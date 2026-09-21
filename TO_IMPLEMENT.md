@@ -96,16 +96,20 @@ top of today's plain maps — three things would then mutate routes, health
 checks, and the proxy handler independently, with no consistency
 guarantee. Instead:
 
-- [ ] A `RouteManager` (or similarly named) that: parses config, validates
+- [x] A `RouteManager` (or similarly named) that: parses config, validates
       it, builds the proxies and health checkers for it, and produces one
       immutable **snapshot**.
-- [ ] Swapping to a new snapshot is atomic (e.g. `atomic.Pointer`) — a
+- [x] Swapping to a new snapshot is atomic (e.g. `atomic.Pointer`) — a
       request either sees the old snapshot in full or the new one in full,
       never a half-updated mix.
-- [ ] A snapshot that fails to build (bad config) never replaces the
+- [x] A snapshot that fails to build (bad config) never replaces the
       running one — log the error, keep serving the last-good snapshot.
 
 This is the foundation Phase 3's reload/API/dashboard are built on.
+
+Implemented in `internal/routemanager`: listener and TLS changes are rejected
+during reload because their sockets/certificate manager are process-level;
+those settings require restart.
 
 ## Phase 3 — Separate control plane
 
