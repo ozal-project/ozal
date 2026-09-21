@@ -56,11 +56,10 @@ done.
       `groups` depends on the provider actually issuing a groups claim
       (works with Okta/Google Workspace when scoped correctly) — document
       that dependency rather than silently no-op'ing when it's absent.
-- [ ] **HTTP server timeouts.** The public `http.Server`s
-      (`cmd/switchboard/main.go`) currently have no `ReadHeaderTimeout`,
-      `ReadTimeout`, `WriteTimeout`, or `IdleTimeout` — trivially
-      exhaustible (Slowloris-style). Set sane defaults on every server we
-      construct, plain and TLS both.
+- [x] **HTTP server timeouts.** `ReadHeaderTimeout` + `IdleTimeout` set on
+      every server we construct (plain, TLS, ACME challenge). `ReadTimeout`/
+      `WriteTimeout` deliberately left unset — a route may need to stream a
+      long-lived or large response (WebSocket/SSE support is planned).
 - [ ] **Stricter, normalized route validation.**
       - Reject duplicate `host` entries instead of silently letting the
         last one win.
@@ -70,11 +69,16 @@ done.
         diverge.
       - Validate `cookie_domain` actually covers every `auth_required`
         route's host (a real suffix check, not just "is it set").
-- [ ] **Session store cleanup + limits.** Expired sessions are only evicted
-      on `Get` today — an abandoned session with no follow-up request never
-      gets swept. Add a periodic sweep (same ticker pattern as
-      `healthcheck.Checker`) and a capacity ceiling so a burst of logins
-      can't grow the store unbounded.
+- [x] **Session store cleanup + limits.** Periodic sweep (same ticker
+      pattern as `healthcheck.Checker`) plus a 10k capacity ceiling
+      (`ErrStoreFull` -> 503).
+- [ ] **`pendingStore` cleanup + limits** (found in a later review pass,
+      not yet fixed): `SessionStore` now self-limits, but `pendingStore`
+      (in-flight logins, keyed by OAuth `state`) only evicts expired
+      entries lazily on `put` — it has no independent periodic sweep and
+      no capacity ceiling, so a burst of `/​_/auth/login` hits faster than
+      new logins arrive could grow it unbounded within the 5-minute TTL
+      window. Apply the same fix as `SessionStore`.
 - [ ] **Secure identity propagation upstream, and strip client-forged
       headers first.** Once auth passes, forward the verified identity to
       the upstream app (`X-Auth-Request-Email`, `X-Auth-Request-User` —
@@ -158,8 +162,7 @@ This is the foundation Phase 3's reload/API/dashboard are built on.
 
 ## Phase 6 — Open-source experience
 
-- [ ] `LICENSE` file — legally not really open source without one, even
-      once the repo is made public.
+- [x] `LICENSE` file (MIT).
 - [ ] `switchboard validate` (check a config file without running),
       `switchboard doctor` (environment/config sanity check),
       `switchboard routes` (print the resolved routing table).

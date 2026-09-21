@@ -1,9 +1,18 @@
 package auth
 
 import (
+	"context"
+	"errors"
 	"sync"
 	"time"
 )
+
+// ErrTooManyPendingLogins is returned by put when the pending-login store
+// is at capacity — a burst of /_/auth/login hits faster than logins
+// complete shouldn't be able to grow this store without bound.
+var ErrTooManyPendingLogins = errors.New("too many logins in progress")
+
+const maxPendingLogins = 10_000
 
 // pendingLogin holds what a login-in-progress needs to survive the round
 // trip to the OIDC provider and back: the PKCE verifier (to prove this
@@ -30,15 +39,39 @@ func newPendingStore() *pendingStore {
 	return &pendingStore{byKey: make(map[string]pendingLogin)}
 }
 
-func (p *pendingStore) put(state, codeVerifier, returnTo string) {
+func (p *pendingStore) put(state, codeVerifier, returnTo string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.evictExpiredLocked()
+	if len(p.byKey) >= maxPendingLogins {
+		return ErrTooManyPendingLogins
+	}
 	p.byKey[state] = pendingLogin{
 		codeVerifier: codeVerifier,
 		returnTo:     returnTo,
 		expiresAt:    time.Now().Add(pendingLoginTTL),
 	}
+	return nil
+}
+
+// startCleanup periodically sweeps expired pending logins until ctx is
+// canceled, independent of evictExpiredLocked's lazy sweep-on-put — a lull
+// in new login attempts shouldn't leave stale entries sitting around.
+func (p *pendingStore) startCleanup(ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				p.mu.Lock()
+				p.evictExpiredLocked()
+				p.mu.Unlock()
+			}
+		}
+	}()
 }
 
 // take returns and removes the pending login for state — a state is only

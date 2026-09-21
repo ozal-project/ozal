@@ -48,9 +48,11 @@ In progress (Phase 1 hardening, see [TO_IMPLEMENT.md](TO_IMPLEMENT.md)):
 
 ## Roadmap
 
-Done: project scaffold, host-based routing, structured logging, graceful
-shutdown, per-upstream health checks, automatic TLS via ACME, and OIDC
-login phase 1 (delegated to an external provider — see below).
+Done: project scaffold, host-based routing, request logging (plain
+`log.Printf` today — structured JSON logging is still Phase 5, not done
+yet), graceful shutdown, per-upstream health checks, automatic TLS via
+ACME, and OIDC login phase 1 (delegated to an external provider — see
+below).
 
 Everything still ahead — the status dashboard, config hot-reload, a
 runtime route-management API, a from-scratch OIDC identity provider

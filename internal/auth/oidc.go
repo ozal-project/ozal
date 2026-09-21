@@ -64,6 +64,9 @@ func NewGate(ctx context.Context, cfg config.Auth, allowedHosts []string) (*Gate
 	sessions := NewSessionStore(ttl)
 	sessions.StartCleanup(ctx, sessionCleanupInterval)
 
+	pending := newPendingStore()
+	pending.startCleanup(ctx, sessionCleanupInterval)
+
 	return &Gate{
 		oauthConfig: oauth2.Config{
 			ClientID:     cfg.ClientID,
@@ -76,7 +79,7 @@ func NewGate(ctx context.Context, cfg config.Auth, allowedHosts []string) (*Gate
 		cookieDomain: cfg.CookieDomain,
 		allowedHosts: hosts,
 		sessions:     sessions,
-		pending:      newPendingStore(),
+		pending:      pending,
 	}, nil
 }
 
@@ -140,7 +143,10 @@ func (g *Gate) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	if returnTo == "" {
 		returnTo = "/"
 	}
-	g.pending.put(state, verifier, returnTo)
+	if err := g.pending.put(state, verifier, returnTo); err != nil {
+		http.Error(w, "too many logins in progress, try again shortly", http.StatusServiceUnavailable)
+		return
+	}
 
 	challenge := s256Challenge(verifier)
 	authURL := g.oauthConfig.AuthCodeURL(state,
