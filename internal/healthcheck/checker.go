@@ -4,6 +4,7 @@ package healthcheck
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -13,17 +14,27 @@ import (
 
 const defaultPath = "/"
 
+// Status is the latest observed operational state for one route.
+type Status struct {
+	Healthy        bool
+	Checked        bool
+	LastCheck      time.Time
+	Latency        time.Duration
+	LastError      string
+	LastTransition time.Time
+}
+
 type Checker struct {
 	client *http.Client
 
 	mu     sync.RWMutex
-	status map[string]bool // route host -> healthy
+	status map[string]Status // route host -> latest probe result
 }
 
 func New() *Checker {
 	return &Checker{
 		client: &http.Client{Timeout: 3 * time.Second},
-		status: make(map[string]bool),
+		status: make(map[string]Status),
 	}
 }
 
@@ -31,10 +42,19 @@ func New() *Checker {
 // healthy. An upstream not yet checked is treated as healthy, so routing
 // works immediately at startup before the first probe completes.
 func (c *Checker) Healthy(host string) bool {
+	return c.Status(host).Healthy
+}
+
+// Status returns a copy of the latest probe state. Unchecked routes are
+// treated as healthy, matching Healthy.
+func (c *Checker) Status(host string) Status {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	healthy, checked := c.status[host]
-	return !checked || healthy
+	status, checked := c.status[host]
+	if !checked {
+		return Status{Healthy: true}
+	}
+	return status
 }
 
 // Start probes every route on the given interval until ctx is canceled. It
@@ -75,17 +95,39 @@ func (c *Checker) probe(ctx context.Context, r config.Route) {
 		path = defaultPath
 	}
 
+	started := time.Now()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.Target+path, nil)
 	healthy := false
-	if err == nil {
-		resp, err := c.client.Do(req)
-		if err == nil {
-			healthy = resp.StatusCode < 500
+	lastError := ""
+	if err != nil {
+		lastError = err.Error()
+	} else {
+		resp, requestErr := c.client.Do(req)
+		if requestErr != nil {
+			lastError = requestErr.Error()
+		} else {
 			resp.Body.Close()
+			healthy = resp.StatusCode < http.StatusInternalServerError
+			if !healthy {
+				lastError = fmt.Sprintf("HTTP %d", resp.StatusCode)
+			}
 		}
 	}
+	now := time.Now()
 
 	c.mu.Lock()
-	c.status[r.Host] = healthy
+	previous, hadPrevious := c.status[r.Host]
+	transition := now
+	if hadPrevious && previous.Healthy == healthy {
+		transition = previous.LastTransition
+	}
+	c.status[r.Host] = Status{
+		Healthy:        healthy,
+		Checked:        true,
+		LastCheck:      now,
+		Latency:        now.Sub(started),
+		LastError:      lastError,
+		LastTransition: transition,
+	}
 	c.mu.Unlock()
 }

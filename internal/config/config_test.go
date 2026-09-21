@@ -300,3 +300,97 @@ func TestLoadRejectsNonHTTPRedirectURL(t *testing.T) {
 		t.Fatal("expected non-HTTP auth.redirect_url to be rejected")
 	}
 }
+
+func TestLoadDefaultsAdminListener(t *testing.T) {
+	path := writeConfig(t, `{
+		"listen": ":8888",
+		"routes": [{"host": "a.localhost", "target": "http://localhost:9000"}]
+	}`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Admin.Listen != DefaultAdminListen {
+		t.Fatalf("Admin.Listen = %q, want %q", cfg.Admin.Listen, DefaultAdminListen)
+	}
+}
+
+func TestParseRejectsUnknownAndMultipleValues(t *testing.T) {
+	valid := `{"listen":":8888","routes":[{"host":"a.localhost","target":"http://localhost:9000"}]}`
+	if _, err := Parse([]byte(`{"listen":":8888","typo":true,"routes":[{"host":"a.localhost","target":"http://localhost:9000"}]}`)); err == nil {
+		t.Fatal("unknown field returned nil error")
+	}
+	if _, err := Parse([]byte(valid + valid)); err == nil {
+		t.Fatal("multiple JSON values returned nil error")
+	}
+}
+
+func TestValidateDoesNotMutateInput(t *testing.T) {
+	cfg := Config{
+		Listen: ":8888",
+		Routes: []Route{{
+			Host:   "APP.Localhost.",
+			Target: "http://localhost:9000",
+			Access: &AccessPolicy{AllowedEmails: []string{"user@example.com"}},
+		}},
+		Auth: Auth{
+			Issuer:       "https://issuer.example",
+			ClientID:     "id",
+			ClientSecret: "secret",
+			RedirectURL:  "http://app.localhost/_/auth/callback",
+		},
+	}
+	normalized, err := Validate(cfg)
+	if err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	normalized.Routes[0].Access.AllowedEmails[0] = "changed@example.com"
+	if cfg.Routes[0].Host != "APP.Localhost." || cfg.Routes[0].Access.AllowedEmails[0] != "user@example.com" {
+		t.Fatalf("Validate mutated input: %+v", cfg.Routes[0])
+	}
+}
+
+func TestWriteAtomicRoundTripsAndPreservesPermissions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte("old"), 0o640); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+	cfg := Config{
+		Listen: ":8888",
+		Admin:  Admin{Token: "secret"},
+		Routes: []Route{{Host: "APP.Localhost.", Target: "http://localhost:9000"}},
+	}
+	if err := WriteAtomic(path, cfg); err != nil {
+		t.Fatalf("WriteAtomic: %v", err)
+	}
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if loaded.Routes[0].Host != "app.localhost" || loaded.Admin.Token != "secret" {
+		t.Fatalf("persisted config = %+v", loaded)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o640 {
+		t.Fatalf("mode = %o, want 640", got)
+	}
+}
+
+func TestValidateRejectsNonLoopbackAdminListener(t *testing.T) {
+	cfg := Config{
+		Listen: ":8888",
+		Admin:  Admin{Listen: "0.0.0.0:9090"},
+		Routes: []Route{{Host: "app.localhost", Target: "http://localhost:9000"}},
+	}
+	if _, err := Validate(cfg); err == nil {
+		t.Fatal("non-loopback admin listener returned nil error")
+	}
+
+	cfg.Admin.Listen = "[::1]:9090"
+	if _, err := Validate(cfg); err != nil {
+		t.Fatalf("IPv6 loopback listener rejected: %v", err)
+	}
+}

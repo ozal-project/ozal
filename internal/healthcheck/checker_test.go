@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -43,5 +44,40 @@ func TestProbeMarksHealthyAndUnhealthy(t *testing.T) {
 	}
 	if c.Healthy("down.localhost") {
 		t.Error("down.localhost should be unhealthy")
+	}
+}
+
+func TestStatusTracksChecksErrorsAndTransitions(t *testing.T) {
+	var responseStatus atomic.Int64
+	responseStatus.Store(http.StatusOK)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(int(responseStatus.Load()))
+	}))
+	defer upstream.Close()
+
+	checker := New()
+	route := config.Route{Host: "app.localhost", Target: upstream.URL}
+	checker.probe(context.Background(), route)
+	first := checker.Status(route.Host)
+	if !first.Checked || !first.Healthy || first.LastCheck.IsZero() || first.LastTransition.IsZero() {
+		t.Fatalf("first status = %+v", first)
+	}
+
+	time.Sleep(time.Millisecond)
+	checker.probe(context.Background(), route)
+	second := checker.Status(route.Host)
+	if !second.LastTransition.Equal(first.LastTransition) {
+		t.Fatalf("stable health changed transition time: first=%s second=%s", first.LastTransition, second.LastTransition)
+	}
+
+	responseStatus.Store(http.StatusServiceUnavailable)
+	time.Sleep(time.Millisecond)
+	checker.probe(context.Background(), route)
+	failed := checker.Status(route.Host)
+	if failed.Healthy || failed.LastError != "HTTP 503" {
+		t.Fatalf("failed status = %+v", failed)
+	}
+	if !failed.LastTransition.After(second.LastTransition) {
+		t.Fatalf("transition time did not advance: before=%s after=%s", second.LastTransition, failed.LastTransition)
 	}
 }

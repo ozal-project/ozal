@@ -113,23 +113,27 @@ those settings require restart.
 
 ## Phase 3 — Separate control plane
 
-- [ ] Admin listener bound to `127.0.0.1` by default (not the public
+- [x] Admin listener bound to `127.0.0.1` by default (not the public
       `:80`/`:443`) — config reload trigger, the route-management API, and
       the dashboard all live here.
-- [ ] `GET /_/status` dashboard (per earlier decision: `html/template` +
-      HTMX, no JS framework) moves to this listener — **not public**, since
+- [x] `GET /_/status` dashboard uses `html/template` on this listener
+      with a lightweight full-page refresh (no JS dependency; HTMX remains the
+      choice when interactive dashboard controls are added) — **not public**, since
       route topology/targets can be sensitive information on their own.
-- [ ] `POST /routes`, `DELETE /routes/{host}` on this same listener,
+- [x] `POST /routes`, `DELETE /routes/{host}` on this same listener,
       authenticated with a bearer token from config.
-- [ ] Changes made at runtime persist back to disk (config file or a
-      separate state file — decide which before building) so a restart
+- [x] Changes made at runtime persist atomically back to the active config file so a restart
       doesn't silently lose them.
-- [ ] Audit log of control-plane changes: who/what changed, when.
-- [ ] Per-route operational detail beyond up/down: last check time,
+- [x] Audit log of control-plane changes: who/what changed, when.
+- [x] Per-route operational detail beyond up/down: last check time,
       latency, last error, time of last state transition.
-- [ ] Config hot-reload (`SIGHUP` or file watch via `fsnotify`) rebuilds a
+- [x] Config hot-reload (`SIGHUP` or file watch via `fsnotify`) rebuilds a
       snapshot through the same `RouteManager` path as the API — one
       mechanism, not two.
+
+Implemented with same-file atomic persistence, loopback-only admin binding,
+bearer authentication for every mutation, and audit entries in the process log.
+`admin.listen`, the public listener, and TLS settings remain restart-only.
 
 ## Phase 4 — Serious proxy behavior
 

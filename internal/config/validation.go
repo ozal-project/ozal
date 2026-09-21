@@ -148,3 +148,19 @@ func hostnameOnly(host string) string {
 	}
 	return host
 }
+
+func validateAdminListen(address string) error {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return fmt.Errorf("admin.listen must be an IP host:port: %w", err)
+	}
+	ip := net.ParseIP(host)
+	if ip == nil || !ip.IsLoopback() {
+		return fmt.Errorf("admin.listen must use a loopback IP address")
+	}
+	portNumber, err := strconv.Atoi(port)
+	if err != nil || portNumber < 1 || portNumber > 65535 {
+		return fmt.Errorf("admin.listen has invalid port %q", port)
+	}
+	return nil
+}

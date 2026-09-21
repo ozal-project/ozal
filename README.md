@@ -35,7 +35,9 @@ external review (2026-09-21) before anything else gets built on top.
 Working and tested: host-based routing, health checks, graceful shutdown,
 automatic TLS via ACME, OIDC login, and per-route authorization by verified
 email, email domain, and group claims. `go test ./... -race` is clean.
-The routing runtime is now built and swapped as atomic, immutable snapshots.
+The routing runtime is built and swapped as atomic, immutable snapshots. A
+loopback-only control plane now provides persistent route changes, reloads, and
+operational status.
 
 In progress (Phase 1 hardening, see [TO_IMPLEMENT.md](TO_IMPLEMENT.md)):
 - [x] HTTP server timeouts (`ReadHeaderTimeout`, `IdleTimeout`) on every listener
@@ -55,17 +57,41 @@ yet), graceful shutdown, per-upstream health checks, automatic TLS via
 ACME, and OIDC login with per-route claim authorization (delegated to an
 external provider — see below).
 
-Everything still ahead — the status dashboard, a config reload trigger, a
-runtime route-management API, and npm-based distribution — is tracked in
+Everything still ahead — serious proxy behavior, production observability,
+and npm-based distribution — is tracked in
 detail in [TO_IMPLEMENT.md](TO_IMPLEMENT.md), including the stack decisions
-already made for each (e.g. `html/template` + HTMX for the dashboard, not a
-JS framework) and why.
+already made for each and why.
 
 The Phase 2 transactional runtime is complete: a reload candidate is fully
 validated and built before one atomic swap. Invalid candidates leave the
 last-good routing snapshot active. Listener and TLS settings remain static
-and require a process restart; Phase 3 will expose reload through the control
-plane.
+and require a process restart; Phase 3 exposes reload through the control plane.
+
+## Control plane
+
+Switchboard starts a separate administrative listener on `127.0.0.1:9090` by
+default. Its status dashboard is available at `http://127.0.0.1:9090/_/status`
+and shows health, latency, the latest check, the latest state transition, and the
+last probe error for every route. The admin listener is restricted to loopback
+IPs by configuration validation.
+
+Configure a bearer token to enable mutations:
+
+```json
+"admin": {
+  "listen": "127.0.0.1:9090",
+  "token": "replace-with-a-long-random-token"
+}
+```
+
+`POST /routes`, `DELETE /routes/{host}`, and `POST /_/reload` require
+`Authorization: Bearer <token>`. Route changes are validated, written atomically
+to the active config file, and only then installed as a complete runtime
+snapshot. Duplicate creates return `409`; deleting the final route is rejected.
+Every accepted or rejected control-plane change is written to the audit log.
+
+Sending `SIGHUP` performs the same last-good reload from disk. Changes to the
+public listener, `admin.listen`, or TLS settings require a process restart.
 
 ## Usage
 

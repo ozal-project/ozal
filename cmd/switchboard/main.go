@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,6 +14,7 @@ import (
 
 	"golang.org/x/crypto/acme/autocert"
 
+	"github.com/octaviosantacruz/switchboard/internal/admin"
 	"github.com/octaviosantacruz/switchboard/internal/config"
 	"github.com/octaviosantacruz/switchboard/internal/routemanager"
 )
@@ -32,16 +34,38 @@ func main() {
 	}
 	cfg := manager.Config()
 
+	hup := make(chan os.Signal, 1)
+	signal.Notify(hup, syscall.SIGHUP)
+	defer signal.Stop(hup)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-hup:
+				if err := manager.Reload(); err != nil {
+					log.Printf("audit actor=signal:SIGHUP action=config.reload result=rejected error=%q", err)
+					continue
+				}
+				log.Printf("audit actor=signal:SIGHUP action=config.reload result=accepted")
+			}
+		}
+	}()
+
 	log.Printf("routes:")
 	for _, r := range cfg.Routes {
 		log.Printf("  %s -> %s", r.Host, r.Target)
 	}
 
-	var servers []*http.Server
+	adminServer, err := startAdmin(&cfg, manager)
+	if err != nil {
+		log.Fatalf("admin listener: %v", err)
+	}
+	servers := []*http.Server{adminServer}
 	if cfg.TLS.Enabled {
-		servers = startTLS(&cfg, manager)
+		servers = append(servers, startTLS(&cfg, manager)...)
 	} else {
-		servers = []*http.Server{startPlain(&cfg, manager)}
+		servers = append(servers, startPlain(&cfg, manager))
 	}
 
 	<-ctx.Done()
@@ -66,6 +90,31 @@ const (
 	readHeaderTimeout = 5 * time.Second
 	idleTimeout       = 120 * time.Second
 )
+
+func startAdmin(cfg *config.Config, manager *routemanager.Manager) (*http.Server, error) {
+	listener, err := net.Listen("tcp", cfg.Admin.Listen)
+	if err != nil {
+		return nil, err
+	}
+	server := &http.Server{
+		Addr:              cfg.Admin.Listen,
+		Handler:           admin.New(manager, nil),
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       idleTimeout,
+	}
+	go func() {
+		log.Printf("switchboard admin listening on %s", cfg.Admin.Listen)
+		if cfg.Admin.Token == "" {
+			log.Printf("admin mutations disabled: set admin.token in config")
+		}
+		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("admin listener %s: %v", cfg.Admin.Listen, err)
+		}
+	}()
+	return server, nil
+}
 
 func startPlain(cfg *config.Config, handler http.Handler) *http.Server {
 	server := &http.Server{

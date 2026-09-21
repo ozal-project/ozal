@@ -3,6 +3,7 @@ package routemanager
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -17,15 +18,20 @@ import (
 
 func writeConfig(t *testing.T, cfg config.Config) string {
 	t.Helper()
+	path := filepath.Join(t.TempDir(), "config.json")
+	overwriteConfig(t, path, cfg)
+	return path
+}
+
+func overwriteConfig(t *testing.T, path string, cfg config.Config) {
+	t.Helper()
 	data, err := json.Marshal(cfg)
 	if err != nil {
 		t.Fatalf("marshal config: %v", err)
 	}
-	path := filepath.Join(t.TempDir(), "config.json")
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	return path
 }
 
 func routeConfig(target string) config.Config {
@@ -58,7 +64,8 @@ func TestReloadSwapsSnapshotAndPreservesLastGood(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	manager, err := New(ctx, writeConfig(t, routeConfig(oldUpstream.URL)), time.Hour)
+	configPath := writeConfig(t, routeConfig(oldUpstream.URL))
+	manager, err := New(ctx, configPath, time.Hour)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -67,7 +74,8 @@ func TestReloadSwapsSnapshotAndPreservesLastGood(t *testing.T) {
 		t.Fatalf("initial response = (%d, %q), want (200, old)", status, body)
 	}
 
-	if err := manager.Reload(writeConfig(t, routeConfig(newUpstream.URL))); err != nil {
+	overwriteConfig(t, configPath, routeConfig(newUpstream.URL))
+	if err := manager.Reload(); err != nil {
 		t.Fatalf("Reload valid config: %v", err)
 	}
 	if status, body := serve(manager); status != http.StatusOK || body != "new" {
@@ -75,7 +83,8 @@ func TestReloadSwapsSnapshotAndPreservesLastGood(t *testing.T) {
 	}
 
 	invalid := routeConfig("ftp://invalid.example")
-	if err := manager.Reload(writeConfig(t, invalid)); err == nil {
+	overwriteConfig(t, configPath, invalid)
+	if err := manager.Reload(); err == nil {
 		t.Fatal("Reload invalid config returned nil error")
 	}
 	if status, body := serve(manager); status != http.StatusOK || body != "new" {
@@ -84,11 +93,22 @@ func TestReloadSwapsSnapshotAndPreservesLastGood(t *testing.T) {
 
 	changedListener := routeConfig(oldUpstream.URL)
 	changedListener.Listen = ":9999"
-	if err := manager.Reload(writeConfig(t, changedListener)); err == nil {
+	overwriteConfig(t, configPath, changedListener)
+	if err := manager.Reload(); err == nil {
 		t.Fatal("Reload with changed listener returned nil error")
 	}
 	if status, body := serve(manager); status != http.StatusOK || body != "new" {
 		t.Fatalf("response after rejected listener change = (%d, %q), want (200, new)", status, body)
+	}
+
+	changedAdmin := routeConfig(oldUpstream.URL)
+	changedAdmin.Admin.Listen = "127.0.0.1:9191"
+	overwriteConfig(t, configPath, changedAdmin)
+	if err := manager.Reload(); err == nil {
+		t.Fatal("Reload with changed admin listener returned nil error")
+	}
+	if status, body := serve(manager); status != http.StatusOK || body != "new" {
+		t.Fatalf("response after rejected admin listener change = (%d, %q), want (200, new)", status, body)
 	}
 }
 
@@ -104,7 +124,8 @@ func TestConcurrentRequestsSeeWholeSnapshots(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	manager, err := New(ctx, writeConfig(t, routeConfig(oldUpstream.URL)), time.Hour)
+	configPath := writeConfig(t, routeConfig(oldUpstream.URL))
+	manager, err := New(ctx, configPath, time.Hour)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -126,7 +147,8 @@ func TestConcurrentRequestsSeeWholeSnapshots(t *testing.T) {
 	}
 
 	close(start)
-	if err := manager.Reload(writeConfig(t, routeConfig(newUpstream.URL))); err != nil {
+	overwriteConfig(t, configPath, routeConfig(newUpstream.URL))
+	if err := manager.Reload(); err != nil {
 		t.Fatalf("Reload: %v", err)
 	}
 	wg.Wait()
@@ -199,5 +221,183 @@ func TestCloneConfigDeepCopiesAccessPolicy(t *testing.T) {
 	}
 	if policy.RequiredGroups[0] != "operators" {
 		t.Fatalf("source required groups mutated: %v", policy.RequiredGroups)
+	}
+}
+
+func TestAddAndDeleteRoutePersistAndInstallTogether(t *testing.T) {
+	firstUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "first")
+	}))
+	defer firstUpstream.Close()
+	secondUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "second")
+	}))
+	defer secondUpstream.Close()
+
+	cfg := routeConfig(firstUpstream.URL)
+	cfg.Admin.Token = "secret"
+	configPath := writeConfig(t, cfg)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	manager, err := New(ctx, configPath, time.Hour)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	added := config.Route{Host: "NEW.Localhost.", Target: secondUpstream.URL, HealthPath: "/"}
+	if err := manager.AddRoute(added); err != nil {
+		t.Fatalf("AddRoute: %v", err)
+	}
+	if err := manager.AddRoute(added); !errors.Is(err, ErrRouteExists) {
+		t.Fatalf("duplicate AddRoute error = %v, want ErrRouteExists", err)
+	}
+
+	persisted, err := config.Load(configPath)
+	if err != nil {
+		t.Fatalf("Load persisted config: %v", err)
+	}
+	if len(persisted.Routes) != 2 || persisted.Routes[1].Host != "new.localhost" {
+		t.Fatalf("persisted routes = %+v", persisted.Routes)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://new.localhost/", nil)
+	req.Host = "new.localhost"
+	rec := httptest.NewRecorder()
+	manager.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || rec.Body.String() != "second" {
+		t.Fatalf("new route response = (%d, %q), want (200, second)", rec.Code, rec.Body.String())
+	}
+
+	if err := manager.DeleteRoute("APP.localhost."); err != nil {
+		t.Fatalf("DeleteRoute: %v", err)
+	}
+	persisted, err = config.Load(configPath)
+	if err != nil {
+		t.Fatalf("Load after delete: %v", err)
+	}
+	if len(persisted.Routes) != 1 || persisted.Routes[0].Host != "new.localhost" {
+		t.Fatalf("routes after delete = %+v", persisted.Routes)
+	}
+	if status, _ := serve(manager); status != http.StatusNotFound {
+		t.Fatalf("deleted route status = %d, want 404", status)
+	}
+
+	if err := manager.DeleteRoute("new.localhost"); err == nil {
+		t.Fatal("deleting the final route returned nil error")
+	}
+	if len(manager.Config().Routes) != 1 {
+		t.Fatal("failed deletion changed active snapshot")
+	}
+	persisted, err = config.Load(configPath)
+	if err != nil || len(persisted.Routes) != 1 {
+		t.Fatalf("failed deletion changed persisted config: routes=%v err=%v", persisted.Routes, err)
+	}
+}
+
+func TestPersistenceFailureKeepsActiveSnapshot(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "active")
+	}))
+	defer upstream.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	manager, err := New(ctx, writeConfig(t, routeConfig(upstream.URL)), time.Hour)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	manager.configPath = filepath.Join(t.TempDir(), "missing", "config.json")
+
+	err = manager.AddRoute(config.Route{Host: "new.localhost", Target: upstream.URL})
+	if !errors.Is(err, ErrPersistence) {
+		t.Fatalf("AddRoute error = %v, want ErrPersistence", err)
+	}
+	if routes := manager.Config().Routes; len(routes) != 1 || routes[0].Host != "app.localhost" {
+		t.Fatalf("active routes changed after persistence failure: %+v", routes)
+	}
+}
+
+func TestRouteStatusesExposeLatestHealthObservation(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer upstream.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	manager, err := New(ctx, writeConfig(t, routeConfig(upstream.URL)), time.Hour)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	statuses := manager.RouteStatuses()
+	if len(statuses) != 1 {
+		t.Fatalf("len(RouteStatuses) = %d, want 1", len(statuses))
+	}
+	status := statuses[0]
+	if !status.Health.Checked || status.Health.Healthy {
+		t.Fatalf("health = %+v, want checked and unhealthy", status.Health)
+	}
+	if status.Health.LastCheck.IsZero() || status.Health.LastTransition.IsZero() {
+		t.Fatalf("health timestamps not populated: %+v", status.Health)
+	}
+	if status.Health.LastError != "HTTP 502" {
+		t.Fatalf("LastError = %q, want HTTP 502", status.Health.LastError)
+	}
+}
+
+func TestReloadReusesOIDCGateWhenAuthBoundaryIsUnchanged(t *testing.T) {
+	var provider *httptest.Server
+	provider = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/.well-known/openid-configuration" {
+			http.NotFound(w, r)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"issuer":                 provider.URL,
+			"authorization_endpoint": provider.URL + "/authorize",
+			"token_endpoint":         provider.URL + "/token",
+			"jwks_uri":               provider.URL + "/jwks",
+		})
+	}))
+	defer provider.Close()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer upstream.Close()
+
+	cfg := routeConfig(upstream.URL)
+	cfg.Auth = config.Auth{
+		Issuer:       provider.URL,
+		ClientID:     "client",
+		ClientSecret: "secret",
+		RedirectURL:  "http://app.localhost/_/auth/callback",
+	}
+	cfg.Routes[0].Access = &config.AccessPolicy{}
+	configPath := writeConfig(t, cfg)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	manager, err := New(ctx, configPath, time.Hour)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	initialGate := manager.gate
+	if initialGate == nil {
+		t.Fatal("initial OIDC gate is nil")
+	}
+
+	overwriteConfig(t, configPath, cfg)
+	if err := manager.Reload(); err != nil {
+		t.Fatalf("Reload: %v", err)
+	}
+	if manager.gate != initialGate {
+		t.Fatal("identical reload replaced OIDC gate and would invalidate sessions")
+	}
+
+	if err := manager.AddRoute(config.Route{Host: "public.localhost", Target: upstream.URL}); err != nil {
+		t.Fatalf("AddRoute: %v", err)
+	}
+	if manager.gate != initialGate {
+		t.Fatal("adding an unprotected route replaced OIDC gate")
 	}
 }

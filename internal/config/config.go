@@ -2,10 +2,15 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"slices"
 )
+
+const DefaultAdminListen = "127.0.0.1:9090"
 
 type Route struct {
 	Host         string        `json:"host"`
@@ -45,10 +50,16 @@ type Auth struct {
 	CookieDomain string `json:"cookie_domain,omitempty"`
 }
 
+type Admin struct {
+	Listen string `json:"listen,omitempty"`
+	Token  string `json:"token,omitempty"`
+}
+
 type Config struct {
 	Listen string  `json:"listen"`
 	TLS    TLS     `json:"tls,omitempty"`
 	Auth   Auth    `json:"auth,omitempty"`
+	Admin  Admin   `json:"admin,omitempty"`
 	Routes []Route `json:"routes"`
 }
 
@@ -58,13 +69,35 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("read config: %w", err)
 	}
 
+	return Parse(data)
+}
+
+// Parse decodes and validates a configuration document. Unknown fields are
+// rejected so a misspelled security or routing option cannot be ignored.
+func Parse(data []byte) (*Config, error) {
 	var cfg Config
-	if err := json.Unmarshal(data, &cfg); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return nil, fmt.Errorf("parse config: multiple JSON values")
+	}
+	return Validate(cfg)
+}
 
+// Validate returns a normalized copy of cfg or an error.
+func Validate(cfg Config) (*Config, error) {
+	cfg = Clone(cfg)
 	if cfg.Listen == "" {
 		return nil, fmt.Errorf("config: listen address is required")
+	}
+	if cfg.Admin.Listen == "" {
+		cfg.Admin.Listen = DefaultAdminListen
+	}
+	if err := validateAdminListen(cfg.Admin.Listen); err != nil {
+		return nil, fmt.Errorf("config: %w", err)
 	}
 	if len(cfg.Routes) == 0 {
 		return nil, fmt.Errorf("config: at least one route is required")
@@ -171,4 +204,22 @@ func hostOf(rawURL string) (string, error) {
 		return "", err
 	}
 	return host, nil
+}
+
+// Clone returns a deep copy suitable for independent mutation.
+func Clone(source Config) Config {
+	clone := source
+	clone.TLS.Domains = slices.Clone(source.TLS.Domains)
+	clone.Routes = make([]Route, len(source.Routes))
+	for i, route := range source.Routes {
+		clone.Routes[i] = route
+		if route.Access != nil {
+			access := *route.Access
+			access.AllowedEmails = slices.Clone(route.Access.AllowedEmails)
+			access.AllowedDomains = slices.Clone(route.Access.AllowedDomains)
+			access.RequiredGroups = slices.Clone(route.Access.RequiredGroups)
+			clone.Routes[i].Access = &access
+		}
+	}
+	return clone
 }
