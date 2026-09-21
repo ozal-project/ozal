@@ -1,0 +1,9 @@
+/switchboard
+*.exe
+*.test
+*.out
+config.json
+
+# Editors/OS
+.vscode/
+.DS_Store
