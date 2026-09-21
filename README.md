@@ -13,7 +13,7 @@ localhost to production.
 It started from a concrete annoyance: running several independent projects
 locally (each on its own port) makes it easy to collide on ports and
 annoying to remember which port serves what. Switchboard lets each project
-answer to a name (`magiclink.localhost`, `auditanchor.localhost`, ...)
+answer to a name (`test1.localhost`, `test2.localhost`, ...)
 instead of a port number, and grows into the same mechanism used to
 publish those projects on a real domain later, with automatic TLS and,
 optionally, a login requirement per route.
@@ -27,6 +27,42 @@ enough to actually explain. See [TO_IMPLEMENT.md](TO_IMPLEMENT.md) for the
 full reasoning and roadmap, including what's explicitly *not* planned here
 (a from-scratch identity provider — real learning territory, but its own
 separate project, not part of Switchboard's story).
+
+## How it fits
+
+Switchboard is not "Caddy with Okta built in."
+
+- **Caddy** is a broad, production-grade web server and proxy platform with a
+  large module ecosystem. Switchboard deliberately has a much smaller scope:
+  host-based routing for local services and small self-hosted deployments,
+  with a configuration a developer can read in one sitting.
+- **Okta, Google, Auth0, and similar services** are identity providers.
+  Switchboard does not manage users, passwords, MFA, consent, signing keys,
+  or token issuance. It delegates login to one of those providers via OIDC,
+  verifies the resulting identity, and applies a route's access policy.
+- **Pomerium** is a mature, policy-heavy identity-aware proxy. Switchboard
+  borrows the useful shape of that idea for a smaller audience: a single Go
+  binary that lets a developer put a local or self-hosted app behind a name,
+  TLS, and optional OIDC access control without assembling several services.
+
+Put plainly: Switchboard is an **identity-aware application gateway**. It
+connects `app.localhost` or `app.example.com` to an upstream service, then
+optionally asks an external identity provider who the user is before allowing
+that request through. Its differentiator is the compact, local-first path from
+development to a small real deployment, not a larger feature checklist.
+
+## Open-source direction
+
+The initial product is deliberately narrow: make it easy to expose several
+local or self-hosted applications through human-readable hosts, then apply
+TLS and optional external OIDC access control with one understandable config.
+That is the MVP, not a temporary compromise before rebuilding Caddy or Okta.
+
+The project should grow only where a capability makes that path more reliable,
+safer, or easier to operate. Its first release goal is a trustworthy public
+alpha, with secrets outside JSON, fuzz coverage for the security boundaries,
+CI, and a repeatable quickstart. The measurable release gates and dates are in
+[TO_IMPLEMENT.md](TO_IMPLEMENT.md#smart-goals-draft).
 
 ## Status
 
@@ -48,6 +84,24 @@ In progress (Phase 1 hardening, see [TO_IMPLEMENT.md](TO_IMPLEMENT.md)):
 - [ ] Secrets via env/file, not only inline JSON
 - [x] `LICENSE` (MIT)
 - [ ] CI and the rest of Phase 6's open-source hygiene items
+
+## Next work
+
+The next engineering block closes the remaining hardening debt before adding
+more proxy behavior:
+
+1. Read `auth.client_secret` and `admin.token` from environment variables or
+   files, so deployed credentials do not need to live in version-controlled
+   JSON.
+2. Add fuzz tests for configuration parsing, host normalization, and the OIDC
+   `return_to` open-redirect guard.
+3. Add CI that runs `go test -race ./...`, `go vet ./...`, and a build on each
+   supported platform.
+
+After that comes Phase 4: multiple upstreams with round-robin selection,
+active and passive health checks, safe retries, circuit breaking, per-route
+timeouts, explicit WebSocket/SSE coverage, request IDs, and a trusted-proxy
+policy. The full ordered backlog remains in [TO_IMPLEMENT.md](TO_IMPLEMENT.md).
 
 ## Roadmap
 

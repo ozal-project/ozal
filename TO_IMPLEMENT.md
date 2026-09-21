@@ -22,6 +22,64 @@ protocol compatibility) and doesn't serve this positioning. It's real
 curiosity-driven learning territory, so it becomes **its own separate
 project** later, not a Switchboard phase — see the end of this file.
 
+## SMART goals (draft)
+
+These are product goals, not a promise to reproduce a larger proxy or identity
+platform. Dates are planning targets and should be reviewed at each milestone.
+Success is a reproducible release with a clear user outcome, not stars,
+downloads, or feature count.
+
+### Goal 1: publish a trustworthy MVP alpha by 2026-10-19
+
+**User outcome:** a developer can route local or small self-hosted services by
+hostname, protect selected routes with an existing OIDC provider, and operate
+the gateway without committing credentials to a repository.
+
+**Release gates:**
+
+- [ ] `auth.client_secret` and `admin.token` support environment or file
+      references; inline values remain compatible but are documented as local
+      development only.
+- [ ] Fuzz targets cover config parsing, host validation, and `return_to`; each
+      has deterministic regression seeds for previously discovered failures.
+- [ ] CI runs `go test -race ./...`, `go vet ./...`, and a build on Linux,
+      macOS, and Windows for every pull request.
+- [ ] The README contains one copy-pasteable quickstart that starts a routed
+      local app and reaches the administrative status page.
+- [ ] A `v0.1.0-alpha.1` tag is cut only after every gate above is green.
+
+### Goal 2: make the first release usable by contributors by 2026-11-16
+
+**User outcome:** a new contributor can validate a configuration, understand
+how to report a vulnerability, and run the project locally without reading the
+source first.
+
+**Release gates:**
+
+- [ ] `switchboard validate` checks a config without serving traffic, and
+      `switchboard routes` prints the resolved routing table.
+- [ ] `CONTRIBUTING.md`, `SECURITY.md`, and `CHANGELOG.md` explain the normal
+      contribution, disclosure, and release paths.
+- [ ] The repository includes a Dockerfile and a documented systemd deployment
+      example, both exercised by documentation checks or CI where practical.
+
+### Goal 3: deliver a small reliability upgrade by 2026-12-14
+
+**User outcome:** a route can use more than one upstream and continue serving
+when one upstream fails, without retrying unsafe requests.
+
+**Release gates:**
+
+- [ ] Routes support multiple upstreams and deterministic round-robin
+      selection.
+- [ ] Active and passive health state prevent failed upstreams from receiving
+      new traffic.
+- [ ] Retries apply only to configured idempotent methods and have integration
+      tests proving that `POST` is never retried automatically.
+
+Everything else in Phases 4-7 remains backlog until these goals are met or
+explicitly re-scoped.
+
 ## Status snapshot (2026-09-21)
 
 Routing, health checks, graceful shutdown, TLS/ACME, OIDC login, and
