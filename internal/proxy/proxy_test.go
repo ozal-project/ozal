@@ -16,7 +16,7 @@ func TestRoutesByHost(t *testing.T) {
 
 	handler, err := New([]config.Route{
 		{Host: "known.localhost", Target: upstream.URL},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -49,9 +49,38 @@ func TestRoutesByHost(t *testing.T) {
 	})
 
 	t.Run("rejects an invalid target URL at construction time", func(t *testing.T) {
-		_, err := New([]config.Route{{Host: "bad.localhost", Target: "://not-a-url"}})
+		_, err := New([]config.Route{{Host: "bad.localhost", Target: "://not-a-url"}}, nil)
 		if err == nil {
 			t.Fatal("expected an error for an invalid target URL, got nil")
 		}
 	})
+}
+
+type fakeChecker struct{ healthy map[string]bool }
+
+func (f fakeChecker) Healthy(host string) bool { return f.healthy[host] }
+
+func TestUnhealthyUpstreamReturns503(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("should not be reached"))
+	}))
+	defer upstream.Close()
+
+	handler, err := New(
+		[]config.Route{{Host: "down.localhost", Target: upstream.URL}},
+		fakeChecker{healthy: map[string]bool{"down.localhost": false}},
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://down.localhost/", nil)
+	req.Host = "down.localhost"
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", rec.Code)
+	}
 }

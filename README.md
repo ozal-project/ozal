@@ -15,24 +15,26 @@ these projects on a real domain later, with automatic TLS.
 
 ## Status
 
-Early scaffold. v1 goal: host-based HTTP reverse proxy driven by a static
-config file, no TLS yet.
+Working: host-based routing, health checks, graceful shutdown, and
+automatic TLS via ACME are all implemented.
 
 ## Roadmap
 
 - [x] Project scaffold
-- [ ] Host-based routing to local upstreams (plain HTTP)
+- [x] Host-based routing to local upstreams (plain HTTP)
+- [x] Structured request logging
+- [x] Graceful shutdown
+- [x] Health checks per upstream (unhealthy upstream -> 503, doesn't block startup)
+- [x] Automatic TLS via ACME (Let's Encrypt) for real domains
 - [ ] Config reload without restart
-- [ ] Structured request logging
-- [ ] Graceful shutdown
-- [ ] Automatic TLS via ACME (Let's Encrypt) for real domains
-- [ ] Health checks per upstream
 
-## Usage (once implemented)
+## Usage
 
 ```bash
 go run ./cmd/switchboard -config config.json
 ```
+
+### Local development (plain HTTP)
 
 `config.json`:
 
@@ -41,7 +43,37 @@ go run ./cmd/switchboard -config config.json
   "listen": ":8888",
   "routes": [
     { "host": "magiclink.localhost:8888", "target": "http://localhost:8090" },
-    { "host": "auditanchor.localhost:8888", "target": "http://localhost:8081" }
+    { "host": "auditanchor.localhost:8888", "target": "http://localhost:8081", "health_path": "/healthz" }
   ]
 }
 ```
+
+`health_path` defaults to `/` if omitted. An unchecked or healthy upstream
+gets traffic; an upstream that fails its check (5xx or unreachable) gets a
+503 from Switchboard instead of being proxied to.
+
+### Real deployment (HTTPS via Let's Encrypt)
+
+Set `tls.enabled: true` and point real DNS at the box. Switchboard then
+listens on `:80` (ACME challenges + redirect to HTTPS) and `:443` (TLS,
+certificates issued and renewed automatically):
+
+```json
+{
+  "listen": ":8888",
+  "tls": {
+    "enabled": true,
+    "domains": ["magiclink.example.com", "auditanchor.example.com"],
+    "cache_dir": "/var/lib/switchboard/certs",
+    "email": "you@example.com"
+  },
+  "routes": [
+    { "host": "magiclink.example.com", "target": "http://localhost:8090" },
+    { "host": "auditanchor.example.com", "target": "http://localhost:8081", "health_path": "/healthz" }
+  ]
+}
+```
+
+`cache_dir` must be a writable, persistent directory — certificates are
+cached there so they aren't re-issued on every restart. `listen` is ignored
+in this mode (ports 80/443 are fixed, as ACME and browsers expect).
