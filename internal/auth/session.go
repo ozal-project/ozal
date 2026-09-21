@@ -4,11 +4,23 @@
 package auth
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"sync"
 	"time"
 )
+
+// ErrStoreFull is returned by Create when the session store is at
+// capacity. A caller sees this as "login failed, try again" — better than
+// an unbounded map growing forever under a sustained burst of logins.
+var ErrStoreFull = errors.New("session store is full")
+
+// maxSessions caps how many sessions can exist at once, independent of
+// the periodic cleanup sweep — a burst of logins faster than the sweep
+// interval shouldn't be able to grow the store without bound.
+const maxSessions = 10_000
 
 type Session struct {
 	Email     string
@@ -43,10 +55,43 @@ func (s *SessionStore) Create(email, subject string) (string, error) {
 	id := base64.RawURLEncoding.EncodeToString(idBytes)
 
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.sessions) >= maxSessions {
+		return "", ErrStoreFull
+	}
 	s.sessions[id] = Session{Email: email, Subject: subject, ExpiresAt: time.Now().Add(s.ttl)}
-	s.mu.Unlock()
 
 	return id, nil
+}
+
+// StartCleanup periodically sweeps expired sessions until ctx is
+// canceled. Get already evicts an expired session it happens to look up,
+// but a session nobody ever presents again (an abandoned login) would
+// otherwise sit in memory until process restart — this bounds that.
+func (s *SessionStore) StartCleanup(ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				s.sweep()
+			}
+		}
+	}()
+}
+
+func (s *SessionStore) sweep() {
+	now := time.Now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for id, sess := range s.sessions {
+		if now.After(sess.ExpiresAt) {
+			delete(s.sessions, id)
+		}
+	}
 }
 
 // Get returns the session for id, or ok=false if it doesn't exist or has

@@ -117,8 +117,24 @@ func withAuthEndpoints(proxyHandler http.Handler, authGate *auth.Gate) http.Hand
 	})
 }
 
+// Timeouts guard the listener itself against slow-client attacks
+// (Slowloris et al.) without limiting how long a proxied request/response
+// body can take — a route might legitimately stream a large download or
+// hold open a long-lived connection (WebSocket/SSE support is planned),
+// so ReadTimeout/WriteTimeout are deliberately left unset rather than
+// capping every request's total duration.
+const (
+	readHeaderTimeout = 5 * time.Second
+	idleTimeout       = 120 * time.Second
+)
+
 func startPlain(cfg *config.Config, handler http.Handler) *http.Server {
-	server := &http.Server{Addr: cfg.Listen, Handler: handler}
+	server := &http.Server{
+		Addr:              cfg.Listen,
+		Handler:           handler,
+		ReadHeaderTimeout: readHeaderTimeout,
+		IdleTimeout:       idleTimeout,
+	}
 	go func() {
 		log.Printf("switchboard listening on %s (plain HTTP)", cfg.Listen)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -140,9 +156,11 @@ func startTLS(cfg *config.Config, handler http.Handler) []*http.Server {
 	}
 
 	httpsServer := &http.Server{
-		Addr:      ":443",
-		Handler:   handler,
-		TLSConfig: manager.TLSConfig(),
+		Addr:              ":443",
+		Handler:           handler,
+		TLSConfig:         manager.TLSConfig(),
+		ReadHeaderTimeout: readHeaderTimeout,
+		IdleTimeout:       idleTimeout,
 	}
 	go func() {
 		log.Printf("switchboard listening on :443 (HTTPS, ACME domains: %v)", cfg.TLS.Domains)
@@ -157,6 +175,8 @@ func startTLS(cfg *config.Config, handler http.Handler) []*http.Server {
 			target := "https://" + r.Host + r.URL.RequestURI()
 			http.Redirect(w, r, target, http.StatusMovedPermanently)
 		})),
+		ReadHeaderTimeout: readHeaderTimeout,
+		IdleTimeout:       idleTimeout,
 	}
 	go func() {
 		log.Printf("switchboard listening on :80 (ACME challenges + HTTPS redirect)")

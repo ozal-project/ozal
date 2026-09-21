@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -17,8 +18,9 @@ import (
 )
 
 const (
-	sessionCookieName = "sb_session"
-	defaultSessionTTL = 8 * time.Hour
+	sessionCookieName      = "sb_session"
+	defaultSessionTTL      = 8 * time.Hour
+	sessionCleanupInterval = 10 * time.Minute
 )
 
 // Gate protects routes behind a login against an external OIDC provider.
@@ -59,6 +61,9 @@ func NewGate(ctx context.Context, cfg config.Auth, allowedHosts []string) (*Gate
 		hosts[h] = true
 	}
 
+	sessions := NewSessionStore(ttl)
+	sessions.StartCleanup(ctx, sessionCleanupInterval)
+
 	return &Gate{
 		oauthConfig: oauth2.Config{
 			ClientID:     cfg.ClientID,
@@ -70,7 +75,7 @@ func NewGate(ctx context.Context, cfg config.Auth, allowedHosts []string) (*Gate
 		verifier:     provider.Verifier(&oidc.Config{ClientID: cfg.ClientID}),
 		cookieDomain: cfg.CookieDomain,
 		allowedHosts: hosts,
-		sessions:     NewSessionStore(ttl),
+		sessions:     sessions,
 		pending:      newPendingStore(),
 	}, nil
 }
@@ -179,6 +184,10 @@ func (g *Gate) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	_ = idToken.Claims(&claims) // email is best-effort; absence doesn't invalidate the session
 
 	sessionID, err := g.sessions.Create(claims.Email, idToken.Subject)
+	if errors.Is(err, ErrStoreFull) {
+		http.Error(w, "too many active sessions, try again shortly", http.StatusServiceUnavailable)
+		return
+	}
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return

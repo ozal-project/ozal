@@ -4,30 +4,47 @@ A small reverse proxy, written in Go, that routes incoming requests to local
 services by hostname — like an old telephone switchboard connecting each
 call to the right line.
 
-## Why
+## What this is
 
-Built to solve a real problem: running several independent projects locally
-(each on its own port) makes it easy to collide on ports and annoying to
-remember which port serves what. Switchboard lets each project answer to a
-name (`magiclink.localhost`, `auditanchor.localhost`, ...) instead of a
-port number, and is meant to grow into the same mechanism used to publish
-these projects on a real domain later, with automatic TLS.
+Switchboard is a local-first, identity-aware application gateway for
+developers and small self-hosted deployments. One binary, one config, from
+localhost to production.
 
-The longer-term ambition: Switchboard as "a homemade Caddy plus a homemade
-Okta" — a single Go binary that both routes traffic *and* gates it behind
-login, the same niche as [Pomerium](https://github.com/pomerium/pomerium)
-or [oauth2-proxy](https://github.com/oauth2-proxy/oauth2-proxy). Phase 1
-(current work) delegates login to a real external OIDC provider (Google,
-Okta, etc.) — Switchboard only manages the session after that. A from-
-scratch identity provider (own users, own token issuance) is a deliberately
-separate, later phase, tracked in the roadmap below, and won't be wired
-into anything that needs real security until it's had the same scrutiny.
+It started from a concrete annoyance: running several independent projects
+locally (each on its own port) makes it easy to collide on ports and
+annoying to remember which port serves what. Switchboard lets each project
+answer to a name (`magiclink.localhost`, `auditanchor.localhost`, ...)
+instead of a port number, and grows into the same mechanism used to
+publish those projects on a real domain later, with automatic TLS and,
+optionally, a login requirement per route.
+
+Not a Caddy or Pomerium replacement — those are mature, feature-complete
+projects and competing on feature count would be a losing game. The
+differentiator here is narrower and deliberate: an excellent local-dev
+experience, the *same* config from a laptop to a real VPS, OIDC without
+standing up five separate services, and configuration that stays legible
+enough to actually explain. See [TO_IMPLEMENT.md](TO_IMPLEMENT.md) for the
+full reasoning and roadmap, including what's explicitly *not* planned here
+(a from-scratch identity provider — real learning territory, but its own
+separate project, not part of Switchboard's story).
 
 ## Status
 
-Working: host-based routing, health checks, graceful shutdown, and
-automatic TLS via ACME are all implemented. OIDC login (delegated to an
-external provider) is in progress.
+Solid prototype, **not yet production-ready** — being hardened per an
+external review (2026-09-21) before anything else gets built on top.
+Working and tested: host-based routing, health checks, graceful shutdown,
+automatic TLS via ACME, and OIDC login phase 1 (delegated to an external
+provider). `go test ./... -race` is clean across 39 tests.
+
+In progress (Phase 1 hardening, see [TO_IMPLEMENT.md](TO_IMPLEMENT.md)):
+- [x] HTTP server timeouts (`ReadHeaderTimeout`, `IdleTimeout`) on every listener
+- [x] Session store: periodic cleanup sweep + capacity ceiling (`ErrStoreFull`)
+- [ ] Authorization by claims (allowed emails/domains/required groups) — today, any identity an OIDC provider vouches for gets in, which is the biggest open gap
+- [ ] Stricter route validation (duplicate hosts, scheme restriction, host normalization)
+- [ ] Identity headers propagated to upstream, with client-forged headers stripped first
+- [ ] Secrets via env/file, not only inline JSON
+- [x] `LICENSE` (MIT)
+- [ ] CI and the rest of Phase 6's open-source hygiene items
 
 ## Roadmap
 
