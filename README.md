@@ -31,36 +31,16 @@ external provider) is in progress.
 
 ## Roadmap
 
-- [x] Project scaffold
-- [x] Host-based routing to local upstreams (plain HTTP)
-- [x] Structured request logging
-- [x] Graceful shutdown
-- [x] Health checks per upstream (unhealthy upstream -> 503, doesn't block startup)
-- [x] Automatic TLS via ACME (Let's Encrypt) for real domains
-- [ ] Config reload without restart
-- [ ] `GET /_/status` heartbeat/dashboard (read-only view of route health)
-- [x] **OIDC login, phase 1 — delegated auth**: per-route
-      `auth_required`, login redirect to an external OIDC provider
-      (authorization code + PKCE), server-side session, session cookie.
-      Switchboard trusts the external provider's identity; it does not
-      store credentials or issue its own tokens. Verified: real OIDC
-      discovery against Google succeeds, and the full login -> PKCE ->
-      code exchange -> signed-JWT verification -> session -> callback
-      round trip is tested end-to-end against a fake in-process OIDC
-      provider (real RSA-signed ID token, real JWKS, real signature
-      verification). **Not yet verified against a real provider in a
-      browser** — that needs a registered OAuth app (Google/Okta/etc.) to
-      try live; the mechanics are proven, the real-world integration isn't.
-- [ ] Runtime route management API (`POST/DELETE /routes`) on a separate,
-      authenticated admin listener — not the public :80/:443
-- [ ] **OIDC login, phase 2 — homemade identity provider** (stretch goal,
-      curiosity-driven): Switchboard's own user store, password/credential
-      handling, and OIDC token issuance, instead of delegating to Google/
-      Okta/etc. Meaningfully higher security stakes than phase 1 (signing
-      keys, token lifecycle, credential storage) — treated with the same
-      "moonlighter" discipline as the Sigea projects: build it for real,
-      but don't point anything that matters at it until it's proven out
-      on its own.
+Done: project scaffold, host-based routing, structured logging, graceful
+shutdown, per-upstream health checks, automatic TLS via ACME, and OIDC
+login phase 1 (delegated to an external provider — see below).
+
+Everything still ahead — the status dashboard, config hot-reload, a
+runtime route-management API, a from-scratch OIDC identity provider
+(phase 2), and npm-based distribution — is tracked in detail in
+[TO_IMPLEMENT.md](TO_IMPLEMENT.md), including the stack decisions already
+made for each (e.g. `html/template` + HTMX for the dashboard, not a JS
+framework) and why.
 
 ## Usage
 
