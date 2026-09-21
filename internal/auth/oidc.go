@@ -185,11 +185,23 @@ func (g *Gate) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var claims struct {
-		Email string `json:"email"`
+		Email         string   `json:"email"`
+		EmailVerified bool     `json:"email_verified"`
+		Groups        []string `json:"groups"`
 	}
-	_ = idToken.Claims(&claims) // email is best-effort; absence doesn't invalidate the session
+	if err := idToken.Claims(&claims); err != nil {
+		http.Error(w, "failed to decode id_token claims", http.StatusBadGateway)
+		return
+	}
 
-	sessionID, err := g.sessions.Create(claims.Email, idToken.Subject)
+	principal := Principal{
+		Subject:       idToken.Subject,
+		Email:         claims.Email,
+		EmailVerified: claims.EmailVerified,
+		Groups:        claims.Groups,
+	}
+
+	sessionID, err := g.sessions.Create(principal)
 	if errors.Is(err, ErrStoreFull) {
 		http.Error(w, "too many active sessions, try again shortly", http.StatusServiceUnavailable)
 		return

@@ -23,11 +23,13 @@ import (
 // token. It does not implement or check PKCE/state itself — that's
 // Switchboard's job, and is asserted on the Switchboard side.
 type fakeOIDCProvider struct {
-	server *httptest.Server
-	key    *rsa.PrivateKey
-	keyID  string
-	email  string
-	sub    string
+	server        *httptest.Server
+	key           *rsa.PrivateKey
+	keyID         string
+	email         string
+	emailVerified bool
+	groups        []string
+	sub           string
 }
 
 func newFakeOIDCProvider(t *testing.T) *fakeOIDCProvider {
@@ -37,7 +39,14 @@ func newFakeOIDCProvider(t *testing.T) *fakeOIDCProvider {
 		t.Fatalf("generate key: %v", err)
 	}
 
-	p := &fakeOIDCProvider{key: key, keyID: "test-key", email: "user@example.com", sub: "user-123"}
+	p := &fakeOIDCProvider{
+		key:           key,
+		keyID:         "test-key",
+		email:         "user@example.com",
+		emailVerified: true,
+		groups:        []string{"engineering"},
+		sub:           "user-123",
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/.well-known/openid-configuration", p.handleDiscovery)
@@ -89,7 +98,11 @@ func (p *fakeOIDCProvider) handleToken(w http.ResponseWriter, r *http.Request) {
 		Expiry:   jwt.NewNumericDate(time.Now().Add(time.Hour)),
 		IssuedAt: jwt.NewNumericDate(time.Now()),
 	}
-	extra := map[string]any{"email": p.email}
+	extra := map[string]any{
+		"email":          p.email,
+		"email_verified": p.emailVerified,
+		"groups":         p.groups,
+	}
 	rawIDToken, err := jwt.Signed(signer).Claims(claims).Claims(extra).Serialize()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -172,8 +185,15 @@ func TestFullLoginCallbackFlow(t *testing.T) {
 	}
 
 	sess, _ := gate.sessions.Get(sessionCookie.Value)
-	if sess.Email != provider.email || sess.Subject != provider.sub {
-		t.Errorf("session = %+v, want email=%q subject=%q", sess, provider.email, provider.sub)
+	p := sess.Principal
+	if p.Email != provider.email || p.Subject != provider.sub {
+		t.Errorf("principal = %+v, want email=%q subject=%q", p, provider.email, provider.sub)
+	}
+	if !p.EmailVerified {
+		t.Error("expected the session's principal to carry email_verified=true from the id_token")
+	}
+	if len(p.Groups) != 1 || p.Groups[0] != "engineering" {
+		t.Errorf("groups = %v, want [engineering]", p.Groups)
 	}
 }
 

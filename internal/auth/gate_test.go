@@ -21,7 +21,7 @@ func newTestGate() *Gate {
 
 func TestMiddlewareAllowsValidSession(t *testing.T) {
 	g := newTestGate()
-	id, _ := g.sessions.Create("user@example.com", "sub")
+	id, _ := g.sessions.Create(Principal{Email: "user@example.com", Subject: "sub"})
 
 	called := false
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true })
@@ -79,7 +79,7 @@ func TestMiddlewareRedirectsWithInvalidSessionCookie(t *testing.T) {
 
 func TestHandleLogoutClearsSession(t *testing.T) {
 	g := newTestGate()
-	id, _ := g.sessions.Create("user@example.com", "sub")
+	id, _ := g.sessions.Create(Principal{Email: "user@example.com", Subject: "sub"})
 
 	req := httptest.NewRequest(http.MethodGet, "/_/auth/logout", nil)
 	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: id})

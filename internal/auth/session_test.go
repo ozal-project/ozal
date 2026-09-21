@@ -10,7 +10,7 @@ import (
 func TestCreateAndGet(t *testing.T) {
 	store := NewSessionStore(time.Hour)
 
-	id, err := store.Create("user@example.com", "sub-123")
+	id, err := store.Create(Principal{Email: "user@example.com", Subject: "sub-123"})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -19,7 +19,7 @@ func TestCreateAndGet(t *testing.T) {
 	if !ok {
 		t.Fatal("expected session to be found")
 	}
-	if sess.Email != "user@example.com" || sess.Subject != "sub-123" {
+	if sess.Principal.Email != "user@example.com" || sess.Principal.Subject != "sub-123" {
 		t.Errorf("unexpected session contents: %+v", sess)
 	}
 }
@@ -33,7 +33,7 @@ func TestGetUnknownID(t *testing.T) {
 
 func TestExpiredSessionIsEvicted(t *testing.T) {
 	store := NewSessionStore(-time.Second) // already expired on creation
-	id, err := store.Create("user@example.com", "sub-123")
+	id, err := store.Create(Principal{Email: "user@example.com", Subject: "sub-123"})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestExpiredSessionIsEvicted(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	store := NewSessionStore(time.Hour)
-	id, _ := store.Create("user@example.com", "sub-123")
+	id, _ := store.Create(Principal{Email: "user@example.com", Subject: "sub-123"})
 
 	store.Delete(id)
 
@@ -56,8 +56,8 @@ func TestDelete(t *testing.T) {
 
 func TestSessionIDsAreUnique(t *testing.T) {
 	store := NewSessionStore(time.Hour)
-	id1, _ := store.Create("a@example.com", "a")
-	id2, _ := store.Create("b@example.com", "b")
+	id1, _ := store.Create(Principal{Email: "a@example.com", Subject: "a"})
+	id2, _ := store.Create(Principal{Email: "b@example.com", Subject: "b"})
 	if id1 == id2 {
 		t.Fatal("expected distinct session ids")
 	}
@@ -66,19 +66,19 @@ func TestSessionIDsAreUnique(t *testing.T) {
 func TestCreateFailsAtCapacity(t *testing.T) {
 	store := NewSessionStore(time.Hour)
 	for i := 0; i < maxSessions; i++ {
-		if _, err := store.Create("user@example.com", "sub"); err != nil {
+		if _, err := store.Create(Principal{Email: "user@example.com", Subject: "sub"}); err != nil {
 			t.Fatalf("Create #%d: unexpected error before reaching capacity: %v", i, err)
 		}
 	}
 
-	if _, err := store.Create("one-too-many@example.com", "sub"); !errors.Is(err, ErrStoreFull) {
+	if _, err := store.Create(Principal{Email: "one-too-many@example.com", Subject: "sub"}); !errors.Is(err, ErrStoreFull) {
 		t.Fatalf("Create at capacity: err = %v, want ErrStoreFull", err)
 	}
 }
 
 func TestStartCleanupSweepsExpiredSessions(t *testing.T) {
 	store := NewSessionStore(-time.Second) // already expired on creation
-	id, err := store.Create("user@example.com", "sub-123")
+	id, err := store.Create(Principal{Email: "user@example.com", Subject: "sub-123"})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}

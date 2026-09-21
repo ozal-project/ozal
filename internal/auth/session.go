@@ -23,8 +23,7 @@ var ErrStoreFull = errors.New("session store is full")
 const maxSessions = 10_000
 
 type Session struct {
-	Email     string
-	Subject   string
+	Principal Principal
 	ExpiresAt time.Time
 }
 
@@ -43,11 +42,11 @@ func NewSessionStore(ttl time.Duration) *SessionStore {
 	return &SessionStore{ttl: ttl, sessions: make(map[string]Session)}
 }
 
-// Create stores a new session and returns its opaque, unguessable ID —
-// this ID is what goes in the session cookie. 256 bits of randomness from
-// crypto/rand is the whole security boundary here: knowing the ID is
-// equivalent to being logged in as that user.
-func (s *SessionStore) Create(email, subject string) (string, error) {
+// Create stores a new session for principal and returns its opaque,
+// unguessable ID — this ID is what goes in the session cookie. 256 bits of
+// randomness from crypto/rand is the whole security boundary here: knowing
+// the ID is equivalent to being logged in as that principal.
+func (s *SessionStore) Create(principal Principal) (string, error) {
 	idBytes := make([]byte, 32)
 	if _, err := rand.Read(idBytes); err != nil {
 		return "", err
@@ -59,7 +58,7 @@ func (s *SessionStore) Create(email, subject string) (string, error) {
 	if len(s.sessions) >= maxSessions {
 		return "", ErrStoreFull
 	}
-	s.sessions[id] = Session{Email: email, Subject: subject, ExpiresAt: time.Now().Add(s.ttl)}
+	s.sessions[id] = Session{Principal: principal, ExpiresAt: time.Now().Add(s.ttl)}
 
 	return id, nil
 }
