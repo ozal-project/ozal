@@ -180,7 +180,7 @@ func TestFullLoginCallbackFlow(t *testing.T) {
 	// requests, with the identity taken from the fake provider's ID token.
 	checkReq := httptest.NewRequest(http.MethodGet, "http://app.localhost/dashboard", nil)
 	checkReq.AddCookie(sessionCookie)
-	if !gate.IsAuthenticated(checkReq) {
+	if _, ok := gate.Authenticate(checkReq); !ok {
 		t.Fatal("expected the session set by the callback to authenticate a follow-up request")
 	}
 

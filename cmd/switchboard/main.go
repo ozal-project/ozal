@@ -42,7 +42,7 @@ func main() {
 	// pointer, and proxy.go's "gate == nil" check would then miss it.
 	var gate proxy.AuthGate
 	var authGate *auth.Gate
-	if hasAuthRequiredRoute(cfg.Routes) {
+	if hasProtectedRoute(cfg.Routes) {
 		hosts := make([]string, len(cfg.Routes))
 		for i, r := range cfg.Routes {
 			hosts[i] = r.Host
@@ -85,9 +85,9 @@ func main() {
 	}
 }
 
-func hasAuthRequiredRoute(routes []config.Route) bool {
+func hasProtectedRoute(routes []config.Route) bool {
 	for _, r := range routes {
-		if r.AuthRequired {
+		if r.RequiresAuth() {
 			return true
 		}
 	}

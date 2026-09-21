@@ -6,15 +6,21 @@ import (
 	"log"
 	"net/http"
 	"net/http/httputil"
-	"net/url"
 
+	"github.com/octaviosantacruz/switchboard/internal/auth"
 	"github.com/octaviosantacruz/switchboard/internal/config"
+)
+
+const (
+	authEmailHeader = "X-Auth-Request-Email"
+	authUserHeader  = "X-Auth-Request-User"
 )
 
 type route struct {
 	target       string
 	proxy        *httputil.ReverseProxy
 	authRequired bool
+	access       config.AccessPolicy
 }
 
 // HealthChecker reports whether the upstream for a route's host is
@@ -24,39 +30,59 @@ type HealthChecker interface {
 	Healthy(host string) bool
 }
 
-// AuthGate decides whether a request to an auth_required route is allowed
-// through, and where to send it if not. A nil AuthGate is fine as long as
-// no route sets auth_required — config validation already enforces that.
+// AuthGate authenticates requests to protected routes and starts the login
+// flow when no valid session exists. A nil AuthGate is fine as long as no
+// route requires authentication; config validation already enforces that.
 type AuthGate interface {
-	IsAuthenticated(r *http.Request) bool
+	Authenticate(r *http.Request) (auth.Principal, bool)
 	RedirectToLogin(w http.ResponseWriter, r *http.Request)
 }
 
 // New builds a host-routed reverse proxy handler from the given routes.
-// It fails fast if any target URL is invalid. checker and gate may be nil.
+// It fails fast on invalid or duplicate hosts and targets. checker and gate may be nil.
 func New(routes []config.Route, checker HealthChecker, gate AuthGate) (http.Handler, error) {
 	byHost := make(map[string]route, len(routes))
 
 	for _, r := range routes {
-		target, err := url.Parse(r.Target)
+		host, err := config.NormalizeHost(r.Host)
+		if err != nil {
+			return nil, fmt.Errorf("route %q has invalid host: %w", r.Host, err)
+		}
+		if _, exists := byHost[host]; exists {
+			return nil, fmt.Errorf("duplicate route host %q", host)
+		}
+		target, err := config.ParseTarget(r.Target)
 		if err != nil {
 			return nil, fmt.Errorf("route %s: invalid target %q: %w", r.Host, r.Target, err)
 		}
-		byHost[r.Host] = route{
+		policy := config.AccessPolicy{}
+		if r.Access != nil {
+			policy = *r.Access
+		}
+		byHost[host] = route{
 			target:       r.Target,
 			proxy:        httputil.NewSingleHostReverseProxy(target),
-			authRequired: r.AuthRequired,
+			authRequired: r.RequiresAuth(),
+			access:       policy,
 		}
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		rt, ok := byHost[req.Host]
+		req.Header.Del(authEmailHeader)
+		req.Header.Del(authUserHeader)
+
+		host, err := config.NormalizeHost(req.Host)
+		if err != nil {
+			http.Error(w, "invalid request host", http.StatusBadRequest)
+			return
+		}
+		rt, ok := byHost[host]
 		if !ok {
 			http.Error(w, "no route for host: "+req.Host, http.StatusNotFound)
 			return
 		}
-		if checker != nil && !checker.Healthy(req.Host) {
-			http.Error(w, "upstream unhealthy: "+req.Host, http.StatusServiceUnavailable)
+		if checker != nil && !checker.Healthy(host) {
+			http.Error(w, "upstream unhealthy: "+host, http.StatusServiceUnavailable)
 			return
 		}
 		if rt.authRequired {
@@ -64,12 +90,25 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate) (http.Hand
 				http.Error(w, "auth misconfigured for this route", http.StatusInternalServerError)
 				return
 			}
-			if !gate.IsAuthenticated(req) {
+			principal, ok := gate.Authenticate(req)
+			if !ok {
 				gate.RedirectToLogin(w, req)
 				return
 			}
+			decision := auth.Authorize(principal, rt.access)
+			if !decision.Allowed {
+				log.Printf("access denied for %s on %s: %s", principal.Subject, host, decision.Code)
+				http.Error(w, "access denied", http.StatusForbidden)
+				return
+			}
+			if principal.Email != "" {
+				req.Header.Set(authEmailHeader, principal.Email)
+			}
+			if principal.Subject != "" {
+				req.Header.Set(authUserHeader, principal.Subject)
+			}
 		}
-		log.Printf("%s %s%s -> %s", req.Method, req.Host, req.URL.Path, rt.target)
+		log.Printf("%s %s%s -> %s", req.Method, host, req.URL.Path, rt.target)
 		rt.proxy.ServeHTTP(w, req)
 	}), nil
 }

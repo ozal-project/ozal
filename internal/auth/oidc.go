@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -58,7 +59,11 @@ func NewGate(ctx context.Context, cfg config.Auth, allowedHosts []string) (*Gate
 
 	hosts := make(map[string]bool, len(allowedHosts))
 	for _, h := range allowedHosts {
-		hosts[h] = true
+		host, err := config.NormalizeHost(h)
+		if err != nil {
+			return nil, fmt.Errorf("invalid allowed host %q: %w", h, err)
+		}
+		hosts[host] = true
 	}
 
 	sessions := NewSessionStore(ttl)
@@ -83,18 +88,18 @@ func NewGate(ctx context.Context, cfg config.Auth, allowedHosts []string) (*Gate
 	}, nil
 }
 
-// IsAuthenticated reports whether the request carries a valid session
-// cookie. Callers that need to gate something other than a full
-// http.Handler (e.g. picking a route first, then deciding) use this plus
-// RedirectToLogin directly; Middleware is the convenience wrapper for the
-// common case of gating a whole handler.
-func (g *Gate) IsAuthenticated(r *http.Request) bool {
+// Authenticate returns the trusted identity stored in a valid session.
+// The bool is false when the cookie is absent, unknown, or expired.
+func (g *Gate) Authenticate(r *http.Request) (Principal, bool) {
 	cookie, err := r.Cookie(sessionCookieName)
 	if err != nil {
-		return false
+		return Principal{}, false
 	}
-	_, ok := g.sessions.Get(cookie.Value)
-	return ok
+	session, ok := g.sessions.Get(cookie.Value)
+	if !ok {
+		return Principal{}, false
+	}
+	return session.Principal, true
 }
 
 // RedirectToLogin sends the browser to the login flow, remembering the
@@ -119,7 +124,7 @@ func requestURL(r *http.Request) string {
 // which routes need auth — the caller only wraps the routes that do.
 func (g *Gate) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if g.IsAuthenticated(r) {
+		if _, ok := g.Authenticate(r); ok {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -228,7 +233,15 @@ func (g *Gate) HandleCallback(w http.ResponseWriter, r *http.Request) {
 // returnTo comes from a query parameter an attacker fully controls.
 func (g *Gate) safeReturnTo(returnTo string) string {
 	u, err := url.Parse(returnTo)
-	if err != nil || !g.allowedHosts[u.Host] {
+	if err != nil || u.User != nil {
+		return "/"
+	}
+	scheme := strings.ToLower(u.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return "/"
+	}
+	host, err := config.NormalizeHost(u.Host)
+	if err != nil || !g.allowedHosts[host] {
 		return "/"
 	}
 	return returnTo

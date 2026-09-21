@@ -3,7 +3,8 @@ package config
 // AccessPolicy narrows who may reach a route beyond having a valid session.
 //
 // Semantics (enforced by auth.Authorize, not here):
-//   - Route.Access == nil: the route is public, no session required.
+//   - Route.Access == nil: the route is public unless legacy
+//     Route.AuthRequired is true.
 //   - Route.Access == &AccessPolicy{}: any authenticated user may pass.
 //   - AllowedEmails / AllowedDomains: OR'd together — either allowlist
 //     matching is enough. If both are empty, identity is not restricted.

@@ -24,10 +24,10 @@ project** later, not a Switchboard phase — see the end of this file.
 
 ## Status snapshot (2026-09-21)
 
-Routing, health checks, graceful shutdown, TLS/ACME, and OIDC login phase 1
-(delegated to an external provider) are implemented — ~1,650 lines of Go,
-37 tests including a full login/PKCE/JWT-verification round trip against a
-fake in-process provider. Solid prototype, **not yet production-ready**:
+Routing, health checks, graceful shutdown, TLS/ACME, OIDC login, and
+per-route authorization by claims are implemented, including a full
+login/PKCE/JWT-verification round trip against a fake in-process provider.
+Solid prototype, **not yet production-ready**:
 see Phase 1 below for exactly what's blocking that claim.
 
 External review credited as especially solid:
@@ -43,60 +43,51 @@ Converts the prototype into a trustworthy base. Nothing else on this
 roadmap should be built on top of the current state until this phase is
 done.
 
-- [ ] **Authorization by claims, not just authentication.** Today any
-      identity an OIDC provider vouches for gets in — there's no allowlist.
-      Add per-route access policy:
+- [x] **Authorization by claims, not just authentication.** Per-route access
+      policies support:
       ```yaml
       access:
         allowed_emails: ["octavio@example.com"]
         allowed_domains: ["example.com"]
         required_groups: ["engineering"]
       ```
-      Enforce it in the proxy's auth-gate check, not just "has a session."
-      `groups` depends on the provider actually issuing a groups claim
-      (works with Okta/Google Workspace when scoped correctly) — document
-      that dependency rather than silently no-op'ing when it's absent.
+      The proxy enforces the policy after authentication. `groups` depends
+      on the provider actually issuing a groups claim (works with
+      Okta/Google Workspace when scoped correctly); a missing claim fails
+      closed when groups are required.
 - [x] **HTTP server timeouts.** `ReadHeaderTimeout` + `IdleTimeout` set on
       every server we construct (plain, TLS, ACME challenge). `ReadTimeout`/
       `WriteTimeout` deliberately left unset — a route may need to stream a
       long-lived or large response (WebSocket/SSE support is planned).
-- [ ] **Stricter, normalized route validation.**
+- [x] **Stricter, normalized route validation.**
       - Reject duplicate `host` entries instead of silently letting the
         last one win.
       - Restrict `target` to `http`/`https` schemes only.
       - Normalize hosts (case, trailing dot) before using them as map keys,
         so `Magiclink.Localhost` and `magiclink.localhost` don't silently
         diverge.
-      - Validate `cookie_domain` actually covers every `auth_required`
+      - Validate `cookie_domain` actually covers every protected
         route's host (a real suffix check, not just "is it set").
 - [x] **Session store cleanup + limits.** Periodic sweep (same ticker
       pattern as `healthcheck.Checker`) plus a 10k capacity ceiling
       (`ErrStoreFull` -> 503).
-- [ ] **`pendingStore` cleanup + limits** (found in a later review pass,
-      not yet fixed): `SessionStore` now self-limits, but `pendingStore`
-      (in-flight logins, keyed by OAuth `state`) only evicts expired
-      entries lazily on `put` — it has no independent periodic sweep and
-      no capacity ceiling, so a burst of `/​_/auth/login` hits faster than
-      new logins arrive could grow it unbounded within the 5-minute TTL
-      window. Apply the same fix as `SessionStore`.
-- [ ] **Secure identity propagation upstream, and strip client-forged
-      headers first.** Once auth passes, forward the verified identity to
-      the upstream app (`X-Auth-Request-Email`, `X-Auth-Request-User` —
-      the `oauth2-proxy` convention) so upstream apps can use it — but
-      strip any inbound header with those same names from the *client*
-      request first, so a client can't just set the header itself and
-      spoof an identity.
+- [x] **`pendingStore` cleanup + limits.** In-flight logins have an
+      independent periodic sweep and a 10k capacity ceiling, matching the
+      bounded-session-store approach.
+- [x] **Secure identity propagation upstream.** Protected routes receive
+      `X-Auth-Request-Email` and `X-Auth-Request-User` (OIDC subject)
+      from the verified session. Client-supplied values are stripped on
+      every route before any trusted values are added.
 - [ ] **Secrets from env/file, not only inline JSON.** `client_secret`
       currently has to live in the JSON config in plaintext. Support
       `client_secret_file` (read the value from a file) and/or environment
       variable expansion, so the secret doesn't have to sit in a
       version-controllable file.
-- [ ] **Test hardening**: run the existing suite with `-race`, add fuzz
-      tests for config parsing / host validation / the `return_to`
-      open-redirect guard, and more negative-path tests generally.
-- [ ] **Fix the README inconsistency** where OIDC phase 1 is described as
-      both "in progress" and "done" in different sections (a leftover from
-      editing the roadmap without updating the status blurb above it).
+- [ ] **Test hardening**: the existing suite is clean with `-race`; add
+      fuzz tests for config parsing / host validation / the `return_to`
+      open-redirect guard, plus more negative-path tests generally.
+- [x] **Fix the README inconsistency:** the status and roadmap now describe
+      OIDC login and claim authorization consistently.
 
 ## Phase 2 — Transactional runtime (prerequisite for reload/API/dashboard)
 

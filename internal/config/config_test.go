@@ -140,3 +140,163 @@ func TestLoadRejectsMissingFile(t *testing.T) {
 		t.Fatal("expected an error for a missing config file")
 	}
 }
+
+func TestLoadAcceptsAccessPolicyWithFullAuthConfig(t *testing.T) {
+	path := writeConfig(t, `{
+		"listen": ":8888",
+		"auth": {
+			"issuer": "https://accounts.google.com",
+			"client_id": "id",
+			"client_secret": "secret",
+			"redirect_url": "http://localhost:8888/_/auth/callback"
+		},
+		"routes": [{
+			"host": "localhost:8888",
+			"target": "http://localhost:9000",
+			"access": {
+				"allowed_domains": ["example.com"],
+				"required_groups": ["engineering"]
+			}
+		}]
+	}`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Routes[0].Access == nil {
+		t.Fatal("Access = nil, want decoded policy")
+	}
+	if got := cfg.Routes[0].Access.AllowedDomains; len(got) != 1 || got[0] != "example.com" {
+		t.Fatalf("AllowedDomains = %v, want [example.com]", got)
+	}
+}
+
+func TestLoadRejectsAccessPolicyWithoutAuthConfig(t *testing.T) {
+	path := writeConfig(t, `{
+		"listen": ":8888",
+		"routes": [{"host": "a.localhost", "target": "http://localhost:9000", "access": {}}]
+	}`)
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected an error for access policy without an auth config")
+	}
+}
+
+func TestLoadNormalizesRouteHosts(t *testing.T) {
+	path := writeConfig(t, `{
+		"listen": ":8888",
+		"routes": [{"host": "Magiclink.Localhost.:8888", "target": "http://localhost:9000"}]
+	}`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := cfg.Routes[0].Host; got != "magiclink.localhost:8888" {
+		t.Fatalf("Host = %q, want magiclink.localhost:8888", got)
+	}
+}
+
+func TestLoadRejectsDuplicateNormalizedHosts(t *testing.T) {
+	path := writeConfig(t, `{
+		"listen": ":8888",
+		"routes": [
+			{"host": "APP.localhost", "target": "http://localhost:9000"},
+			{"host": "app.localhost.", "target": "http://localhost:9001"}
+		]
+	}`)
+
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected duplicate normalized route hosts to be rejected")
+	}
+}
+
+func TestLoadRejectsUnsupportedTargetScheme(t *testing.T) {
+	path := writeConfig(t, `{
+		"listen": ":8888",
+		"routes": [{"host": "app.localhost", "target": "ftp://localhost:9000"}]
+	}`)
+
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected an unsupported target scheme to be rejected")
+	}
+}
+
+func TestLoadNormalizesAndValidatesCookieDomain(t *testing.T) {
+	path := writeConfig(t, `{
+		"listen": ":8888",
+		"auth": {
+			"issuer": "https://accounts.google.com",
+			"client_id": "id",
+			"client_secret": "secret",
+			"redirect_url": "https://AUTH.example.com/_/auth/callback",
+			"cookie_domain": ".Example.COM"
+		},
+		"routes": [{
+			"host": "APP.example.com",
+			"target": "http://localhost:9000",
+			"access": {}
+		}]
+	}`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Auth.CookieDomain != "example.com" {
+		t.Fatalf("CookieDomain = %q, want example.com", cfg.Auth.CookieDomain)
+	}
+}
+
+func TestLoadRejectsCookieDomainThatDoesNotCoverCallback(t *testing.T) {
+	path := writeConfig(t, `{
+		"listen": ":8888",
+		"auth": {
+			"issuer": "https://accounts.google.com",
+			"client_id": "id",
+			"client_secret": "secret",
+			"redirect_url": "https://auth.example.com/_/auth/callback",
+			"cookie_domain": ".other.example"
+		},
+		"routes": [{"host": "auth.example.com", "target": "http://localhost:9000", "access": {}}]
+	}`)
+
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected cookie_domain not covering redirect host to be rejected")
+	}
+}
+
+func TestLoadRejectsCookieDomainThatDoesNotCoverProtectedRoute(t *testing.T) {
+	path := writeConfig(t, `{
+		"listen": ":8888",
+		"auth": {
+			"issuer": "https://accounts.google.com",
+			"client_id": "id",
+			"client_secret": "secret",
+			"redirect_url": "https://auth.example.com/_/auth/callback",
+			"cookie_domain": ".auth.example.com"
+		},
+		"routes": [{"host": "app.example.com", "target": "http://localhost:9000", "access": {}}]
+	}`)
+
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected cookie_domain not covering protected route to be rejected")
+	}
+}
+
+func TestLoadRejectsNonHTTPRedirectURL(t *testing.T) {
+	path := writeConfig(t, `{
+		"listen": ":8888",
+		"auth": {
+			"issuer": "https://accounts.google.com",
+			"client_id": "id",
+			"client_secret": "secret",
+			"redirect_url": "ftp://app.example.com/_/auth/callback"
+		},
+		"routes": [{"host": "app.example.com", "target": "http://localhost:9000", "access": {}}]
+	}`)
+
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected non-HTTP auth.redirect_url to be rejected")
+	}
+}

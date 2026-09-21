@@ -33,15 +33,15 @@ separate project, not part of Switchboard's story).
 Solid prototype, **not yet production-ready** — being hardened per an
 external review (2026-09-21) before anything else gets built on top.
 Working and tested: host-based routing, health checks, graceful shutdown,
-automatic TLS via ACME, and OIDC login phase 1 (delegated to an external
-provider). `go test ./... -race` is clean across 39 tests.
+automatic TLS via ACME, OIDC login, and per-route authorization by verified
+email, email domain, and group claims. `go test ./... -race` is clean.
 
 In progress (Phase 1 hardening, see [TO_IMPLEMENT.md](TO_IMPLEMENT.md)):
 - [x] HTTP server timeouts (`ReadHeaderTimeout`, `IdleTimeout`) on every listener
 - [x] Session store: periodic cleanup sweep + capacity ceiling (`ErrStoreFull`)
-- [ ] Authorization by claims (allowed emails/domains/required groups) — today, any identity an OIDC provider vouches for gets in, which is the biggest open gap
-- [ ] Stricter route validation (duplicate hosts, scheme restriction, host normalization)
-- [ ] Identity headers propagated to upstream, with client-forged headers stripped first
+- [x] Authorization by claims (allowed emails/domains/required groups)
+- [x] Strict route validation (duplicates, HTTP(S) targets, normalized hosts/cookies)
+- [x] Verified identity headers propagated upstream; client-forged values stripped
 - [ ] Secrets via env/file, not only inline JSON
 - [x] `LICENSE` (MIT)
 - [ ] CI and the rest of Phase 6's open-source hygiene items
@@ -51,8 +51,8 @@ In progress (Phase 1 hardening, see [TO_IMPLEMENT.md](TO_IMPLEMENT.md)):
 Done: project scaffold, host-based routing, request logging (plain
 `log.Printf` today — structured JSON logging is still Phase 5, not done
 yet), graceful shutdown, per-upstream health checks, automatic TLS via
-ACME, and OIDC login phase 1 (delegated to an external provider — see
-below).
+ACME, and OIDC login with per-route claim authorization (delegated to an
+external provider — see below).
 
 Everything still ahead — the status dashboard, config hot-reload, a
 runtime route-management API, a from-scratch OIDC identity provider
@@ -85,6 +85,10 @@ go run ./cmd/switchboard -config config.json
 gets traffic; an upstream that fails its check (5xx or unreachable) gets a
 503 from Switchboard instead of being proxied to.
 
+Route hosts are matched case-insensitively and normalized without a trailing
+DNS dot. Duplicate normalized hosts are rejected, and upstream targets must
+be absolute `http://` or `https://` URLs.
+
 ### Real deployment (HTTPS via Let's Encrypt)
 
 Set `tls.enabled: true` and point real DNS at the box. Switchboard then
@@ -113,13 +117,14 @@ in this mode (ports 80/443 are fixed, as ACME and browsers expect).
 
 ### Gating a route behind login (OIDC, phase 1)
 
-Set `auth_required: true` on a route and fill in `auth` with a real OIDC
-provider's details (Google, Okta, Auth0, ...). A request to that route
-without a valid session gets redirected to the provider's login page;
-after a successful login, Switchboard sets a session cookie (an opaque,
-server-side session ID — it never signs or encodes anything into the
-cookie itself, so there's no separate signing secret to manage) and
-proxies the request through as normal.
+Add an `access` policy to a route and fill in `auth` with a real OIDC
+provider's details (Google, Okta, Auth0, ...). An empty policy (`"access": {}`)
+allows any authenticated identity. A request without a valid session gets
+redirected to the provider's login page; after a successful login,
+Switchboard sets a session cookie (an opaque, server-side session ID — it
+never signs or encodes anything into the cookie itself, so there's no
+separate signing secret to manage) and checks the route policy before
+proxying the request.
 
 Sessions are in-memory and per-process: they don't survive a restart and
 aren't shared across replicas. Fine for a single-box deployment; revisit
@@ -139,7 +144,7 @@ if Switchboard is ever run more than once behind a load balancer.
     "session_ttl_minutes": 480
   },
   "routes": [
-    { "host": "localhost:8888", "target": "http://localhost:8090", "auth_required": true }
+    { "host": "localhost:8888", "target": "http://localhost:8090", "access": {} }
   ]
 }
 ```
@@ -163,15 +168,31 @@ them:
   },
   "routes": [
     { "host": "auth.example.com", "target": "http://localhost:9000" },
-    { "host": "app.example.com", "target": "http://localhost:9001", "auth_required": true }
+    {
+      "host": "app.example.com",
+      "target": "http://localhost:9001",
+      "access": {
+        "allowed_domains": ["example.com"],
+        "required_groups": ["engineering"]
+      }
+    }
   ]
 }
 ```
 
-Without `cookie_domain`, Switchboard refuses to start if any `auth_required`
-route is on a host other than `redirect_url`'s — that combination silently
-loops back to login forever otherwise, and it's better to fail at startup
-than discover it live.
+Without `cookie_domain`, Switchboard refuses to start if any protected route
+is on a host other than `redirect_url`'s — that combination silently loops
+back to login forever otherwise, and it's better to fail at startup than
+discover it live.
+
+`allowed_emails` and `allowed_domains` are alternative ways to pass the
+identity allowlist; `required_groups` is additionally enforced and every
+listed group must be present. Email matching is case-insensitive and requires
+the provider's `email_verified` claim. Group names are case-sensitive. Group
+authorization only works when the provider includes a `groups` claim in the
+ID token; if a route requires groups and that claim is absent, access is
+denied. The older `auth_required: true` remains supported as shorthand for
+an empty access policy.
 
 `redirect_url` must be registered as an authorized redirect URI in the
 OIDC provider's app configuration, and must exactly match Switchboard's
@@ -179,6 +200,7 @@ OIDC provider's app configuration, and must exactly match Switchboard's
 at. `session_ttl_minutes` defaults to 480 (8 hours) if omitted. Switchboard
 never sees or stores a password — it only receives the provider's ID token
 after a successful login and trusts that identity for the session. A
-post-login redirect (`return_to`) is only honored if it points at one of
-the hosts in this config's `routes` — otherwise Switchboard would be an
-open redirect for anyone who can craft a login link.
+post-login redirect (`return_to`) is only honored when it is an absolute
+HTTP(S) URL without userinfo and points at one of the normalized hosts in
+this config's `routes` — otherwise Switchboard would be an open redirect
+for anyone who can craft a login link.

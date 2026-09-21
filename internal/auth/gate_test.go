@@ -21,7 +21,8 @@ func newTestGate() *Gate {
 
 func TestMiddlewareAllowsValidSession(t *testing.T) {
 	g := newTestGate()
-	id, _ := g.sessions.Create(Principal{Email: "user@example.com", Subject: "sub"})
+	want := Principal{Email: "user@example.com", Subject: "sub"}
+	id, _ := g.sessions.Create(want)
 
 	called := false
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true })
@@ -35,6 +36,10 @@ func TestMiddlewareAllowsValidSession(t *testing.T) {
 
 	if !called {
 		t.Fatal("expected the protected handler to be called with a valid session")
+	}
+	got, ok := g.Authenticate(req)
+	if !ok || got.Email != want.Email || got.Subject != want.Subject {
+		t.Fatalf("Authenticate = (%+v, %v), want (%+v, true)", got, ok, want)
 	}
 }
 
@@ -137,5 +142,29 @@ func TestRandomStringIsNotEmptyAndVaries(t *testing.T) {
 	b, _ := randomString(32)
 	if a == "" || a == b {
 		t.Fatalf("expected non-empty, distinct random strings, got %q and %q", a, b)
+	}
+}
+
+func TestSafeReturnToNormalizesKnownHost(t *testing.T) {
+	g := newTestGate()
+	returnTo := "https://APP.EXAMPLE.COM./dashboard"
+	if got := g.safeReturnTo(returnTo); got != returnTo {
+		t.Fatalf("safeReturnTo = %q, want %q", got, returnTo)
+	}
+}
+
+func TestSafeReturnToRejectsUnsafeSchemesAndUserinfo(t *testing.T) {
+	g := newTestGate()
+	for _, returnTo := range []string{
+		"javascript://app.example.com/alert",
+		"ftp://app.example.com/file",
+		"//app.example.com/scheme-relative",
+		"https://attacker@app.example.com/dashboard",
+	} {
+		t.Run(returnTo, func(t *testing.T) {
+			if got := g.safeReturnTo(returnTo); got != "/" {
+				t.Fatalf("safeReturnTo(%q) = %q, want /", returnTo, got)
+			}
+		})
 	}
 }
