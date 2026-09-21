@@ -13,6 +13,7 @@ import (
 
 	"golang.org/x/crypto/acme/autocert"
 
+	"github.com/octaviosantacruz/switchboard/internal/auth"
 	"github.com/octaviosantacruz/switchboard/internal/config"
 	"github.com/octaviosantacruz/switchboard/internal/healthcheck"
 	"github.com/octaviosantacruz/switchboard/internal/proxy"
@@ -35,10 +36,30 @@ func main() {
 	checker := healthcheck.New()
 	checker.Start(ctx, cfg.Routes, healthCheckInterval)
 
-	handler, err := proxy.New(cfg.Routes, checker)
+	// gate stays a nil proxy.AuthGate (a genuinely nil interface) unless a
+	// route actually needs auth — assigning a nil *auth.Gate to it
+	// directly would instead produce a non-nil interface wrapping a nil
+	// pointer, and proxy.go's "gate == nil" check would then miss it.
+	var gate proxy.AuthGate
+	var authGate *auth.Gate
+	if hasAuthRequiredRoute(cfg.Routes) {
+		hosts := make([]string, len(cfg.Routes))
+		for i, r := range cfg.Routes {
+			hosts[i] = r.Host
+		}
+		authGate, err = auth.NewGate(ctx, cfg.Auth, hosts)
+		if err != nil {
+			log.Fatalf("auth: %v", err)
+		}
+		gate = authGate
+		log.Printf("OIDC login enabled (issuer: %s)", cfg.Auth.Issuer)
+	}
+
+	proxyHandler, err := proxy.New(cfg.Routes, checker, gate)
 	if err != nil {
 		log.Fatalf("proxy: %v", err)
 	}
+	handler := withAuthEndpoints(proxyHandler, authGate)
 
 	log.Printf("routes:")
 	for _, r := range cfg.Routes {
@@ -62,6 +83,38 @@ func main() {
 			log.Printf("shutdown %s: %v", s.Addr, err)
 		}
 	}
+}
+
+func hasAuthRequiredRoute(routes []config.Route) bool {
+	for _, r := range routes {
+		if r.AuthRequired {
+			return true
+		}
+	}
+	return false
+}
+
+// withAuthEndpoints intercepts the /_/auth/* paths (login, callback,
+// logout) regardless of Host, so they work the same way on every route's
+// hostname; everything else falls through to the proxy. authGate may be
+// nil if no route needs auth, in which case those paths 404 like anything
+// else unmatched by proxyHandler.
+func withAuthEndpoints(proxyHandler http.Handler, authGate *auth.Gate) http.Handler {
+	if authGate == nil {
+		return proxyHandler
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/_/auth/login":
+			authGate.HandleLogin(w, r)
+		case "/_/auth/callback":
+			authGate.HandleCallback(w, r)
+		case "/_/auth/logout":
+			authGate.HandleLogout(w, r)
+		default:
+			proxyHandler.ServeHTTP(w, r)
+		}
+	})
 }
 
 func startPlain(cfg *config.Config, handler http.Handler) *http.Server {

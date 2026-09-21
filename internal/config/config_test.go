@@ -76,6 +76,65 @@ func TestLoadRejectsTLSWithoutCacheDir(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsAuthRequiredWithoutAuthConfig(t *testing.T) {
+	path := writeConfig(t, `{
+		"listen": ":8888",
+		"routes": [{"host": "a.localhost", "target": "http://localhost:9000", "auth_required": true}]
+	}`)
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected an error for auth_required without an auth config")
+	}
+}
+
+func TestLoadAcceptsAuthRequiredWithFullAuthConfig(t *testing.T) {
+	path := writeConfig(t, `{
+		"listen": ":8888",
+		"auth": {
+			"issuer": "https://accounts.google.com",
+			"client_id": "id",
+			"client_secret": "secret",
+			"redirect_url": "http://localhost:8888/_/auth/callback"
+		},
+		"routes": [{"host": "localhost:8888", "target": "http://localhost:9000", "auth_required": true}]
+	}`)
+	if _, err := Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+}
+
+func TestLoadRejectsAuthRequiredOnDifferentHostWithoutCookieDomain(t *testing.T) {
+	path := writeConfig(t, `{
+		"listen": ":8888",
+		"auth": {
+			"issuer": "https://accounts.google.com",
+			"client_id": "id",
+			"client_secret": "secret",
+			"redirect_url": "http://auth.example.com/_/auth/callback"
+		},
+		"routes": [{"host": "app.example.com", "target": "http://localhost:9000", "auth_required": true}]
+	}`)
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected an error: auth_required route on a different host than redirect_url, with no cookie_domain to share the session")
+	}
+}
+
+func TestLoadAcceptsAuthRequiredOnDifferentHostWithCookieDomain(t *testing.T) {
+	path := writeConfig(t, `{
+		"listen": ":8888",
+		"auth": {
+			"issuer": "https://accounts.google.com",
+			"client_id": "id",
+			"client_secret": "secret",
+			"redirect_url": "http://auth.example.com/_/auth/callback",
+			"cookie_domain": ".example.com"
+		},
+		"routes": [{"host": "app.example.com", "target": "http://localhost:9000", "auth_required": true}]
+	}`)
+	if _, err := Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+}
+
 func TestLoadRejectsMissingFile(t *testing.T) {
 	if _, err := Load(filepath.Join(t.TempDir(), "nope.json")); err == nil {
 		t.Fatal("expected an error for a missing config file")
