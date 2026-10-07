@@ -1,0 +1,30 @@
+# Learning log
+
+One line per closed task: what was learned, in Go or in the domain. This is
+the raw material for each release's write-up. Newest first.
+
+Format: `YYYY-MM-DD · ID · topic — what clicked (link to code)`
+
+## v0.1 Edge
+
+- 2026-10-07 · — · architecture — functional core / imperative shell and
+  ports-and-adapters chosen; `auth.Authorize` is the reference example of a
+  pure decision function ([authz.go](../../internal/auth/authz.go)).
+
+## Go concepts met so far
+
+Tick when you have written one yourself, not just read it.
+
+- [ ] `net/http` handlers and middleware (`func(http.Handler) http.Handler`)
+- [ ] `httptest.NewServer` / `httptest.NewRecorder`
+- [ ] Table-driven tests and `t.Run`
+- [ ] Error wrapping with `%w`, `errors.Is` / `errors.As`
+- [ ] Interfaces declared by the consumer
+- [ ] `sync.Mutex` vs `atomic.Pointer`
+- [ ] Goroutines with `context` cancellation
+- [ ] Channels and `select`
+- [ ] Native fuzzing (`go test -fuzz`)
+- [ ] `embed.FS`
+- [ ] `log/slog`
+- [ ] `crypto/x509`, `crypto/ed25519`
+- [ ] Benchmarks (`testing.B`)

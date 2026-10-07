@@ -23,10 +23,23 @@ projects and competing on feature count would be a losing game. The
 differentiator here is narrower and deliberate: an excellent local-dev
 experience, the *same* config from a laptop to a real VPS, OIDC without
 standing up five separate services, and configuration that stays legible
-enough to actually explain. See [TO_IMPLEMENT.md](TO_IMPLEMENT.md) for the
+enough to actually explain. See [TO_IMPLEMENT.md](docs/TO_IMPLEMENT.md) for the
 full reasoning and roadmap, including what's explicitly *not* planned here
-(a from-scratch identity provider — real learning territory, but its own
-separate project, not part of Switchboard's story).
+(a full identity provider with passwords and account recovery stays its own
+separate project; a narrow passwordless identity layer is planned — see
+[VISION.md](VISION.md)).
+
+## Where it's going
+
+Switchboard is a year-long project (October 2026 – September 2027) aiming to
+become an open-source, self-hostable **transparent zero-trust access
+platform**: outbound tunnels so nothing needs an open port, passwordless
+identity, a private ACME CA with short-lived certificates, infrastructure
+access with recorded sessions, a WAF built to learn from, Telegram approvals,
+an AI-agent gateway, and a transparency log
+that makes every trust decision verifiable — even against the operator. The
+full map, quarterly plan and principles are in [VISION.md](VISION.md); the
+near-term checklist stays in [TO_IMPLEMENT.md](docs/TO_IMPLEMENT.md).
 
 ## How it fits
 
@@ -62,7 +75,7 @@ The project should grow only where a capability makes that path more reliable,
 safer, or easier to operate. Its first release goal is a trustworthy public
 alpha, with secrets outside JSON, fuzz coverage for the security boundaries,
 CI, and a repeatable quickstart. The measurable release gates and dates are in
-[TO_IMPLEMENT.md](TO_IMPLEMENT.md#smart-goals-draft).
+[TO_IMPLEMENT.md](docs/TO_IMPLEMENT.md#alpha-release-gates).
 
 ## Status
 
@@ -75,7 +88,7 @@ The routing runtime is built and swapped as atomic, immutable snapshots. A
 loopback-only control plane now provides persistent route changes, reloads, and
 operational status.
 
-In progress (Phase 1 hardening, see [TO_IMPLEMENT.md](TO_IMPLEMENT.md)):
+In progress (Phase 1 hardening, see [TO_IMPLEMENT.md](docs/TO_IMPLEMENT.md)):
 - [x] HTTP server timeouts (`ReadHeaderTimeout`, `IdleTimeout`) on every listener
 - [x] Session store: periodic cleanup sweep + capacity ceiling (`ErrStoreFull`)
 - [x] Authorization by claims (allowed emails/domains/required groups)
@@ -101,7 +114,7 @@ more proxy behavior:
 After that comes Phase 4: multiple upstreams with round-robin selection,
 active and passive health checks, safe retries, circuit breaking, per-route
 timeouts, explicit WebSocket/SSE coverage, request IDs, and a trusted-proxy
-policy. The full ordered backlog remains in [TO_IMPLEMENT.md](TO_IMPLEMENT.md).
+policy. The full ordered backlog remains in [TO_IMPLEMENT.md](docs/TO_IMPLEMENT.md).
 
 ## Roadmap
 
@@ -113,7 +126,7 @@ external provider — see below).
 
 Everything still ahead — serious proxy behavior, production observability,
 and npm-based distribution — is tracked in
-detail in [TO_IMPLEMENT.md](TO_IMPLEMENT.md), including the stack decisions
+detail in [TO_IMPLEMENT.md](docs/TO_IMPLEMENT.md), including the stack decisions
 already made for each and why.
 
 The Phase 2 transactional runtime is complete: a reload candidate is fully
