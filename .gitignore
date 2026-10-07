@@ -7,3 +7,8 @@ config.json
 # Editors/OS
 .vscode/
 .DS_Store
+
+# Local state
+*.db
+*.db-wal
+*.db-shm

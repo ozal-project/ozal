@@ -22,6 +22,13 @@ import (
 const healthCheckInterval = 10 * time.Second
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "migrate" {
+		if err := runMigrate(context.Background(), os.Args[2:], os.Stdout); err != nil {
+			log.Fatalf("migrate: %v", err)
+		}
+		return
+	}
+
 	configPath := flag.String("config", "config.json", "path to routing config")
 	flag.Parse()
 
