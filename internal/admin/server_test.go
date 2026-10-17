@@ -60,7 +60,12 @@ func (l *bufferLogger) Printf(format string, args ...any) {
 }
 
 func request(handler http.Handler, method, target, token, body string) *httptest.ResponseRecorder {
+	return requestWithHost(handler, "127.0.0.1:9090", method, target, token, body)
+}
+
+func requestWithHost(handler http.Handler, host, method, target, token, body string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, target, strings.NewReader(body))
+	req.Host = host
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -102,6 +107,62 @@ func TestStatusDashboardShowsOperationalDetailsWithoutSecrets(t *testing.T) {
 	}
 	if got := rec.Header().Get("Cache-Control"); got != "no-store" {
 		t.Fatalf("Cache-Control = %q, want no-store", got)
+	}
+}
+
+func TestAdminListenerRejectsNonLoopbackHost(t *testing.T) {
+	manager := &fakeManager{cfg: config.Config{Admin: config.Admin{Token: "secret"}}}
+	handler := New(manager, nil)
+
+	cases := []struct {
+		name   string
+		method string
+		target string
+		token  string
+	}{
+		{"status read", http.MethodGet, "/_/status", ""},
+		{"reload mutation", http.MethodPost, "/_/reload", "secret"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := requestWithHost(handler, "evil.example", tc.method, tc.target, tc.token, "")
+			if rec.Code != http.StatusMisdirectedRequest {
+				t.Fatalf("status = %d, want 421", rec.Code)
+			}
+		})
+	}
+	if manager.reloads != 0 {
+		t.Fatal("a rebound request must not reach the route manager")
+	}
+}
+
+func TestLoopbackHost(t *testing.T) {
+	cases := []struct {
+		host string
+		want bool
+	}{
+		{"127.0.0.1", true},
+		{"127.0.0.1:9090", true},
+		{"127.1.2.3:9090", true},
+		{"[::1]:9090", true},
+		{"::1", true},
+		{"localhost", true},
+		{"LOCALHOST:9090", true},
+		{"localhost.", true},
+		{"", false},
+		{"evil.example", false},
+		{"evil.example:9090", false},
+		{"127.0.0.1.evil.example", false},
+		{"localhost.evil.example", false},
+		{"192.168.100.147:9090", false},
+		{"10.0.0.1", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.host, func(t *testing.T) {
+			if got := loopbackHost(tc.host); got != tc.want {
+				t.Fatalf("loopbackHost(%q) = %v, want %v", tc.host, got, tc.want)
+			}
+		})
 	}
 }
 

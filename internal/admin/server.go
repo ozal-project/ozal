@@ -10,6 +10,7 @@ import (
 	"html/template"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -52,7 +53,32 @@ func New(manager routeManager, audit auditLogger) *Handler {
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// DNS rebinding makes a browser connect to 127.0.0.1 while sending an
+	// attacker-controlled Host header; the admin plane only answers names of
+	// the local machine.
+	if !loopbackHost(r.Host) {
+		http.Error(w, "admin listener accepts loopback hosts only", http.StatusMisdirectedRequest)
+		return
+	}
 	h.mux.ServeHTTP(w, r)
+}
+
+// loopbackHost reports whether an admin Host header names only the local
+// machine: an IP in 127.0.0.0/8 or ::1, or the localhost name.
+func loopbackHost(host string) bool {
+	if host == "" {
+		return false
+	}
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.TrimSuffix(host, ".")
+	host = strings.TrimPrefix(strings.TrimSuffix(host, "]"), "[")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 type statusView struct {

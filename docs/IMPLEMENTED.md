@@ -50,6 +50,7 @@ history and grouped by the original phases.
 
 | Commit | Result |
 |---|---|
+| _uncommitted_ | `SEC-003`: the admin listener answers only loopback hosts. A `Host` header that is not 127.0.0.0/8, `::1` or `localhost` (with/without port, trailing dot) gets `421` before the mux, so DNS rebinding cannot read `/_/status` or reach mutations. Table tests + rebound-request regression. |
 | `1868ab1` | `SEC-002`: every request header whose name normalizes to an identity header (case- and dash/underscore-insensitive) is deleted before routing, including non-canonical keys written straight into the map. Raw-socket regression test with `X_Auth_Request_Email`/`X_Auth_Request_User` on public and protected routes; proven to fail with the previous exact-name deletion. |
 | `b249f83` | `SEC-001`: the proxy strips Switchboard's `sb_session` cookie from every request before it reaches an upstream, preserving the other cookies (and removing the header when nothing is left). Pure `stripCookie` + table tests; e2e tests on public and protected routes; proven to fail without the wiring. |
 

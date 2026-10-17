@@ -7,6 +7,11 @@ Format: `YYYY-MM-DD · ID · topic — what clicked (link to code)`
 
 ## v0.1 Edge
 
+- 2026-10-17 · SEC-003 · DNS rebinding — the socket address proves nothing
+  when a browser is tricked into connecting to 127.0.0.1; the admin plane
+  checks the `Host` header itself and rejects everything that is not a local
+  name with `421` ([server.go](../../internal/admin/server.go),
+  [server_test.go](../../internal/admin/server_test.go)).
 - 2026-10-17 · SEC-002 · header canonicalization — Go canonicalizes header
   keys but keeps `_`, and WSGI/PHP/Rack fold it back to `-`; compare normalized
   names and `delete` the raw map key, because `Header.Del` only removes the
