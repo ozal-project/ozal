@@ -28,11 +28,18 @@ const (
 	// LoginCookieName carries a signed, short-lived login attempt (state,
 	// PKCE verifier, return_to). The server keeps no pending-login store:
 	// the cookie is the state, signed and bound to the browser.
-	LoginCookieName        = "sb_login"
-	defaultSessionTTL      = 8 * time.Hour
-	sessionCleanupInterval = 10 * time.Minute
-	loginCookieTTL         = 5 * time.Minute
+	LoginCookieName   = "sb_login"
+	defaultSessionTTL = 8 * time.Hour
+	loginCookieTTL    = 5 * time.Minute
 )
+
+// SessionTTL is the configured session lifetime.
+func SessionTTL(cfg config.Auth) time.Duration {
+	if cfg.SessionTTLMinutes > 0 {
+		return time.Duration(cfg.SessionTTLMinutes) * time.Minute
+	}
+	return defaultSessionTTL
+}
 
 // Gate protects routes behind a login against an external OIDC provider.
 // Switchboard never handles a password: it redirects to the provider,
@@ -56,15 +63,13 @@ type Gate struct {
 // routing config) a post-login redirect is allowed to land on. Without
 // this check, an attacker could craft a login link with return_to pointing
 // anywhere and use this Gate as an open redirect once a victim logs in.
-func NewGate(ctx context.Context, cfg config.Auth, allowedHosts []string) (*Gate, error) {
+func NewGate(ctx context.Context, cfg config.Auth, allowedHosts []string, sessions *SessionStore) (*Gate, error) {
+	if sessions == nil {
+		return nil, errors.New("auth: NewGate requires a session store")
+	}
 	provider, err := oidc.NewProvider(ctx, cfg.Issuer)
 	if err != nil {
 		return nil, fmt.Errorf("oidc discovery against %q: %w", cfg.Issuer, err)
-	}
-
-	ttl := defaultSessionTTL
-	if cfg.SessionTTLMinutes > 0 {
-		ttl = time.Duration(cfg.SessionTTLMinutes) * time.Minute
 	}
 
 	hosts := make(map[string]bool, len(allowedHosts))
@@ -75,9 +80,6 @@ func NewGate(ctx context.Context, cfg config.Auth, allowedHosts []string) (*Gate
 		}
 		hosts[host] = true
 	}
-
-	sessions := NewSessionStore(ttl)
-	sessions.StartCleanup(ctx, sessionCleanupInterval)
 
 	return &Gate{
 		oauthConfig: oauth2.Config{

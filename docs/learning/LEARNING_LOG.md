@@ -7,6 +7,12 @@ Format: `YYYY-MM-DD · ID · topic — what clicked (link to code)`
 
 ## v0.1 Edge
 
+- 2026-10-17 · SEC-005 · ownership of state — a session store built inside
+  the object that gets rebuilt (the gate) dies with it; move ownership to the
+  component that outlives rebuilds, promote candidates only on install, and
+  test the behavior that matters (an old session still authenticates)
+  ([manager.go](../../internal/routemanager/manager.go),
+  [session.go](../../internal/auth/session.go)).
 - 2026-10-17 · SEC-004 · login CSRF — binding a login attempt to the browser:
   sign state + PKCE verifier + `return_to` into a short-lived cookie, compare
   `state` in constant time, clear on first use; going stateless also deleted

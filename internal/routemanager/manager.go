@@ -35,12 +35,14 @@ type RouteStatus struct {
 // Snapshot is immutable after construction except for the checker state. Its
 // fields stay private so a request observes one complete routing generation.
 type Snapshot struct {
-	cfg          config.Config
-	handler      http.Handler
-	checker      *healthcheck.Checker
-	healthCancel context.CancelFunc
-	gate         *auth.Gate
-	gateCancel   context.CancelFunc
+	cfg           config.Config
+	handler       http.Handler
+	checker       *healthcheck.Checker
+	healthCancel  context.CancelFunc
+	gate          *auth.Gate
+	gateCancel    context.CancelFunc
+	sessions      *auth.SessionStore
+	sessionCancel context.CancelFunc
 }
 
 // Manager owns the current routing snapshot. Reloads and mutations are
@@ -55,6 +57,9 @@ type Manager struct {
 	gateCancel          context.CancelFunc
 	gateAuth            config.Auth
 	gateHosts           []string
+	sessions            *auth.SessionStore
+	sessionTTL          time.Duration
+	sessionCancel       context.CancelFunc
 }
 
 // New builds and installs the initial snapshot from configPath.
@@ -215,24 +220,39 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 
 	healthCtx, healthCancel := context.WithCancel(m.ctx)
 	var gateCancel context.CancelFunc
+	var sessionCancel context.CancelFunc
 	defer func() {
 		if err != nil {
 			healthCancel()
 			if gateCancel != nil {
 				gateCancel()
 			}
+			if sessionCancel != nil {
+				sessionCancel()
+			}
 		}
 	}()
 
 	var gate proxy.AuthGate
 	var oidcGate *auth.Gate
+	var sessions *auth.SessionStore
 	protectedHosts := protectedRouteHosts(cfg.Routes)
 	if len(protectedHosts) > 0 {
+		// The session store outlives gate rebuilds: adding a protected route
+		// must not log everyone out. A changed session TTL is a policy change,
+		// so it gets a fresh store; the candidate is promoted only on install.
+		sessions = m.sessions
+		if sessions == nil || m.sessionTTL != auth.SessionTTL(cfg.Auth) {
+			storeCtx, cancelStore := context.WithCancel(m.ctx)
+			sessions = auth.NewSessionStore(auth.SessionTTL(cfg.Auth))
+			sessions.StartCleanup(storeCtx, auth.SessionCleanupInterval)
+			sessionCancel = cancelStore
+		}
 		if m.gate != nil && m.gateAuth == cfg.Auth && slices.Equal(m.gateHosts, protectedHosts) {
 			oidcGate = m.gate
 		} else {
 			gateCtx, cancelGate := context.WithCancel(m.ctx)
-			oidcGate, err = auth.NewGate(gateCtx, cfg.Auth, protectedHosts)
+			oidcGate, err = auth.NewGate(gateCtx, cfg.Auth, protectedHosts, sessions)
 			if err != nil {
 				cancelGate()
 				return nil, fmt.Errorf("build auth gate: %w", err)
@@ -254,12 +274,14 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 	}
 
 	return &Snapshot{
-		cfg:          cloneConfig(*cfg),
-		handler:      handler,
-		checker:      checker,
-		healthCancel: healthCancel,
-		gate:         oidcGate,
-		gateCancel:   gateCancel,
+		cfg:           cloneConfig(*cfg),
+		handler:       handler,
+		checker:       checker,
+		healthCancel:  healthCancel,
+		gate:          oidcGate,
+		gateCancel:    gateCancel,
+		sessions:      sessions,
+		sessionCancel: sessionCancel,
 	}, nil
 }
 
@@ -279,12 +301,25 @@ func (m *Manager) install(candidate *Snapshot) {
 			oldGateCancel()
 		}
 	}
+	if candidate.sessions != m.sessions {
+		oldSessionCancel := m.sessionCancel
+		m.sessions = candidate.sessions
+		m.sessionTTL = auth.SessionTTL(candidate.cfg.Auth)
+		m.sessionCancel = candidate.sessionCancel
+		candidate.sessionCancel = nil
+		if oldSessionCancel != nil {
+			oldSessionCancel()
+		}
+	}
 }
 
 func (m *Manager) discard(candidate *Snapshot) {
 	candidate.healthCancel()
 	if candidate.gateCancel != nil {
 		candidate.gateCancel()
+	}
+	if candidate.sessionCancel != nil {
+		candidate.sessionCancel()
 	}
 }
 

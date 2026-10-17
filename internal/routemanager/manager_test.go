@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/octaviosantacruz/switchboard/internal/auth"
 	"github.com/octaviosantacruz/switchboard/internal/config"
 )
 
@@ -399,5 +400,71 @@ func TestReloadReusesOIDCGateWhenAuthBoundaryIsUnchanged(t *testing.T) {
 	}
 	if manager.gate != initialGate {
 		t.Fatal("adding an unprotected route replaced OIDC gate")
+	}
+}
+
+func TestSessionsSurviveGateRebuildWhenProtectedHostsChange(t *testing.T) {
+	var provider *httptest.Server
+	provider = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/.well-known/openid-configuration" {
+			http.NotFound(w, r)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"issuer":                 provider.URL,
+			"authorization_endpoint": provider.URL + "/authorize",
+			"token_endpoint":         provider.URL + "/token",
+			"jwks_uri":               provider.URL + "/jwks",
+		})
+	}))
+	defer provider.Close()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer upstream.Close()
+
+	cfg := routeConfig(upstream.URL)
+	cfg.Auth = config.Auth{
+		Issuer:       provider.URL,
+		ClientID:     "client",
+		ClientSecret: "secret",
+		RedirectURL:  "http://app.localhost/_/auth/callback",
+		// The shared cookie domain is what lets a second protected host exist;
+		// changing that boundary is exactly what forces a gate rebuild.
+		CookieDomain: "localhost",
+	}
+	cfg.Routes[0].Access = &config.AccessPolicy{}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	manager, err := New(ctx, writeConfig(t, cfg), time.Hour)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if manager.sessions == nil {
+		t.Fatal("expected a session store after building the gate")
+	}
+	id, err := manager.sessions.Create(auth.Principal{Subject: "user-1", Email: "ana@example.com", EmailVerified: true})
+	if err != nil {
+		t.Fatalf("Create session: %v", err)
+	}
+	initialGate := manager.gate
+
+	// A second protected route changes the gate's host boundary, so the gate
+	// is rebuilt — the session store must outlive that rebuild.
+	if err := manager.AddRoute(config.Route{Host: "app2.localhost", Target: upstream.URL, Access: &config.AccessPolicy{}}); err != nil {
+		t.Fatalf("AddRoute: %v", err)
+	}
+	if manager.gate == initialGate {
+		t.Fatal("expected a new gate after the protected boundary changed")
+	}
+	if manager.sessions == nil {
+		t.Fatal("session store disappeared after the rebuild")
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://app.localhost/", nil)
+	req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: id})
+	principal, ok := manager.gate.Authenticate(req)
+	if !ok || principal.Email != "ana@example.com" {
+		t.Fatalf("Authenticate after rebuild = (%+v, %v), want the session created before the rebuild", principal, ok)
 	}
 }

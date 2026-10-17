@@ -32,7 +32,8 @@ infrastructure access · `TLOG` transparency log · `AI` AI-assisted decisions �
 
 ## Recommended order
 
-1. `SEC-001`–`SEC-005`: the edge will be public; known holes first.
+1. `BUG-001`–`BUG-008`: every `SEC-*` finding is closed (2026-10-17); fix the
+   remaining proxy defects before exposure.
 2. `ARCH-001`–`ARCH-002`: put the pipeline and event sink in place so every
    later feature plugs into one order of checks.
 3. `REL-*`: secrets from env/file, fuzzing, CI, quickstart → tag `v0.1.0-alpha.1`.
@@ -43,12 +44,6 @@ infrastructure access · `TLOG` transparency log · `AI` AI-assisted decisions �
 ---
 
 ## Release v0.1 · Edge (October–December 2026)
-
-### Security findings (audit 2026-10-07)
-
-| ID | Task | State | Done when |
-|---|---|---|---|
-| `SEC-005` | Rebuilding the OIDC gate (e.g. adding a protected route) creates a new session store and logs everyone out. Session store must outlive gate rebuilds. | Ready | Test: sessions survive a reload that changes protected hosts. |
 
 ### Defects
 

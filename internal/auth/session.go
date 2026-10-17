@@ -17,10 +17,14 @@ import (
 // an unbounded map growing forever under a sustained burst of logins.
 var ErrStoreFull = errors.New("session store is full")
 
-// maxSessions caps how many sessions can exist at once, independent of
-// the periodic cleanup sweep — a burst of logins faster than the sweep
-// interval shouldn't be able to grow the store without bound.
-const maxSessions = 10_000
+const (
+	// maxSessions caps how many sessions can exist at once, independent of
+	// the periodic cleanup sweep — a burst of logins faster than the sweep
+	// interval shouldn't be able to grow the store without bound.
+	maxSessions = 10_000
+	// SessionCleanupInterval is how often an owner sweeps expired sessions.
+	SessionCleanupInterval = 10 * time.Minute
+)
 
 type Session struct {
 	Principal Principal
