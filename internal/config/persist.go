@@ -20,6 +20,14 @@ func WriteAtomic(path string, cfg Config) (err error) {
 	}
 	data = append(data, '\n')
 
+	// Replace the symlink's target, not the link itself: an operator's config
+	// path may be a symlink (e.g. to a versioned file) and must stay one.
+	if resolved, resolveErr := filepath.EvalSymlinks(path); resolveErr == nil {
+		path = resolved
+	} else if !os.IsNotExist(resolveErr) {
+		return fmt.Errorf("resolve config path: %w", resolveErr)
+	}
+
 	mode := os.FileMode(0o600)
 	if info, statErr := os.Stat(path); statErr == nil {
 		mode = info.Mode().Perm()
@@ -54,6 +62,12 @@ func WriteAtomic(path string, cfg Config) (err error) {
 	}
 	if err = os.Rename(tmpPath, path); err != nil {
 		return fmt.Errorf("replace config: %w", err)
+	}
+	// A rename is only durable once the directory entry is synced. Not every
+	// platform supports directory fsync, so a failure here is not fatal.
+	if dirFile, openErr := os.Open(dir); openErr == nil {
+		_ = dirFile.Sync()
+		_ = dirFile.Close()
 	}
 
 	return nil

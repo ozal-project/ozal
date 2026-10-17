@@ -395,6 +395,41 @@ func TestValidateRejectsNonLoopbackAdminListener(t *testing.T) {
 	}
 }
 
+func TestWriteAtomicKeepsSymlinkAndUpdatesTarget(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "real.json")
+	if err := os.WriteFile(target, []byte("{\"listen\":\":9999\"}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "config.json")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := Config{Listen: ":8888", Routes: []Route{{
+		Host:   "app.localhost",
+		Target: "http://localhost:9000",
+	}}}
+	if err := WriteAtomic(link, cfg); err != nil {
+		t.Fatalf("WriteAtomic: %v", err)
+	}
+
+	info, err := os.Lstat(link)
+	if err != nil {
+		t.Fatalf("Lstat: %v", err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatal("WriteAtomic replaced the symlink with a regular file")
+	}
+	loaded, err := Load(link)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(loaded.Routes) != 1 || loaded.Routes[0].Host != "app.localhost" {
+		t.Fatalf("target config = %+v, want the written routes", loaded.Routes)
+	}
+}
+
 func TestValidateHealthPathMustBeAbsolute(t *testing.T) {
 	base := func(healthPath string) Config {
 		return Config{Listen: ":8888", Routes: []Route{{

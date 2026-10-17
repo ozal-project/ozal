@@ -7,6 +7,10 @@ Format: `YYYY-MM-DD · ID · topic — what clicked (link to code)`
 
 ## v0.1 Edge
 
+- 2026-10-17 · BUG-006 · atomic writes — `os.Rename` replaces the *name* it is
+  given: through a symlink that means replacing the link, not its target;
+  `EvalSymlinks` first, then rename and fsync the directory for durability
+  ([persist.go](../../internal/config/persist.go)).
 - 2026-10-17 · BUG-005 · path ownership — a reserved path is only reserved on
   the hosts that own it; intercepting `/_/auth/*` everywhere silently stole
   application routes. Logout is a state change: POST and `303` back to a GET
