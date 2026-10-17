@@ -7,6 +7,11 @@ Format: `YYYY-MM-DD · ID · topic — what clicked (link to code)`
 
 ## v0.1 Edge
 
+- 2026-10-17 · SEC-002 · header canonicalization — Go canonicalizes header
+  keys but keeps `_`, and WSGI/PHP/Rack fold it back to `-`; compare normalized
+  names and `delete` the raw map key, because `Header.Del` only removes the
+  canonical spelling ([proxy.go](../../internal/proxy/proxy.go),
+  [proxy_test.go](../../internal/proxy/proxy_test.go)). Raw-socket test.
 - 2026-10-17 · SEC-001 · cookie stripping — a proxy owns the trust boundary:
   parse the `Cookie` header, drop only Switchboard's `sb_session`, and prove
   with `httptest` that it never reaches the upstream

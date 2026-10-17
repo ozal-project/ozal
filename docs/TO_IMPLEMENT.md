@@ -48,7 +48,6 @@ infrastructure access · `TLOG` transparency log · `AI` AI-assisted decisions �
 
 | ID | Task | State | Done when |
 |---|---|---|---|
-| `SEC-002` | Identity headers can be spoofed with underscores (`X_Auth_Request_Email` reaches upstream; WSGI/PHP/Rack treat it as the trusted header). Strip any header whose name normalized `_`→`-` matches. | Ready | Raw-socket regression test with underscore variants on public and protected routes. |
 | `SEC-003` | Admin listener has no `Host` check → DNS rebinding can read `/_/status`. Accept only loopback hosts. | Ready | Test: request with `Host: evil.example` gets `421`/`403`; loopback hosts work. |
 | `SEC-004` | Login CSRF and pending-store exhaustion: OIDC `state` is not bound to the browser; 10k `/_/auth/login` hits block real logins. Move state + PKCE verifier + `return_to` into a short-lived HMAC-signed cookie. | Ready | Callback without the matching cookie fails; no server-side pending store; tests for replay, expiry, tampering. |
 | `SEC-005` | Rebuilding the OIDC gate (e.g. adding a protected route) creates a new session store and logs everyone out. Session store must outlive gate rebuilds. | Ready | Test: sessions survive a reload that changes protected hosts. |

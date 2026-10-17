@@ -1,12 +1,18 @@
 package proxy
 
 import (
+	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/octaviosantacruz/switchboard/internal/auth"
 	"github.com/octaviosantacruz/switchboard/internal/config"
@@ -535,6 +541,153 @@ func TestPublicRouteStripsSessionCookie(t *testing.T) {
 		}
 		if gotCookie != "" {
 			t.Fatalf("upstream Cookie = %q, want no header", gotCookie)
+		}
+	})
+}
+
+func TestStripSpoofedIdentityHeaders(t *testing.T) {
+	cases := []struct {
+		name   string
+		header string
+	}{
+		{"canonical email", "X-Auth-Request-Email"},
+		{"canonical user", "X-Auth-Request-User"},
+		{"lowercase", "x-auth-request-user"},
+		{"underscore variant", "X_auth_request_email"},
+		{"mixed separators", "X_Auth-Request_User"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := http.Header{tc.header: []string{"forged"}}
+			h["X-Request-Id"] = []string{"keep-me"}
+			stripSpoofedIdentityHeaders(h)
+			if _, ok := h[tc.header]; ok {
+				t.Fatalf("%s survived the strip", tc.header)
+			}
+			if got := h.Get("X-Request-Id"); got != "keep-me" {
+				t.Fatalf("X-Request-Id = %q, want keep-me", got)
+			}
+		})
+	}
+
+	t.Run("keeps a longer lookalike", func(t *testing.T) {
+		h := http.Header{"X-Auth-Request-Email-Extra": []string{"keep-me"}}
+		stripSpoofedIdentityHeaders(h)
+		if got := h.Get("X-Auth-Request-Email-Extra"); got != "keep-me" {
+			t.Fatalf("lookalike header = %q, want keep-me", got)
+		}
+	})
+}
+
+// sendRawRequest writes a request with underscore-spelled identity headers to
+// the edge, exercising the names as the HTTP server parses them from the wire.
+func sendRawRequest(t *testing.T, addr, host, path string) string {
+	t.Helper()
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatalf("dial %s: %v", addr, err)
+	}
+	defer conn.Close()
+	_, err = fmt.Fprintf(conn,
+		"GET %s HTTP/1.1\r\nHost: %s\r\nX_Auth_Request_Email: forged@attacker.example\r\nX_Auth_Request_User: forged-subject\r\nConnection: close\r\n\r\n",
+		path, host)
+	if err != nil {
+		t.Fatalf("write raw request: %v", err)
+	}
+	resp, err := io.ReadAll(conn)
+	if err != nil {
+		t.Fatalf("read raw response: %v", err)
+	}
+	return string(resp)
+}
+
+func captureHeaders(t *testing.T) (*httptest.Server, chan http.Header) {
+	t.Helper()
+	got := make(chan http.Header, 1)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got <- r.Header.Clone()
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(upstream.Close)
+	return upstream, got
+}
+
+// identityHeaders returns every header in h whose name normalizes to a
+// Switchboard identity header, as "Name=value" strings. The check repeats the
+// dash/underscore normalization independently of the production helper so a
+// broken strip cannot hide behind a broken detector.
+func identityHeaders(h http.Header) []string {
+	var found []string
+	for name, values := range h {
+		normalized := strings.ReplaceAll(name, "_", "-")
+		if strings.EqualFold(normalized, authEmailHeader) || strings.EqualFold(normalized, authUserHeader) {
+			found = append(found, name+"="+strings.Join(values, ","))
+		}
+	}
+	sort.Strings(found)
+	return found
+}
+
+func TestSpoofedIdentityHeadersOverRawSocket(t *testing.T) {
+	t.Run("public route", func(t *testing.T) {
+		upstream, got := captureHeaders(t)
+		handler, err := New([]config.Route{{Host: "public.localhost", Target: upstream.URL}}, nil, nil)
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		edge := httptest.NewServer(handler)
+		t.Cleanup(edge.Close)
+
+		resp := sendRawRequest(t, strings.TrimPrefix(edge.URL, "http://"), "public.localhost", "/")
+		if !strings.Contains(resp, "204") {
+			t.Fatalf("response = %q, want 204", resp)
+		}
+		select {
+		case headers := <-got:
+			if found := identityHeaders(headers); len(found) != 0 {
+				t.Fatalf("upstream identity headers = %q, want none", found)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("upstream was not reached")
+		}
+	})
+
+	t.Run("protected route", func(t *testing.T) {
+		upstream, got := captureHeaders(t)
+		gate := &fakeGate{
+			authenticated: true,
+			principal: auth.Principal{
+				Subject:       "verified-subject",
+				Email:         "verified@example.com",
+				EmailVerified: true,
+			},
+		}
+		handler, err := New(
+			[]config.Route{{Host: "private.localhost", Target: upstream.URL, AuthRequired: true, Access: &config.AccessPolicy{}}},
+			nil, gate,
+		)
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		edge := httptest.NewServer(handler)
+		t.Cleanup(edge.Close)
+
+		resp := sendRawRequest(t, strings.TrimPrefix(edge.URL, "http://"), "private.localhost", "/")
+		if !strings.Contains(resp, "204") {
+			t.Fatalf("response = %q, want 204", resp)
+		}
+		select {
+		case headers := <-got:
+			want := []string{
+				authEmailHeader + "=verified@example.com",
+				authUserHeader + "=verified-subject",
+			}
+			sort.Strings(want)
+			if found := identityHeaders(headers); !slices.Equal(found, want) {
+				t.Fatalf("upstream identity headers = %q, want %q", found, want)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("upstream was not reached")
 		}
 	})
 }

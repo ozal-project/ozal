@@ -71,8 +71,7 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate) (http.Hand
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		req.Header.Del(authEmailHeader)
-		req.Header.Del(authUserHeader)
+		stripSpoofedIdentityHeaders(req.Header)
 		stripSessionCookie(req)
 
 		host, err := config.NormalizeHost(req.Host)
@@ -115,6 +114,27 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate) (http.Hand
 		log.Printf("%s %s%s -> %s", req.Method, host, req.URL.Path, rt.target)
 		rt.handler.ServeHTTP(w, req)
 	}), nil
+}
+
+// stripSpoofedIdentityHeaders removes every client-supplied header whose name
+// normalizes to a Switchboard identity header. WSGI, PHP and Rack map `_` back
+// to `-`, so `X_Auth_Request_Email` would otherwise become trusted identity at
+// the upstream. delete() uses the raw map key: a non-canonical name written
+// straight into the header map would survive Header.Del's canonicalization.
+func stripSpoofedIdentityHeaders(h http.Header) {
+	for name := range h {
+		if isIdentityHeader(name) {
+			delete(h, name)
+		}
+	}
+}
+
+// isIdentityHeader reports whether name is an identity header, ignoring case
+// and the dash/underscore spelling.
+func isIdentityHeader(name string) bool {
+	normalized := strings.ReplaceAll(name, "_", "-")
+	return strings.EqualFold(normalized, authEmailHeader) ||
+		strings.EqualFold(normalized, authUserHeader)
 }
 
 // stripSessionCookie removes Switchboard's session cookie from the request so
