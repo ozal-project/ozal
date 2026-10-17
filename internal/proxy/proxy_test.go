@@ -692,6 +692,64 @@ func TestSpoofedIdentityHeadersOverRawSocket(t *testing.T) {
 	})
 }
 
+type upstreamObservation struct {
+	header http.Header
+	host   string
+}
+
+func TestReverseProxySetsForwardedHeadersFromTheEdge(t *testing.T) {
+	seen := make(chan upstreamObservation, 2)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen <- upstreamObservation{header: r.Header.Clone(), host: r.Host}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer upstream.Close()
+
+	handler, err := New([]config.Route{{Host: "public.localhost", Target: upstream.URL}}, nil, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	cases := []struct {
+		name      string
+		scheme    string
+		wantProto string
+	}{
+		{"plain http", "http", "http"},
+		{"tls", "https", "https"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.scheme+"://public.localhost/", nil)
+			req.Host = "public.localhost"
+			req.RemoteAddr = "203.0.113.7:5678"
+			req.Header.Set("X-Forwarded-For", "6.6.6.6")
+			req.Header.Set("X-Forwarded-Host", "evil.example")
+			req.Header.Set("X-Forwarded-Proto", "https")
+
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != http.StatusNoContent {
+				t.Fatalf("status = %d, want 204", rec.Code)
+			}
+
+			got := <-seen
+			if got.header.Get("X-Forwarded-For") != "203.0.113.7" {
+				t.Errorf("X-Forwarded-For = %q, want the client IP only (client chain replaced)", got.header.Get("X-Forwarded-For"))
+			}
+			if got.header.Get("X-Forwarded-Host") != "public.localhost" {
+				t.Errorf("X-Forwarded-Host = %q, want public.localhost", got.header.Get("X-Forwarded-Host"))
+			}
+			if got.header.Get("X-Forwarded-Proto") != tc.wantProto {
+				t.Errorf("X-Forwarded-Proto = %q, want %q", got.header.Get("X-Forwarded-Proto"), tc.wantProto)
+			}
+			if got.host != "public.localhost" {
+				t.Errorf("upstream Host = %q, want the public host preserved", got.host)
+			}
+		})
+	}
+}
+
 func TestProtectedRouteStripsSessionCookie(t *testing.T) {
 	var gotCookie string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

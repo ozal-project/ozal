@@ -49,7 +49,6 @@ infrastructure access · `TLOG` transparency log · `AI` AI-assisted decisions �
 
 | ID | Task | State | Done when |
 |---|---|---|---|
-| `BUG-001` | Upstreams receive no `X-Forwarded-Proto`/`X-Forwarded-Host`, and client `X-Forwarded-For` is passed through. Migrate to `ReverseProxy.Rewrite` with `SetURL` + `SetXForwarded`. | Ready | Test asserts forwarded headers are set by Switchboard and client values are replaced. |
 | `BUG-002` | `health_path` is not validated (`"healthz"` without `/` builds a broken URL; target paths produce `//`). | Ready | Validation rejects relative paths; URL joined with `url.URL.JoinPath`; tests. |
 | `BUG-003` | Public listener bind errors surface late via `log.Fatalf` in a goroutine, skipping shutdown. Listen synchronously like the admin listener. | Ready | Port-in-use fails at startup with a clear error. |
 | `BUG-004` | Bearer parsing accepts a bare token without the `Bearer ` prefix. | Ready | Test: header without prefix gets `401`. |

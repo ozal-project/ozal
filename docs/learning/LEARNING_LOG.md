@@ -7,6 +7,11 @@ Format: `YYYY-MM-DD · ID · topic — what clicked (link to code)`
 
 ## v0.1 Edge
 
+- 2026-10-17 · BUG-001 · forwarded headers — `ReverseProxy.Rewrite` +
+  `SetURL`/`SetXForwarded` replaces `Director`; `SetXForwarded` **appends** to
+  an existing `X-Forwarded-For`, and `SetURL` clears `Host`, so the order
+  (drop → rewrite → re-set `Host`) is part of the fix
+  ([proxy.go](../../internal/proxy/proxy.go)).
 - 2026-10-17 · SEC-005 · ownership of state — a session store built inside
   the object that gets rebuilt (the gate) dies with it; move ownership to the
   component that outlives rebuilds, promote candidates only on install, and

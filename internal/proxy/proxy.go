@@ -183,5 +183,16 @@ func upstreamHandler(r config.Route) (http.Handler, error) {
 	if err != nil {
 		return nil, fmt.Errorf("route %s: invalid target %q: %w", r.Host, r.Target, err)
 	}
-	return httputil.NewSingleHostReverseProxy(target), nil
+	return &httputil.ReverseProxy{
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			// A client-supplied forwarding chain is never trusted: SetXForwarded
+			// appends to an existing X-Forwarded-For, so drop it first.
+			pr.Out.Header.Del("X-Forwarded-For")
+			pr.SetURL(target)
+			pr.SetXForwarded()
+			// SetURL clears the outbound Host (the transport would use the
+			// internal target); keep the public host the client asked for.
+			pr.Out.Host = pr.In.Host
+		},
+	}, nil
 }
