@@ -6,9 +6,11 @@ import (
 	"log"
 	"net/http"
 	"net/http/httputil"
+	"os"
 
 	"github.com/octaviosantacruz/switchboard/internal/auth"
 	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/octaviosantacruz/switchboard/internal/static"
 )
 
 const (
@@ -18,7 +20,7 @@ const (
 
 type route struct {
 	target       string
-	proxy        *httputil.ReverseProxy
+	handler      http.Handler // reverse proxy, or static site for root routes
 	authRequired bool
 	access       config.AccessPolicy
 }
@@ -51,17 +53,17 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate) (http.Hand
 		if _, exists := byHost[host]; exists {
 			return nil, fmt.Errorf("duplicate route host %q", host)
 		}
-		target, err := config.ParseTarget(r.Target)
+		handler, err := upstreamHandler(r)
 		if err != nil {
-			return nil, fmt.Errorf("route %s: invalid target %q: %w", r.Host, r.Target, err)
+			return nil, err
 		}
 		policy := config.AccessPolicy{}
 		if r.Access != nil {
 			policy = *r.Access
 		}
 		byHost[host] = route{
-			target:       r.Target,
-			proxy:        httputil.NewSingleHostReverseProxy(target),
+			target:       r.Destination(),
+			handler:      handler,
 			authRequired: r.RequiresAuth(),
 			access:       policy,
 		}
@@ -109,6 +111,26 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate) (http.Hand
 			}
 		}
 		log.Printf("%s %s%s -> %s", req.Method, host, req.URL.Path, rt.target)
-		rt.proxy.ServeHTTP(w, req)
+		rt.handler.ServeHTTP(w, req)
 	}), nil
+}
+
+// upstreamHandler builds what a route forwards to. A static root must already
+// exist as a directory so a typo fails at startup instead of serving 404s.
+func upstreamHandler(r config.Route) (http.Handler, error) {
+	if r.IsStatic() {
+		info, err := os.Stat(r.Root)
+		if err != nil {
+			return nil, fmt.Errorf("route %s: static root: %w", r.Host, err)
+		}
+		if !info.IsDir() {
+			return nil, fmt.Errorf("route %s: static root %q is not a directory", r.Host, r.Root)
+		}
+		return static.Handler{Dir: r.Root, SPA: r.SPA}, nil
+	}
+	target, err := config.ParseTarget(r.Target)
+	if err != nil {
+		return nil, fmt.Errorf("route %s: invalid target %q: %w", r.Host, r.Target, err)
+	}
+	return httputil.NewSingleHostReverseProxy(target), nil
 }

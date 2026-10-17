@@ -7,6 +7,10 @@ Format: `YYYY-MM-DD · ID · topic — what clicked (link to code)`
 
 ## v0.1 Edge
 
+- 2026-10-17 · PAGES-001 · path traversal — `path.Clean` stops `..` in the
+  URL, but only `os.OpenInRoot` stops symlinks; defense in depth = pure check
+  + kernel-level check ([resolve.go](../../internal/static/resolve.go),
+  [handler.go](../../internal/static/handler.go)). First fuzz target.
 - 2026-10-07 · — · architecture — functional core / imperative shell and
   ports-and-adapters chosen; `auth.Authorize` is the reference example of a
   pure decision function ([authz.go](../../internal/auth/authz.go)).
@@ -23,7 +27,7 @@ Tick when you have written one yourself, not just read it.
 - [ ] `sync.Mutex` vs `atomic.Pointer`
 - [ ] Goroutines with `context` cancellation
 - [ ] Channels and `select`
-- [ ] Native fuzzing (`go test -fuzz`)
+- [x] Native fuzzing (`go test -fuzz`) — `FuzzResolve`
 - [ ] `embed.FS`
 - [ ] `log/slog`
 - [ ] `crypto/x509`, `crypto/ed25519`

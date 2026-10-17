@@ -28,7 +28,7 @@ ID prefixes: `SEC` security finding · `BUG` defect · `REL` release hygiene ·
 `ARCH` architecture · `EDGE` edge/deployment · `TUN` tunnels · `ID` identity ·
 `SHD` Shield/WAF · `NTF` notifications · `PKI` private CA · `ACC`
 infrastructure access · `TLOG` transparency log · `AI` AI-assisted decisions ·
-`AGT` AI-agent gateway.
+`AGT` AI-agent gateway · `UI` dashboard · `PAGES` static sites.
 
 ## Recommended order
 
@@ -107,13 +107,35 @@ infrastructure access · `TLOG` transparency log · `AI` AI-assisted decisions �
 | `SHD-002` | Security headers on Switchboard's own pages (HSTS, CSP, frame-ancestors). | Ready | Tests assert headers. |
 | `NTF-001` | `Notifier` port + Telegram adapter: alerts for logins and admin changes; chat pairing code. | Planned | Pairing and an alert work end to end; callback data signed. |
 
+### Pages (static sites)
+
+Switchboard publishes static sites the way Cloudflare Pages does: a site is a
+route whose upstream is a directory instead of a URL, deployments are
+immutable and swapped atomically, and later a push builds and deploys.
+
+| ID | Task | State | Done when |
+|---|---|---|---|
+| `PAGES-002` | Deployments: `switchboard deploy --site <name> ./dist` uploads an archive to the admin API; stored content-addressed under `sites/<name>/<hash>/`; the live pointer switches atomically; `rollback` and retention of the last N. | Planned (after `PAGES-001`) | A request never sees a half-written site; rollback is instant; archive extraction rejects absolute paths, `..`, links and size bombs; tests. |
+| `PAGES-003` | `_headers` and `_redirects` files in the site, Cloudflare Pages syntax subset. | Planned | Parser with fuzz target; security headers and redirects applied; tests. |
+| `PAGES-004` | Git builds: GitHub webhook verified with HMAC-SHA256, checkout of the pushed commit, build command run unprivileged with timeout and no access to Switchboard secrets, output deployed through `PAGES-002`. | Planned | Unsigned or replayed webhooks rejected; a failing build leaves the live site untouched; build logs kept per deployment. |
+| `PAGES-005` | Preview deployments per branch at `<branch>.<site>.<domain>`, protected by an access policy by default. | Planned (after `PAGES-004`) | Preview URL per push; production unchanged until `main` builds. |
+
+### Dashboard
+
+Pure Go first, Svelte only where a feature needs it (see
+[`stack.md`](architecture/stack.md)).
+
+| ID | Task | State | Done when |
+|---|---|---|---|
+| `UI-001` | Live event stream on the admin dashboard over Server-Sent Events, in pure Go (`html/template` + HTMX, `http.Flusher`, fan-out from the `EventSink`). | Ready (after `ARCH-002`) | Events appear live; a slow or disconnected client never blocks the sink; the stream goroutine ends when the request context is cancelled; tests. |
+
 ---
 
 ## Later releases (planned, refined at the start of each quarter)
 
 | Release | IDs | Scope |
 |---|---|---|
-| v0.2 PKI (Jan–Mar 2027) | `PKI-*`, `SHD-0xx` | ACME server, internal CA, mTLS agent/origin, developer certs, SSH CA, workload identity; rules language + compiler, PoW challenge |
+| v0.2 PKI (Jan–Mar 2027) | `PKI-*`, `SHD-0xx`, `UI-002` | ACME server, internal CA, mTLS agent/origin, developer certs, SSH CA, workload identity; rules language + compiler, PoW challenge; `UI-002`: JSON admin API + first Svelte island, a policy simulator over the pure `auth.Authorize` (blocked on `UI-001`) |
 | v0.3 Access (Apr–Jun 2027) | `ACC-*`, `NTF-*`, `SHD-0xx` | SSH/DB over tunnels, JIT with Telegram approvals, session recording, credential injection, CAEP/SSF, SCIM; Coraza + CRS, API schema validation, leaked credentials, CSP reporting |
 | v0.4 Trust (Jul–Sep 2027) | `TLOG-*`, `AI-*`, `AGT-*`, `SHD-0xx` | Transparency log, witnesses, risk signals and explanations, AI-agent/MCP gateway; Web Bot Auth, Firewall for AI, DLP |
 

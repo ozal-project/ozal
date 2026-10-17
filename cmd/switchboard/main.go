@@ -61,7 +61,7 @@ func main() {
 
 	log.Printf("routes:")
 	for _, r := range cfg.Routes {
-		log.Printf("  %s -> %s", r.Host, r.Target)
+		log.Printf("  %s -> %s", r.Host, r.Destination())
 	}
 
 	adminServer, err := startAdmin(&cfg, manager)

@@ -3,6 +3,8 @@ package proxy
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/octaviosantacruz/switchboard/internal/auth"
@@ -402,5 +404,46 @@ func TestInvalidRequestHostReturns400(t *testing.T) {
 	}
 	if upstreamCalled {
 		t.Fatal("invalid request host should not reach upstream")
+	}
+}
+
+func TestStaticRouteServesSiteBehindAccessPolicy(t *testing.T) {
+	site := t.TempDir()
+	if err := os.WriteFile(filepath.Join(site, "index.html"), []byte("static home"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gate := &fakeGate{authenticated: true, principal: auth.Principal{Subject: "user-1", Email: "ana@example.com", EmailVerified: true}}
+	handler, err := New(
+		[]config.Route{{
+			Host:   "site.localhost",
+			Root:   site,
+			Access: &config.AccessPolicy{AllowedDomains: []string{"example.com"}},
+		}},
+		nil, gate,
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	get := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "http://site.localhost/", nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec
+	}
+	if rec := get(); rec.Code != http.StatusOK || rec.Body.String() != "static home" {
+		t.Fatalf("allowed = %d %q, want 200 static home", rec.Code, rec.Body.String())
+	}
+
+	gate.principal.Email = "mallory@other.com"
+	if rec := get(); rec.Code != http.StatusForbidden {
+		t.Fatalf("denied = %d, want 403", rec.Code)
+	}
+}
+
+func TestNewRejectsMissingStaticRoot(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "does-not-exist")
+	if _, err := New([]config.Route{{Host: "site.localhost", Root: missing}}, nil, nil); err == nil {
+		t.Fatal("New accepted a static root that does not exist")
 	}
 }

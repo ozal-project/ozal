@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"slices"
 )
 
@@ -14,10 +15,27 @@ const DefaultAdminListen = "127.0.0.1:9090"
 
 type Route struct {
 	Host         string        `json:"host"`
-	Target       string        `json:"target"`
+	Target       string        `json:"target,omitempty"`
+	Root         string        `json:"root,omitempty"`          // static site directory; alternative to Target
+	SPA          bool          `json:"spa,omitempty"`           // static only: unknown paths fall back to index.html
 	HealthPath   string        `json:"health_path,omitempty"`   // defaults to "/" if empty
 	AuthRequired bool          `json:"auth_required,omitempty"` // legacy shorthand for access: {}
 	Access       *AccessPolicy `json:"access,omitempty"`
+}
+
+// IsStatic reports whether the route serves files from Root instead of
+// proxying to Target.
+func (r Route) IsStatic() bool {
+	return r.Root != ""
+}
+
+// Destination is the human-readable upstream: the target URL, or the site
+// directory for static routes.
+func (r Route) Destination() string {
+	if r.IsStatic() {
+		return r.Root
+	}
+	return r.Target
 }
 
 // RequiresAuth reports whether a route needs an authenticated identity.
@@ -105,8 +123,11 @@ func Validate(cfg Config) (*Config, error) {
 	seenHosts := make(map[string]struct{}, len(cfg.Routes))
 	for i := range cfg.Routes {
 		r := &cfg.Routes[i]
-		if r.Host == "" || r.Target == "" {
-			return nil, fmt.Errorf("config: route missing host or target: %+v", *r)
+		if r.Host == "" {
+			return nil, fmt.Errorf("config: route missing host: %+v", *r)
+		}
+		if (r.Target == "") == (r.Root == "") {
+			return nil, fmt.Errorf("config: route %q needs exactly one of target or root", r.Host)
 		}
 		host, err := NormalizeHost(r.Host)
 		if err != nil {
@@ -117,6 +138,19 @@ func Validate(cfg Config) (*Config, error) {
 		}
 		seenHosts[host] = struct{}{}
 		r.Host = host
+		if r.IsStatic() {
+			if !filepath.IsAbs(r.Root) {
+				return nil, fmt.Errorf("config: route %q root %q must be an absolute path", r.Host, r.Root)
+			}
+			if r.HealthPath != "" {
+				return nil, fmt.Errorf("config: route %q serves a static root and cannot set health_path", r.Host)
+			}
+			r.Root = filepath.Clean(r.Root)
+			continue
+		}
+		if r.SPA {
+			return nil, fmt.Errorf("config: route %q sets spa but has no root", r.Host)
+		}
 		if _, err := ParseTarget(r.Target); err != nil {
 			return nil, fmt.Errorf("config: route %q has invalid target %q: %w", r.Host, r.Target, err)
 		}

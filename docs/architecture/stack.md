@@ -19,12 +19,12 @@ project.
 | Config | JSON with `DisallowUnknownFields` | Already in use; strict and dependency-free |
 | Logging | stdlib `log/slog` (JSON handler) | Structured logs without a dependency |
 | Rate limiting | `golang.org/x/time/rate` or own token bucket | Own implementation is a good small learning piece; x/time/rate as fallback |
-| Persistent state | SQLite via **`modernc.org/sqlite`** | Pure Go (no cgo), so cross-compiling stays trivial; one file to back up |
+| Persistent state | SQLite via **`modernc.org/sqlite`** | Embedded: no extra service, so the gate cannot lose its database while it runs; pure Go (no cgo) keeps cross-compiling trivial; one file to back up. Kept behind consumer-declared ports so a Postgres adapter can be added later |
 | Migrations | Embedded numbered `.sql` files + small own runner | Same discipline as DSHub: sequential and immutable once applied |
 | Tunnels | **`hashicorp/yamux`** over mTLS (Q1); `quic-go` evaluated later | yamux is small and proven; QUIC is a later learning step |
 | Passkeys | **`go-webauthn/webauthn`** | WebAuthn verification is subtle; learn it through a reviewed library |
 | SSH (Q2–Q3) | `golang.org/x/crypto/ssh` | Certificates, server and client in one package |
-| Dashboard | `html/template` + `embed.FS`; HTMX when interactive | No JS build step; already the documented choice |
+| Dashboard | Q1: `html/template` + `embed.FS` + HTMX. Q2: Svelte 5 islands (custom elements built with Vite) for features that need rich client state. Q3+: SvelteKit `adapter-static` only if the dashboard becomes an app | Learn the Go side first (handlers, SSE, sessions, CSRF/CSP); Node is a build-time tool only, output embedded, so it stays one binary. Same-origin cookie auth, no tokens in `localStorage` |
 | CLI | stdlib `flag` with a small subcommand dispatcher | Few subcommands; avoids a framework |
 | Telegram | Bot API called directly with `net/http` | Small API surface; good HTTP-client practice |
 | Tests | stdlib `testing`, `httptest`, native fuzzing, `-race` | No assertion library; matches existing tests |
@@ -45,6 +45,8 @@ project.
 | Metrics / tracing | `prometheus/client_golang`, OpenTelemetry | Q2 |
 | Local AI | Ollama HTTP API | Q4 |
 | CI | GitHub Actions (Linux/macOS/Windows) | Q1 |
+| Postgres adapter | Only if Switchboard runs on two or more edges (shared state, HA) | When multi-edge is planned |
+| Go → TypeScript types for the admin API | `tygo` or hand-written | Q2 (with `UI-002`) |
 | Releases | GoReleaser, checksums, SBOM, cosign | Q1 |
 
 ## Rejected
@@ -55,3 +57,5 @@ project.
 | An ORM | Few tables, explicit SQL is clearer and teaches more |
 | cgo SQLite (`mattn/go-sqlite3`) | Breaks easy cross-compilation |
 | Assertion libraries (testify) | Existing tests use the stdlib style |
+| Next.js for the dashboard | Its value is a Node server at runtime (SSR, API routes): a second process beside the Go binary, or a static export that keeps only React. Svelte + Vite covers the rich-UI need with build-time Node only |
+| Supabase (or any hosted DB) as primary state | The access gate would depend on a third party and a network hop for every session check; contradicts self-hosting and "verifiable even against the operator". As plain Postgres it remains a valid target for a future Postgres adapter |

@@ -394,3 +394,33 @@ func TestValidateRejectsNonLoopbackAdminListener(t *testing.T) {
 		t.Fatalf("IPv6 loopback listener rejected: %v", err)
 	}
 }
+
+func TestValidateStaticRoutes(t *testing.T) {
+	route := func(r Route) Config {
+		r.Host = "site.localhost"
+		return Config{Listen: ":8888", Routes: []Route{r}}
+	}
+
+	got, err := Validate(route(Route{Root: "/srv/sites/blog/", SPA: true}))
+	if err != nil {
+		t.Fatalf("Validate(static route): %v", err)
+	}
+	if got.Routes[0].Root != "/srv/sites/blog" || !got.Routes[0].IsStatic() {
+		t.Fatalf("Root = %q, IsStatic = %v; want cleaned /srv/sites/blog and true", got.Routes[0].Root, got.Routes[0].IsStatic())
+	}
+
+	rejected := map[string]Route{
+		"neither target nor root": {},
+		"both target and root":    {Target: "http://localhost:9000", Root: "/srv/site"},
+		"relative root":           {Root: "sites/blog"},
+		"root with health_path":   {Root: "/srv/site", HealthPath: "/health"},
+		"spa without root":        {Target: "http://localhost:9000", SPA: true},
+	}
+	for name, r := range rejected {
+		t.Run(name, func(t *testing.T) {
+			if _, err := Validate(route(r)); err == nil {
+				t.Fatalf("Validate accepted %+v", r)
+			}
+		})
+	}
+}

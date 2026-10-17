@@ -101,7 +101,7 @@ func (h *Handler) status(w http.ResponseWriter, _ *http.Request) {
 		}
 		view.Routes[i] = routeView{
 			Host:           status.Route.Host,
-			Target:         status.Route.Target,
+			Target:         status.Route.Destination(),
 			HealthPath:     healthPath,
 			State:          state,
 			StateClass:     stateClass,

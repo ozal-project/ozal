@@ -184,6 +184,21 @@ go run ./cmd/switchboard -config config.json
 gets traffic; an upstream that fails its check (5xx or unreachable) gets a
 503 from Switchboard instead of being proxied to.
 
+### Static sites
+
+A route can serve a directory instead of proxying, the way Cloudflare Pages
+does. Use `root` (an absolute path) instead of `target`:
+
+```json
+{ "host": "blog.localhost:8888", "root": "/srv/sites/blog", "spa": false }
+```
+
+Directories are served through their `index.html` and never listed; hidden
+files (`.git`, `.env`) are refused except `.well-known`; files are opened
+with `os.OpenInRoot`, so neither `..` nor a symlink can leave the directory.
+`spa: true` serves the root `index.html` for unknown extensionless paths, for
+client-side routers. Static routes take `access` policies like any other.
+
 Route hosts are matched case-insensitively and normalized without a trailing
 DNS dot. Duplicate normalized hosts are rejected, and upstream targets must
 be absolute `http://` or `https://` URLs.

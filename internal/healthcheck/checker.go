@@ -80,6 +80,9 @@ func (c *Checker) Start(ctx context.Context, routes []config.Route, interval tim
 func (c *Checker) probeAll(ctx context.Context, routes []config.Route) {
 	var wg sync.WaitGroup
 	for _, r := range routes {
+		if r.IsStatic() {
+			continue // no upstream to probe; served from disk
+		}
 		wg.Add(1)
 		go func(r config.Route) {
 			defer wg.Done()
