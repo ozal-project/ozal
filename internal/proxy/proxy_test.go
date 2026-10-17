@@ -16,6 +16,7 @@ import (
 
 	"github.com/octaviosantacruz/switchboard/internal/auth"
 	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/octaviosantacruz/switchboard/internal/pipeline"
 )
 
 func TestRoutesByHost(t *testing.T) {
@@ -273,8 +274,8 @@ func TestAccessPolicyAllowsMatchingClaims(t *testing.T) {
 func TestProtectedRoutePropagatesVerifiedIdentityHeaders(t *testing.T) {
 	var gotEmail, gotUser string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotEmail = r.Header.Get(authEmailHeader)
-		gotUser = r.Header.Get(authUserHeader)
+		gotEmail = r.Header.Get(pipeline.IdentityEmailHeader)
+		gotUser = r.Header.Get(pipeline.IdentityUserHeader)
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer upstream.Close()
@@ -301,8 +302,8 @@ func TestProtectedRoutePropagatesVerifiedIdentityHeaders(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "http://private.localhost/", nil)
 	req.Host = "private.localhost"
-	req.Header.Set(authEmailHeader, "forged@attacker.example")
-	req.Header.Set(authUserHeader, "forged-subject")
+	req.Header.Set(pipeline.IdentityEmailHeader, "forged@attacker.example")
+	req.Header.Set(pipeline.IdentityUserHeader, "forged-subject")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -317,8 +318,8 @@ func TestProtectedRoutePropagatesVerifiedIdentityHeaders(t *testing.T) {
 func TestPublicRouteStripsClientIdentityHeaders(t *testing.T) {
 	var gotEmail, gotUser string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotEmail = r.Header.Get(authEmailHeader)
-		gotUser = r.Header.Get(authUserHeader)
+		gotEmail = r.Header.Get(pipeline.IdentityEmailHeader)
+		gotUser = r.Header.Get(pipeline.IdentityUserHeader)
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer upstream.Close()
@@ -333,8 +334,8 @@ func TestPublicRouteStripsClientIdentityHeaders(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "http://public.localhost/", nil)
 	req.Host = "public.localhost"
-	req.Header.Set(authEmailHeader, "forged@attacker.example")
-	req.Header.Set(authUserHeader, "forged-subject")
+	req.Header.Set(pipeline.IdentityEmailHeader, "forged@attacker.example")
+	req.Header.Set(pipeline.IdentityUserHeader, "forged-subject")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -623,42 +624,6 @@ func TestPublicRouteStripsSessionCookie(t *testing.T) {
 	})
 }
 
-func TestStripSpoofedIdentityHeaders(t *testing.T) {
-	cases := []struct {
-		name   string
-		header string
-	}{
-		{"canonical email", "X-Auth-Request-Email"},
-		{"canonical user", "X-Auth-Request-User"},
-		{"lowercase", "x-auth-request-user"},
-		{"underscore variant", "X_auth_request_email"},
-		{"mixed separators", "X_Auth-Request_User"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			h := http.Header{tc.header: []string{"forged"}}
-			h["X-Request-Id"] = []string{"keep-me"}
-			stripSpoofedIdentityHeaders(h)
-			if _, ok := h[tc.header]; ok {
-				t.Fatalf("%s survived the strip", tc.header)
-			}
-			if got := h.Get("X-Request-Id"); got != "keep-me" {
-				t.Fatalf("X-Request-Id = %q, want keep-me", got)
-			}
-		})
-	}
-
-	t.Run("keeps a longer lookalike", func(t *testing.T) {
-		h := http.Header{"X-Auth-Request-Email-Extra": []string{"keep-me"}}
-		stripSpoofedIdentityHeaders(h)
-		if got := h.Get("X-Auth-Request-Email-Extra"); got != "keep-me" {
-			t.Fatalf("lookalike header = %q, want keep-me", got)
-		}
-	})
-}
-
-// sendRawRequest writes a request with underscore-spelled identity headers to
-// the edge, exercising the names as the HTTP server parses them from the wire.
 func sendRawRequest(t *testing.T, addr, host, path string) string {
 	t.Helper()
 	conn, err := net.Dial("tcp", addr)
@@ -698,7 +663,7 @@ func identityHeaders(h http.Header) []string {
 	var found []string
 	for name, values := range h {
 		normalized := strings.ReplaceAll(name, "_", "-")
-		if strings.EqualFold(normalized, authEmailHeader) || strings.EqualFold(normalized, authUserHeader) {
+		if strings.EqualFold(normalized, pipeline.IdentityEmailHeader) || strings.EqualFold(normalized, pipeline.IdentityUserHeader) {
 			found = append(found, name+"="+strings.Join(values, ","))
 		}
 	}
@@ -757,8 +722,8 @@ func TestSpoofedIdentityHeadersOverRawSocket(t *testing.T) {
 		select {
 		case headers := <-got:
 			want := []string{
-				authEmailHeader + "=verified@example.com",
-				authUserHeader + "=verified-subject",
+				pipeline.IdentityEmailHeader + "=verified@example.com",
+				pipeline.IdentityUserHeader + "=verified-subject",
 			}
 			sort.Strings(want)
 			if found := identityHeaders(headers); !slices.Equal(found, want) {
@@ -768,6 +733,58 @@ func TestSpoofedIdentityHeadersOverRawSocket(t *testing.T) {
 			t.Fatal("upstream was not reached")
 		}
 	})
+}
+
+// fakeCookieGate authenticates only when the session cookie is readable: it
+// catches the ordering mistake of stripping the cookie before identify runs.
+type fakeCookieGate struct {
+	authenticated bool
+	principal     auth.Principal
+}
+
+func (f *fakeCookieGate) Authenticate(r *http.Request) (auth.Principal, bool) {
+	if _, err := r.Cookie(auth.SessionCookieName); err != nil {
+		return auth.Principal{}, false
+	}
+	return f.principal, f.authenticated
+}
+
+func (f *fakeCookieGate) RedirectToLogin(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "/_/auth/login", http.StatusFound)
+}
+
+func TestSessionCookieIsVisibleToTheGateAndNotToTheUpstream(t *testing.T) {
+	var gotCookie string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotCookie = r.Header.Get("Cookie")
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer upstream.Close()
+
+	gate := &fakeCookieGate{
+		authenticated: true,
+		principal:     auth.Principal{Subject: "user-1", Email: "ana@example.com", EmailVerified: true},
+	}
+	handler, err := New(
+		[]config.Route{{Host: "private.localhost", Target: upstream.URL, AuthRequired: true, Access: &config.AccessPolicy{}}},
+		nil, gate,
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://private.localhost/", nil)
+	req.Host = "private.localhost"
+	req.Header.Set("Cookie", auth.SessionCookieName+"=edge-session; app=1")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204: the gate must read the session cookie before the upstream loses it", rec.Code)
+	}
+	if gotCookie != "app=1" {
+		t.Fatalf("upstream Cookie = %q, want app=1 (session stripped, other cookies kept)", gotCookie)
+	}
 }
 
 type upstreamObservation struct {

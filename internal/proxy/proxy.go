@@ -12,12 +12,8 @@ import (
 
 	"github.com/octaviosantacruz/switchboard/internal/auth"
 	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/octaviosantacruz/switchboard/internal/pipeline"
 	"github.com/octaviosantacruz/switchboard/internal/static"
-)
-
-const (
-	authEmailHeader = "X-Auth-Request-Email"
-	authUserHeader  = "X-Auth-Request-User"
 )
 
 // Option configures the proxy handler.
@@ -89,10 +85,7 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 		}
 	}
 
-	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		stripSpoofedIdentityHeaders(req.Header)
-		stripSessionCookie(req)
-
+	forward := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		host, err := config.NormalizeHost(req.Host)
 		if err != nil {
 			http.Error(w, "invalid request host", http.StatusBadRequest)
@@ -128,46 +121,19 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 				return
 			}
 			if principal.Email != "" {
-				req.Header.Set(authEmailHeader, principal.Email)
+				req.Header.Set(pipeline.IdentityEmailHeader, principal.Email)
 			}
 			if principal.Subject != "" {
-				req.Header.Set(authUserHeader, principal.Subject)
+				req.Header.Set(pipeline.IdentityUserHeader, principal.Subject)
 			}
 		}
 		log.Printf("%s %s%s -> %s", req.Method, host, req.URL.Path, rt.target)
 		rt.handler.ServeHTTP(w, req)
-	}), nil
-}
+	})
 
-// stripSpoofedIdentityHeaders removes every client-supplied header whose name
-// normalizes to a Switchboard identity header. WSGI, PHP and Rack map `_` back
-// to `-`, so `X_Auth_Request_Email` would otherwise become trusted identity at
-// the upstream. delete() uses the raw map key: a non-canonical name written
-// straight into the header map would survive Header.Del's canonicalization.
-func stripSpoofedIdentityHeaders(h http.Header) {
-	for name := range h {
-		if isIdentityHeader(name) {
-			delete(h, name)
-		}
-	}
-}
-
-// isIdentityHeader reports whether name is an identity header, ignoring case
-// and the dash/underscore spelling.
-func isIdentityHeader(name string) bool {
-	normalized := strings.ReplaceAll(name, "_", "-")
-	return strings.EqualFold(normalized, authEmailHeader) ||
-		strings.EqualFold(normalized, authUserHeader)
-}
-
-// stripSessionCookie removes Switchboard's session cookie from the request so
-// an upstream never receives the edge session. Other cookies are preserved.
-func stripSessionCookie(r *http.Request) {
-	if cookie := stripCookie(r.Header.Get("Cookie"), auth.SessionCookieName); cookie != "" {
-		r.Header.Set("Cookie", cookie)
-		return
-	}
-	r.Header.Del("Cookie")
+	// The trust stage runs before anything reads the request: spoofed
+	// identity headers never survive to the forwarding handler.
+	return pipeline.Chain(pipeline.Trust)(forward), nil
 }
 
 // stripCookie returns a Cookie header value without the named cookie, keeping
@@ -224,6 +190,14 @@ func upstreamHandler(r config.Route, devErrors bool) (http.Handler, error) {
 	}
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
+			// The identify stage already read the session cookie; the outbound
+			// request is where it stops, so no upstream ever sees the edge
+			// session. Other cookies are preserved.
+			if cookie := stripCookie(pr.Out.Header.Get("Cookie"), auth.SessionCookieName); cookie != "" {
+				pr.Out.Header.Set("Cookie", cookie)
+			} else {
+				pr.Out.Header.Del("Cookie")
+			}
 			// A client-supplied forwarding chain is never trusted: SetXForwarded
 			// appends to an existing X-Forwarded-For, so drop it first.
 			pr.Out.Header.Del("X-Forwarded-For")

@@ -7,6 +7,12 @@ Format: `YYYY-MM-DD · ID · topic — what clicked (link to code)`
 
 ## v0.1 Edge
 
+- 2026-10-17 · ARCH-001 · pipeline order — a stage's *position* is part of
+  its contract: stripping the session cookie at the request entry broke the
+  identify stage that needs it. Trust strips inbound spoofing; the outbound
+  clone is where the cookie dies
+  ([pipeline.go](../../internal/pipeline/pipeline.go),
+  [proxy.go](../../internal/proxy/proxy.go)).
 - 2026-10-17 · BUG-008 · error surfaces — debugging ergonomics and
   information disclosure pull in opposite directions; a variadic `Option`
   keeps the friendly pages off the default path and testable both ways
