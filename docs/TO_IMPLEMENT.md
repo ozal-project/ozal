@@ -1,7 +1,7 @@
 # To implement — Switchboard
 
 **Last review:** 2026-10-17
-**Code reviewed up to:** `8c5568e`
+**Code reviewed up to:** `50ba9b3`
 **Purpose:** the single source of active work, priorities, blockers and done
 criteria. Closed work moves to [`IMPLEMENTED.md`](IMPLEMENTED.md). Direction
 and the long-range map live in [`VISION.md`](../VISION.md); if another
@@ -34,27 +34,20 @@ infrastructure access · `TLOG` transparency log · `AI` AI-assisted decisions �
 
 Every `SEC-*` and `BUG-*` finding is closed (2026-10-17).
 
-1. `ARCH-001`–`ARCH-002`: put the pipeline and event sink in place so every
-   later feature plugs into one order of checks.
-2. `REL-*`: secrets from env/file, fuzzing, CI, quickstart → tag `v0.1.0-alpha.1`.
-3. `TUN-*` spike in parallel with the edge decisions (`EDGE-001`/`002` are
-   blocked on VPS and DNS).
-4. Identity (`ID-*`), then `NTF-001`, `SHD-001`.
+1. `REL-*`: secrets from env/file, fuzzing, CI, quickstart → tag `v0.1.0-alpha.1`.
+2. `EDGE-001` through the Cloudflare tunnel (no VPS; DNS is already on
+   Cloudflare); `EDGE-005` is locally implemented and verified. `TUN-*` spike
+   in parallel.
+3. Identity (`ID-*`), then `NTF-001`, `SHD-001`.
 
 ---
 
 ## Release v0.1 · Edge (October–December 2026)
 
-### Defects
-
-| ID | Task | State | Done when |
-|---|---|---|---|
 ### Architecture
 
 | ID | Task | State | Done when |
 |---|---|---|---|
-| `ARCH-001` | Introduce the request pipeline (`internal/pipeline`) with the stage order from `docs/architecture/design.md`; move header stripping into the `trust` stage. | Ready | Pipeline order defined in one function; end-to-end test proves order. |
-| `ARCH-002` | `EventSink` interface + `log/slog` JSON sink; decisions, logins and admin changes emit events (replaces `log.Printf` audit lines). | Ready | Events have stable types; tests capture them with an in-memory sink. |
 | `ARCH-003` | Raw vs resolved config, so secrets from env/files are never written back. | Ready | Control-plane writes preserve secret references; test. Prerequisite of `REL-001`. |
 | `ARCH-004` | Embedded SQLite store with migration runner (sessions, later tunnels/passkeys). Store and runner are committed (`7d0c56e`, `cmd/switchboard migrate`); wiring into `auth`/sessions is still pending. | In progress | Sessions survive restart; migrations numbered and immutable. |
 | `ARCH-005` | Remove duplicated clone helpers in `routemanager` (`cloneRoute`, `cloneConfig` wrapper). | Ready | Single `config.Clone`; tests pass. |
@@ -74,8 +67,8 @@ Every `SEC-*` and `BUG-*` finding is closed (2026-10-17).
 
 | ID | Task | State | Done when |
 |---|---|---|---|
-| `EDGE-001` | VPS provisioned, systemd unit, Switchboard serving `octaviosantacruz.com` subdomains. | Blocked: choose VPS | Edge reachable; restart-safe; documented. |
-| `EDGE-002` | Wildcard TLS via DNS-01 (CertMagic + libdns provider). | Blocked: choose DNS provider | `*.share.` and `*.apps.` certificates issued and renewed. |
+| `EDGE-001` | `cloudflared` tunnel + systemd unit on the current host, Switchboard serving flat `octaviosantacruz.com` subdomains ([edge-cloudflared](architecture/edge-cloudflared.md)). No VPS needed. | Blocked: tunnel credentials from the operator; `EDGE-005` locally verified | `preview.` (Portfolio build, live site stays on Cloudflare Pages) reachable through the tunnel; restart-safe; origin unreachable directly; documented. |
+| `EDGE-002` | Wildcard TLS via DNS-01 (CertMagic + libdns provider). | Planned (deferred: Cloudflare terminates public TLS for the first release) | Only if Switchboard terminates TLS itself (VPS path). |
 | `EDGE-003` | Route hosts without a port match any listener port (local-dev ergonomics). | Ready | `app.localhost` route works on `:8888`; tests. |
 | `EDGE-004` | Multiple upstreams per route, round-robin, active + passive health. | Planned | Failed upstream receives no new traffic; tests. |
 | `TUN-001` | Spike: agent ↔ edge over yamux + TLS; one HTTP request through a tunnel. | Ready | Throwaway branch; findings written in `docs/architecture/`. |
@@ -85,7 +78,7 @@ Every `SEC-*` and `BUG-*` finding is closed (2026-10-17).
 | `ID-002` | Email delivery provider. | Blocked: choose provider | Decision recorded in `stack.md`. |
 | `ID-003` | Passkeys (WebAuthn) registration and login. | Planned | Works on desktop and phone; step-up supported. |
 | `ID-004` | OIDC provider: discovery, JWKS, key rotation, authorization code + PKCE. | Planned | A sample app signs in via Switchboard. |
-| `SHD-001` | Rate limiting stage (per IP, identity, route; strict on `/_/auth/*`). | Ready (after `ARCH-001`) | Table tests on the core bucket; integration test returns `429`. |
+| `SHD-001` | Rate limiting stage (per IP, identity, route; strict on `/_/auth/*`). | Ready (`ARCH-001` closed; slots into `internal/pipeline`) | Table tests on the core bucket; integration test returns `429`. |
 | `SHD-002` | Security headers on Switchboard's own pages (HSTS, CSP, frame-ancestors). | Ready | Tests assert headers. |
 | `NTF-001` | `Notifier` port + Telegram adapter: alerts for logins and admin changes; chat pairing code. | Planned | Pairing and an alert work end to end; callback data signed. |
 

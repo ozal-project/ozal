@@ -1,7 +1,6 @@
 package admin
 
 import (
-	"bytes"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/octaviosantacruz/switchboard/internal/events"
 	"github.com/octaviosantacruz/switchboard/internal/healthcheck"
 	"github.com/octaviosantacruz/switchboard/internal/routemanager"
 )
@@ -46,17 +46,6 @@ func (m *fakeManager) DeleteRoute(host string) error {
 	defer m.mu.Unlock()
 	m.deleted = append(m.deleted, host)
 	return m.deleteErr
-}
-
-type bufferLogger struct {
-	mu sync.Mutex
-	bytes.Buffer
-}
-
-func (l *bufferLogger) Printf(format string, args ...any) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.WriteString(format)
 }
 
 func request(handler http.Handler, method, target, token, body string) *httptest.ResponseRecorder {
@@ -217,8 +206,8 @@ func TestMutationsRequireConfiguredBearerToken(t *testing.T) {
 
 func TestRouteMutationsAndReloadAreAudited(t *testing.T) {
 	manager := &fakeManager{cfg: config.Config{Admin: config.Admin{Token: "secret"}}}
-	audit := &bufferLogger{}
-	handler := New(manager, audit)
+	recorder := &events.Recorder{}
+	handler := New(manager, recorder)
 
 	body := `{"host":"new.localhost","target":"http://localhost:9001"}`
 	if rec := request(handler, http.MethodPost, "/routes", "secret", body); rec.Code != http.StatusCreated {
@@ -240,11 +229,17 @@ func TestRouteMutationsAndReloadAreAudited(t *testing.T) {
 	if manager.reloads != 1 {
 		t.Fatalf("reloads = %d, want 1", manager.reloads)
 	}
-	logOutput := audit.String()
-	for _, action := range []string{"route.create", "route.delete", "config.reload"} {
-		if !strings.Contains(logOutput, action) {
-			t.Errorf("audit log missing %q: %s", action, logOutput)
-		}
+	created, ok := recorder.Find(events.RouteCreated)
+	if !ok || created.Host != "new.localhost" || created.Actor == "" {
+		t.Errorf("route.created event = %+v, %v", created, ok)
+	}
+	deleted, ok := recorder.Find(events.RouteDeleted)
+	if !ok || deleted.Host != "new.localhost" || deleted.Actor == "" {
+		t.Errorf("route.deleted event = %+v, %v", deleted, ok)
+	}
+	reloaded, ok := recorder.Find(events.ConfigReloaded)
+	if !ok || reloaded.Actor == "" || reloaded.Error != "" {
+		t.Errorf("config.reloaded event = %+v, %v", reloaded, ok)
 	}
 }
 

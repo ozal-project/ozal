@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"golang.org/x/oauth2"
+
+	"github.com/octaviosantacruz/switchboard/internal/events"
 )
 
 // newTestGate builds a Gate without real OIDC discovery, for testing the
@@ -287,6 +289,23 @@ func TestCallbackRejectsStateMismatchAndClearsCookie(t *testing.T) {
 	}
 	if !cleared {
 		t.Fatal("expected the login cookie to be cleared even on failure")
+	}
+}
+
+func TestLoginEmitsEvents(t *testing.T) {
+	g := newTestGate()
+	recorder := &events.Recorder{}
+	g.sink = recorder
+
+	g.HandleLogin(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/_/auth/login", nil))
+	if !recorder.Has(events.LoginStarted) {
+		t.Fatal("missing login.started event")
+	}
+
+	g.HandleCallback(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/_/auth/callback?code=x&state=y", nil))
+	failed, ok := recorder.Find(events.LoginFailed)
+	if !ok || failed.Code != "missing_login_cookie" {
+		t.Fatalf("login.failed event = %+v, %v", failed, ok)
 	}
 }
 

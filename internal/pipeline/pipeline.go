@@ -37,16 +37,10 @@ func Chain(stages ...Stage) Stage {
 	}
 }
 
-// Trust is the first stage: it removes every client-supplied header whose
-// name normalizes to an identity header. WSGI, PHP and Rack map `_` back to
-// `-`, so `X_Auth_Request_Email` would otherwise become trusted identity at
-// the upstream. delete() uses the raw map key: a non-canonical name written
-// straight into the header map would survive Header.Del's canonicalization.
+// Trust is the first stage with no trusted forwarding peers. Use
+// TrustWithProxies to opt into CF-Connecting-IP from configured TCP peers.
 func Trust(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		stripIdentityHeaders(r.Header)
-		next.ServeHTTP(w, r)
-	})
+	return TrustWithProxies(nil)(next)
 }
 
 func stripIdentityHeaders(h http.Header) {

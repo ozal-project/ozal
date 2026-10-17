@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/octaviosantacruz/switchboard/internal/events"
 	"github.com/octaviosantacruz/switchboard/internal/routemanager"
 )
 
@@ -29,22 +30,18 @@ type routeManager interface {
 	DeleteRoute(string) error
 }
 
-type auditLogger interface {
-	Printf(string, ...any)
-}
-
 // Handler serves the administrative dashboard and authenticated mutations.
 type Handler struct {
 	manager routeManager
-	audit   auditLogger
+	sink    events.Sink
 	mux     *http.ServeMux
 }
 
-func New(manager routeManager, audit auditLogger) *Handler {
-	if audit == nil {
-		audit = log.Default()
+func New(manager routeManager, sink events.Sink) *Handler {
+	if sink == nil {
+		sink = events.Discard
 	}
-	h := &Handler{manager: manager, audit: audit, mux: http.NewServeMux()}
+	h := &Handler{manager: manager, sink: sink, mux: http.NewServeMux()}
 	h.mux.HandleFunc("GET /_/status", h.status)
 	h.mux.HandleFunc("POST /_/reload", h.requireBearer(h.reload))
 	h.mux.HandleFunc("POST /routes", h.requireBearer(h.addRoute))
@@ -149,11 +146,11 @@ func (h *Handler) status(w http.ResponseWriter, _ *http.Request) {
 
 func (h *Handler) reload(w http.ResponseWriter, r *http.Request) {
 	if err := h.manager.Reload(); err != nil {
-		h.audit.Printf("audit actor=%q action=config.reload result=rejected error=%q", actor(r), err)
+		h.emit(events.Event{Type: events.ConfigReloaded, Actor: actor(r), Error: err.Error()})
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	h.audit.Printf("audit actor=%q action=config.reload result=accepted", actor(r))
+	h.emit(events.Event{Type: events.ConfigReloaded, Actor: actor(r)})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "reloaded"})
 }
 
@@ -170,11 +167,11 @@ func (h *Handler) addRoute(w http.ResponseWriter, r *http.Request) {
 		} else if errors.Is(err, routemanager.ErrPersistence) {
 			status = http.StatusInternalServerError
 		}
-		h.audit.Printf("audit actor=%q action=route.create host=%q result=rejected error=%q", actor(r), route.Host, err)
+		h.emit(events.Event{Type: events.RouteCreated, Actor: actor(r), Host: route.Host, Error: err.Error()})
 		writeError(w, status, err.Error())
 		return
 	}
-	h.audit.Printf("audit actor=%q action=route.create host=%q result=accepted", actor(r), route.Host)
+	h.emit(events.Event{Type: events.RouteCreated, Actor: actor(r), Host: route.Host})
 	writeJSON(w, http.StatusCreated, map[string]string{"status": "created"})
 }
 
@@ -187,11 +184,11 @@ func (h *Handler) deleteRoute(w http.ResponseWriter, r *http.Request) {
 		} else if errors.Is(err, routemanager.ErrPersistence) {
 			status = http.StatusInternalServerError
 		}
-		h.audit.Printf("audit actor=%q action=route.delete host=%q result=rejected error=%q", actor(r), host, err)
+		h.emit(events.Event{Type: events.RouteDeleted, Actor: actor(r), Host: host, Error: err.Error()})
 		writeError(w, status, err.Error())
 		return
 	}
-	h.audit.Printf("audit actor=%q action=route.delete host=%q result=accepted", actor(r), host)
+	h.emit(events.Event{Type: events.RouteDeleted, Actor: actor(r), Host: host})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
@@ -254,6 +251,12 @@ func actor(r *http.Request) string {
 		return "unknown"
 	}
 	return r.RemoteAddr
+}
+
+// emit publishes a control-plane event with the timestamp filled in.
+func (h *Handler) emit(e events.Event) {
+	e.Time = time.Now()
+	h.sink.Emit(e)
 }
 
 var dashboardTemplate = template.Must(template.New("status").Parse(`<!doctype html>

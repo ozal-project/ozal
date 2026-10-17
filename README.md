@@ -330,3 +330,36 @@ login link. `/_/auth/login`, `/_/auth/callback` and `/_/auth/logout` are
 answered only on those protected hosts (plus the `redirect_url` host); on
 any other host the path belongs to the route's own upstream. Logout is a
 `POST`.
+
+## Client IP behind a trusted proxy
+
+Forwarding-IP trust is disabled by default. `trusted_proxies` explicitly lists
+TCP peer IPs or CIDRs allowed to supply a single `CF-Connecting-IP` address:
+
+```json
+"trusted_proxies": ["127.0.0.1/32", "::1/128"]
+```
+
+Use those loopback entries only for a local `cloudflared` connector, with the
+origin listener on loopback. This trusts local processes able to reach that
+listener; it does not authenticate the connector process. Do not add visitor
+networks or a catch-all CIDR. IP literals and network prefixes are normalized;
+hostnames and scoped addresses are rejected. Changes reload atomically with
+the routing snapshot and are preserved by route mutations.
+
+Trust runs before routing/authentication: a configured peer with one valid IP
+header supplies the client address; otherwise the socket peer is used. Duplicate,
+comma-separated, malformed, scoped, unspecified or multicast header values are
+ignored. Invalid socket peers produce no client IP. IPv4-mapped addresses are
+normalized to IPv4. `RemoteAddr` always remains the transport peer;
+`pipeline.ClientIP(ctx)` exposes the selected address for later stages.
+
+Incoming forwarding/real-IP headers (including underscore aliases) are stripped.
+The reverse proxy builds one `X-Forwarded-For` from the context; a caller's chain
+never survives, and `CF-Connecting-IP` itself is not passed upstream. Existing
+Host/protocol handling and edge-cookie stripping remain in the outbound adapter.
+
+See [`config.tunnel.example.json`](config.tunnel.example.json) for a Portfolio-only
+route on `preview.octaviosantacruz.com` (the live apex stays on Cloudflare Pages),
+and the [tunnel plan](docs/architecture/edge-cloudflared.md)
+for deployment prerequisites. The example is not an installed/public deployment.

@@ -75,6 +75,35 @@ history and grouped by the original phases.
 |---|---|
 | `08738fe` | `ARCH-001`: `internal/pipeline` owns the stage order from `design.md` (trust → ratelimit → shield → identify → authorize → route → forward) and the `Trust` stage strips spoofed identity headers before anything reads the request. The session-cookie strip moved from the request entry to the outbound clone (`ReverseProxy.Rewrite`): the identify stage must read `sb_session`, the upstream must not — a real ordering bug (login loop) that the pilot's cookie-reading gate test caught. `Chain` order test plus gate-visible/upstream-hidden cookie test. |
 
+## Trusted-proxy client IP (2026-10-17)
+
+| Commit | Result |
+|---|---|
+| _uncommitted_ | `EDGE-005`: opt-in `trusted_proxies` IP/CIDR allowlist, normalized/validated and deep-cloned with config. Trust accepts one valid `CF-Connecting-IP` only from a configured TCP peer, strips forwarding-IP headers/aliases, stores the selected `netip.Addr` under a private context key and preserves `RemoteAddr`. The outbound proxy rebuilds one `X-Forwarded-For`; edge-cookie stripping is preserved. `config.tunnel.example.json` serves only Portfolio on `preview.` with loopback listeners and `dev_errors: false`; the live apex stays on Cloudflare Pages. |
+
+Verification: `scripts/verify.sh` green (gofmt, vet, all tests with `-race`,
+build, diff check), including concurrent event changes present at the time.
+Optional staticcheck/govulncheck were not installed. Table and integration tests
+cover trusted/untrusted/absent/malformed/duplicate/scoped headers, IPv4/IPv6 and
+mapped addresses, spoofed chains, original-peer preservation, immutable snapshots,
+config persistence and rejected reloads. A compiler overlay removing the trusted
+stage made the trusted-peer regression fail; no shared source was mutated.
+
+Discardable binary smoke: actual TCP sources `127.0.0.1` (trusted) and
+`127.0.0.2` (untrusted) produce the expected single upstream address; raw
+CF/forwarding headers and `sb_session` never reach the echo upstream. Fresh
+Portfolio `/` and `/es/` and hashed assets return 200 through Switchboard;
+unknown host, hidden path and traversal return 404 with production errors.
+Browser smoke confirmed bilingual project states with no JS errors observed.
+All temporary listeners/processes were stopped; no tunnel, DNS or public
+site was changed. Credentials and restart-safe deployment remain in `EDGE-001`.
+
+## Events (2026-10-17)
+
+| Commit | Result |
+|---|---|
+| _uncommitted_ | `ARCH-002`: `internal/events` defines stable event types (`access.allowed`/`denied`, `login.started`/`failed`/`succeeded`, `route.created`/`deleted`, `config.reloaded`), a `Sink` interface, a JSON `slog` sink and an in-memory `Recorder`. Access decisions, the login flow and admin/SIGHUP changes publish events, replacing the `log.Printf` audit lines. Tests capture events with the recorder (stable types asserted). |
+
 ## SQLite store (2026-10-17)
 
 | Commit | Result |

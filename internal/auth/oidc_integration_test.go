@@ -15,6 +15,7 @@ import (
 	"github.com/go-jose/go-jose/v4/jwt"
 
 	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/octaviosantacruz/switchboard/internal/events"
 )
 
 // fakeOIDCProvider is a minimal OIDC provider good enough to exercise
@@ -120,12 +121,13 @@ func (p *fakeOIDCProvider) handleToken(w http.ResponseWriter, r *http.Request) {
 func TestFullLoginCallbackFlow(t *testing.T) {
 	provider := newFakeOIDCProvider(t)
 
+	recorder := &events.Recorder{}
 	gate, err := NewGate(t.Context(), config.Auth{
 		Issuer:       provider.server.URL,
 		ClientID:     "test-client",
 		ClientSecret: "test-secret",
 		RedirectURL:  "http://app.localhost/_/auth/callback",
-	}, []string{"app.localhost"}, NewSessionStore(time.Hour))
+	}, []string{"app.localhost"}, NewSessionStore(time.Hour), recorder)
 	if err != nil {
 		t.Fatalf("NewGate: %v", err)
 	}
@@ -204,6 +206,14 @@ func TestFullLoginCallbackFlow(t *testing.T) {
 		t.Fatal("expected the session set by the callback to authenticate a follow-up request")
 	}
 
+	success, ok := recorder.Find(events.LoginSucceeded)
+	if !ok || success.Actor != provider.sub || success.Host != "app.localhost" {
+		t.Fatalf("login.succeeded event = %+v, %v", success, ok)
+	}
+	if !recorder.Has(events.LoginStarted) {
+		t.Fatal("missing login.started event")
+	}
+
 	sess, _ := gate.sessions.Get(sessionCookie.Value)
 	p := sess.Principal
 	if p.Email != provider.email || p.Subject != provider.sub {
@@ -224,7 +234,7 @@ func TestCallbackRejectsForgedLoginCookie(t *testing.T) {
 		ClientID:     "test-client",
 		ClientSecret: "test-secret",
 		RedirectURL:  "http://app.localhost/_/auth/callback",
-	}, []string{"app.localhost"}, NewSessionStore(time.Hour))
+	}, []string{"app.localhost"}, NewSessionStore(time.Hour), events.Discard)
 	if err != nil {
 		t.Fatalf("NewGate: %v", err)
 	}

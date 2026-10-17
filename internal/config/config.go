@@ -79,6 +79,9 @@ type Config struct {
 	TLS    TLS    `json:"tls,omitempty"`
 	Auth   Auth   `json:"auth,omitempty"`
 	Admin  Admin  `json:"admin,omitempty"`
+	// TrustedProxies opts specific TCP peer IPs or CIDRs into CF-Connecting-IP.
+	// Empty means no forwarding peer is trusted.
+	TrustedProxies []string `json:"trusted_proxies,omitempty"`
 	// DevErrors renders local-development error pages (upstream address,
 	// hint, route list on 404). Local-only: it reveals internal addresses.
 	DevErrors bool    `json:"dev_errors,omitempty"`
@@ -114,6 +117,13 @@ func Validate(cfg Config) (*Config, error) {
 	cfg = Clone(cfg)
 	if cfg.Listen == "" {
 		return nil, fmt.Errorf("config: listen address is required")
+	}
+	proxies, err := ParseTrustedProxies(cfg.TrustedProxies)
+	if err != nil {
+		return nil, err
+	}
+	for i, prefix := range proxies {
+		cfg.TrustedProxies[i] = prefix.String()
 	}
 	if cfg.Admin.Listen == "" {
 		cfg.Admin.Listen = DefaultAdminListen
@@ -251,6 +261,7 @@ func hostOf(rawURL string) (string, error) {
 func Clone(source Config) Config {
 	clone := source
 	clone.TLS.Domains = slices.Clone(source.TLS.Domains)
+	clone.TrustedProxies = slices.Clone(source.TrustedProxies)
 	clone.Routes = make([]Route, len(source.Routes))
 	for i, route := range source.Routes {
 		clone.Routes[i] = route

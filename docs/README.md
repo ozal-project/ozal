@@ -20,6 +20,8 @@
   shell, ports and adapters, the request pipeline, Go rules.
 - [Stack](architecture/stack.md) — decided, pending and rejected technology
   choices.
+- [Edge behind Cloudflare Tunnel](architecture/edge-cloudflared.md) — public
+  edge decision, naming, ingress rules and the publish workflow.
 
 ## For agents
 

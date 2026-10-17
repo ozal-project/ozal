@@ -7,6 +7,17 @@ Format: `YYYY-MM-DD · ID · topic — what clicked (link to code)`
 
 ## v0.1 Edge
 
+- 2026-10-17 · ARCH-002 · publishing decisions — ports and adapters again: a
+  small `Sink` interface plus a JSON `slog` adapter and an in-memory recorder
+  turn every decision into one stable event type instead of ad-hoc log lines
+  ([events.go](../../internal/events/events.go)).
+- 2026-10-17 · EDGE-005 · peer versus client IP — `netip.ParseAddrPort`
+  validates the transport peer, IP/CIDR membership bounds header trust, and a
+  private context-key type passes the selected `netip.Addr` without rewriting
+  `RemoteAddr`. Clone slices when capturing policy in an immutable snapshot
+  ([client_ip.go](../../internal/pipeline/client_ip.go),
+  [trusted_proxies.go](../../internal/config/trusted_proxies.go)).
+
 - 2026-10-17 · ARCH-001 · pipeline order — a stage's *position* is part of
   its contract: stripping the session cookie at the request entry broke the
   identify stage that needs it. Trust strips inbound spoofing; the outbound

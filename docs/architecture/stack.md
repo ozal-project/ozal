@@ -34,8 +34,8 @@ project.
 
 | Area | Options | Decide by |
 |---|---|---|
-| VPS provider | Hetzner, DigitalOcean, Oracle free tier | Q1 (blocks `EDGE-001`) |
-| DNS provider for DNS-01 | Cloudflare DNS (API, free), registrar's own DNS | Q1 (blocks `EDGE-002`) |
+| VPS provider | Hetzner, DigitalOcean, Oracle free tier | Deferred: first edge runs on the current host behind a Cloudflare Tunnel ([edge-cloudflared](edge-cloudflared.md)) |
+| DNS provider for DNS-01 | Cloudflare DNS (already in use) | Deferred: only needed if Switchboard terminates TLS (`EDGE-002`) |
 | Email for one-time codes | SMTP relay, Resend, Amazon SES | Q1 (blocks `ID-002`) |
 | Private CA / ACME server | Own implementation on `crypto/x509` (preferred, learning) with Pebble as reference | Q2 |
 | Policy language | Own JSON policies, Cedar (`cedar-go`), CEL | Q2 |

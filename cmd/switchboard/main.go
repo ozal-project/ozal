@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/octaviosantacruz/switchboard/internal/admin"
 	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/octaviosantacruz/switchboard/internal/events"
 	"github.com/octaviosantacruz/switchboard/internal/routemanager"
 )
 
@@ -35,7 +37,10 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	manager, err := routemanager.New(ctx, *configPath, healthCheckInterval)
+	// Decisions, logins and control-plane changes are published as JSON
+	// records, one event per line.
+	sink := events.SlogSink{Logger: slog.New(slog.NewJSONHandler(os.Stdout, nil))}
+	manager, err := routemanager.New(ctx, *configPath, healthCheckInterval, routemanager.WithEventSink(sink))
 	if err != nil {
 		log.Fatalf("routes: %v", err)
 	}
@@ -50,11 +55,11 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-hup:
+				event := events.Event{Type: events.ConfigReloaded, Actor: "signal:SIGHUP", Time: time.Now()}
 				if err := manager.Reload(); err != nil {
-					log.Printf("audit actor=signal:SIGHUP action=config.reload result=rejected error=%q", err)
-					continue
+					event.Error = err.Error()
 				}
-				log.Printf("audit actor=signal:SIGHUP action=config.reload result=accepted")
+				sink.Emit(event)
 			}
 		}
 	}()
@@ -64,7 +69,7 @@ func main() {
 		log.Printf("  %s -> %s", r.Host, r.Destination())
 	}
 
-	adminServer, err := startAdmin(&cfg, manager)
+	adminServer, err := startAdmin(&cfg, manager, sink)
 	if err != nil {
 		log.Fatalf("admin listener: %v", err)
 	}
@@ -106,14 +111,14 @@ const (
 	idleTimeout       = 120 * time.Second
 )
 
-func startAdmin(cfg *config.Config, manager *routemanager.Manager) (*http.Server, error) {
+func startAdmin(cfg *config.Config, manager *routemanager.Manager, sink events.Sink) (*http.Server, error) {
 	listener, err := net.Listen("tcp", cfg.Admin.Listen)
 	if err != nil {
 		return nil, err
 	}
 	server := &http.Server{
 		Addr:              cfg.Admin.Listen,
-		Handler:           admin.New(manager, nil),
+		Handler:           admin.New(manager, sink),
 		ReadHeaderTimeout: readHeaderTimeout,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,

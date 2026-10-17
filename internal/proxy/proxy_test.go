@@ -16,6 +16,7 @@ import (
 
 	"github.com/octaviosantacruz/switchboard/internal/auth"
 	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/octaviosantacruz/switchboard/internal/events"
 	"github.com/octaviosantacruz/switchboard/internal/pipeline"
 )
 
@@ -206,13 +207,14 @@ func TestAccessPolicyRejectsAuthenticatedPrincipalWithoutClaims(t *testing.T) {
 			EmailVerified: true,
 		},
 	}
+	recorder := &events.Recorder{}
 	handler, err := New(
 		[]config.Route{{
 			Host:   "private.localhost",
 			Target: upstream.URL,
 			Access: &config.AccessPolicy{AllowedDomains: []string{"example.com"}},
 		}},
-		nil, gate,
+		nil, gate, WithEventSink(recorder),
 	)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -228,6 +230,10 @@ func TestAccessPolicyRejectsAuthenticatedPrincipalWithoutClaims(t *testing.T) {
 	}
 	if upstreamCalled {
 		t.Fatal("expected denied request not to reach upstream")
+	}
+	denied, ok := recorder.Find(events.AccessDenied)
+	if !ok || denied.Actor != "user-123" || denied.Host != "private.localhost" || denied.Code == "" {
+		t.Fatalf("access.denied event = %+v, %v", denied, ok)
 	}
 }
 
@@ -246,6 +252,7 @@ func TestAccessPolicyAllowsMatchingClaims(t *testing.T) {
 			Groups:        []string{"engineering"},
 		},
 	}
+	recorder := &events.Recorder{}
 	handler, err := New(
 		[]config.Route{{
 			Host:   "private.localhost",
@@ -255,7 +262,7 @@ func TestAccessPolicyAllowsMatchingClaims(t *testing.T) {
 				RequiredGroups: []string{"engineering"},
 			},
 		}},
-		nil, gate,
+		nil, gate, WithEventSink(recorder),
 	)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -268,6 +275,10 @@ func TestAccessPolicyAllowsMatchingClaims(t *testing.T) {
 
 	if rec.Code != http.StatusOK || rec.Body.String() != "allowed" {
 		t.Fatalf("status = %d, body = %q, want 200 / allowed", rec.Code, rec.Body.String())
+	}
+	allowed, ok := recorder.Find(events.AccessAllowed)
+	if !ok || allowed.Actor != "user-123" || allowed.Host != "private.localhost" {
+		t.Fatalf("access.allowed event = %+v, %v", allowed, ok)
 	}
 }
 

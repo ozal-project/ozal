@@ -16,9 +16,22 @@ import (
 
 	"github.com/octaviosantacruz/switchboard/internal/auth"
 	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/octaviosantacruz/switchboard/internal/events"
 	"github.com/octaviosantacruz/switchboard/internal/healthcheck"
 	"github.com/octaviosantacruz/switchboard/internal/proxy"
 )
+
+// Option configures the manager.
+type Option func(*Manager)
+
+// WithEventSink publishes auth, access and control-plane events to sink.
+func WithEventSink(sink events.Sink) Option {
+	return func(m *Manager) {
+		if sink != nil {
+			m.sink = sink
+		}
+	}
+}
 
 var (
 	ErrRouteExists   = errors.New("route already exists")
@@ -61,10 +74,11 @@ type Manager struct {
 	sessions            *auth.SessionStore
 	sessionTTL          time.Duration
 	sessionCancel       context.CancelFunc
+	sink                events.Sink
 }
 
 // New builds and installs the initial snapshot from configPath.
-func New(ctx context.Context, configPath string, healthCheckInterval time.Duration) (*Manager, error) {
+func New(ctx context.Context, configPath string, healthCheckInterval time.Duration, opts ...Option) (*Manager, error) {
 	if healthCheckInterval <= 0 {
 		return nil, fmt.Errorf("health check interval must be positive")
 	}
@@ -72,6 +86,10 @@ func New(ctx context.Context, configPath string, healthCheckInterval time.Durati
 		ctx:                 ctx,
 		configPath:          configPath,
 		healthCheckInterval: healthCheckInterval,
+		sink:                events.Discard,
+	}
+	for _, opt := range opts {
+		opt(manager)
 	}
 	if err := manager.Reload(); err != nil {
 		return nil, err
@@ -253,7 +271,7 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 			oidcGate = m.gate
 		} else {
 			gateCtx, cancelGate := context.WithCancel(m.ctx)
-			oidcGate, err = auth.NewGate(gateCtx, cfg.Auth, protectedHosts, sessions)
+			oidcGate, err = auth.NewGate(gateCtx, cfg.Auth, protectedHosts, sessions, m.sink)
 			if err != nil {
 				cancelGate()
 				return nil, fmt.Errorf("build auth gate: %w", err)
@@ -265,6 +283,11 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 
 	checker := healthcheck.New()
 	var proxyOpts []proxy.Option
+	trustedProxies, err := config.ParseTrustedProxies(cfg.TrustedProxies)
+	if err != nil {
+		return nil, err
+	}
+	proxyOpts = append(proxyOpts, proxy.WithTrustedProxies(trustedProxies), proxy.WithEventSink(m.sink))
 	if cfg.DevErrors {
 		proxyOpts = append(proxyOpts, proxy.WithDevErrors())
 	}

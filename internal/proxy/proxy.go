@@ -6,12 +6,16 @@ import (
 	"log"
 	"net/http"
 	"net/http/httputil"
+	"net/netip"
 	"os"
+	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/octaviosantacruz/switchboard/internal/auth"
 	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/octaviosantacruz/switchboard/internal/events"
 	"github.com/octaviosantacruz/switchboard/internal/pipeline"
 	"github.com/octaviosantacruz/switchboard/internal/static"
 )
@@ -20,7 +24,16 @@ import (
 type Option func(*options)
 
 type options struct {
-	devErrors bool
+	devErrors      bool
+	sink           events.Sink
+	trustedProxies []netip.Prefix
+}
+
+// WithTrustedProxies allows only these TCP peers to supply CF-Connecting-IP.
+// Empty is the default: never trust forwarding headers from a direct client.
+func WithTrustedProxies(prefixes []netip.Prefix) Option {
+	trusted := slices.Clone(prefixes)
+	return func(o *options) { o.trustedProxies = trusted }
 }
 
 // WithDevErrors enables local-development error pages: the upstream address
@@ -28,6 +41,15 @@ type options struct {
 // public edge — it reveals internal addresses and hostnames.
 func WithDevErrors() Option {
 	return func(o *options) { o.devErrors = true }
+}
+
+// WithEventSink publishes access decisions to sink (events.Discard by default).
+func WithEventSink(sink events.Sink) Option {
+	return func(o *options) {
+		if sink != nil {
+			o.sink = sink
+		}
+	}
 }
 
 type route struct {
@@ -55,7 +77,7 @@ type AuthGate interface {
 // New builds a host-routed reverse proxy handler from the given routes.
 // It fails fast on invalid or duplicate hosts and targets. checker and gate may be nil.
 func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Option) (http.Handler, error) {
-	var cfg options
+	cfg := options{sink: events.Discard}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
@@ -116,10 +138,25 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 			}
 			decision := auth.Authorize(principal, rt.access)
 			if !decision.Allowed {
-				log.Printf("access denied for %s on %s: %s", principal.Subject, host, decision.Code)
+				cfg.sink.Emit(events.Event{
+					Time:       time.Now(),
+					Type:       events.AccessDenied,
+					Actor:      principal.Subject,
+					Host:       host,
+					Code:       string(decision.Code),
+					Reason:     decision.Reason,
+					RemoteAddr: req.RemoteAddr,
+				})
 				http.Error(w, "access denied", http.StatusForbidden)
 				return
 			}
+			cfg.sink.Emit(events.Event{
+				Time:       time.Now(),
+				Type:       events.AccessAllowed,
+				Actor:      principal.Subject,
+				Host:       host,
+				RemoteAddr: req.RemoteAddr,
+			})
 			if principal.Email != "" {
 				req.Header.Set(pipeline.IdentityEmailHeader, principal.Email)
 			}
@@ -133,7 +170,7 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 
 	// The trust stage runs before anything reads the request: spoofed
 	// identity headers never survive to the forwarding handler.
-	return pipeline.Chain(pipeline.Trust)(forward), nil
+	return pipeline.Chain(pipeline.TrustWithProxies(cfg.trustedProxies))(forward), nil
 }
 
 // stripCookie returns a Cookie header value without the named cookie, keeping
@@ -203,6 +240,12 @@ func upstreamHandler(r config.Route, devErrors bool) (http.Handler, error) {
 			pr.Out.Header.Del("X-Forwarded-For")
 			pr.SetURL(target)
 			pr.SetXForwarded()
+			// Forward a single address from Trust's decision, never an
+			// incoming chain. RemoteAddr still identifies the TCP peer.
+			pr.Out.Header.Del("X-Forwarded-For")
+			if ip, ok := pipeline.ClientIP(pr.In.Context()); ok {
+				pr.Out.Header.Set("X-Forwarded-For", ip.String())
+			}
 			// SetURL clears the outbound Host (the transport would use the
 			// internal target); keep the public host the client asked for.
 			pr.Out.Host = pr.In.Host

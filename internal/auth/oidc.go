@@ -19,6 +19,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/octaviosantacruz/switchboard/internal/events"
 )
 
 const (
@@ -53,6 +54,16 @@ type Gate struct {
 
 	sessions *SessionStore
 	loginKey []byte
+	sink     events.Sink
+}
+
+// emit publishes a login event when a sink is configured.
+func (g *Gate) emit(e events.Event) {
+	if g.sink == nil {
+		return
+	}
+	e.Time = time.Now()
+	g.sink.Emit(e)
 }
 
 // NewGate performs OIDC discovery against cfg.Issuer. It fails fast if the
@@ -63,9 +74,12 @@ type Gate struct {
 // routing config) a post-login redirect is allowed to land on. Without
 // this check, an attacker could craft a login link with return_to pointing
 // anywhere and use this Gate as an open redirect once a victim logs in.
-func NewGate(ctx context.Context, cfg config.Auth, allowedHosts []string, sessions *SessionStore) (*Gate, error) {
+func NewGate(ctx context.Context, cfg config.Auth, allowedHosts []string, sessions *SessionStore, sink events.Sink) (*Gate, error) {
 	if sessions == nil {
 		return nil, errors.New("auth: NewGate requires a session store")
+	}
+	if sink == nil {
+		sink = events.Discard
 	}
 	provider, err := oidc.NewProvider(ctx, cfg.Issuer)
 	if err != nil {
@@ -94,6 +108,7 @@ func NewGate(ctx context.Context, cfg config.Auth, allowedHosts []string, sessio
 		allowedHosts: hosts,
 		sessions:     sessions,
 		loginKey:     loginCookieKey(cfg.ClientSecret),
+		sink:         sink,
 	}, nil
 }
 
@@ -142,6 +157,8 @@ func (g *Gate) Middleware(next http.Handler) http.Handler {
 }
 
 func (g *Gate) HandleLogin(w http.ResponseWriter, r *http.Request) {
+	g.emit(events.Event{Type: events.LoginStarted, Host: r.Host, RemoteAddr: r.RemoteAddr})
+
 	state, err := randomString(32)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -199,11 +216,13 @@ func (g *Gate) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	state := r.URL.Query().Get("state")
 	cookie, err := r.Cookie(LoginCookieName)
 	if err != nil {
+		g.emit(events.Event{Type: events.LoginFailed, Host: r.Host, Code: "missing_login_cookie", RemoteAddr: r.RemoteAddr})
 		http.Error(w, "login expired or invalid, please try again", http.StatusBadRequest)
 		return
 	}
 	pl, ok := g.openLogin(cookie.Value)
 	if !ok || subtle.ConstantTimeCompare([]byte(state), []byte(pl.State)) != 1 {
+		g.emit(events.Event{Type: events.LoginFailed, Host: r.Host, Code: "invalid_login_state", RemoteAddr: r.RemoteAddr})
 		http.Error(w, "login expired or invalid, please try again", http.StatusBadRequest)
 		return
 	}
@@ -211,17 +230,20 @@ func (g *Gate) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
 	token, err := g.oauthConfig.Exchange(ctx, code, oauth2.SetAuthURLParam("code_verifier", pl.CodeVerifier))
 	if err != nil {
+		g.emit(events.Event{Type: events.LoginFailed, Host: r.Host, Code: "token_exchange_failed", Error: err.Error(), RemoteAddr: r.RemoteAddr})
 		http.Error(w, "token exchange failed", http.StatusBadGateway)
 		return
 	}
 
 	rawIDToken, ok := token.Extra("id_token").(string)
 	if !ok {
+		g.emit(events.Event{Type: events.LoginFailed, Host: r.Host, Code: "id_token_missing", RemoteAddr: r.RemoteAddr})
 		http.Error(w, "provider did not return an id_token", http.StatusBadGateway)
 		return
 	}
 	idToken, err := g.verifier.Verify(ctx, rawIDToken)
 	if err != nil {
+		g.emit(events.Event{Type: events.LoginFailed, Host: r.Host, Code: "id_token_invalid", Error: err.Error(), RemoteAddr: r.RemoteAddr})
 		http.Error(w, "id_token verification failed", http.StatusUnauthorized)
 		return
 	}
@@ -232,6 +254,7 @@ func (g *Gate) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		Groups        []string `json:"groups"`
 	}
 	if err := idToken.Claims(&claims); err != nil {
+		g.emit(events.Event{Type: events.LoginFailed, Host: r.Host, Code: "claims_invalid", Error: err.Error(), RemoteAddr: r.RemoteAddr})
 		http.Error(w, "failed to decode id_token claims", http.StatusBadGateway)
 		return
 	}
@@ -245,13 +268,16 @@ func (g *Gate) HandleCallback(w http.ResponseWriter, r *http.Request) {
 
 	sessionID, err := g.sessions.Create(principal)
 	if errors.Is(err, ErrStoreFull) {
+		g.emit(events.Event{Type: events.LoginFailed, Actor: principal.Subject, Host: r.Host, Code: "session_store_full", RemoteAddr: r.RemoteAddr})
 		http.Error(w, "too many active sessions, try again shortly", http.StatusServiceUnavailable)
 		return
 	}
 	if err != nil {
+		g.emit(events.Event{Type: events.LoginFailed, Actor: principal.Subject, Host: r.Host, Code: "session_create_failed", Error: err.Error(), RemoteAddr: r.RemoteAddr})
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	g.emit(events.Event{Type: events.LoginSucceeded, Actor: principal.Subject, Host: r.Host, RemoteAddr: r.RemoteAddr})
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     SessionCookieName,
