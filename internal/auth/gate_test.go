@@ -6,15 +6,21 @@ import (
 	"net/url"
 	"testing"
 	"time"
+
+	"golang.org/x/oauth2"
 )
 
 // newTestGate builds a Gate without real OIDC discovery, for testing the
-// session-checking parts (Middleware, HandleLogout) that don't need a
-// live provider.
+// session-checking and login-cookie parts that don't need a live provider.
 func newTestGate() *Gate {
 	return &Gate{
+		oauthConfig: oauth2.Config{
+			ClientID:    "test-client",
+			RedirectURL: "http://app.localhost/_/auth/callback",
+			Endpoint:    oauth2.Endpoint{AuthURL: "https://idp.example.com/authorize"},
+		},
 		sessions:     NewSessionStore(time.Hour),
-		pending:      newPendingStore(),
+		loginKey:     loginCookieKey("test-secret"),
 		allowedHosts: map[string]bool{"app.example.com": true},
 	}
 }
@@ -142,6 +148,145 @@ func TestRandomStringIsNotEmptyAndVaries(t *testing.T) {
 	b, _ := randomString(32)
 	if a == "" || a == b {
 		t.Fatalf("expected non-empty, distinct random strings, got %q and %q", a, b)
+	}
+}
+
+func TestHandleLoginSetsSignedLoginCookie(t *testing.T) {
+	g := newTestGate()
+	req := httptest.NewRequest(http.MethodGet, "/_/auth/login?return_to="+url.QueryEscape("http://app.localhost/dashboard"), nil)
+	rec := httptest.NewRecorder()
+
+	g.HandleLogin(rec, req)
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("status = %d, want 302", rec.Code)
+	}
+	authURL, err := url.Parse(rec.Header().Get("Location"))
+	if err != nil {
+		t.Fatalf("parse auth URL: %v", err)
+	}
+	state := authURL.Query().Get("state")
+	if state == "" {
+		t.Fatal("expected a non-empty state on the auth URL")
+	}
+
+	var loginCookie *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == LoginCookieName {
+			loginCookie = c
+		}
+	}
+	if loginCookie == nil {
+		t.Fatal("expected the login attempt to be carried in a signed cookie")
+	}
+	if !loginCookie.HttpOnly || loginCookie.SameSite != http.SameSiteLaxMode {
+		t.Fatalf("login cookie flags = HttpOnly:%v SameSite:%v, want HttpOnly and Lax", loginCookie.HttpOnly, loginCookie.SameSite)
+	}
+	if loginCookie.MaxAge != int(loginCookieTTL.Seconds()) {
+		t.Fatalf("login cookie MaxAge = %d, want %d", loginCookie.MaxAge, int(loginCookieTTL.Seconds()))
+	}
+
+	pl, ok := g.openLogin(loginCookie.Value)
+	if !ok {
+		t.Fatal("the freshly issued login cookie does not verify")
+	}
+	if pl.State != state || pl.CodeVerifier == "" {
+		t.Fatalf("payload = %+v, want state %q and a verifier", pl, state)
+	}
+	if pl.ReturnTo != "http://app.localhost/dashboard" {
+		t.Fatalf("payload return_to = %q, want the original URL", pl.ReturnTo)
+	}
+}
+
+func TestOpenLoginRejectsTamperingAndExpiry(t *testing.T) {
+	g := newTestGate()
+	valid, err := g.sealLogin(loginPayload{
+		State:        "state-a",
+		CodeVerifier: "verifier-a",
+		ReturnTo:     "/",
+		ExpiresAt:    time.Now().Add(time.Minute).Unix(),
+	})
+	if err != nil {
+		t.Fatalf("sealLogin: %v", err)
+	}
+	if _, ok := g.openLogin(valid); !ok {
+		t.Fatal("expected the untouched cookie to verify")
+	}
+
+	flipped := []byte(valid)
+	if flipped[0] == 'A' {
+		flipped[0] = 'B'
+	} else {
+		flipped[0] = 'A'
+	}
+	expired, _ := g.sealLogin(loginPayload{State: "s", CodeVerifier: "v", ReturnTo: "/", ExpiresAt: time.Now().Add(-time.Second).Unix()})
+	emptyState, _ := g.sealLogin(loginPayload{CodeVerifier: "v", ReturnTo: "/", ExpiresAt: time.Now().Add(time.Minute).Unix()})
+	emptyVerifier, _ := g.sealLogin(loginPayload{State: "s", ReturnTo: "/", ExpiresAt: time.Now().Add(time.Minute).Unix()})
+
+	rejected := map[string]string{
+		"tampered payload":   string(flipped),
+		"tampered signature": valid + "x",
+		"missing separator":  "no-dot-here",
+		"garbage":            "!!!.???",
+		"expired":            expired,
+		"empty state":        emptyState,
+		"empty verifier":     emptyVerifier,
+		"signed by someone else": func() string {
+			other := &Gate{loginKey: loginCookieKey("another-secret")}
+			v, _ := other.sealLogin(loginPayload{State: "s", CodeVerifier: "v", ReturnTo: "/", ExpiresAt: time.Now().Add(time.Minute).Unix()})
+			return v
+		}(),
+	}
+	for name, value := range rejected {
+		t.Run(name, func(t *testing.T) {
+			if _, ok := g.openLogin(value); ok {
+				t.Fatalf("openLogin accepted %q", name)
+			}
+		})
+	}
+}
+
+func TestCallbackWithoutLoginCookieFails(t *testing.T) {
+	g := newTestGate()
+	req := httptest.NewRequest(http.MethodGet, "/_/auth/callback?code=stolen-code&state=attacker-state", nil)
+	rec := httptest.NewRecorder()
+
+	g.HandleCallback(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (replayed callback without the browser cookie)", rec.Code)
+	}
+}
+
+func TestCallbackRejectsStateMismatchAndClearsCookie(t *testing.T) {
+	g := newTestGate()
+	value, err := g.sealLogin(loginPayload{
+		State:        "state-a",
+		CodeVerifier: "verifier-a",
+		ReturnTo:     "/",
+		ExpiresAt:    time.Now().Add(time.Minute).Unix(),
+	})
+	if err != nil {
+		t.Fatalf("sealLogin: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/_/auth/callback?code=x&state=state-b", nil)
+	req.AddCookie(&http.Cookie{Name: LoginCookieName, Value: value})
+	rec := httptest.NewRecorder()
+
+	g.HandleCallback(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 for a state that does not match the cookie", rec.Code)
+	}
+	cleared := false
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == LoginCookieName && c.MaxAge < 0 {
+			cleared = true
+		}
+	}
+	if !cleared {
+		t.Fatal("expected the login cookie to be cleared even on failure")
 	}
 }
 

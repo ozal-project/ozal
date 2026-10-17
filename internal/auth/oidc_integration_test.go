@@ -130,7 +130,8 @@ func TestFullLoginCallbackFlow(t *testing.T) {
 		t.Fatalf("NewGate: %v", err)
 	}
 
-	// Step 1: hit login, capture the state Switchboard generated.
+	// Step 1: hit login, capture the state Switchboard generated and the
+	// signed cookie that binds this attempt to the browser.
 	loginReq := httptest.NewRequest(http.MethodGet, "http://app.localhost/_/auth/login?return_to="+url.QueryEscape("http://app.localhost/dashboard"), nil)
 	loginRec := httptest.NewRecorder()
 	gate.HandleLogin(loginRec, loginReq)
@@ -149,12 +150,22 @@ func TestFullLoginCallbackFlow(t *testing.T) {
 	if authURL.Query().Get("code_challenge") == "" || authURL.Query().Get("code_challenge_method") != "S256" {
 		t.Fatal("expected PKCE code_challenge/code_challenge_method on the auth URL")
 	}
+	var loginCookie *http.Cookie
+	for _, c := range loginRec.Result().Cookies() {
+		if c.Name == LoginCookieName {
+			loginCookie = c
+		}
+	}
+	if loginCookie == nil {
+		t.Fatal("expected a signed login cookie on the login response")
+	}
 
 	// Step 2: simulate the provider redirecting back with a code. Our fake
 	// token endpoint doesn't validate the code's authenticity, only that a
 	// real token request reaches it — which is what proves the exchange
 	// wiring (client_id, code_verifier, endpoint) is correct.
 	callbackReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("http://app.localhost/_/auth/callback?code=fake-code&state=%s", state), nil)
+	callbackReq.AddCookie(loginCookie)
 	callbackRec := httptest.NewRecorder()
 	gate.HandleCallback(callbackRec, callbackReq)
 
@@ -163,6 +174,15 @@ func TestFullLoginCallbackFlow(t *testing.T) {
 	}
 	if loc := callbackRec.Header().Get("Location"); loc != "http://app.localhost/dashboard" {
 		t.Errorf("callback redirect = %q, want the original return_to", loc)
+	}
+	loginCleared := false
+	for _, c := range callbackRec.Result().Cookies() {
+		if c.Name == LoginCookieName && c.MaxAge < 0 {
+			loginCleared = true
+		}
+	}
+	if !loginCleared {
+		t.Error("expected the callback to clear the login cookie")
 	}
 
 	cookies := callbackRec.Result().Cookies()
@@ -197,7 +217,7 @@ func TestFullLoginCallbackFlow(t *testing.T) {
 	}
 }
 
-func TestCallbackRejectsUnknownState(t *testing.T) {
+func TestCallbackRejectsForgedLoginCookie(t *testing.T) {
 	provider := newFakeOIDCProvider(t)
 	gate, err := NewGate(t.Context(), config.Auth{
 		Issuer:       provider.server.URL,
@@ -209,11 +229,23 @@ func TestCallbackRejectsUnknownState(t *testing.T) {
 		t.Fatalf("NewGate: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "http://app.localhost/_/auth/callback?code=x&state=never-issued", nil)
+	forger := &Gate{loginKey: loginCookieKey("another-secret")}
+	forged, err := forger.sealLogin(loginPayload{
+		State:        "forged-state",
+		CodeVerifier: "forged-verifier",
+		ReturnTo:     "/",
+		ExpiresAt:    time.Now().Add(time.Minute).Unix(),
+	})
+	if err != nil {
+		t.Fatalf("sealLogin: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://app.localhost/_/auth/callback?code=x&state=forged-state", nil)
+	req.AddCookie(&http.Cookie{Name: LoginCookieName, Value: forged})
 	rec := httptest.NewRecorder()
 	gate.HandleCallback(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400 for an unknown/replayed state", rec.Code)
+		t.Fatalf("status = %d, want 400 for a cookie signed with another key", rec.Code)
 	}
 }

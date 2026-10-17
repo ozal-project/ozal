@@ -2,9 +2,12 @@ package auth
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -21,9 +24,14 @@ import (
 const (
 	// SessionCookieName is Switchboard's session cookie. The proxy strips it
 	// from every request so an upstream never receives the edge session.
-	SessionCookieName      = "sb_session"
+	SessionCookieName = "sb_session"
+	// LoginCookieName carries a signed, short-lived login attempt (state,
+	// PKCE verifier, return_to). The server keeps no pending-login store:
+	// the cookie is the state, signed and bound to the browser.
+	LoginCookieName        = "sb_login"
 	defaultSessionTTL      = 8 * time.Hour
 	sessionCleanupInterval = 10 * time.Minute
+	loginCookieTTL         = 5 * time.Minute
 )
 
 // Gate protects routes behind a login against an external OIDC provider.
@@ -37,7 +45,7 @@ type Gate struct {
 	allowedHosts map[string]bool
 
 	sessions *SessionStore
-	pending  *pendingStore
+	loginKey []byte
 }
 
 // NewGate performs OIDC discovery against cfg.Issuer. It fails fast if the
@@ -71,9 +79,6 @@ func NewGate(ctx context.Context, cfg config.Auth, allowedHosts []string) (*Gate
 	sessions := NewSessionStore(ttl)
 	sessions.StartCleanup(ctx, sessionCleanupInterval)
 
-	pending := newPendingStore()
-	pending.startCleanup(ctx, sessionCleanupInterval)
-
 	return &Gate{
 		oauthConfig: oauth2.Config{
 			ClientID:     cfg.ClientID,
@@ -86,7 +91,7 @@ func NewGate(ctx context.Context, cfg config.Auth, allowedHosts []string) (*Gate
 		cookieDomain: cfg.CookieDomain,
 		allowedHosts: hosts,
 		sessions:     sessions,
-		pending:      pending,
+		loginKey:     loginCookieKey(cfg.ClientSecret),
 	}, nil
 }
 
@@ -150,10 +155,27 @@ func (g *Gate) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	if returnTo == "" {
 		returnTo = "/"
 	}
-	if err := g.pending.put(state, verifier, returnTo); err != nil {
-		http.Error(w, "too many logins in progress, try again shortly", http.StatusServiceUnavailable)
+
+	value, err := g.sealLogin(loginPayload{
+		State:        state,
+		CodeVerifier: verifier,
+		ReturnTo:     returnTo,
+		ExpiresAt:    time.Now().Add(loginCookieTTL).Unix(),
+	})
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     LoginCookieName,
+		Value:    value,
+		Domain:   g.cookieDomain,
+		Path:     "/",
+		MaxAge:   int(loginCookieTTL.Seconds()),
+		HttpOnly: true,
+		Secure:   r.TLS != nil,
+		SameSite: http.SameSiteLaxMode,
+	})
 
 	challenge := s256Challenge(verifier)
 	authURL := g.oauthConfig.AuthCodeURL(state,
@@ -166,15 +188,26 @@ func (g *Gate) HandleLogin(w http.ResponseWriter, r *http.Request) {
 func (g *Gate) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// The login attempt is valid exactly once: clear the cookie before
+	// anything else, whatever the outcome. Replaying a captured callback URL
+	// without the matching browser cookie fails below; a replayed code dies
+	// at the provider, where authorization codes are single-use.
+	g.clearLoginCookie(w, r)
+
 	state := r.URL.Query().Get("state")
-	pl, ok := g.pending.take(state)
-	if !ok {
+	cookie, err := r.Cookie(LoginCookieName)
+	if err != nil {
+		http.Error(w, "login expired or invalid, please try again", http.StatusBadRequest)
+		return
+	}
+	pl, ok := g.openLogin(cookie.Value)
+	if !ok || subtle.ConstantTimeCompare([]byte(state), []byte(pl.State)) != 1 {
 		http.Error(w, "login expired or invalid, please try again", http.StatusBadRequest)
 		return
 	}
 
 	code := r.URL.Query().Get("code")
-	token, err := g.oauthConfig.Exchange(ctx, code, oauth2.SetAuthURLParam("code_verifier", pl.codeVerifier))
+	token, err := g.oauthConfig.Exchange(ctx, code, oauth2.SetAuthURLParam("code_verifier", pl.CodeVerifier))
 	if err != nil {
 		http.Error(w, "token exchange failed", http.StatusBadGateway)
 		return
@@ -227,7 +260,7 @@ func (g *Gate) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		Secure:   r.TLS != nil,
 		SameSite: http.SameSiteLaxMode,
 	})
-	http.Redirect(w, r, g.safeReturnTo(pl.returnTo), http.StatusFound)
+	http.Redirect(w, r, g.safeReturnTo(pl.ReturnTo), http.StatusFound)
 }
 
 // safeReturnTo only honors returnTo if it points at a host this Gate was
@@ -264,6 +297,80 @@ func (g *Gate) HandleLogout(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 	})
 	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+// loginPayload is what a login attempt carries across the provider round
+// trip, signed into LoginCookieName instead of kept server-side.
+type loginPayload struct {
+	State        string `json:"s"`
+	CodeVerifier string `json:"v"`
+	ReturnTo     string `json:"r"`
+	ExpiresAt    int64  `json:"e"`
+}
+
+// loginCookieKey derives the cookie signing key from the OIDC client secret
+// with a domain separator, so one secret is never used directly as the HMAC
+// key of a second protocol. Rotating the client secret invalidates only
+// in-flight logins (minutes), never established sessions.
+func loginCookieKey(clientSecret string) []byte {
+	sum := sha256.Sum256([]byte("switchboard/login-cookie/v1\x00" + clientSecret))
+	return sum[:]
+}
+
+// sealLogin returns base64url(payload) + "." + base64url(HMAC-SHA256).
+func (g *Gate) sealLogin(p loginPayload) (string, error) {
+	body, err := json.Marshal(p)
+	if err != nil {
+		return "", err
+	}
+	payload := base64.RawURLEncoding.EncodeToString(body)
+	mac := hmac.New(sha256.New, g.loginKey)
+	mac.Write([]byte(payload))
+	return payload + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
+}
+
+// openLogin verifies the signature and expiry and returns the payload.
+// Any failure is a plain false: callers must not tell an attacker which
+// check failed.
+func (g *Gate) openLogin(value string) (loginPayload, bool) {
+	payload, signature, ok := strings.Cut(value, ".")
+	if !ok {
+		return loginPayload{}, false
+	}
+	want, err := base64.RawURLEncoding.DecodeString(signature)
+	if err != nil {
+		return loginPayload{}, false
+	}
+	mac := hmac.New(sha256.New, g.loginKey)
+	mac.Write([]byte(payload))
+	if !hmac.Equal(mac.Sum(nil), want) {
+		return loginPayload{}, false
+	}
+	body, err := base64.RawURLEncoding.DecodeString(payload)
+	if err != nil {
+		return loginPayload{}, false
+	}
+	var p loginPayload
+	if err := json.Unmarshal(body, &p); err != nil {
+		return loginPayload{}, false
+	}
+	if p.State == "" || p.CodeVerifier == "" || time.Now().Unix() > p.ExpiresAt {
+		return loginPayload{}, false
+	}
+	return p, true
+}
+
+func (g *Gate) clearLoginCookie(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     LoginCookieName,
+		Value:    "",
+		Domain:   g.cookieDomain,
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   r.TLS != nil,
+		SameSite: http.SameSiteLaxMode,
+	})
 }
 
 func randomString(n int) (string, error) {
