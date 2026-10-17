@@ -24,9 +24,16 @@ import (
 type Option func(*options)
 
 type options struct {
+	transport      http.RoundTripper
 	devErrors      bool
 	sink           events.Sink
 	trustedProxies []netip.Prefix
+}
+
+// WithTransport supplies an outbound transport (for example, a tunnel).
+// The trust and authorization stages still run before forwarding.
+func WithTransport(transport http.RoundTripper) Option {
+	return func(o *options) { o.transport = transport }
 }
 
 // WithTrustedProxies allows only these TCP peers to supply CF-Connecting-IP.
@@ -91,7 +98,7 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 		if _, exists := byHost[host]; exists {
 			return nil, fmt.Errorf("duplicate route host %q", host)
 		}
-		handler, err := upstreamHandler(r, cfg.devErrors)
+		handler, err := upstreamHandler(r, cfg.devErrors, cfg.transport)
 		if err != nil {
 			return nil, err
 		}
@@ -210,7 +217,7 @@ func writeDevNotFound(w http.ResponseWriter, requested string, byHost map[string
 
 // upstreamHandler builds what a route forwards to. A static root must already
 // exist as a directory so a typo fails at startup instead of serving 404s.
-func upstreamHandler(r config.Route, devErrors bool) (http.Handler, error) {
+func upstreamHandler(r config.Route, devErrors bool, transport http.RoundTripper) (http.Handler, error) {
 	if r.IsStatic() {
 		info, err := os.Stat(r.Root)
 		if err != nil {
@@ -226,6 +233,7 @@ func upstreamHandler(r config.Route, devErrors bool) (http.Handler, error) {
 		return nil, fmt.Errorf("route %s: invalid target %q: %w", r.Host, r.Target, err)
 	}
 	proxy := &httputil.ReverseProxy{
+		Transport: transport,
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			// The identify stage already read the session cookie; the outbound
 			// request is where it stops, so no upstream ever sees the edge

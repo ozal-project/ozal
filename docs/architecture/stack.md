@@ -21,7 +21,7 @@ project.
 | Rate limiting | `golang.org/x/time/rate` or own token bucket | Own implementation is a good small learning piece; x/time/rate as fallback |
 | Persistent state | SQLite via **`modernc.org/sqlite`** | Embedded: no extra service, so the gate cannot lose its database while it runs; pure Go (no cgo) keeps cross-compiling trivial; one file to back up. Kept behind consumer-declared ports so a Postgres adapter can be added later |
 | Migrations | Embedded numbered `.sql` files + small own runner | Same discipline as DSHub: sequential and immutable once applied |
-| Tunnels | **`hashicorp/yamux`** over mTLS (Q1); `quic-go` evaluated later | yamux is small and proven; QUIC is a later learning step |
+| Tunnels | **`github.com/hashicorp/yamux v0.1.2`** over mTLS (`TUN-001` local spike); `quic-go` evaluated later | Reuse reviewed stream multiplexing rather than invent framing/flow control. TLS authenticates both peers; one configured connector and upstream in the local spike. QUIC is a later learning step. |
 | Passkeys | **`go-webauthn/webauthn`** | WebAuthn verification is subtle; learn it through a reviewed library |
 | SSH (Q2–Q3) | `golang.org/x/crypto/ssh` | Certificates, server and client in one package |
 | Dashboard | Q1: `html/template` + `embed.FS` + HTMX. Q2: Svelte 5 islands (custom elements built with Vite) for features that need rich client state. Q3+: SvelteKit `adapter-static` only if the dashboard becomes an app | Learn the Go side first (handlers, SSE, sessions, CSRF/CSP); Node is a build-time tool only, output embedded, so it stays one binary. Same-origin cookie auth, no tokens in `localStorage` |
@@ -34,7 +34,7 @@ project.
 
 | Area | Options | Decide by |
 |---|---|---|
-| VPS provider | Hetzner, DigitalOcean, Oracle free tier | Deferred: first edge runs on the current host behind a Cloudflare Tunnel ([edge-cloudflared](edge-cloudflared.md)) |
+| VPS provider | External host for the owned public edge; provider undecided | No budget now. Develop both roles locally under [TUN-001](tunnel-local-spike.md). Cloudflare Tunnel remains optional; no purchase blocks implementation. |
 | DNS provider for DNS-01 | Cloudflare DNS (already in use) | Deferred: only needed if Switchboard terminates TLS (`EDGE-002`) |
 | Email for one-time codes | SMTP relay, Resend, Amazon SES | Q1 (blocks `ID-002`) |
 | Private CA / ACME server | Own implementation on `crypto/x509` (preferred, learning) with Pebble as reference | Q2 |
