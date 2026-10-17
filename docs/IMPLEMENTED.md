@@ -1,7 +1,7 @@
 # Implemented — Switchboard
 
 **Last review:** 2026-10-17
-**Code reviewed up to:** `8c5568e`
+**Code reviewed up to:** `08738fe`
 
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
@@ -73,7 +73,7 @@ history and grouped by the original phases.
 
 | Commit | Result |
 |---|---|
-| _uncommitted_ | `ARCH-001`: `internal/pipeline` owns the stage order from `design.md` (trust → ratelimit → shield → identify → authorize → route → forward) and the `Trust` stage strips spoofed identity headers before anything reads the request. The session-cookie strip moved from the request entry to the outbound clone (`ReverseProxy.Rewrite`): the identify stage must read `sb_session`, the upstream must not — a real ordering bug (login loop) that the pilot's cookie-reading gate test caught. `Chain` order test plus gate-visible/upstream-hidden cookie test. |
+| `08738fe` | `ARCH-001`: `internal/pipeline` owns the stage order from `design.md` (trust → ratelimit → shield → identify → authorize → route → forward) and the `Trust` stage strips spoofed identity headers before anything reads the request. The session-cookie strip moved from the request entry to the outbound clone (`ReverseProxy.Rewrite`): the identify stage must read `sb_session`, the upstream must not — a real ordering bug (login loop) that the pilot's cookie-reading gate test caught. `Chain` order test plus gate-visible/upstream-hidden cookie test. |
 
 ## SQLite store (2026-10-17)
 
