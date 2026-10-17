@@ -114,6 +114,7 @@ site was changed. Credentials and restart-safe deployment remain in `EDGE-001`.
 
 | Commit | Result |
 |---|---|
+| _uncommitted_ | `REL-004`: `QUICKSTART.md` + `config.quickstart.json` take a clean checkout to a demo upstream, a routed host, the local error page and the read-only status page. Followed end-to-end locally (route body, 404 route list, status 200, admin 421 on a non-loopback host, no leftover listeners). |
 | `3713c5b` | `REL-002`: fuzz targets for `config.Parse` (round-trip invariant), `NormalizeHost` (idempotent), `safeReturnTo` (only allowed absolute HTTP(S) hosts, fixed point) and `stripCookie` (target never survives, idempotent). Seed corpora run with `go test`; `scripts/verify.sh` adds a 1s fuzz pass per target. |
 | `4659f5a` | `REL-001`: `auth.client_secret` and `admin.token` come from `env:`/`file:` references (inline values documented as local-only). Tests cover both sources, an unresolved reference (startup error / `503` on mutations) and that control-plane writes never persist the resolved value. |
 

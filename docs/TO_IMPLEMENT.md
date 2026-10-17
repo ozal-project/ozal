@@ -34,7 +34,7 @@ infrastructure access · `TLOG` transparency log · `AI` AI-assisted decisions �
 
 Every `SEC-*` and `BUG-*` finding is closed (2026-10-17).
 
-1. `REL-003`–`REL-006`: CI, quickstart, GoReleaser → tag `v0.1.0-alpha.1`.<br>`REL-001`–`REL-002` closed (secret references, fuzz targets).
+1. `REL-003`, `REL-005`–`REL-006`: CI, GoReleaser → tag `v0.1.0-alpha.1`.<br>`REL-001`–`REL-002` and `REL-004` closed (secret references, fuzz, quickstart).
 2. `EDGE-001` through the Cloudflare tunnel (no VPS; DNS is already on
    Cloudflare); `EDGE-005` is locally implemented and verified. `TUN-*` spike
    in parallel.
@@ -56,7 +56,6 @@ Every `SEC-*` and `BUG-*` finding is closed (2026-10-17).
 | ID | Task | State | Done when |
 |---|---|---|---|
 | `REL-003` | CI on GitHub Actions: `scripts/verify.sh` on Linux, macOS, Windows. | Ready | Green on a pull request. |
-| `REL-004` | Copy-pasteable quickstart reaching a routed app and the status page. | Ready | Followed from a clean machine. |
 | `REL-005` | GoReleaser config, checksums, SBOM. | Ready | Snapshot build produces artifacts locally. |
 | `REL-006` | Tag `v0.1.0-alpha.1` after every gate above is green. | Blocked on `REL-002`–`REL-005` | Tag pushed with release notes. |
 

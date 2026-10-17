@@ -1,0 +1,8 @@
+{
+  "listen": ":8888",
+  "admin": { "listen": "127.0.0.1:9090" },
+  "dev_errors": true,
+  "routes": [
+    { "host": "app.localhost:8888", "target": "http://127.0.0.1:9000" }
+  ]
+}

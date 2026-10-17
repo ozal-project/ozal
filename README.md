@@ -74,7 +74,7 @@ That is the MVP, not a temporary compromise before rebuilding Caddy or Okta.
 The project should grow only where a capability makes that path more reliable,
 safer, or easier to operate. Its first release goal is a trustworthy public
 alpha, with secrets outside JSON, fuzz coverage for the security boundaries,
-CI, and a repeatable quickstart. The measurable release gates and dates are in
+CI and release artifacts. The measurable release gates and dates are in
 [TO_IMPLEMENT.md](docs/TO_IMPLEMENT.md#alpha-release-gates).
 
 ## Status
@@ -103,9 +103,7 @@ In progress (Phase 1 hardening, see [TO_IMPLEMENT.md](docs/TO_IMPLEMENT.md)):
 The next engineering block closes the remaining hardening debt before adding
 more proxy behavior:
 
-1. Add fuzz tests for configuration parsing, host normalization, and the OIDC
-   `return_to` open-redirect guard.
-2. Add CI that runs `go test -race ./...`, `go vet ./...`, and a build on each
+1. Add CI that runs `scripts/verify.sh` (including the short fuzz pass) on each
    supported platform.
 
 After that comes Phase 4: multiple upstreams with round-robin selection,
@@ -158,6 +156,9 @@ Sending `SIGHUP` performs the same last-good reload from disk. Changes to the
 public listener, `admin.listen`, or TLS settings require a process restart.
 
 ## Usage
+
+New here? [QUICKSTART.md](QUICKSTART.md) goes from a clean checkout to a routed
+app and the status page.
 
 ```bash
 go run ./cmd/switchboard -config config.json
