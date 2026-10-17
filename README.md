@@ -203,6 +203,14 @@ Route hosts are matched case-insensitively and normalized without a trailing
 DNS dot. Duplicate normalized hosts are rejected, and upstream targets must
 be absolute `http://` or `https://` URLs.
 
+### Local error pages
+
+`dev_errors: true` renders development-friendly errors: a 404 that lists the
+configured hosts when the `Host` doesn't match any route, and a 502 that names
+the unreachable upstream plus a hint. It is off by default and meant for local
+development only — those pages reveal internal hostnames and addresses, so
+never enable them on a public edge.
+
 ### Real deployment (HTTPS via Let's Encrypt)
 
 Set `tls.enabled: true` and point real DNS at the box. Switchboard then
@@ -315,6 +323,10 @@ at. `session_ttl_minutes` defaults to 480 (8 hours) if omitted. Switchboard
 never sees or stores a password — it only receives the provider's ID token
 after a successful login and trusts that identity for the session. A
 post-login redirect (`return_to`) is only honored when it is an absolute
-HTTP(S) URL without userinfo and points at one of the normalized hosts in
-this config's `routes` — otherwise Switchboard would be an open redirect
-for anyone who can craft a login link.
+HTTP(S) URL without userinfo and points at one of the **protected** route
+hosts — a host whose route sets an access policy or `auth_required` —
+otherwise Switchboard would be an open redirect for anyone who can craft a
+login link. `/_/auth/login`, `/_/auth/callback` and `/_/auth/logout` are
+answered only on those protected hosts (plus the `redirect_url` host); on
+any other host the path belongs to the route's own upstream. Logout is a
+`POST`.
