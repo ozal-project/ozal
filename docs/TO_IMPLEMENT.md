@@ -32,14 +32,14 @@ infrastructure access · `TLOG` transparency log · `AI` AI-assisted decisions �
 
 ## Recommended order
 
-1. `BUG-001`–`BUG-008`: every `SEC-*` finding is closed (2026-10-17); fix the
-   remaining proxy defects before exposure.
-2. `ARCH-001`–`ARCH-002`: put the pipeline and event sink in place so every
+Every `SEC-*` and `BUG-*` finding is closed (2026-10-17).
+
+1. `ARCH-001`–`ARCH-002`: put the pipeline and event sink in place so every
    later feature plugs into one order of checks.
-3. `REL-*`: secrets from env/file, fuzzing, CI, quickstart → tag `v0.1.0-alpha.1`.
-4. `TUN-*` spike in parallel with the edge decisions (`EDGE-001`/`002` are
+2. `REL-*`: secrets from env/file, fuzzing, CI, quickstart → tag `v0.1.0-alpha.1`.
+3. `TUN-*` spike in parallel with the edge decisions (`EDGE-001`/`002` are
    blocked on VPS and DNS).
-5. Identity (`ID-*`), then `NTF-001`, `SHD-001`.
+4. Identity (`ID-*`), then `NTF-001`, `SHD-001`.
 
 ---
 
@@ -49,9 +49,6 @@ infrastructure access · `TLOG` transparency log · `AI` AI-assisted decisions �
 
 | ID | Task | State | Done when |
 |---|---|---|---|
-| `BUG-007` | README says `return_to` accepts any route host; code accepts only protected hosts. | Ready | Docs and code agree (decide which is intended). |
-| `BUG-008` | Upstream down → bare empty `502`; unknown host → plain `404`. | Ready | Friendly local-dev error pages (upstream address, hint, route list on 404) behind a flag safe for production. |
-
 ### Architecture
 
 | ID | Task | State | Done when |

@@ -75,11 +75,14 @@ type Admin struct {
 }
 
 type Config struct {
-	Listen string  `json:"listen"`
-	TLS    TLS     `json:"tls,omitempty"`
-	Auth   Auth    `json:"auth,omitempty"`
-	Admin  Admin   `json:"admin,omitempty"`
-	Routes []Route `json:"routes"`
+	Listen string `json:"listen"`
+	TLS    TLS    `json:"tls,omitempty"`
+	Auth   Auth   `json:"auth,omitempty"`
+	Admin  Admin  `json:"admin,omitempty"`
+	// DevErrors renders local-development error pages (upstream address,
+	// hint, route list on 404). Local-only: it reveals internal addresses.
+	DevErrors bool    `json:"dev_errors,omitempty"`
+	Routes    []Route `json:"routes"`
 }
 
 func Load(path string) (*Config, error) {

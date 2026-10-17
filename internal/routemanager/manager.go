@@ -264,7 +264,11 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 	}
 
 	checker := healthcheck.New()
-	proxyHandler, err := proxy.New(cfg.Routes, checker, gate)
+	var proxyOpts []proxy.Option
+	if cfg.DevErrors {
+		proxyOpts = append(proxyOpts, proxy.WithDevErrors())
+	}
+	proxyHandler, err := proxy.New(cfg.Routes, checker, gate, proxyOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("build proxy: %w", err)
 	}

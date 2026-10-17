@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/octaviosantacruz/switchboard/internal/auth"
@@ -18,6 +19,20 @@ const (
 	authEmailHeader = "X-Auth-Request-Email"
 	authUserHeader  = "X-Auth-Request-User"
 )
+
+// Option configures the proxy handler.
+type Option func(*options)
+
+type options struct {
+	devErrors bool
+}
+
+// WithDevErrors enables local-development error pages: the upstream address
+// and a hint on 502, the known route hosts on 404. Never enable it on a
+// public edge — it reveals internal addresses and hostnames.
+func WithDevErrors() Option {
+	return func(o *options) { o.devErrors = true }
+}
 
 type route struct {
 	target       string
@@ -43,7 +58,11 @@ type AuthGate interface {
 
 // New builds a host-routed reverse proxy handler from the given routes.
 // It fails fast on invalid or duplicate hosts and targets. checker and gate may be nil.
-func New(routes []config.Route, checker HealthChecker, gate AuthGate) (http.Handler, error) {
+func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Option) (http.Handler, error) {
+	var cfg options
+	for _, opt := range opts {
+		opt(&cfg)
+	}
 	byHost := make(map[string]route, len(routes))
 
 	for _, r := range routes {
@@ -54,7 +73,7 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate) (http.Hand
 		if _, exists := byHost[host]; exists {
 			return nil, fmt.Errorf("duplicate route host %q", host)
 		}
-		handler, err := upstreamHandler(r)
+		handler, err := upstreamHandler(r, cfg.devErrors)
 		if err != nil {
 			return nil, err
 		}
@@ -81,6 +100,10 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate) (http.Hand
 		}
 		rt, ok := byHost[host]
 		if !ok {
+			if cfg.devErrors {
+				writeDevNotFound(w, req.Host, byHost)
+				return
+			}
 			http.Error(w, "no route for host: "+req.Host, http.StatusNotFound)
 			return
 		}
@@ -166,9 +189,25 @@ func stripCookie(header, name string) string {
 	return strings.Join(kept, "; ")
 }
 
+// writeDevNotFound lists the configured hosts for a local developer who
+// typed the wrong one; production keeps the terse message.
+func writeDevNotFound(w http.ResponseWriter, requested string, byHost map[string]route) {
+	hosts := make([]string, 0, len(byHost))
+	for host := range byHost {
+		hosts = append(hosts, host)
+	}
+	sort.Strings(hosts)
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusNotFound)
+	fmt.Fprintf(w, "no route for host %q\nknown hosts:\n", requested)
+	for _, host := range hosts {
+		fmt.Fprintf(w, "  %s\n", host)
+	}
+}
+
 // upstreamHandler builds what a route forwards to. A static root must already
 // exist as a directory so a typo fails at startup instead of serving 404s.
-func upstreamHandler(r config.Route) (http.Handler, error) {
+func upstreamHandler(r config.Route, devErrors bool) (http.Handler, error) {
 	if r.IsStatic() {
 		info, err := os.Stat(r.Root)
 		if err != nil {
@@ -183,7 +222,7 @@ func upstreamHandler(r config.Route) (http.Handler, error) {
 	if err != nil {
 		return nil, fmt.Errorf("route %s: invalid target %q: %w", r.Host, r.Target, err)
 	}
-	return &httputil.ReverseProxy{
+	proxy := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			// A client-supplied forwarding chain is never trusted: SetXForwarded
 			// appends to an existing X-Forwarded-For, so drop it first.
@@ -194,5 +233,13 @@ func upstreamHandler(r config.Route) (http.Handler, error) {
 			// internal target); keep the public host the client asked for.
 			pr.Out.Host = pr.In.Host
 		},
-	}, nil
+	}
+	if devErrors {
+		proxy.ErrorHandler = func(w http.ResponseWriter, req *http.Request, err error) {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusBadGateway)
+			fmt.Fprintf(w, "upstream %s is unreachable: %v\nhint: is the app running and listening on that port?\n", target, err)
+		}
+	}
+	return proxy, nil
 }

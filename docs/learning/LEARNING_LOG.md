@@ -7,6 +7,10 @@ Format: `YYYY-MM-DD · ID · topic — what clicked (link to code)`
 
 ## v0.1 Edge
 
+- 2026-10-17 · BUG-008 · error surfaces — debugging ergonomics and
+  information disclosure pull in opposite directions; a variadic `Option`
+  keeps the friendly pages off the default path and testable both ways
+  ([proxy.go](../../internal/proxy/proxy.go)).
 - 2026-10-17 · BUG-006 · atomic writes — `os.Rename` replaces the *name* it is
   given: through a symlink that means replacing the link, not its target;
   `EvalSymlinks` first, then rename and fsync the directory for durability

@@ -346,6 +346,84 @@ func TestPublicRouteStripsClientIdentityHeaders(t *testing.T) {
 	}
 }
 
+func TestDevErrorPages(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer upstream.Close()
+
+	closedPort := func() string {
+		probe, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatalf("listen: %v", err)
+		}
+		addr := probe.Addr().String()
+		probe.Close()
+		return addr
+	}
+
+	fetch := func(t *testing.T, handler http.Handler, host string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "http://"+host+"/", nil)
+		req.Host = host
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec
+	}
+
+	t.Run("unknown host lists the configured hosts when enabled", func(t *testing.T) {
+		handler, err := New([]config.Route{{Host: "known.localhost", Target: upstream.URL}}, nil, nil, WithDevErrors())
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		rec := fetch(t, handler, "unknown.localhost")
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want 404", rec.Code)
+		}
+		for _, want := range []string{"no route for host", "known.localhost"} {
+			if !strings.Contains(rec.Body.String(), want) {
+				t.Errorf("dev 404 body missing %q: %s", want, rec.Body.String())
+			}
+		}
+	})
+
+	t.Run("unreachable upstream names the target when enabled", func(t *testing.T) {
+		addr := closedPort()
+		handler, err := New([]config.Route{{Host: "down.localhost", Target: "http://" + addr}}, nil, nil, WithDevErrors())
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		rec := fetch(t, handler, "down.localhost")
+		if rec.Code != http.StatusBadGateway {
+			t.Fatalf("status = %d, want 502", rec.Code)
+		}
+		for _, want := range []string{addr, "hint"} {
+			if !strings.Contains(rec.Body.String(), want) {
+				t.Errorf("dev 502 body missing %q: %s", want, rec.Body.String())
+			}
+		}
+	})
+
+	t.Run("production stays terse", func(t *testing.T) {
+		addr := closedPort()
+		handler, err := New([]config.Route{
+			{Host: "known.localhost", Target: upstream.URL},
+			{Host: "down.localhost", Target: "http://" + addr},
+		}, nil, nil)
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		notFound := fetch(t, handler, "unknown.localhost")
+		if notFound.Code != http.StatusNotFound || strings.Contains(notFound.Body.String(), "known hosts") {
+			t.Fatalf("production 404 = %d %q, want a terse message without the route list", notFound.Code, notFound.Body.String())
+		}
+		badGateway := fetch(t, handler, "down.localhost")
+		if badGateway.Code != http.StatusBadGateway || strings.Contains(badGateway.Body.String(), addr) {
+			t.Fatalf("production 502 = %d %q, want no upstream address", badGateway.Code, badGateway.Body.String())
+		}
+	})
+}
+
 func TestRoutesUsingNormalizedRequestHost(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("normalized"))
