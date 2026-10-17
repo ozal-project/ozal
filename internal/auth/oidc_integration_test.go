@@ -168,7 +168,7 @@ func TestFullLoginCallbackFlow(t *testing.T) {
 	cookies := callbackRec.Result().Cookies()
 	var sessionCookie *http.Cookie
 	for _, c := range cookies {
-		if c.Name == sessionCookieName {
+		if c.Name == SessionCookieName {
 			sessionCookie = c
 		}
 	}

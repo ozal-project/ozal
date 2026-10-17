@@ -19,7 +19,9 @@ import (
 )
 
 const (
-	sessionCookieName      = "sb_session"
+	// SessionCookieName is Switchboard's session cookie. The proxy strips it
+	// from every request so an upstream never receives the edge session.
+	SessionCookieName      = "sb_session"
 	defaultSessionTTL      = 8 * time.Hour
 	sessionCleanupInterval = 10 * time.Minute
 )
@@ -91,7 +93,7 @@ func NewGate(ctx context.Context, cfg config.Auth, allowedHosts []string) (*Gate
 // Authenticate returns the trusted identity stored in a valid session.
 // The bool is false when the cookie is absent, unknown, or expired.
 func (g *Gate) Authenticate(r *http.Request) (Principal, bool) {
-	cookie, err := r.Cookie(sessionCookieName)
+	cookie, err := r.Cookie(SessionCookieName)
 	if err != nil {
 		return Principal{}, false
 	}
@@ -217,7 +219,7 @@ func (g *Gate) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookieName,
+		Name:     SessionCookieName,
 		Value:    sessionID,
 		Domain:   g.cookieDomain,
 		Path:     "/",
@@ -248,11 +250,11 @@ func (g *Gate) safeReturnTo(returnTo string) string {
 }
 
 func (g *Gate) HandleLogout(w http.ResponseWriter, r *http.Request) {
-	if cookie, err := r.Cookie(sessionCookieName); err == nil {
+	if cookie, err := r.Cookie(SessionCookieName); err == nil {
 		g.sessions.Delete(cookie.Value)
 	}
 	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookieName,
+		Name:     SessionCookieName,
 		Value:    "",
 		Domain:   g.cookieDomain,
 		Path:     "/",

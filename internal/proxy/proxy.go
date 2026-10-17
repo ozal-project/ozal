@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"os"
+	"strings"
 
 	"github.com/octaviosantacruz/switchboard/internal/auth"
 	"github.com/octaviosantacruz/switchboard/internal/config"
@@ -72,6 +73,7 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate) (http.Hand
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		req.Header.Del(authEmailHeader)
 		req.Header.Del(authUserHeader)
+		stripSessionCookie(req)
 
 		host, err := config.NormalizeHost(req.Host)
 		if err != nil {
@@ -113,6 +115,35 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate) (http.Hand
 		log.Printf("%s %s%s -> %s", req.Method, host, req.URL.Path, rt.target)
 		rt.handler.ServeHTTP(w, req)
 	}), nil
+}
+
+// stripSessionCookie removes Switchboard's session cookie from the request so
+// an upstream never receives the edge session. Other cookies are preserved.
+func stripSessionCookie(r *http.Request) {
+	if cookie := stripCookie(r.Header.Get("Cookie"), auth.SessionCookieName); cookie != "" {
+		r.Header.Set("Cookie", cookie)
+		return
+	}
+	r.Header.Del("Cookie")
+}
+
+// stripCookie returns a Cookie header value without the named cookie, keeping
+// the other pairs in order. It returns "" when nothing is left; the caller
+// decides whether that means removing the header.
+func stripCookie(header, name string) string {
+	var kept []string
+	for _, pair := range strings.Split(header, ";") {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+		cookieName, _, _ := strings.Cut(pair, "=")
+		if strings.TrimSpace(cookieName) == name {
+			continue
+		}
+		kept = append(kept, pair)
+	}
+	return strings.Join(kept, "; ")
 }
 
 // upstreamHandler builds what a route forwards to. A static root must already

@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/octaviosantacruz/switchboard/internal/auth"
@@ -445,5 +446,133 @@ func TestNewRejectsMissingStaticRoot(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "does-not-exist")
 	if _, err := New([]config.Route{{Host: "site.localhost", Root: missing}}, nil, nil); err == nil {
 		t.Fatal("New accepted a static root that does not exist")
+	}
+}
+
+func TestStripCookie(t *testing.T) {
+	cases := []struct {
+		name   string
+		header string
+		want   string
+	}{
+		{"keeps the other cookies", "sb_session=secret; theme=dark; lang=es", "theme=dark; lang=es"},
+		{"removes the only cookie", "sb_session=secret", ""},
+		{"removes the first pair", "sb_session=secret; a=1", "a=1"},
+		{"removes the last pair", "a=1; sb_session=secret", "a=1"},
+		{"removes a middle pair", "a=1; sb_session=secret; b=2", "a=1; b=2"},
+		{"leaves an unrelated header alone", "a=1; b=2", "a=1; b=2"},
+		{"empty header", "", ""},
+		{"tolerates spaces", "  a=1 ;  sb_session=secret ; b=2 ", "a=1; b=2"},
+		{"keeps values containing equals", "token=a=b; sb_session=secret", "token=a=b"},
+		{"matches the name exactly", "sb_session_extra=1; x=y", "sb_session_extra=1; x=y"},
+		{"drops a valueless target pair", "sb_session; a=1", "a=1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := stripCookie(tc.header, "sb_session"); got != tc.want {
+				t.Fatalf("stripCookie(%q) = %q, want %q", tc.header, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestPublicRouteStripsSessionCookie(t *testing.T) {
+	session := auth.SessionCookieName
+
+	t.Run("keeps the other cookies", func(t *testing.T) {
+		var gotCookie string
+		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotCookie = r.Header.Get("Cookie")
+			w.WriteHeader(http.StatusNoContent)
+		}))
+		defer upstream.Close()
+
+		handler, err := New([]config.Route{{Host: "public.localhost", Target: upstream.URL}}, nil, nil)
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "http://public.localhost/", nil)
+		req.Host = "public.localhost"
+		req.Header.Set("Cookie", session+"=edge-session; theme=dark")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("status = %d, want 204", rec.Code)
+		}
+		if gotCookie != "theme=dark" {
+			t.Fatalf("upstream Cookie = %q, want %q", gotCookie, "theme=dark")
+		}
+		if strings.Contains(gotCookie, session) {
+			t.Fatalf("upstream received the session cookie: %q", gotCookie)
+		}
+	})
+
+	t.Run("removes the header when only the session is present", func(t *testing.T) {
+		var gotCookie string
+		upstreamGot := false
+		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			upstreamGot = true
+			gotCookie = r.Header.Get("Cookie")
+			w.WriteHeader(http.StatusNoContent)
+		}))
+		defer upstream.Close()
+
+		handler, err := New([]config.Route{{Host: "public.localhost", Target: upstream.URL}}, nil, nil)
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "http://public.localhost/", nil)
+		req.Host = "public.localhost"
+		req.Header.Set("Cookie", session+"=edge-session")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusNoContent || !upstreamGot {
+			t.Fatalf("status = %d upstream = %v, want 204 / reached", rec.Code, upstreamGot)
+		}
+		if gotCookie != "" {
+			t.Fatalf("upstream Cookie = %q, want no header", gotCookie)
+		}
+	})
+}
+
+func TestProtectedRouteStripsSessionCookie(t *testing.T) {
+	var gotCookie string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotCookie = r.Header.Get("Cookie")
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer upstream.Close()
+
+	gate := &fakeGate{
+		authenticated: true,
+		principal: auth.Principal{
+			Subject:       "user-123",
+			Email:         "alice@example.com",
+			EmailVerified: true,
+		},
+	}
+	handler, err := New(
+		[]config.Route{{Host: "private.localhost", Target: upstream.URL, AuthRequired: true, Access: &config.AccessPolicy{}}},
+		nil, gate,
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://private.localhost/", nil)
+	req.Host = "private.localhost"
+	req.Header.Set("Cookie", auth.SessionCookieName+"=edge-session; app_session=upstream-token")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", rec.Code)
+	}
+	if gotCookie != "app_session=upstream-token" {
+		t.Fatalf("upstream Cookie = %q, want %q", gotCookie, "app_session=upstream-token")
 	}
 }

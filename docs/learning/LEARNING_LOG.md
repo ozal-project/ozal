@@ -7,6 +7,11 @@ Format: `YYYY-MM-DD · ID · topic — what clicked (link to code)`
 
 ## v0.1 Edge
 
+- 2026-10-17 · SEC-001 · cookie stripping — a proxy owns the trust boundary:
+  parse the `Cookie` header, drop only Switchboard's `sb_session`, and prove
+  with `httptest` that it never reaches the upstream
+  ([proxy.go](../../internal/proxy/proxy.go),
+  [proxy_test.go](../../internal/proxy/proxy_test.go)).
 - 2026-10-17 · PAGES-001 · path traversal — `path.Clean` stops `..` in the
   URL, but only `os.OpenInRoot` stops symlinks; defense in depth = pure check
   + kernel-level check ([resolve.go](../../internal/static/resolve.go),

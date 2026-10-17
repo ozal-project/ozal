@@ -46,6 +46,12 @@ history and grouped by the original phases.
 |---|---|
 | _uncommitted_ | Full audit (findings now `SEC-001`–`SEC-005`, `BUG-001`–`BUG-008`); `VISION.md`; `AGENTS.md`; mentor skill; design pattern, stack and tracker docs; `scripts/verify.sh`. |
 
+## Security findings (2026-10-17)
+
+| Commit | Result |
+|---|---|
+| _uncommitted_ | `SEC-001`: the proxy strips Switchboard's `sb_session` cookie from every request before it reaches an upstream, preserving the other cookies (and removing the header when nothing is left). Pure `stripCookie` + table tests; e2e tests on public and protected routes; proven to fail without the wiring. |
+
 ## SQLite store (2026-10-17)
 
 | Commit | Result |

@@ -29,7 +29,7 @@ func TestMiddlewareAllowsValidSession(t *testing.T) {
 	handler := g.Middleware(next)
 
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
-	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: id})
+	req.AddCookie(&http.Cookie{Name: SessionCookieName, Value: id})
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, req)
@@ -72,7 +72,7 @@ func TestMiddlewareRedirectsWithInvalidSessionCookie(t *testing.T) {
 	handler := g.Middleware(next)
 
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
-	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "not-a-real-session-id"})
+	req.AddCookie(&http.Cookie{Name: SessionCookieName, Value: "not-a-real-session-id"})
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, req)
@@ -87,7 +87,7 @@ func TestHandleLogoutClearsSession(t *testing.T) {
 	id, _ := g.sessions.Create(Principal{Email: "user@example.com", Subject: "sub"})
 
 	req := httptest.NewRequest(http.MethodGet, "/_/auth/logout", nil)
-	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: id})
+	req.AddCookie(&http.Cookie{Name: SessionCookieName, Value: id})
 	rec := httptest.NewRecorder()
 
 	g.HandleLogout(rec, req)
