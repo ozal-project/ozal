@@ -7,6 +7,11 @@ Format: `YYYY-MM-DD · ID · topic — what clicked (link to code)`
 
 ## v0.1 Edge
 
+- 2026-10-17 · REL-002 · fuzzing invariants — a fuzz target is only useful
+  when it asserts a property, not just "does not panic": round-trip,
+  idempotence and allowlist membership turn random bytes into security
+  evidence ([fuzz_test.go](../../internal/config/fuzz_test.go),
+  [fuzz_test.go](../../internal/auth/fuzz_test.go)).
 - 2026-10-17 · ARCH-003 · raw vs resolved — keep the config value as the
   operator wrote it and resolve a copy only for the consumer; otherwise the
   atomic write launders the secret into the file. Validation checks shape,

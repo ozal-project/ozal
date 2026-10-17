@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-echo "[1/6] gofmt"
+echo "[1/7] gofmt"
 unformatted="$(gofmt -l .)"
 if [[ -n "$unformatted" ]]; then
   echo "Files need gofmt:" >&2
@@ -13,16 +13,24 @@ if [[ -n "$unformatted" ]]; then
   exit 1
 fi
 
-echo "[2/6] go vet"
+echo "[2/7] go vet"
 go vet ./...
 
-echo "[3/6] go test -race"
+echo "[3/7] go test -race"
 go test -race -count=1 ./...
 
-echo "[4/6] go build"
+echo "[4/7] go build"
 go build -o /dev/null ./cmd/switchboard
 
-echo "[5/6] optional linters"
+# Short fuzz pass: the seed corpus runs in the normal test step above; this
+# keeps the fuzz targets alive without turning the gate into a long run.
+echo "[5/7] fuzz (short)"
+go test ./internal/config -run '^$' -fuzz '^FuzzParse$' -fuzztime=1s
+go test ./internal/config -run '^$' -fuzz '^FuzzNormalizeHost$' -fuzztime=1s
+go test ./internal/auth -run '^$' -fuzz '^FuzzSafeReturnTo$' -fuzztime=1s
+go test ./internal/proxy -run '^$' -fuzz '^FuzzStripCookie$' -fuzztime=1s
+
+echo "[6/7] optional linters"
 if command -v staticcheck >/dev/null 2>&1; then
   staticcheck ./...
 else
@@ -34,7 +42,7 @@ else
   echo "  govulncheck not installed (go install golang.org/x/vuln/cmd/govulncheck@latest)"
 fi
 
-echo "[6/6] git diff --check"
+echo "[7/7] git diff --check"
 git diff --check
 
 echo "OK"
