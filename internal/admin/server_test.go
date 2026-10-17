@@ -166,6 +166,39 @@ func TestLoopbackHost(t *testing.T) {
 	}
 }
 
+func TestMutationsRequireBearerScheme(t *testing.T) {
+	manager := &fakeManager{cfg: config.Config{Admin: config.Admin{Token: "secret"}}}
+	handler := New(manager, nil)
+
+	cases := []struct {
+		name   string
+		header string
+		want   int
+	}{
+		{"bare token without scheme", "secret", http.StatusUnauthorized},
+		{"wrong scheme", "Basic secret", http.StatusUnauthorized},
+		{"scheme without token", "Bearer ", http.StatusUnauthorized},
+		{"no header", "", http.StatusUnauthorized},
+		{"bearer", "Bearer secret", http.StatusOK},
+		{"scheme is case-insensitive", "bearer secret", http.StatusOK},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/_/reload", nil)
+			req.Host = "127.0.0.1:9090"
+			req.RemoteAddr = "127.0.0.1:43210"
+			if tc.header != "" {
+				req.Header.Set("Authorization", tc.header)
+			}
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != tc.want {
+				t.Fatalf("status = %d, want %d", rec.Code, tc.want)
+			}
+		})
+	}
+}
+
 func TestMutationsRequireConfiguredBearerToken(t *testing.T) {
 	manager := &fakeManager{cfg: config.Config{Admin: config.Admin{Token: "secret"}}}
 	handler := New(manager, nil)

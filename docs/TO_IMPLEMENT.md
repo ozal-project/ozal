@@ -49,7 +49,6 @@ infrastructure access · `TLOG` transparency log · `AI` AI-assisted decisions �
 
 | ID | Task | State | Done when |
 |---|---|---|---|
-| `BUG-004` | Bearer parsing accepts a bare token without the `Bearer ` prefix. | Ready | Test: header without prefix gets `401`. |
 | `BUG-005` | `/_/auth/*` is intercepted on every host, shadowing upstream paths on public routes; logout is a GET (logout CSRF). | Ready | Auth endpoints only on hosts that need them; logout via POST; tests. |
 | `BUG-006` | `WriteAtomic` replaces a symlinked config with a regular file and skips directory fsync. | Ready | Resolves symlinks before rename; fsyncs the directory; test with a symlinked config. |
 | `BUG-007` | README says `return_to` accepts any route host; code accepts only protected hosts. | Ready | Docs and code agree (decide which is intended). |

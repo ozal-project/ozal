@@ -7,6 +7,9 @@ Format: `YYYY-MM-DD · ID · topic — what clicked (link to code)`
 
 ## v0.1 Edge
 
+- 2026-10-17 · BUG-004 · parsing authorization — `strings.TrimPrefix` treats
+  "no prefix" and "wrong prefix" as valid input; `strings.Cut` plus a scheme
+  check makes the grammar explicit ([server.go](../../internal/admin/server.go)).
 - 2026-10-17 · BUG-003 · startup contract — `ListenAndServe` hides the bind
   inside the serve loop; `net.Listen` first turns "port busy" into a startup
   error the process can report before claiming it is running

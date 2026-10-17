@@ -202,7 +202,15 @@ func (h *Handler) requireBearer(next http.HandlerFunc) http.HandlerFunc {
 			writeError(w, http.StatusServiceUnavailable, "admin mutations are disabled until admin.token is configured")
 			return
 		}
-		provided := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		// Require the Bearer scheme (case-insensitive per RFC 7235); a bare
+		// token is as invalid as no token. "Bearer " with an empty token fails
+		// the hash comparison below.
+		scheme, provided, ok := strings.Cut(r.Header.Get("Authorization"), " ")
+		if !ok || !strings.EqualFold(scheme, "Bearer") {
+			w.Header().Set("WWW-Authenticate", "Bearer")
+			writeError(w, http.StatusUnauthorized, "invalid bearer token")
+			return
+		}
 		wantHash := sha256.Sum256([]byte(token))
 		providedHash := sha256.Sum256([]byte(provided))
 		if subtle.ConstantTimeCompare(providedHash[:], wantHash[:]) != 1 {
