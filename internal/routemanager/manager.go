@@ -18,7 +18,9 @@ import (
 	"github.com/octaviosantacruz/switchboard/internal/config"
 	"github.com/octaviosantacruz/switchboard/internal/events"
 	"github.com/octaviosantacruz/switchboard/internal/healthcheck"
+	"github.com/octaviosantacruz/switchboard/internal/pipeline"
 	"github.com/octaviosantacruz/switchboard/internal/proxy"
+	"github.com/octaviosantacruz/switchboard/internal/ratelimit"
 )
 
 // Option configures the manager.
@@ -303,6 +305,19 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 		return nil, fmt.Errorf("build proxy: %w", err)
 	}
 	handler := withAuthEndpoints(proxyHandler, oidcGate, authEndpointHosts(*cfg, protectedHosts))
+	if rl := cfg.RateLimit; rl != nil {
+		// Outside withAuthEndpoints so /_/auth/* is limited too. Trust runs
+		// first for the client IP; the copy inside the proxy is a no-op.
+		const idle = 10 * time.Minute
+		handler = pipeline.Chain(
+			pipeline.TrustWithProxies(trustedProxies),
+			pipeline.RateLimit(
+				ratelimit.NewLimiter(rl.General.Rate, rl.General.Burst, idle),
+				ratelimit.NewLimiter(rl.Auth.Rate, rl.Auth.Burst, idle),
+				"/_/auth/",
+			),
+		)(handler)
+	}
 	checker.Start(healthCtx, cfg.Routes, m.healthCheckInterval)
 	if err := m.contextError(); err != nil {
 		return nil, err

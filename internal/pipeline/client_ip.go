@@ -23,10 +23,16 @@ func TrustWithProxies(proxies []netip.Prefix) Stage {
 	trusted := slices.Clone(proxies)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ip := resolveClientIP(r.RemoteAddr, connectingIPValues(r.Header), trusted)
+			// An outer Trust already resolved the address from the original
+			// headers; running again would see them stripped and downgrade
+			// the client to the transport peer.
+			ip, resolved := ClientIP(r.Context())
+			if !resolved {
+				ip = resolveClientIP(r.RemoteAddr, connectingIPValues(r.Header), trusted)
+			}
 			stripIdentityHeaders(r.Header)
 			stripForwardingHeaders(r.Header)
-			if ip.IsValid() {
+			if !resolved && ip.IsValid() {
 				r = r.WithContext(context.WithValue(r.Context(), clientIPKey{}, ip))
 			}
 			next.ServeHTTP(w, r)

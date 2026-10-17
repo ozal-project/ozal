@@ -74,6 +74,20 @@ type Admin struct {
 	Token  string `json:"token,omitempty"`
 }
 
+// Limit is a token bucket: Rate requests per second with bursts up to Burst.
+type Limit struct {
+	Rate  float64 `json:"rate"`
+	Burst int     `json:"burst"`
+}
+
+// RateLimit throttles requests per client IP. General applies to every
+// request; Auth applies in addition to paths under /_/auth/ and should be
+// much stricter. A nil RateLimit disables limiting.
+type RateLimit struct {
+	General Limit `json:"general"`
+	Auth    Limit `json:"auth"`
+}
+
 type Config struct {
 	Listen string `json:"listen"`
 	TLS    TLS    `json:"tls,omitempty"`
@@ -84,8 +98,9 @@ type Config struct {
 	TrustedProxies []string `json:"trusted_proxies,omitempty"`
 	// DevErrors renders local-development error pages (upstream address,
 	// hint, route list on 404). Local-only: it reveals internal addresses.
-	DevErrors bool    `json:"dev_errors,omitempty"`
-	Routes    []Route `json:"routes"`
+	DevErrors bool       `json:"dev_errors,omitempty"`
+	RateLimit *RateLimit `json:"rate_limit,omitempty"`
+	Routes    []Route    `json:"routes"`
 }
 
 func Load(path string) (*Config, error) {
@@ -124,6 +139,13 @@ func Validate(cfg Config) (*Config, error) {
 	}
 	for i, prefix := range proxies {
 		cfg.TrustedProxies[i] = prefix.String()
+	}
+	if cfg.RateLimit != nil {
+		for name, l := range map[string]Limit{"general": cfg.RateLimit.General, "auth": cfg.RateLimit.Auth} {
+			if l.Rate <= 0 || l.Burst < 1 {
+				return nil, fmt.Errorf("config: rate_limit.%s needs rate > 0 and burst >= 1", name)
+			}
+		}
 	}
 	if cfg.Admin.Listen == "" {
 		cfg.Admin.Listen = DefaultAdminListen
@@ -269,6 +291,10 @@ func Clone(source Config) Config {
 	clone := source
 	clone.TLS.Domains = slices.Clone(source.TLS.Domains)
 	clone.TrustedProxies = slices.Clone(source.TrustedProxies)
+	if source.RateLimit != nil {
+		limit := *source.RateLimit
+		clone.RateLimit = &limit
+	}
 	clone.Routes = make([]Route, len(source.Routes))
 	for i, route := range source.Routes {
 		clone.Routes[i] = route
