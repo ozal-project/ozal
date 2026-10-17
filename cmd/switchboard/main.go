@@ -47,7 +47,9 @@ func main() {
 
 	// Decisions, logins and control-plane changes are published as JSON
 	// records, one event per line.
-	sink := events.SlogSink{Logger: slog.New(slog.NewJSONHandler(os.Stdout, nil))}
+	// The broker keeps recent events for the admin activity page.
+	broker := events.NewBroker()
+	sink := events.Multi{events.SlogSink{Logger: slog.New(slog.NewJSONHandler(os.Stdout, nil))}, broker}
 	manager, err := routemanager.New(ctx, *configPath, healthCheckInterval, routemanager.WithEventSink(sink))
 	if err != nil {
 		log.Fatalf("routes: %v", err)
@@ -77,7 +79,7 @@ func main() {
 		log.Printf("  %s -> %s", r.Host, r.Destination())
 	}
 
-	adminServer, err := startAdmin(&cfg, manager, sink)
+	adminServer, err := startAdmin(&cfg, manager, sink, broker)
 	if err != nil {
 		log.Fatalf("admin listener: %v", err)
 	}
@@ -119,14 +121,14 @@ const (
 	idleTimeout       = 120 * time.Second
 )
 
-func startAdmin(cfg *config.Config, manager *routemanager.Manager, sink events.Sink) (*http.Server, error) {
+func startAdmin(cfg *config.Config, manager *routemanager.Manager, sink events.Sink, broker *events.Broker) (*http.Server, error) {
 	listener, err := net.Listen("tcp", cfg.Admin.Listen)
 	if err != nil {
 		return nil, err
 	}
 	server := &http.Server{
 		Addr:              cfg.Admin.Listen,
-		Handler:           admin.New(manager, sink),
+		Handler:           admin.New(manager, sink, admin.WithEvents(broker)),
 		ReadHeaderTimeout: readHeaderTimeout,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,

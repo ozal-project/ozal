@@ -34,10 +34,11 @@ type routeManager interface {
 type Handler struct {
 	manager routeManager
 	sink    events.Sink
+	broker  *events.Broker
 	mux     *http.ServeMux
 }
 
-func New(manager routeManager, sink events.Sink) *Handler {
+func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 	if sink == nil {
 		sink = events.Discard
 	}
@@ -46,6 +47,14 @@ func New(manager routeManager, sink events.Sink) *Handler {
 	h.mux.HandleFunc("POST /_/reload", h.requireBearer(h.reload))
 	h.mux.HandleFunc("POST /routes", h.requireBearer(h.addRoute))
 	h.mux.HandleFunc("DELETE /routes/{host}", h.requireBearer(h.deleteRoute))
+	for _, opt := range opts {
+		opt(h)
+	}
+	if h.broker != nil {
+		h.mux.HandleFunc("GET /_/activity", h.activityPage)
+		h.mux.HandleFunc("GET /_/activity.js", h.activityScript)
+		h.mux.HandleFunc("GET /_/events", h.stream)
+	}
 	return h
 }
 
@@ -79,6 +88,7 @@ func loopbackHost(host string) bool {
 }
 
 type statusView struct {
+	HasActivity bool
 	GeneratedAt string
 	Routes      []routeView
 }
@@ -98,6 +108,7 @@ type routeView struct {
 func (h *Handler) status(w http.ResponseWriter, _ *http.Request) {
 	statuses := h.manager.RouteStatuses()
 	view := statusView{
+		HasActivity: h.broker != nil,
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
 		Routes:      make([]routeView, len(statuses)),
 	}
@@ -295,7 +306,7 @@ var dashboardTemplate = template.Must(template.New("status").Parse(`<!doctype ht
   </style>
 </head>
 <body>
-  <header><div><h1>Switchboard</h1><span class="updated">Updated {{.GeneratedAt}}</span></div></header>
+  <header><div><h1>Switchboard</h1><span class="updated">Updated {{.GeneratedAt}}</span>{{if .HasActivity}} · <a href="/_/activity">Activity</a>{{end}}</div></header>
   <main>
     <table>
       <thead><tr><th>Route</th><th>Upstream</th><th>Health</th><th>Latency</th><th>Last check</th><th>Last transition</th><th>Error</th></tr></thead>
