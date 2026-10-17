@@ -7,6 +7,10 @@ Format: `YYYY-MM-DD · ID · topic — what clicked (link to code)`
 
 ## v0.1 Edge
 
+- 2026-10-17 · ARCH-003 · raw vs resolved — keep the config value as the
+  operator wrote it and resolve a copy only for the consumer; otherwise the
+  atomic write launders the secret into the file. Validation checks shape,
+  never content ([secrets.go](../../internal/config/secrets.go)).
 - 2026-10-17 · ARCH-002 · publishing decisions — ports and adapters again: a
   small `Sink` interface plus a JSON `slog` adapter and an in-memory recorder
   turn every decision into one stable event type instead of ad-hoc log lines

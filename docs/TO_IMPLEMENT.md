@@ -34,7 +34,7 @@ infrastructure access · `TLOG` transparency log · `AI` AI-assisted decisions �
 
 Every `SEC-*` and `BUG-*` finding is closed (2026-10-17).
 
-1. `REL-*`: secrets from env/file, fuzzing, CI, quickstart → tag `v0.1.0-alpha.1`.
+1. `REL-002`–`REL-006`: fuzzing, CI, quickstart, GoReleaser → tag `v0.1.0-alpha.1`.<br>`REL-001` closed with the secret references (`ARCH-003`).
 2. `EDGE-001` through the Cloudflare tunnel (no VPS; DNS is already on
    Cloudflare); `EDGE-005` is locally implemented and verified. `TUN-*` spike
    in parallel.
@@ -48,7 +48,6 @@ Every `SEC-*` and `BUG-*` finding is closed (2026-10-17).
 
 | ID | Task | State | Done when |
 |---|---|---|---|
-| `ARCH-003` | Raw vs resolved config, so secrets from env/files are never written back. | Ready | Control-plane writes preserve secret references; test. Prerequisite of `REL-001`. |
 | `ARCH-004` | Embedded SQLite store with migration runner (sessions, later tunnels/passkeys). Store and runner are committed (`7d0c56e`, `cmd/switchboard migrate`); wiring into `auth`/sessions is still pending. | In progress | Sessions survive restart; migrations numbered and immutable. |
 | `ARCH-005` | Remove duplicated clone helpers in `routemanager` (`cloneRoute`, `cloneConfig` wrapper). | Ready | Single `config.Clone`; tests pass. |
 
@@ -56,12 +55,11 @@ Every `SEC-*` and `BUG-*` finding is closed (2026-10-17).
 
 | ID | Task | State | Done when |
 |---|---|---|---|
-| `REL-001` | `auth.client_secret` and `admin.token` from env or file references; inline values documented as local-only. | Ready (after `ARCH-003`) | Tests for each source and for never persisting resolved values. |
 | `REL-002` | Fuzz targets: config parsing, `NormalizeHost`, `safeReturnTo`, cookie stripping. | Ready | Fuzz targets with seed corpora run in `scripts/verify.sh` (short mode). |
 | `REL-003` | CI on GitHub Actions: `scripts/verify.sh` on Linux, macOS, Windows. | Ready | Green on a pull request. |
 | `REL-004` | Copy-pasteable quickstart reaching a routed app and the status page. | Ready | Followed from a clean machine. |
 | `REL-005` | GoReleaser config, checksums, SBOM. | Ready | Snapshot build produces artifacts locally. |
-| `REL-006` | Tag `v0.1.0-alpha.1` after every gate above is green. | Blocked on `REL-001`–`REL-005` | Tag pushed with release notes. |
+| `REL-006` | Tag `v0.1.0-alpha.1` after every gate above is green. | Blocked on `REL-002`–`REL-005` | Tag pushed with release notes. |
 
 ### Edge, tunnels, identity, Shield, notifications
 

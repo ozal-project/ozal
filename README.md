@@ -103,18 +103,15 @@ In progress (Phase 1 hardening, see [TO_IMPLEMENT.md](docs/TO_IMPLEMENT.md)):
 The next engineering block closes the remaining hardening debt before adding
 more proxy behavior:
 
-1. Read `auth.client_secret` and `admin.token` from environment variables or
-   files, so deployed credentials do not need to live in version-controlled
-   JSON.
-2. Add fuzz tests for configuration parsing, host normalization, and the OIDC
+1. Add fuzz tests for configuration parsing, host normalization, and the OIDC
    `return_to` open-redirect guard.
-3. Add CI that runs `go test -race ./...`, `go vet ./...`, and a build on each
+2. Add CI that runs `go test -race ./...`, `go vet ./...`, and a build on each
    supported platform.
 
 After that comes Phase 4: multiple upstreams with round-robin selection,
 active and passive health checks, safe retries, circuit breaking, per-route
-timeouts, explicit WebSocket/SSE coverage, request IDs, and a trusted-proxy
-policy. The full ordered backlog remains in [TO_IMPLEMENT.md](docs/TO_IMPLEMENT.md).
+timeouts, explicit WebSocket/SSE coverage and request IDs. The full ordered
+backlog remains in [TO_IMPLEMENT.md](docs/TO_IMPLEMENT.md).
 
 ## Roadmap
 
@@ -315,6 +312,22 @@ authorization only works when the provider includes a `groups` claim in the
 ID token; if a route requires groups and that claim is absent, access is
 denied. The older `auth_required: true` remains supported as shorthand for
 an empty access policy.
+
+### Secret references
+
+`auth.client_secret` and `admin.token` accept a reference instead of an inline
+value:
+
+- `"env:NAME"` reads environment variable `NAME` (must be non-empty);
+- `"file:/path/to/secret"` reads the file and trims surrounding whitespace.
+
+The control plane persists the reference itself, never the resolved value, so
+reloading routes or editing the config through the admin API cannot leak a
+secret into the file. Inline values still work for local development but are
+not suitable for a deployed edge. The `env:` and `file:` prefixes are reserved.
+
+A `client_secret` reference that cannot be resolved fails startup; an
+unresolvable `admin.token` reference answers `503` on mutations until fixed.
 
 `redirect_url` must be registered as an authorized redirect URI in the
 OIDC provider's app configuration, and must exactly match Switchboard's

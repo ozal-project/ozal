@@ -181,6 +181,10 @@ func Validate(cfg Config) (*Config, error) {
 		}
 	}
 
+	if err := ValidateSecretReference("admin.token", cfg.Admin.Token); err != nil {
+		return nil, fmt.Errorf("config: %w", err)
+	}
+
 	anyProtectedRoute := false
 	for _, r := range cfg.Routes {
 		if r.RequiresAuth() {
@@ -204,6 +208,9 @@ func Validate(cfg Config) (*Config, error) {
 		}
 		if len(missing) > 0 {
 			return nil, fmt.Errorf("config: a route requires authentication but auth.%s is missing", missing[0])
+		}
+		if err := ValidateSecretReference("auth.client_secret", cfg.Auth.ClientSecret); err != nil {
+			return nil, fmt.Errorf("config: %w", err)
 		}
 
 		redirectHost, err := hostOf(cfg.Auth.RedirectURL)

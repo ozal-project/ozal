@@ -194,7 +194,11 @@ func (h *Handler) deleteRoute(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) requireBearer(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		token := h.manager.Config().Admin.Token
+		token, err := config.ResolveSecret(h.manager.Config().Admin.Token)
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "admin token reference could not be resolved")
+			return
+		}
 		if token == "" {
 			writeError(w, http.StatusServiceUnavailable, "admin mutations are disabled until admin.token is configured")
 			return

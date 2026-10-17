@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -469,6 +470,84 @@ func TestAuthEndpointsOnlyExistOnAuthHosts(t *testing.T) {
 	}
 	if rec := do(http.MethodPost, "app.localhost", "/_/auth/logout"); rec.Code != http.StatusSeeOther {
 		t.Fatalf("protected POST /_/auth/logout = %d, want 303", rec.Code)
+	}
+}
+
+func TestControlPlaneWritesPersistSecretReferences(t *testing.T) {
+	var provider *httptest.Server
+	provider = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/.well-known/openid-configuration" {
+			http.NotFound(w, r)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"issuer":                 provider.URL,
+			"authorization_endpoint": provider.URL + "/authorize",
+			"token_endpoint":         provider.URL + "/token",
+			"jwks_uri":               provider.URL + "/jwks",
+		})
+	}))
+	defer provider.Close()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer upstream.Close()
+
+	t.Setenv("SB_TEST_CLIENT_SECRET", "resolved-secret-value")
+	cfg := routeConfig(upstream.URL)
+	cfg.Auth = config.Auth{
+		Issuer:       provider.URL,
+		ClientID:     "client",
+		ClientSecret: "env:SB_TEST_CLIENT_SECRET",
+		RedirectURL:  "http://app.localhost/_/auth/callback",
+	}
+	cfg.Routes[0].Access = &config.AccessPolicy{}
+	path := writeConfig(t, cfg)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	manager, err := New(ctx, path, time.Hour)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	if err := manager.AddRoute(config.Route{Host: "public.localhost", Target: upstream.URL}); err != nil {
+		t.Fatalf("AddRoute: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if !strings.Contains(string(data), "env:SB_TEST_CLIENT_SECRET") {
+		t.Fatalf("control-plane write lost the secret reference:\n%s", data)
+	}
+	if strings.Contains(string(data), "resolved-secret-value") {
+		t.Fatalf("control-plane write persisted the resolved secret:\n%s", data)
+	}
+}
+
+func TestUnresolvedSecretReferenceFailsStartup(t *testing.T) {
+	var provider *httptest.Server
+	provider = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{"issuer": provider.URL})
+	}))
+	defer provider.Close()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer upstream.Close()
+
+	t.Setenv("SB_TEST_CLIENT_SECRET", "")
+	cfg := routeConfig(upstream.URL)
+	cfg.Auth = config.Auth{
+		Issuer:       provider.URL,
+		ClientID:     "client",
+		ClientSecret: "env:SB_TEST_CLIENT_SECRET",
+		RedirectURL:  "http://app.localhost/_/auth/callback",
+	}
+	cfg.Routes[0].Access = &config.AccessPolicy{}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	_, err := New(ctx, writeConfig(t, cfg), time.Hour)
+	if err == nil || !strings.Contains(err.Error(), "resolve auth.client_secret") {
+		t.Fatalf("New error = %v, want a resolve auth.client_secret failure", err)
 	}
 }
 

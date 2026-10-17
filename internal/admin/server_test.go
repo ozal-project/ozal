@@ -204,6 +204,20 @@ func TestMutationsRequireConfiguredBearerToken(t *testing.T) {
 	}
 }
 
+func TestAdminTokenReferenceIsResolvedPerRequest(t *testing.T) {
+	t.Setenv("SB_ADMIN_TOKEN", "secret")
+	manager := &fakeManager{cfg: config.Config{Admin: config.Admin{Token: "env:SB_ADMIN_TOKEN"}}}
+	handler := New(manager, nil)
+
+	if rec := request(handler, http.MethodPost, "/_/reload", "secret", ""); rec.Code != http.StatusOK {
+		t.Fatalf("resolved token status = %d, want 200", rec.Code)
+	}
+	t.Setenv("SB_ADMIN_TOKEN", "")
+	if rec := request(handler, http.MethodPost, "/_/reload", "secret", ""); rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unresolved reference status = %d, want 503", rec.Code)
+	}
+}
+
 func TestRouteMutationsAndReloadAreAudited(t *testing.T) {
 	manager := &fakeManager{cfg: config.Config{Admin: config.Admin{Token: "secret"}}}
 	recorder := &events.Recorder{}

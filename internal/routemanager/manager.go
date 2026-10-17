@@ -270,8 +270,15 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 		if m.gate != nil && m.gateAuth == cfg.Auth && slices.Equal(m.gateHosts, protectedHosts) {
 			oidcGate = m.gate
 		} else {
+			// Resolve the secret only for the consumer; cfg keeps the raw
+			// reference so control-plane writes persist it unchanged.
+			authConfig := cfg.Auth
+			authConfig.ClientSecret, err = config.ResolveSecret(cfg.Auth.ClientSecret)
+			if err != nil {
+				return nil, fmt.Errorf("resolve auth.client_secret: %w", err)
+			}
 			gateCtx, cancelGate := context.WithCancel(m.ctx)
-			oidcGate, err = auth.NewGate(gateCtx, cfg.Auth, protectedHosts, sessions, m.sink)
+			oidcGate, err = auth.NewGate(gateCtx, authConfig, protectedHosts, sessions, m.sink)
 			if err != nil {
 				cancelGate()
 				return nil, fmt.Errorf("build auth gate: %w", err)
