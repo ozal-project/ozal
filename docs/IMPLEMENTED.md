@@ -1,7 +1,7 @@
 # Implemented — Switchboard
 
 **Last review:** 2026-10-17
-**Code reviewed up to:** `c537e83`
+**Code reviewed up to:** `b249f83`
 
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
@@ -50,7 +50,7 @@ history and grouped by the original phases.
 
 | Commit | Result |
 |---|---|
-| _uncommitted_ | `SEC-001`: the proxy strips Switchboard's `sb_session` cookie from every request before it reaches an upstream, preserving the other cookies (and removing the header when nothing is left). Pure `stripCookie` + table tests; e2e tests on public and protected routes; proven to fail without the wiring. |
+| `b249f83` | `SEC-001`: the proxy strips Switchboard's `sb_session` cookie from every request before it reaches an upstream, preserving the other cookies (and removing the header when nothing is left). Pure `stripCookie` + table tests; e2e tests on public and protected routes; proven to fail without the wiring. |
 
 ## SQLite store (2026-10-17)
 

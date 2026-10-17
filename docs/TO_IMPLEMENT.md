@@ -1,7 +1,7 @@
 # To implement — Switchboard
 
 **Last review:** 2026-10-17
-**Code reviewed up to:** `c537e83`
+**Code reviewed up to:** `b249f83`
 **Purpose:** the single source of active work, priorities, blockers and done
 criteria. Closed work moves to [`IMPLEMENTED.md`](IMPLEMENTED.md). Direction
 and the long-range map live in [`VISION.md`](../VISION.md); if another
