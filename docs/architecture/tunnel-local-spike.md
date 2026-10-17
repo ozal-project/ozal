@@ -120,7 +120,10 @@ Lifecycle events use stable codes; raw TLS errors/peer payloads are not logged.
 `TUN-002` owns automatic reconnection/backoff, named routing, enrolment and
 revocation, persistent credentials, operator status, and integration with normal
 configuration/reload/admin. Its first slice (registry, revocation, `ConnectLoop`)
-is implemented in `internal/tunnel`; what remains is listed in the tracker. `TUN-003` owns ephemeral protected shares. Production
+is implemented in `internal/tunnel`. The subsequent
+[registry-backed CLI](tunnel-persistent.md) exercises persistent identity files
+and automatic reconnection across process restarts; remaining work is listed
+in the tracker. `TUN-003` owns ephemeral protected shares. Production
 TLS issuance, systemd deployment, rate limiting/exposure gates and a real remote
 edge remain separate work. A local success does not prove WAN behavior, latency,
 residential-IP privacy, DDoS protection or host restart recovery.

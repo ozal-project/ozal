@@ -83,7 +83,44 @@ CI and release artifacts. The measurable release gates and dates are in
 and edge on loopback with mutual TLS and yamux. It serves one fixed HTTP origin
 or static site through the tunnel. See the [local lab guide](docs/architecture/tunnel-local-spike.md).
 This is the `TUN-001` experiment, not a publicly deployable tunnel product.
-Automatic reconnection and persistent enrolment remain in `TUN-002`.
+`switchboard tunnel edge|connect` adds registry-backed local commands with
+operator-supplied certificate/key files and automatic reconnect. See the
+[persistent tunnel guide](docs/architecture/tunnel-persistent.md) for enrolment,
+revocation, flags and the reproducible process smoke. Config/reload/admin
+integration, visitor assertions and credential rotation remain in `TUN-002`.
+
+## SQLite migrations
+
+The embedded state database currently has migrations for `sessions` and
+`connectors`. Apply them through the Go runner so transaction boundaries,
+checksums and migration history are preserved:
+
+```bash
+./scripts/migrate.sh status -db /absolute/path/state.db
+./scripts/migrate.sh up -db /absolute/path/state.db
+./scripts/migrate.sh status -db /absolute/path/state.db
+```
+
+The parent directory must already exist. Without `-db`, the target is
+`switchboard.db` in the repository root; relative paths also resolve from that
+root. `status` checks history and lists pending migrations without applying
+application SQL, but can create a fresh database and its history table.
+Repeated `up` runs skip applied migrations. A changed applied migration or a
+database newer than the runner is rejected. Use this checkout's runner so the
+embedded migrations include `002_create_connectors`.
+
+To author a future schema change:
+
+```bash
+./scripts/new-migration.sh add_connector_metadata
+# Edit the generated SQL, then test it on a disposable database first.
+```
+
+The generator checks contiguous numbering and never overwrites an existing
+file. Applied SQL files stay immutable. The runner owns transactions; do not
+add `BEGIN`/`COMMIT` to migration files. Session persistence in the normal
+application remains pending under `ARCH-004`; creating its table alone does
+not enable it.
 
 ## Optional rate limiting
 
@@ -108,8 +145,11 @@ The normal admin listener serves `/_/activity` and a live SSE feed at `/_/events
 with recent events replayed from memory. The page shows access decisions,
 logins and control-plane changes; it does not control host processes. It stays
 on the loopback admin listener. History is bounded and not durable; reconnects
-can replay events, and slow subscribers can miss events. Filters and full
-protected-route acceptance remain tracked in `UI-001`.
+can replay events, and slow subscribers can miss events. The console includes category/search filters, pause/resume, and a route-access
+overview. `/` opens the activity page; `/_/status` is a read-only route-debug
+snapshot with expandable probe details. Static sites have no HTTP probe. Full
+protected-route acceptance remains tracked in `UI-001`; tunnel CLI events are
+not integrated into this normal-process feed yet.
 
 ## Status
 

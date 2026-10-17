@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -59,4 +61,31 @@ func runMigrate(ctx context.Context, args []string, out io.Writer) error {
 		fmt.Fprintf(out, "%s is up to date (%d migrations)\n", *dbPath, len(migrations))
 	}
 	return nil
+}
+
+// openMigratedDB validates the embedded schema before starting a consumer.
+// Applying migrations is an explicit operator step, never a startup side effect.
+func openMigratedDB(ctx context.Context, path string) (*sql.DB, error) {
+	db, err := sqlite.Open(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	migrations, err := sqlite.LoadMigrations(sqlite.Migrations())
+	if err == nil {
+		var statuses []sqlite.Status
+		statuses, err = sqlite.MigrationStatus(ctx, db, migrations)
+		if err == nil {
+			for _, s := range statuses {
+				if !s.Applied {
+					err = errors.New("database has pending migrations: run `switchboard migrate` first")
+					break
+				}
+			}
+		}
+	}
+	if err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return db, nil
 }

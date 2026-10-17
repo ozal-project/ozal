@@ -3,6 +3,7 @@ package admin
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -107,9 +108,11 @@ func (h *Handler) activityPage(w http.ResponseWriter, _ *http.Request) {
 	hdr := w.Header()
 	hdr.Set("Content-Type", "text/html; charset=utf-8")
 	hdr.Set("Cache-Control", "no-store")
-	hdr.Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'")
+	hdr.Set("Content-Security-Policy", "default-src 'none'; style-src 'self'; font-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'")
 	hdr.Set("X-Content-Type-Options", "nosniff")
-	_, _ = w.Write([]byte(activityHTML))
+	if err := activityTemplate.ExecuteTemplate(w, "activity.html", statusView{Active: "activity", HasActivity: true}); err != nil {
+		log.Printf("render activity: %v", err)
+	}
 }
 
 func (h *Handler) activityScript(w http.ResponseWriter, _ *http.Request) {
@@ -117,59 +120,6 @@ func (h *Handler) activityScript(w http.ResponseWriter, _ *http.Request) {
 	hdr.Set("Content-Type", "text/javascript; charset=utf-8")
 	hdr.Set("Cache-Control", "no-store")
 	hdr.Set("X-Content-Type-Options", "nosniff")
-	_, _ = w.Write([]byte(activityJS))
+	asset, _ := consoleAssets.ReadFile("ui/activity.js")
+	_, _ = w.Write(asset)
 }
-
-const activityHTML = `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Switchboard Activity</title>
-<style>
-:root { color-scheme: light dark; --ink:#19211d; --muted:#65716b; --line:#d9dedb; --paper:#f7f8f6; --red:#a63a2b; --green:#1f7a4d; }
-@media (prefers-color-scheme: dark) { :root { --ink:#e8ece9; --muted:#9aa6a0; --line:#2c3531; --paper:#141917; --red:#e0735f; --green:#5cc08d; } }
-body { margin:0; background:var(--paper); color:var(--ink); font:14px/1.5 ui-sans-serif,system-ui,sans-serif; }
-main { width:min(1180px,calc(100% - 32px)); margin:0 auto; padding:20px 0; }
-h1 { font-size:18px; margin:0 0 4px; } p { color:var(--muted); margin:0 0 16px; }
-a { color:inherit; }
-table { width:100%; border-collapse:collapse; } th,td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
-th { color:var(--muted); font-weight:600; } td.t { white-space:nowrap; font-variant-numeric:tabular-nums; }
-.deny,.fail { color:var(--red); } .allow,.ok { color:var(--green); }
-#state { font-weight:600; }
-</style>
-</head>
-<body>
-<main>
-<h1>Activity</h1>
-<p>Access decisions, logins and control-plane changes. <span id="state">connecting…</span> · <a href="/_/status">route status</a></p>
-<table><thead><tr><th>Time (UTC)</th><th>Event</th><th>Actor</th><th>Host</th><th>Detail</th></tr></thead><tbody id="rows"></tbody></table>
-<noscript><p>This page needs JavaScript for the live stream.</p></noscript>
-</main>
-<script src="/_/activity.js"></script>
-</body>
-</html>`
-
-// The script builds rows with textContent only: event fields can carry
-// attacker-influenced strings (hosts, reasons), so nothing is parsed as HTML.
-const activityJS = `(() => {
-  const rows = document.getElementById("rows");
-  const state = document.getElementById("state");
-  const MAX = 500;
-  const cls = (t) => t.endsWith(".denied") || t.endsWith(".failed") ? "deny" : t.endsWith(".allowed") || t.endsWith(".succeeded") ? "allow" : "";
-  const cell = (tr, text, c) => { const td = document.createElement("td"); td.textContent = text || ""; if (c) td.className = c; tr.appendChild(td); };
-  const es = new EventSource("/_/events");
-  es.onopen = () => { state.textContent = "live"; };
-  es.onerror = () => { state.textContent = "reconnecting…"; };
-  es.onmessage = (m) => {
-    const e = JSON.parse(m.data);
-    const tr = document.createElement("tr");
-    cell(tr, e.time, "t");
-    cell(tr, e.type, cls(e.type));
-    cell(tr, e.actor);
-    cell(tr, e.host);
-    cell(tr, [e.code, e.reason, e.error, e.remote].filter(Boolean).join(" · "));
-    rows.prepend(tr);
-    while (rows.children.length > MAX) rows.lastChild.remove();
-  };
-})();`

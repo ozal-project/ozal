@@ -148,3 +148,72 @@ gate passed again before committing this slice, including race tests for named
 routing, rejection, live revocation and reattachment after an edge restart.
 TUN-002 remains open for command/config/admin integration, visitor assertions
 and credential rotation.
+
+## 2026-10-17 — migration operator scripts (ARCH-004 partial)
+
+`migrate.sh up|status` delegates to the existing embedded Go runner, preserving
+checksums, ordered transactions and history. Status can initialize the history
+table on a fresh database; it is not a read-only database open. The missing
+`new-migration.sh` now validates contiguous numbering and uses Bash noclobber to
+avoid overwriting an existing file. Both scripts are executable. A disposable
+SQLite smoke exercised pending status, both shipped migrations, repeated apply
+and applied status; an isolated generator fixture checked invalid names and a
+numbering gap. Application session wiring remains pending under ARCH-004.
+
+## 2026-10-17 — TUN-002 command integration (partial)
+
+The composition root now wires the same fingerprint registry into `tunnel edge`
+and uses `ConnectLoop` for `tunnel connect`. File-based identities survive
+process restart; schema migration stays an explicit operator action. A shared
+`openMigratedDB` helper checks migration history for enrolment and edge startup.
+The edge owns both listeners and joins both workers on cancellation/error;
+`signal.NotifyContext` propagates SIGINT/SIGTERM into that ownership tree.
+CLI race tests passed. A separate-process smoke served Portfolio ES/EN and
+assets, restarted/killed only its disposable edge, reattached the original
+connector process and cut access after live revocation. Visitor propagation
+remains anonymous and strips identity/forwarding headers; config/reload/admin,
+authenticated visitor assertions and credential rotation remain open.
+
+## 2026-10-17 — UI-001 console redesign (partial)
+
+Embedded HTML/CSS/JS assets separate presentation from the Go handler while
+keeping a single binary and same-origin CSP (inline styles are no longer
+required). The overview serializes an explicit access-rule projection, keeping
+secrets, allowlist identities and upstream paths out. Event fields use
+textContent; browser checks confirmed that HTML-looking event text stays inert.
+Filters use retained events, pause freezes a snapshot while buffering continues,
+and animation-frame batching coalesces stream replay renders. Navigation makes
+activity the entry point; route-debug probes are expandable and static files
+are marked Not probed. Gate and browser checks passed; automated axe reported
+zero WCAG A/AA violations, with decorative glyph contrast flagged for manual
+review. Mobile at 320px has no document overflow. Protected OIDC-route acceptance
+and integration of the separate tunnel CLI remain open.
+
+The final UI assets passed the full gate again. The local Switchboard binary
+was rebuilt and its development unit restarted; live loopback HTTP/browser
+checks confirmed the new pages. Server Ops returned 200 from the host browser;
+the remote VS Code client needs its own 8095 forward.
+
+
+## 2026-10-17 — console visual identity and access-entry boundary
+
+Switchboard now uses a dark/amber console with sidebar navigation on desktop
+and compact tabs on mobile. The self-hosted Manrope font includes its OFL
+license and requires same-origin font-src in CSP. Routes & hostnames explicitly
+separates local routing rules from publishing DNS records. Server Ops owns the
+browser launcher and SSH forwarding metadata in ports.json; Switchboard does
+not duplicate that registry. The full gate passed and Chromium reported no
+automated WCAG A/AA violations; decorative glyph contrast/empty table checks
+were incomplete. Both console pages fit 320/768/1024/1440 px without document
+overflow. Browser behavior from UI-001 remains intact.
+
+
+## 2026-10-17 — CLI and console commit checkpoint
+
+The maintainer requested committing the verified working tree. This checkpoint
+includes the migration operator scripts, registry-backed persistent tunnel CLI,
+real-process smoke, embedded access console and dark/amber visual identity.
+The full repository gate and browser/process checks were run during this session;
+no product code changed after the final checks. TUN-002 and UI-001 retain their
+explicit remaining acceptance work in TO_IMPLEMENT.md. No push is part of this
+checkpoint.

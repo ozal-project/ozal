@@ -12,7 +12,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/store/sqlite"
 	"github.com/octaviosantacruz/switchboard/internal/tunnel"
 )
 
@@ -33,26 +32,14 @@ func runConnector(ctx context.Context, args []string, out io.Writer) error {
 		return err
 	}
 
-	db, err := sqlite.Open(ctx, *dbPath)
+	if fs.NArg() != 0 {
+		return errors.New("unexpected positional arguments")
+	}
+	db, err := openMigratedDB(ctx, *dbPath)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
-	// Refuse to operate on a database whose schema is not current: running
-	// migrations implicitly from an admin command would hide a deploy step.
-	migrations, err := sqlite.LoadMigrations(sqlite.Migrations())
-	if err != nil {
-		return err
-	}
-	statuses, err := sqlite.MigrationStatus(ctx, db, migrations)
-	if err != nil {
-		return err
-	}
-	for _, s := range statuses {
-		if !s.Applied {
-			return errors.New("database has pending migrations: run `switchboard migrate` first")
-		}
-	}
 	registry := tunnel.NewRegistry(db)
 
 	switch sub {

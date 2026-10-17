@@ -24,6 +24,14 @@ import (
 const healthCheckInterval = 10 * time.Second
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "tunnel" {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		if err := runTunnel(ctx, os.Args[2:], os.Stdout); err != nil {
+			log.Fatalf("tunnel: %v", err)
+		}
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "tunnel-spike" {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()

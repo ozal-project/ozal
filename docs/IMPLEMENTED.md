@@ -179,3 +179,36 @@ Portfolio ES/EN/assets, duplicate/foreign-CA rejection, abrupt disconnect and
 manual reconnect smoke passed. No services, DNS or deployments were changed.
 Optional staticcheck/govulncheck are not installed. All source deliveries above
 are local commits on `spike/tun-001-local`; no push in this checkpoint.
+
+
+## Console layout and filters (2026-10-17, included in this commit)
+
+Completed delivery within UI-001: shared navigation, default activity entry,
+category/search filters, pause/resume, safe access-rule overview, explicit empty
+and reconnect/error states, and expandable route-debug probes. Static sites are
+labelled Not probed. Assets are embedded and served from the same origin under
+CSP; overview tests verify that secrets and private configuration fields stay
+out. The remaining UI-001 acceptance is tracked only in TO_IMPLEMENT.md.
+
+Observed: full `scripts/verify.sh` passed on the final assets; Node syntax check
+passed; browser checks exercised filters, paused snapshots, resume, error/retry,
+inert HTML-looking event text, keyboard focus and real SSE from an isolated
+SIGHUP reload. Activity and route-debug layouts had no document overflow at
+320/768/1024/1440 px. Axe reported zero automated WCAG A/AA violations; glyph
+contrast checks were incomplete and were reviewed against the color tokens.
+
+The local binary was rebuilt and only `switchboard-dev.service` was restarted.
+It is active; `/`, activity, route-debug, CSS, JS and overview returned 200.
+A real-browser smoke confirmed the new console on loopback 9090 and the Server
+Ops panel on loopback 8095. The remote user's 8095 forwarding remains a client
+step. No bind expansion or public deployment was performed. This code checkpoint is committed; no push was performed.
+
+
+Visual follow-up (2026-10-17, included in this commit): dark/amber access-console
+identity, self-hosted Manrope with OFL license, desktop sidebar/mobile tabs and
+Routes & hostnames copy separating local names from published DNS. Same-origin
+font-src was added to CSP. Full gate passed; browser layouts fit 320/768/1024/1440
+px and automated axe reported zero WCAG A/AA violations, with empty-table/glyph
+checks incomplete. The local development unit was rebuilt/restarted and both
+console pages plus the font returned 200. Server Ops owns the separate launcher
+and SSH metadata in ports.json; no port registry is copied into Switchboard.
