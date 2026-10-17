@@ -65,3 +65,23 @@ func ClientTLS(cert tls.Certificate, roots *x509.CertPool, serverName string) (*
 		},
 	}, nil
 }
+
+// ServerTLSRegistry is ServerTLS for registry mode: the TLS layer proves the
+// client certificate chains to our CA with client-auth EKU and the right ALPN;
+// whether that certificate is an enrolled connector is decided afterwards by
+// the Edge's Authorizer, which can consult the database and name the peer.
+func ServerTLSRegistry(cert tls.Certificate, roots *x509.CertPool) (*tls.Config, error) {
+	if roots == nil || len(cert.Certificate) == 0 {
+		return nil, errors.New("tunnel requires a certificate and CA")
+	}
+	return &tls.Config{
+		MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{cert},
+		ClientCAs: roots, ClientAuth: tls.RequireAndVerifyClientCert, NextProtos: []string{ALPN},
+		VerifyConnection: func(state tls.ConnectionState) error {
+			if state.NegotiatedProtocol != ALPN || len(state.VerifiedChains) == 0 || len(state.PeerCertificates) == 0 {
+				return errors.New("connector identity denied")
+			}
+			return nil
+		},
+	}, nil
+}

@@ -136,3 +136,15 @@ non-blocking select for event fan-out; slow subscribers drop events instead of
 blocking requests. Request-context cancellation releases the SSE subscription.
 CI workflow `b2602e9` is committed but hosted verification is still pending.
 The local tunnel delivery is committed in `fd72b2c`.
+
+## 2026-10-17 — TUN-002 partial checkpoint: named connectors
+
+Certificate-chain verification establishes trust in the issuing CA; a separate
+`Authorizer` checks the leaf-certificate fingerprint against active enrolments.
+Partial unique SQLite indexes preserve revoked history while preventing duplicate
+active names and certificates. `ConnectLoop` uses cancellable timers and jittered
+exponential backoff; `Link` publishes snapshots under a mutex. The full local
+gate passed again before committing this slice, including race tests for named
+routing, rejection, live revocation and reattachment after an edge restart.
+TUN-002 remains open for command/config/admin integration, visitor assertions
+and credential rotation.
