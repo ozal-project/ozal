@@ -1,7 +1,7 @@
 # Implemented — Switchboard
 
 **Last review:** 2026-10-17
-**Code reviewed up to:** `5de6ebf`
+**Code reviewed up to:** `4659f5a`
 
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
@@ -108,13 +108,13 @@ site was changed. Credentials and restart-safe deployment remain in `EDGE-001`.
 
 | Commit | Result |
 |---|---|
-| _uncommitted_ | `ARCH-003`: `auth.client_secret` and `admin.token` accept `env:NAME` / `file:/path` references. Validation checks the reference shape without reading it; the manager resolves a copy for the OIDC gate (unresolved → startup error) and the admin resolves per mutation (unresolved → `503`). Control-plane writes persist the raw reference — a test proves the resolved value never reaches the config file. Inline values remain local-only and documented as such. |
+| 4659f5a | `ARCH-003`: `auth.client_secret` and `admin.token` accept `env:NAME` / `file:/path` references. Validation checks the reference shape without reading it; the manager resolves a copy for the OIDC gate (unresolved → startup error) and the admin resolves per mutation (unresolved → `503`). Control-plane writes persist the raw reference — a test proves the resolved value never reaches the config file. Inline values remain local-only and documented as such. |
 
 ## Release gates (2026-10-17)
 
 | Commit | Result |
 |---|---|
-| _uncommitted_ | `REL-001`: `auth.client_secret` and `admin.token` come from `env:`/`file:` references (inline values documented as local-only). Tests cover both sources, an unresolved reference (startup error / `503` on mutations) and that control-plane writes never persist the resolved value. |
+| 4659f5a | `REL-001`: `auth.client_secret` and `admin.token` come from `env:`/`file:` references (inline values documented as local-only). Tests cover both sources, an unresolved reference (startup error / `503` on mutations) and that control-plane writes never persist the resolved value. |
 
 ## SQLite store (2026-10-17)
 
