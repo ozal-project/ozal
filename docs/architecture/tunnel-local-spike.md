@@ -145,6 +145,6 @@ residential-IP privacy, DDoS protection or host restart recovery.
   packages with race, build, all four fuzz checks and diff check.
 - Optional `staticcheck` and `govulncheck` are not installed.
 
-TUN-001 local criteria are verified; changes are uncommitted. No push, public
+TUN-001 local criteria are verified; code is committed in `fd72b2c`. No push, public
 deployment, application restart, live credential read or DNS change was performed
 for this experiment. Persistent operation remains TUN-002.

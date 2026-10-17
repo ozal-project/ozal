@@ -133,3 +133,49 @@ site was changed. Credentials and restart-safe deployment remain in `EDGE-001`.
 Re-verified 2026-10-17 (`CROSS-003`): `scripts/verify.sh` green; fresh
 `portfolio` build served as a static route — `/` 200, `/es/` 200, hashed asset
 200; unknown path, `.env`, traversal attempt and unknown host all 404.
+
+## Local outbound tunnel spike (2026-10-17)
+
+| Commit | Result |
+|---|---|
+| `fd72b2c` | `TUN-001`: `tunnel-spike init/edge/connect` runs both roles locally with TLS 1.3 mutual authentication, exact connector SAN authorization and yamux streams. Fixed static/HTTP route; loopback-only lab CLI; duplicate rejection; bounded handshakes/requests; context cancellation; explicit lifecycle events. Existing proxy pipeline reused via an optional outbound `http.RoundTripper`. |
+
+Observed: targeted race tests and the full `scripts/verify.sh` passed; separate
+real processes served Portfolio ES/EN and assets. Foreign CA/connector identity,
+expired certificate, wrong EKU, missing certificate/ALPN and wrong edge identity
+were rejected. Abrupt disconnect produced 502; manual reconnect restored service;
+a request cancellation left the session usable. A compiler overlay removing the
+exact identity check makes its regression fail. Temporary processes/listeners and
+lab identities were removed. Optional staticcheck/govulncheck are not installed.
+
+The first gate stopped at a concurrent unfinished rate-limit exercise; that work
+was preserved and later completed, after which the full gate was repeated green.
+No VPS, live credential, DNS change or deployment was needed. See the
+[lab guide and findings](architecture/tunnel-local-spike.md). Automatic reconnect,
+configuration/enrolment/revocation and visitor attribution are residual TUN-002;
+actual public deployment remains EDGE-001. Code committed in `fd72b2c`; no push
+or public deployment made.
+
+TUN-001 documentation follow-up (2026-10-17, included in `fd72b2c`): both lab listeners
+now default to `127.0.0.1:0`. The existing CLI lifecycle test starts the edge
+without a `-listen` override. The lab examples use the printed allocated ports;
+the README labels Cloudflare deployment as optional. Full `scripts/verify.sh`
+was repeated successfully; documentation links and diff whitespace checked.
+
+## Commit checkpoint (2026-10-17)
+
+- `6185098`: per-IP rate limiting and stricter authentication-path bucket;
+  residual identity/route dimensions remain in SHD-001.
+- `b2602e9`: CI workflow written for Linux/macOS/Windows; REL-003 stays open
+  until a green hosted PR run is observed. Local success is not hosted CI.
+- `e432abf`: broker and admin SSE activity delivery; UI-001 remains open for
+  its documented filters and protected-route acceptance.
+- `fd72b2c`: TUN-001 lab, including ephemeral default listeners and real-process
+  Portfolio smoke.
+
+Verification repeated before this checkpoint: `scripts/verify.sh` passed
+(format, vet, all race tests, build, four fuzz targets, diff check); real-process
+Portfolio ES/EN/assets, duplicate/foreign-CA rejection, abrupt disconnect and
+manual reconnect smoke passed. No services, DNS or deployments were changed.
+Optional staticcheck/govulncheck are not installed. All source deliveries above
+are local commits on `spike/tun-001-local`; no push in this checkpoint.

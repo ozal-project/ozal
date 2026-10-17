@@ -1,7 +1,7 @@
 # To implement — Switchboard
 
 **Last review:** 2026-10-17
-**Code reviewed up to:** `c24b50c`
+**Code reviewed up to:** `e432abf`
 **Purpose:** the single source of active work, priorities, blockers and done
 criteria. Closed work moves to [`IMPLEMENTED.md`](IMPLEMENTED.md). Direction
 and the long-range map live in [`VISION.md`](../VISION.md); if another
@@ -34,10 +34,11 @@ infrastructure access · `TLOG` transparency log · `AI` AI-assisted decisions �
 
 Every `SEC-*` and `BUG-*` finding is closed (2026-10-17).
 
-1. `REL-003`, `REL-005`–`REL-006`: CI, GoReleaser → tag `v0.1.0-alpha.1`.<br>`REL-001`–`REL-002` and `REL-004` closed (secret references, fuzz, quickstart).
-2. `EDGE-001` through the Cloudflare tunnel (no VPS; DNS is already on
-   Cloudflare); `EDGE-005` is locally implemented and verified. `TUN-*` spike
-   in parallel.
+1. `REL-003` (workflow committed in `b2602e9`, awaiting first green PR), `REL-005`–`REL-006`: CI, GoReleaser → tag `v0.1.0-alpha.1`.<br>`REL-001`–`REL-002` and `REL-004` closed (secret references, fuzz, quickstart).
+2. `TUN-001` local spike is verified and committed (`fd72b2c`); continue with `TUN-002`
+   for durable named connections, still without a VPS. `SHD-001` remains a gate before
+   public exposure. `EDGE-001` public deployment waits for an external host;
+   Cloudflare Tunnel is an optional transport, not a development prerequisite.
 3. Identity (`ID-*`), then `NTF-001`, `SHD-001`.
 
 ---
@@ -55,7 +56,7 @@ Every `SEC-*` and `BUG-*` finding is closed (2026-10-17).
 
 | ID | Task | State | Done when |
 |---|---|---|---|
-| `REL-003` | CI on GitHub Actions: `scripts/verify.sh` on Linux, macOS, Windows. | Ready | Green on a pull request. |
+| `REL-003` | CI on GitHub Actions: `scripts/verify.sh` on Linux, macOS, Windows. Workflow is `.github/workflows/ci.yml` (commit `b2602e9`); hosted CI has not been observed. | In progress | Green on a pull request. |
 | `REL-005` | GoReleaser config, checksums, SBOM. | Ready | Snapshot build produces artifacts locally. |
 | `REL-006` | Tag `v0.1.0-alpha.1` after every gate above is green. | Blocked on `REL-002`–`REL-005` | Tag pushed with release notes. |
 
@@ -63,18 +64,17 @@ Every `SEC-*` and `BUG-*` finding is closed (2026-10-17).
 
 | ID | Task | State | Done when |
 |---|---|---|---|
-| `EDGE-001` | `cloudflared` tunnel + systemd unit on the current host, Switchboard serving flat `octaviosantacruz.com` subdomains ([edge-cloudflared](architecture/edge-cloudflared.md)). No VPS needed. | Blocked: tunnel credentials from the operator; `EDGE-005` locally verified | `preview.` (Portfolio build, live site stays on Cloudflare Pages) reachable through the tunnel; restart-safe; origin unreachable directly; documented. |
-| `EDGE-002` | Wildcard TLS via DNS-01 (CertMagic + libdns provider). | Planned (deferred: Cloudflare terminates public TLS for the first release) | Only if Switchboard terminates TLS itself (VPS path). |
+| `EDGE-001` | Public Switchboard edge on an external host with an outbound connector from the homelab. Cloudflare Tunnel remains an [optional alternative](architecture/edge-cloudflared.md). | Public deployment deferred: no VPS budget; local TUN-001 development is unblocked. Requires TUN-002 and exposure gates. | Portfolio reachable via the owned edge/tunnel; restart-safe; no inbound homelab port or public DNS pointing at the residential IP. Actual DNS cutover is a separate operator action. |
+| `EDGE-002` | Wildcard TLS via DNS-01 (CertMagic + libdns provider). | Planned for wildcard hosts on an owned edge; not needed for the local lab | Wildcard issuance/renewal verified before wildcard public deployment. Existing single-host ACME remains an option. |
 | `EDGE-003` | Route hosts without a port match any listener port (local-dev ergonomics). | Ready | `app.localhost` route works on `:8888`; tests. |
 | `EDGE-004` | Multiple upstreams per route, round-robin, active + passive health. | Planned | Failed upstream receives no new traffic; tests. |
-| `TUN-001` | Spike: agent ↔ edge over yamux + TLS; one HTTP request through a tunnel. | Ready | Throwaway branch; findings written in `docs/architecture/`. |
-| `TUN-002` | `sb connect --name <n> <url>`: named, persistent tunnels with tokens, reconnect, heartbeats. | Planned | Survives edge restart and network drop; tests. |
+| `TUN-002` | Named persistent connectors: configuration/reload integration, authenticated enrolment/revocation, automatic reconnect/backoff, heartbeats, status and an explicit visitor-identity propagation contract. Reuse the local TUN-001 transport. | Planned; does not require a VPS to implement | Survives edge restart and network drop without manual restart; identities and fixed upstream permissions enforced; tests. Public deployment remains EDGE-001. |
 | `TUN-003` | `sb share <url> --allow <emails>`: ephemeral protected shares; guest list enforced on the agent via signed assertion (Ed25519). | Planned | Share dies with the agent; non-listed email denied. |
 | `ID-001` | Email one-time codes / magic links. | Planned | Rate-limited; codes single-use and short-lived. |
 | `ID-002` | Email delivery provider. | Blocked: choose provider | Decision recorded in `stack.md`. |
 | `ID-003` | Passkeys (WebAuthn) registration and login. | Planned | Works on desktop and phone; step-up supported. |
 | `ID-004` | OIDC provider: discovery, JWKS, key rotation, authorization code + PKCE. | Planned | A sample app signs in via Switchboard. |
-| `SHD-001` | Rate limiting stage (per IP, identity, route; strict on `/_/auth/*`). | Ready (`ARCH-001` closed; slots into `internal/pipeline`) | Table tests on the core bucket; integration test returns `429`. |
+| `SHD-001` | Rate limiting stage (per IP, identity, route; strict on `/_/auth/*`). | Partial delivery committed in `6185098`: per-IP token buckets, separate auth-path bucket, opt-in config, trusted client-IP key and 429 integration test. Residual: identity/route-specific keys. Limits: buckets reset on reload, fixed `Retry-After: 1`, no hard cap on recent keys; disabled unless configured. | Complete the remaining key dimensions and verify limits on protected routes before public exposure. |
 | `SHD-002` | Security headers on Switchboard's own pages (HSTS, CSP, frame-ancestors). | Ready | Tests assert headers. |
 | `NTF-001` | `Notifier` port + Telegram adapter: alerts for logins and admin changes; chat pairing code. | Planned | Pairing and an alert work end to end; callback data signed. |
 
@@ -98,7 +98,7 @@ Pure Go first, Svelte only where a feature needs it (see
 
 | ID | Task | State | Done when |
 |---|---|---|---|
-| `UI-001` | Live event stream on the admin dashboard over Server-Sent Events, in pure Go (`html/template` + HTMX, `http.Flusher`, fan-out from the `EventSink`). | Ready (after `ARCH-002`) | Events appear live; a slow or disconnected client never blocks the sink; the stream goroutine ends when the request context is cancelled; tests. |
+| `UI-001` | Live event stream on the admin dashboard over Server-Sent Events, in pure Go: `events.Broker` (history + non-blocking fan-out), `GET /_/events`, `/_/activity` page. Delivery committed in `e432abf`; `scripts/verify.sh` green (2026-10-17); SSE checked live via SIGHUP. Product UI = access decisions; host/service health stays in Server Ops (`CROSS-010`). | In progress: residual — filters, auth-decision events need an OIDC route to exercise end to end. | Events appear live; a slow or disconnected client never blocks the sink; the stream goroutine ends when the request context is cancelled; tests. |
 
 ---
 

@@ -32,6 +32,15 @@ gateway and a transparency log. See `VISION.md`.
 
 It is dogfooded on `octaviosantacruz.com`. It is not a commercial product.
 
+## Boundary with Server Ops
+
+Switchboard is the **trust plane** (identity, policy, access decisions, tunnels,
+verifiable log). Server Ops is the **host plane** (processes, systemd units,
+ports, databases, backups, service health). Do not add a service-health or
+process-control dashboard here, and do not copy `server-ops/ports.json`.
+`/_/status` is a route-debug view, not the product UI. Tracker: `CROSS-010` in
+the workspace `TO_IMPLEMENT.md`.
+
 ## Commands
 
 ```bash

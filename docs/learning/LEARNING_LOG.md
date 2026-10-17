@@ -114,3 +114,25 @@ Tick when you have written one yourself, not just read it.
 - [ ] `log/slog`
 - [ ] `crypto/x509`, `crypto/ed25519`
 - [ ] Benchmarks (`testing.B`)
+
+## 2026-10-17 — local outbound tunnel experiment (assistant implementation)
+
+The connector initiates TCP while the edge opens yamux streams: multiplexing
+client/server roles are independent of TCP dial/listen roles. TLS verifies CA,
+EKU and peer identity; the edge additionally authorizes the connector SAN.
+`http.Transport.DialContext` swaps the delivery mechanism while preserving the
+existing request pipeline. `context.AfterFunc` and joined workers close sessions
+and listeners; a request cancellation closes one stream rather than the tunnel.
+The maintainer requested the complete implementation; this does not tick any
+"written yourself" boxes above. Local checks and a repeated full repository gate passed after the separate
+SHD-001 bucket exercise was completed in parallel.
+
+## 2026-10-17 — commit checkpoint: rate limits and live activity
+
+`6185098` injects time into the pure token bucket and protects keyed buckets with
+a mutex. Trusted client-IP context survives nested trust stages; identity and
+route-specific limits remain pending. `e432abf` uses bounded channels and a
+non-blocking select for event fan-out; slow subscribers drop events instead of
+blocking requests. Request-context cancellation releases the SSE subscription.
+CI workflow `b2602e9` is committed but hosted verification is still pending.
+The local tunnel delivery is committed in `fd72b2c`.

@@ -77,6 +77,40 @@ alpha, with secrets outside JSON, fuzz coverage for the security boundaries,
 CI and release artifacts. The measurable release gates and dates are in
 [TO_IMPLEMENT.md](docs/TO_IMPLEMENT.md#alpha-release-gates).
 
+## Local tunnel experiment (no VPS required)
+
+`switchboard tunnel-spike init|edge|connect` exercises an outbound connector
+and edge on loopback with mutual TLS and yamux. It serves one fixed HTTP origin
+or static site through the tunnel. See the [local lab guide](docs/architecture/tunnel-local-spike.md).
+This is the `TUN-001` experiment, not a publicly deployable tunnel product.
+Automatic reconnection and persistent enrolment remain in `TUN-002`.
+
+## Optional rate limiting
+
+The normal routing config can enable per-IP buckets; requests under `/_/auth/`
+use the separate auth bucket. The feature is disabled when `rate_limit` is absent.
+
+```json
+"rate_limit": {
+  "general": { "rate": 20, "burst": 40 },
+  "auth": { "rate": 1, "burst": 3 }
+}
+```
+
+Rates are requests per second. Client keys come from the trust stage, not raw
+visitor forwarding headers. Excess requests return 429 with `Retry-After: 1`.
+Buckets reset on config reload; identity/route-specific limits remain pending.
+The local tunnel experiment is separate from this normal configuration path.
+
+## Local trust activity
+
+The normal admin listener serves `/_/activity` and a live SSE feed at `/_/events`,
+with recent events replayed from memory. The page shows access decisions,
+logins and control-plane changes; it does not control host processes. It stays
+on the loopback admin listener. History is bounded and not durable; reconnects
+can replay events, and slow subscribers can miss events. Filters and full
+protected-route acceptance remain tracked in `UI-001`.
+
 ## Status
 
 Solid prototype, **not yet production-ready** — being hardened per an
@@ -375,5 +409,7 @@ Host/protocol handling and edge-cookie stripping remain in the outbound adapter.
 
 See [`config.tunnel.example.json`](config.tunnel.example.json) for a Portfolio-only
 route on `preview.octaviosantacruz.com` (the live apex stays on Cloudflare Pages),
-and the [tunnel plan](docs/architecture/edge-cloudflared.md)
-for deployment prerequisites. The example is not an installed/public deployment.
+and the [optional Cloudflare deployment proposal](docs/architecture/edge-cloudflared.md)
+for that alternative only. The example is not an installed/public deployment.
+The owned transport is developed in the [local tunnel lab](docs/architecture/tunnel-local-spike.md);
+Cloudflare credentials are not required for it.

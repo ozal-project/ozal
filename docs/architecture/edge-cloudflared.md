@@ -1,6 +1,12 @@
 # Edge behind Cloudflare Tunnel
 
-Status: **proposed** (2026-10-17). Decision record for the first public edge
+Status: **optional alternative, not the selected development path** (2026-10-17).
+The owner now prioritizes the [owned local tunnel](tunnel-local-spike.md), with
+public deployment deferred until an external host is available. The following
+records the earlier Cloudflare-based proposal; its tunnel credentials are not
+a blocker for developing Switchboard.
+
+Historical decision record for the first public edge
 of `octaviosantacruz.com`. Supersedes the "VPS + DNS-01" path of `EDGE-001` and
 `EDGE-002` for the first release; the VPS path stays valid for later.
 
