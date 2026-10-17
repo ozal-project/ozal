@@ -7,6 +7,10 @@ Format: `YYYY-MM-DD · ID · topic — what clicked (link to code)`
 
 ## v0.1 Edge
 
+- 2026-10-17 · BUG-003 · startup contract — `ListenAndServe` hides the bind
+  inside the serve loop; `net.Listen` first turns "port busy" into a startup
+  error the process can report before claiming it is running
+  ([main.go](../../cmd/switchboard/main.go)).
 - 2026-10-17 · BUG-002 · URL construction — `r.Target + path` is string
   concatenation pretending to be URL logic; validate the input and let
   `url.URL.JoinPath` clean the join

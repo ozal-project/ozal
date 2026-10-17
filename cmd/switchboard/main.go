@@ -70,9 +70,17 @@ func main() {
 	}
 	servers := []*http.Server{adminServer}
 	if cfg.TLS.Enabled {
-		servers = append(servers, startTLS(&cfg, manager)...)
+		tlsServers, err := startTLS(&cfg, manager)
+		if err != nil {
+			log.Fatalf("public listener: %v", err)
+		}
+		servers = append(servers, tlsServers...)
 	} else {
-		servers = append(servers, startPlain(&cfg, manager))
+		plainServer, err := startPlain(&cfg, manager)
+		if err != nil {
+			log.Fatalf("public listener: %v", err)
+		}
+		servers = append(servers, plainServer)
 	}
 
 	<-ctx.Done()
@@ -123,7 +131,13 @@ func startAdmin(cfg *config.Config, manager *routemanager.Manager) (*http.Server
 	return server, nil
 }
 
-func startPlain(cfg *config.Config, handler http.Handler) *http.Server {
+// startPlain binds synchronously so an occupied port fails startup with a
+// clear error instead of a log.Fatalf in a goroutine that skips shutdown.
+func startPlain(cfg *config.Config, handler http.Handler) (*http.Server, error) {
+	listener, err := net.Listen("tcp", cfg.Listen)
+	if err != nil {
+		return nil, err
+	}
 	server := &http.Server{
 		Addr:              cfg.Listen,
 		Handler:           handler,
@@ -132,22 +146,33 @@ func startPlain(cfg *config.Config, handler http.Handler) *http.Server {
 	}
 	go func() {
 		log.Printf("switchboard listening on %s (plain HTTP)", cfg.Listen)
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("listen %s: %v", cfg.Listen, err)
+		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("public listener %s: %v", cfg.Listen, err)
 		}
 	}()
-	return server
+	return server, nil
 }
 
 // startTLS serves HTTPS on :443 with certificates issued automatically via
 // ACME, plus a plain HTTP server on :80 that answers ACME HTTP-01
-// challenges and redirects everything else to HTTPS.
-func startTLS(cfg *config.Config, handler http.Handler) []*http.Server {
+// challenges and redirects everything else to HTTPS. Both ports bind
+// synchronously: an occupied port must fail startup, not a goroutine.
+func startTLS(cfg *config.Config, handler http.Handler) ([]*http.Server, error) {
 	manager := &autocert.Manager{
 		Cache:      autocert.DirCache(cfg.TLS.CacheDir),
 		Prompt:     autocert.AcceptTOS,
 		HostPolicy: autocert.HostWhitelist(cfg.TLS.Domains...),
 		Email:      cfg.TLS.Email,
+	}
+
+	httpsListener, err := net.Listen("tcp", ":443")
+	if err != nil {
+		return nil, err
+	}
+	challengeListener, err := net.Listen("tcp", ":80")
+	if err != nil {
+		httpsListener.Close()
+		return nil, err
 	}
 
 	httpsServer := &http.Server{
@@ -159,8 +184,8 @@ func startTLS(cfg *config.Config, handler http.Handler) []*http.Server {
 	}
 	go func() {
 		log.Printf("switchboard listening on :443 (HTTPS, ACME domains: %v)", cfg.TLS.Domains)
-		if err := httpsServer.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("listen :443: %v", err)
+		if err := httpsServer.ServeTLS(httpsListener, "", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("public listener :443: %v", err)
 		}
 	}()
 
@@ -175,10 +200,10 @@ func startTLS(cfg *config.Config, handler http.Handler) []*http.Server {
 	}
 	go func() {
 		log.Printf("switchboard listening on :80 (ACME challenges + HTTPS redirect)")
-		if err := challengeServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("listen :80: %v", err)
+		if err := challengeServer.Serve(challengeListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("public listener :80: %v", err)
 		}
 	}()
 
-	return []*http.Server{httpsServer, challengeServer}
+	return []*http.Server{httpsServer, challengeServer}, nil
 }
