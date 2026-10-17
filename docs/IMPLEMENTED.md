@@ -1,7 +1,7 @@
 # Implemented — Switchboard
 
 **Last review:** 2026-10-17
-**Code reviewed up to:** `2a7f000`
+**Code reviewed up to:** `8c5568e`
 
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
@@ -60,14 +60,14 @@ history and grouped by the original phases.
 
 | Commit | Result |
 |---|---|
-| _uncommitted_ | `BUG-007`: README now says what the code does: `return_to` is honored only for **protected** route hosts (plus docs on endpoint scoping and POST logout from `BUG-005`). Code was the intended behavior. |
-| _uncommitted_ | `BUG-008`: with `dev_errors: true` (config, off by default) a 404 lists the configured hosts and a 502 names the unreachable upstream with a hint; without it the production errors stay terse and leak nothing. Proxy `Option` (`WithDevErrors`) keeps the flag out of the default path; tests for both modes. |
-| _uncommitted_ | `BUG-006`: `WriteAtomic` resolves a symlinked config path first, so the rename replaces the target and the link survives; after the rename it fsyncs the directory (ignored where unsupported). Test: writing through a symlink keeps it a symlink and updates the target. |
-| _uncommitted_ | `BUG-005`: `/_/auth/*` is answered only on hosts where it belongs (protected routes plus the redirect_url host); on any other host the path reaches the upstream. Logout is POST-only (`405` with `Allow: POST` otherwise) and redirects with `303`. Tests cover public passthrough, protected login, and GET/POST logout. |
-| _uncommitted_ | `BUG-004`: the admin bearer parser requires the `Bearer` scheme (case-insensitive per RFC 7235); a bare token, a wrong scheme or an empty token get `401`. Table test covers all six forms. |
-| _uncommitted_ | `BUG-003`: the plain and TLS public listeners bind synchronously (`net.Listen`) before serving, like the admin listener; an occupied port now fails startup with a clear error instead of a `log.Fatalf` inside a goroutine that skips shutdown. Tests: busy port returns an error, free port serves. |
-| _uncommitted_ | `BUG-002`: `health_path` must start with `/` (validated at load), and the probe URL is built with `url.URL.JoinPath`, so a target with a base path (`http://host/prefix`) probes `/prefix/healthz` instead of double slashes or a broken relative URL. |
-| _uncommitted_ | `BUG-001`: the reverse proxy uses `Rewrite` (`SetURL` + `SetXForwarded`): `X-Forwarded-For` is replaced with the client IP (a client-supplied chain is dropped, not appended), `X-Forwarded-Host`/`X-Forwarded-Proto` are set by Switchboard, and the public `Host` is preserved for the upstream. Tests cover plain HTTP and TLS; proven to fail with the old `NewSingleHostReverseProxy`. |
+| `50a0f2c` | `BUG-007`: README now says what the code does: `return_to` is honored only for **protected** route hosts (plus docs on endpoint scoping and POST logout from `BUG-005`). Code was the intended behavior. |
+| `8c5568e` | `BUG-008`: with `dev_errors: true` (config, off by default) a 404 lists the configured hosts and a 502 names the unreachable upstream with a hint; without it the production errors stay terse and leak nothing. Proxy `Option` (`WithDevErrors`) keeps the flag out of the default path; tests for both modes. |
+| `dd200d6` | `BUG-006`: `WriteAtomic` resolves a symlinked config path first, so the rename replaces the target and the link survives; after the rename it fsyncs the directory (ignored where unsupported). Test: writing through a symlink keeps it a symlink and updates the target. |
+| `8d48458` | `BUG-005`: `/_/auth/*` is answered only on hosts where it belongs (protected routes plus the redirect_url host); on any other host the path reaches the upstream. Logout is POST-only (`405` with `Allow: POST` otherwise) and redirects with `303`. Tests cover public passthrough, protected login, and GET/POST logout. |
+| `0af2bf4` | `BUG-004`: the admin bearer parser requires the `Bearer` scheme (case-insensitive per RFC 7235); a bare token, a wrong scheme or an empty token get `401`. Table test covers all six forms. |
+| `f347c5f` | `BUG-003`: the plain and TLS public listeners bind synchronously (`net.Listen`) before serving, like the admin listener; an occupied port now fails startup with a clear error instead of a `log.Fatalf` inside a goroutine that skips shutdown. Tests: busy port returns an error, free port serves. |
+| `d873374` | `BUG-002`: `health_path` must start with `/` (validated at load), and the probe URL is built with `url.URL.JoinPath`, so a target with a base path (`http://host/prefix`) probes `/prefix/healthz` instead of double slashes or a broken relative URL. |
+| `f7e22e9` | `BUG-001`: the reverse proxy uses `Rewrite` (`SetURL` + `SetXForwarded`): `X-Forwarded-For` is replaced with the client IP (a client-supplied chain is dropped, not appended), `X-Forwarded-Host`/`X-Forwarded-Proto` are set by Switchboard, and the public `Host` is preserved for the upstream. Tests cover plain HTTP and TLS; proven to fail with the old `NewSingleHostReverseProxy`. |
 
 ## SQLite store (2026-10-17)
 
