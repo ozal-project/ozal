@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"slices"
 	"sort"
 	"sync"
@@ -267,7 +268,7 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 	if err != nil {
 		return nil, fmt.Errorf("build proxy: %w", err)
 	}
-	handler := withAuthEndpoints(proxyHandler, oidcGate)
+	handler := withAuthEndpoints(proxyHandler, oidcGate, authEndpointHosts(*cfg, protectedHosts))
 	checker.Start(healthCtx, cfg.Routes, m.healthCheckInterval)
 	if err := m.contextError(); err != nil {
 		return nil, err
@@ -337,17 +338,45 @@ func (m *Manager) reloadError(err error) error {
 	return err
 }
 
-func withAuthEndpoints(next http.Handler, gate *auth.Gate) http.Handler {
+// authEndpointHosts returns the hosts where /_/auth/* belongs to Switchboard:
+// the protected routes, plus the redirect_url host where the OIDC callback
+// lands. On any other host the path is the upstream's, not ours.
+func authEndpointHosts(cfg config.Config, protectedHosts []string) map[string]bool {
+	hosts := make(map[string]bool, len(protectedHosts)+1)
+	for _, host := range protectedHosts {
+		hosts[host] = true
+	}
+	if redirect, err := url.Parse(cfg.Auth.RedirectURL); err == nil && redirect.Host != "" {
+		if host, err := config.NormalizeHost(redirect.Host); err == nil {
+			hosts[host] = true
+		}
+	}
+	return hosts
+}
+
+func withAuthEndpoints(next http.Handler, gate *auth.Gate, hosts map[string]bool) http.Handler {
 	if gate == nil {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host, err := config.NormalizeHost(r.Host)
+		if err != nil || !hosts[host] {
+			next.ServeHTTP(w, r)
+			return
+		}
 		switch r.URL.Path {
 		case "/_/auth/login":
 			gate.HandleLogin(w, r)
 		case "/_/auth/callback":
 			gate.HandleCallback(w, r)
 		case "/_/auth/logout":
+			// Logout is a state change: a GET would let any page log the
+			// user out with an image tag.
+			if r.Method != http.MethodPost {
+				w.Header().Set("Allow", "POST")
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
 			gate.HandleLogout(w, r)
 		default:
 			next.ServeHTTP(w, r)

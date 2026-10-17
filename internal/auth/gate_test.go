@@ -101,8 +101,8 @@ func TestHandleLogoutClearsSession(t *testing.T) {
 	if _, ok := g.sessions.Get(id); ok {
 		t.Fatal("expected session to be deleted after logout")
 	}
-	if rec.Code != http.StatusFound {
-		t.Fatalf("status = %d, want 302", rec.Code)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303 (POST logout redirects to GET)", rec.Code)
 	}
 }
 

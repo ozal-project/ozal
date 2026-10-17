@@ -7,6 +7,11 @@ Format: `YYYY-MM-DD · ID · topic — what clicked (link to code)`
 
 ## v0.1 Edge
 
+- 2026-10-17 · BUG-005 · path ownership — a reserved path is only reserved on
+  the hosts that own it; intercepting `/_/auth/*` everywhere silently stole
+  application routes. Logout is a state change: POST and `303` back to a GET
+  ([manager.go](../../internal/routemanager/manager.go),
+  [oidc.go](../../internal/auth/oidc.go)).
 - 2026-10-17 · BUG-004 · parsing authorization — `strings.TrimPrefix` treats
   "no prefix" and "wrong prefix" as valid input; `strings.Cut` plus a scheme
   check makes the grammar explicit ([server.go](../../internal/admin/server.go)).

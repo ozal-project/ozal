@@ -403,6 +403,75 @@ func TestReloadReusesOIDCGateWhenAuthBoundaryIsUnchanged(t *testing.T) {
 	}
 }
 
+func TestAuthEndpointsOnlyExistOnAuthHosts(t *testing.T) {
+	var provider *httptest.Server
+	provider = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/.well-known/openid-configuration" {
+			http.NotFound(w, r)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"issuer":                 provider.URL,
+			"authorization_endpoint": provider.URL + "/authorize",
+			"token_endpoint":         provider.URL + "/token",
+			"jwks_uri":               provider.URL + "/jwks",
+		})
+	}))
+	defer provider.Close()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Upstream-Path", r.URL.Path)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer upstream.Close()
+
+	cfg := routeConfig(upstream.URL)
+	cfg.Auth = config.Auth{
+		Issuer:       provider.URL,
+		ClientID:     "client",
+		ClientSecret: "secret",
+		RedirectURL:  "http://app.localhost/_/auth/callback",
+	}
+	cfg.Routes[0].Access = &config.AccessPolicy{}
+	cfg.Routes = append(cfg.Routes, config.Route{Host: "public.localhost", Target: upstream.URL})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	manager, err := New(ctx, writeConfig(t, cfg), time.Hour)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	do := func(method, host, path string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, "http://"+host+path, nil)
+		req.Host = host
+		rec := httptest.NewRecorder()
+		manager.ServeHTTP(rec, req)
+		return rec
+	}
+
+	// On a public host the path belongs to the upstream, not to Switchboard.
+	rec := do(http.MethodGet, "public.localhost", "/_/auth/login")
+	if rec.Code != http.StatusNoContent || rec.Header().Get("X-Upstream-Path") != "/_/auth/login" {
+		t.Fatalf("public /_/auth/login = %d path=%q, want the upstream 204", rec.Code, rec.Header().Get("X-Upstream-Path"))
+	}
+	if rec := do(http.MethodPost, "public.localhost", "/_/auth/logout"); rec.Code != http.StatusNoContent {
+		t.Fatalf("public POST /_/auth/logout = %d, want the upstream 204", rec.Code)
+	}
+
+	// On a protected host the login endpoint answers with the provider redirect.
+	if rec := do(http.MethodGet, "app.localhost", "/_/auth/login"); rec.Code != http.StatusFound {
+		t.Fatalf("protected /_/auth/login = %d, want 302 to the provider", rec.Code)
+	}
+
+	// Logout is a POST; a GET is rejected before touching the gate.
+	rec = do(http.MethodGet, "app.localhost", "/_/auth/logout")
+	if rec.Code != http.StatusMethodNotAllowed || rec.Header().Get("Allow") != "POST" {
+		t.Fatalf("protected GET /_/auth/logout = %d Allow=%q, want 405 with Allow: POST", rec.Code, rec.Header().Get("Allow"))
+	}
+	if rec := do(http.MethodPost, "app.localhost", "/_/auth/logout"); rec.Code != http.StatusSeeOther {
+		t.Fatalf("protected POST /_/auth/logout = %d, want 303", rec.Code)
+	}
+}
+
 func TestSessionsSurviveGateRebuildWhenProtectedHostsChange(t *testing.T) {
 	var provider *httptest.Server
 	provider = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
