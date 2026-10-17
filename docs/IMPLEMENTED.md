@@ -1,7 +1,7 @@
 # Implemented — Switchboard
 
 **Last review:** 2026-10-17
-**Code reviewed up to:** `08738fe`
+**Code reviewed up to:** `5de6ebf`
 
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
@@ -102,7 +102,7 @@ site was changed. Credentials and restart-safe deployment remain in `EDGE-001`.
 
 | Commit | Result |
 |---|---|
-| _uncommitted_ | `ARCH-002`: `internal/events` defines stable event types (`access.allowed`/`denied`, `login.started`/`failed`/`succeeded`, `route.created`/`deleted`, `config.reloaded`), a `Sink` interface, a JSON `slog` sink and an in-memory `Recorder`. Access decisions, the login flow and admin/SIGHUP changes publish events, replacing the `log.Printf` audit lines. Tests capture events with the recorder (stable types asserted). |
+| `5de6ebf` | `ARCH-002`: `internal/events` defines stable event types (`access.allowed`/`denied`, `login.started`/`failed`/`succeeded`, `route.created`/`deleted`, `config.reloaded`), a `Sink` interface, a JSON `slog` sink and an in-memory `Recorder`. Access decisions, the login flow and admin/SIGHUP changes publish events, replacing the `log.Printf` audit lines. Tests capture events with the recorder (stable types asserted). |
 
 ## SQLite store (2026-10-17)
 
