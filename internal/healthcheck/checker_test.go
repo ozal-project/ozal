@@ -47,6 +47,26 @@ func TestProbeMarksHealthyAndUnhealthy(t *testing.T) {
 	}
 }
 
+func TestProbeJoinsHealthPathToTheTargetPath(t *testing.T) {
+	var gotPath string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	checker := New()
+	route := config.Route{Host: "app.localhost", Target: upstream.URL + "/prefix", HealthPath: "/healthz"}
+	checker.probe(context.Background(), route)
+
+	if gotPath != "/prefix/healthz" {
+		t.Fatalf("probed path = %q, want /prefix/healthz", gotPath)
+	}
+	if status := checker.Status(route.Host); !status.Healthy {
+		t.Fatalf("status = %+v, want healthy", status)
+	}
+}
+
 func TestStatusTracksChecksErrorsAndTransitions(t *testing.T) {
 	var responseStatus atomic.Int64
 	responseStatus.Store(http.StatusOK)

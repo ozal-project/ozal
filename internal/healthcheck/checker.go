@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -99,10 +100,12 @@ func (c *Checker) probe(ctx context.Context, r config.Route) {
 	}
 
 	started := time.Now()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.Target+path, nil)
 	healthy := false
 	lastError := ""
-	if err != nil {
+	probeURL, parseErr := url.Parse(r.Target)
+	if parseErr != nil {
+		lastError = parseErr.Error()
+	} else if req, err := http.NewRequestWithContext(ctx, http.MethodGet, probeURL.JoinPath(path).String(), nil); err != nil {
 		lastError = err.Error()
 	} else {
 		resp, requestErr := c.client.Do(req)

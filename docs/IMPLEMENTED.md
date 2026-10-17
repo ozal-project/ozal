@@ -60,6 +60,7 @@ history and grouped by the original phases.
 
 | Commit | Result |
 |---|---|
+| _uncommitted_ | `BUG-002`: `health_path` must start with `/` (validated at load), and the probe URL is built with `url.URL.JoinPath`, so a target with a base path (`http://host/prefix`) probes `/prefix/healthz` instead of double slashes or a broken relative URL. |
 | _uncommitted_ | `BUG-001`: the reverse proxy uses `Rewrite` (`SetURL` + `SetXForwarded`): `X-Forwarded-For` is replaced with the client IP (a client-supplied chain is dropped, not appended), `X-Forwarded-Host`/`X-Forwarded-Proto` are set by Switchboard, and the public `Host` is preserved for the upstream. Tests cover plain HTTP and TLS; proven to fail with the old `NewSingleHostReverseProxy`. |
 
 ## SQLite store (2026-10-17)

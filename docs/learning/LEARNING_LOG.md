@@ -7,6 +7,10 @@ Format: `YYYY-MM-DD · ID · topic — what clicked (link to code)`
 
 ## v0.1 Edge
 
+- 2026-10-17 · BUG-002 · URL construction — `r.Target + path` is string
+  concatenation pretending to be URL logic; validate the input and let
+  `url.URL.JoinPath` clean the join
+  ([checker.go](../../internal/healthcheck/checker.go)).
 - 2026-10-17 · BUG-001 · forwarded headers — `ReverseProxy.Rewrite` +
   `SetURL`/`SetXForwarded` replaces `Director`; `SetXForwarded` **appends** to
   an existing `X-Forwarded-For`, and `SetURL` clears `Host`, so the order

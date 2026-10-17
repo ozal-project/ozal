@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 )
 
 const DefaultAdminListen = "127.0.0.1:9090"
@@ -153,6 +154,9 @@ func Validate(cfg Config) (*Config, error) {
 		}
 		if _, err := ParseTarget(r.Target); err != nil {
 			return nil, fmt.Errorf("config: route %q has invalid target %q: %w", r.Host, r.Target, err)
+		}
+		if r.HealthPath != "" && !strings.HasPrefix(r.HealthPath, "/") {
+			return nil, fmt.Errorf("config: route %q health_path %q must start with /", r.Host, r.HealthPath)
 		}
 	}
 	if cfg.TLS.Enabled {

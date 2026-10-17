@@ -395,6 +395,22 @@ func TestValidateRejectsNonLoopbackAdminListener(t *testing.T) {
 	}
 }
 
+func TestValidateHealthPathMustBeAbsolute(t *testing.T) {
+	base := func(healthPath string) Config {
+		return Config{Listen: ":8888", Routes: []Route{{
+			Host:       "app.localhost",
+			Target:     "http://localhost:9000",
+			HealthPath: healthPath,
+		}}}
+	}
+	if _, err := Validate(base("healthz")); err == nil {
+		t.Fatal("Validate accepted a relative health_path")
+	}
+	if _, err := Validate(base("/healthz")); err != nil {
+		t.Fatalf("Validate(absolute health_path): %v", err)
+	}
+}
+
 func TestValidateStaticRoutes(t *testing.T) {
 	route := func(r Route) Config {
 		r.Host = "site.localhost"
