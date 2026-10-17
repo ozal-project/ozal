@@ -1,7 +1,7 @@
 # Implemented — Switchboard
 
-**Last review:** 2026-10-07
-**Code reviewed up to:** `1822e51`
+**Last review:** 2026-10-17
+**Code reviewed up to:** `c537e83`
 
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
@@ -46,8 +46,18 @@ history and grouped by the original phases.
 |---|---|
 | _uncommitted_ | Full audit (findings now `SEC-001`–`SEC-005`, `BUG-001`–`BUG-008`); `VISION.md`; `AGENTS.md`; mentor skill; design pattern, stack and tracker docs; `scripts/verify.sh`. |
 
+## SQLite store (2026-10-17)
+
+| Commit | Result |
+|---|---|
+| `7d0c56e` | Embedded SQLite store with migration runner (`internal/store/sqlite/`, `cmd/switchboard migrate`). Numbered migrations and a session schema; not yet wired into `auth` (tracked as `ARCH-004`). |
+
 ## Pages (2026-10-17)
 
 | Commit | Result |
 |---|---|
 | `35bfa9c` | `PAGES-001`: static routes (`"root"`, optional `"spa"`). Pure `static.Resolve` (table tests + fuzz target) plus a handler that opens files through `os.OpenInRoot`; no listings, hidden files refused except `.well-known`, directory redirects built from the cleaned path (no `//host` open redirect). Regression test proven to fail with plain `os.Open` (symlink escape). Access policies apply to static routes. Smoke test: the portfolio `dist/` served through Switchboard. |
+
+Re-verified 2026-10-17 (`CROSS-003`): `scripts/verify.sh` green; fresh
+`portfolio` build served as a static route — `/` 200, `/es/` 200, hashed asset
+200; unknown path, `.env`, traversal attempt and unknown host all 404.

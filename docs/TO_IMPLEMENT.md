@@ -1,7 +1,7 @@
 # To implement — Switchboard
 
-**Last review:** 2026-10-07
-**Code reviewed up to:** `1822e51`
+**Last review:** 2026-10-17
+**Code reviewed up to:** `c537e83`
 **Purpose:** the single source of active work, priorities, blockers and done
 criteria. Closed work moves to [`IMPLEMENTED.md`](IMPLEMENTED.md). Direction
 and the long-range map live in [`VISION.md`](../VISION.md); if another
@@ -74,7 +74,7 @@ infrastructure access · `TLOG` transparency log · `AI` AI-assisted decisions �
 | `ARCH-001` | Introduce the request pipeline (`internal/pipeline`) with the stage order from `docs/architecture/design.md`; move header stripping into the `trust` stage. | Ready | Pipeline order defined in one function; end-to-end test proves order. |
 | `ARCH-002` | `EventSink` interface + `log/slog` JSON sink; decisions, logins and admin changes emit events (replaces `log.Printf` audit lines). | Ready | Events have stable types; tests capture them with an in-memory sink. |
 | `ARCH-003` | Raw vs resolved config, so secrets from env/files are never written back. | Ready | Control-plane writes preserve secret references; test. Prerequisite of `REL-001`. |
-| `ARCH-004` | Embedded SQLite store with migration runner (sessions, later tunnels/passkeys). | Planned | Sessions survive restart; migrations numbered and immutable. |
+| `ARCH-004` | Embedded SQLite store with migration runner (sessions, later tunnels/passkeys). Store and runner are committed (`7d0c56e`, `cmd/switchboard migrate`); wiring into `auth`/sessions is still pending. | In progress | Sessions survive restart; migrations numbered and immutable. |
 | `ARCH-005` | Remove duplicated clone helpers in `routemanager` (`cloneRoute`, `cloneConfig` wrapper). | Ready | Single `config.Clone`; tests pass. |
 
 ### Alpha release gates
