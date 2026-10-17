@@ -1,7 +1,7 @@
 # Implemented — Switchboard
 
 **Last review:** 2026-10-17
-**Code reviewed up to:** `a385806`
+**Code reviewed up to:** `2a7f000`
 
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
@@ -50,7 +50,7 @@ history and grouped by the original phases.
 
 | Commit | Result |
 |---|---|
-| _uncommitted_ | `SEC-005`: the `SessionStore` is owned by the route manager and reused across gate rebuilds, so adding a protected route no longer logs everyone out. A changed session TTL is a policy change and builds a fresh store (promoted only when the candidate installs; discarded candidates cancel their own sweep). New test: a session created before the rebuild authenticates on the new gate. |
+| `2a7f000` | `SEC-005`: the `SessionStore` is owned by the route manager and reused across gate rebuilds, so adding a protected route no longer logs everyone out. A changed session TTL is a policy change and builds a fresh store (promoted only when the candidate installs; discarded candidates cancel their own sweep). New test: a session created before the rebuild authenticates on the new gate. |
 | `a385806` | `SEC-004`: the login attempt (state, PKCE verifier, return_to) travels in a short-lived HMAC-SHA256-signed `sb_login` cookie instead of a server-side store; the signing key is derived from the client secret with a domain separator. The callback requires the cookie, matches `state` in constant time and clears the cookie on first use; missing, mismatched, forged, tampered and expired cookies all get `400`. The pending store, its sweep and its 10k capacity error are gone. |
 | `4297810` | `SEC-003`: the admin listener answers only loopback hosts. A `Host` header that is not 127.0.0.0/8, `::1` or `localhost` (with/without port, trailing dot) gets `421` before the mux, so DNS rebinding cannot read `/_/status` or reach mutations. Table tests + rebound-request regression. |
 | `1868ab1` | `SEC-002`: every request header whose name normalizes to an identity header (case- and dash/underscore-insensitive) is deleted before routing, including non-canonical keys written straight into the map. Raw-socket regression test with `X_Auth_Request_Email`/`X_Auth_Request_User` on public and protected routes; proven to fail with the previous exact-name deletion. |
