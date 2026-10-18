@@ -372,8 +372,8 @@ site was changed. Credentials and restart-safe deployment remain in `EDGE-001`.
 
 | Commit | Result |
 |---|---|
-| _uncommitted_ | `SHD-002`: every admin response carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy` and a baseline CSP; pages keep their richer CSP (`frame-ancestors 'none'`). HSTS (`max-age=31536000`) is added only on TLS responses, and the 421 rebinding rejection carries the headers too. Tests assert each header and the HTTP/TLS difference. |
-| _uncommitted_ | `EDGE-006` residual closed: `origin.denied` events aggregate per minute (`denialEmitter`), emitting one event per window with the count of suppressed denials, so an unauthenticated scan cannot flood the log. Fixed-clock test covers first event, suppression and the summary count. |
+| 2ae8941 | `SHD-002`: every admin response carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy` and a baseline CSP; pages keep their richer CSP (`frame-ancestors 'none'`). HSTS (`max-age=31536000`) is added only on TLS responses, and the 421 rebinding rejection carries the headers too. Tests assert each header and the HTTP/TLS difference. |
+| 2ae8941 | `EDGE-006` residual closed: `origin.denied` events aggregate per minute (`denialEmitter`), emitting one event per window with the count of suppressed denials, so an unauthenticated scan cannot flood the log. Fixed-clock test covers first event, suppression and the summary count. |
 
 ## SQLite store (2026-10-17)
 
