@@ -59,6 +59,11 @@ type Snapshot struct {
 	gateCancel    context.CancelFunc
 	sessions      *auth.SessionStore
 	sessionCancel context.CancelFunc
+	// transport carries every upstream request of this generation. It is the
+	// previous generation's when the timeout is unchanged, so a reload keeps
+	// reusing warm connections.
+	transport        *http.Transport
+	transportTimeout time.Duration
 }
 
 // Manager owns the current routing snapshot. Reloads and mutations are
@@ -76,6 +81,8 @@ type Manager struct {
 	sessions            *auth.SessionStore
 	sessionTTL          time.Duration
 	sessionCancel       context.CancelFunc
+	transport           *http.Transport
+	transportTimeout    time.Duration
 	sink                events.Sink
 }
 
@@ -296,7 +303,13 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 	if err != nil {
 		return nil, err
 	}
-	proxyOpts = append(proxyOpts, proxy.WithTrustedProxies(trustedProxies), proxy.WithEventSink(m.sink))
+	// Same pattern as the gate and the sessions: keep the installed transport
+	// while its settings are unchanged, build a new one when they change.
+	transport, transportTimeout := m.transport, cfg.UpstreamTimeout()
+	if transport == nil || m.transportTimeout != transportTimeout {
+		transport = proxy.NewUpstreamTransport(transportTimeout)
+	}
+	proxyOpts = append(proxyOpts, proxy.WithTrustedProxies(trustedProxies), proxy.WithEventSink(m.sink), proxy.WithTransport(transport))
 	if cfg.DevErrors {
 		proxyOpts = append(proxyOpts, proxy.WithDevErrors())
 	}
@@ -332,6 +345,9 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 		gateCancel:    gateCancel,
 		sessions:      sessions,
 		sessionCancel: sessionCancel,
+
+		transport:        transport,
+		transportTimeout: transportTimeout,
 	}, nil
 }
 
@@ -349,6 +365,15 @@ func (m *Manager) install(candidate *Snapshot) {
 		candidate.gateCancel = nil
 		if oldGateCancel != nil {
 			oldGateCancel()
+		}
+	}
+	if candidate.transport != m.transport {
+		old := m.transport
+		m.transport, m.transportTimeout = candidate.transport, candidate.transportTimeout
+		if old != nil {
+			// Requests already in flight finish on it; only its idle
+			// connections are closed, and none are opened again.
+			old.CloseIdleConnections()
 		}
 	}
 	if candidate.sessions != m.sessions {

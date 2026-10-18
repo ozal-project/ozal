@@ -25,10 +25,6 @@ import (
 // Option configures the proxy handler.
 type Option func(*options)
 
-// defaultResponseHeaderTimeout bounds how long an upstream may stay silent
-// after receiving a request. It does not limit the body: a route may stream.
-const defaultResponseHeaderTimeout = 60 * time.Second
-
 type options struct {
 	transport             http.RoundTripper
 	responseHeaderTimeout time.Duration
@@ -113,14 +109,14 @@ type AuthGate interface {
 // New builds a host-routed reverse proxy handler from the given routes.
 // It fails fast on invalid or duplicate hosts and targets. checker and gate may be nil.
 func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Option) (http.Handler, error) {
-	cfg := options{sink: events.Discard, responseHeaderTimeout: defaultResponseHeaderTimeout, logger: slog.Default()}
+	cfg := options{sink: events.Discard, responseHeaderTimeout: config.DefaultUpstreamTimeout, logger: slog.Default()}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
 	if cfg.transport == nil {
 		// One transport for every route: connections to the same upstream are
 		// reused, and the limits are defined in one place.
-		cfg.transport = newUpstreamTransport(cfg.responseHeaderTimeout)
+		cfg.transport = NewUpstreamTransport(cfg.responseHeaderTimeout)
 	}
 	byHost := make(map[string]route, len(routes))
 
@@ -321,12 +317,13 @@ func upstreamHandler(r config.Route, devErrors bool, transport http.RoundTripper
 	return proxy, nil
 }
 
-// newUpstreamTransport builds the transport every route without a custom one
-// forwards through. It is explicit instead of a copy of http.DefaultTransport:
+// NewUpstreamTransport builds the transport every route without a custom one
+// forwards through. The route manager builds its own so it can reuse it across
+// reloads and close its idle connections when it is replaced. It is explicit instead of a copy of http.DefaultTransport:
 // routes point at internal hosts, so HTTP_PROXY style variables must never
 // reroute them, and every phase before the body has a limit. The body itself
 // is unbounded on purpose, so downloads and streams keep working.
-func newUpstreamTransport(responseHeaderTimeout time.Duration) *http.Transport {
+func NewUpstreamTransport(responseHeaderTimeout time.Duration) *http.Transport {
 	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
 	return &http.Transport{
 		Proxy:                 nil,

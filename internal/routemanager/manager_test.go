@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -614,5 +615,105 @@ func TestSessionsSurviveGateRebuildWhenProtectedHostsChange(t *testing.T) {
 	principal, ok := manager.gate.Authenticate(req)
 	if !ok || principal.Email != "ana@example.com" {
 		t.Fatalf("Authenticate after rebuild = (%+v, %v), want the session created before the rebuild", principal, ok)
+	}
+}
+
+// connCounter records the upstream's view of the proxy's connections: a
+// reload that rebuilt the transport would open a new one, and a replaced
+// transport that kept its idle connections would never close them.
+type connCounter struct {
+	mu     sync.Mutex
+	opened int
+	closed int
+}
+
+func (c *connCounter) track(_ net.Conn, state http.ConnState) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	switch state {
+	case http.StateNew:
+		c.opened++
+	case http.StateClosed:
+		c.closed++
+	}
+}
+
+func (c *connCounter) counts() (opened, closed int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.opened, c.closed
+}
+
+func countedUpstream(t *testing.T) (*httptest.Server, *connCounter) {
+	t.Helper()
+	counter := &connCounter{}
+	upstream := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "ok")
+	}))
+	upstream.Config.ConnState = counter.track
+	upstream.Start()
+	t.Cleanup(upstream.Close)
+	return upstream, counter
+}
+
+func TestReloadReusesUpstreamTransport(t *testing.T) {
+	upstream, _ := countedUpstream(t)
+	path := writeConfig(t, routeConfig(upstream.URL))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	manager, err := New(ctx, path, time.Hour)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	before := manager.current.Load().transport
+	if before == nil {
+		t.Fatal("snapshot has no upstream transport")
+	}
+
+	if err := manager.Reload(); err != nil {
+		t.Fatalf("Reload: %v", err)
+	}
+	if after := manager.current.Load().transport; after != before {
+		t.Fatal("an unchanged reload built a new transport: warm upstream connections are lost")
+	}
+	if code, _ := serve(manager); code != http.StatusOK {
+		t.Fatalf("request after reload = %d, want 200", code)
+	}
+}
+
+func TestChangedUpstreamTimeoutClosesIdleConnectionsOfPreviousTransport(t *testing.T) {
+	upstream, counter := countedUpstream(t)
+	cfg := routeConfig(upstream.URL)
+	path := writeConfig(t, cfg)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	manager, err := New(ctx, path, time.Hour)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if code, _ := serve(manager); code != http.StatusOK {
+		t.Fatalf("first request = %d, want 200", code)
+	}
+	// net/http returns the connection to the idle pool just after the body
+	// ends; give it that moment so there is an idle connection to close.
+	time.Sleep(100 * time.Millisecond)
+
+	cfg.UpstreamTimeoutSeconds = 5
+	overwriteConfig(t, path, cfg)
+	if err := manager.Reload(); err != nil {
+		t.Fatalf("Reload: %v", err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if _, closed := counter.counts(); closed == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the replaced transport left its idle upstream connection open")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if code, _ := serve(manager); code != http.StatusOK {
+		t.Fatalf("request after the change = %d, want 200", code)
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 )
 
 const DefaultAdminListen = "127.0.0.1:9090"
@@ -100,7 +101,26 @@ type Config struct {
 	// hint, route list on 404). Local-only: it reveals internal addresses.
 	DevErrors bool       `json:"dev_errors,omitempty"`
 	RateLimit *RateLimit `json:"rate_limit,omitempty"`
-	Routes    []Route    `json:"routes"`
+	// UpstreamTimeoutSeconds is how long an upstream may take to start
+	// answering before the visitor gets a 504. Zero means the default (60);
+	// the response body is never limited.
+	UpstreamTimeoutSeconds int     `json:"upstream_timeout_seconds,omitempty"`
+	Routes                 []Route `json:"routes"`
+}
+
+const (
+	// DefaultUpstreamTimeout applies when upstream_timeout_seconds is unset.
+	DefaultUpstreamTimeout = 60 * time.Second
+	// maxUpstreamTimeoutSeconds keeps a typo from disabling the protection.
+	maxUpstreamTimeoutSeconds = 3600
+)
+
+// UpstreamTimeout returns the configured response-header limit, or the default.
+func (c Config) UpstreamTimeout() time.Duration {
+	if c.UpstreamTimeoutSeconds == 0 {
+		return DefaultUpstreamTimeout
+	}
+	return time.Duration(c.UpstreamTimeoutSeconds) * time.Second
 }
 
 func Load(path string) (*Config, error) {
@@ -146,6 +166,9 @@ func Validate(cfg Config) (*Config, error) {
 				return nil, fmt.Errorf("config: rate_limit.%s needs rate > 0 and burst >= 1", name)
 			}
 		}
+	}
+	if cfg.UpstreamTimeoutSeconds < 0 || cfg.UpstreamTimeoutSeconds > maxUpstreamTimeoutSeconds {
+		return nil, fmt.Errorf("config: upstream_timeout_seconds must be between 0 (default) and %d", maxUpstreamTimeoutSeconds)
 	}
 	if cfg.Admin.Listen == "" {
 		cfg.Admin.Listen = DefaultAdminListen

@@ -6,7 +6,31 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
-## ARCH-006 — proxy hardening and one log stream — 2026-10-18 (working tree, no commit)
+## ARCH-007 — upstream transport lifecycle and limit — 2026-10-18 (working tree, no commit)
+
+- **One transport across reloads.** `ARCH-006` made every snapshot build its own
+  upstream transport, so each reload dropped warm connections and left the old
+  transport's idle ones open for up to 90 s. The route manager now owns the
+  transport like it owns the gate and the sessions: an unchanged reload reuses
+  it; a changed setting builds a new one and closes the idle connections of the
+  old one when it is replaced (requests in flight finish normally).
+- **Configurable limit.** `upstream_timeout_seconds` (default 60, rejected below
+  0 or above 3600) sets the response-header limit; documented in the README.
+  `proxy.NewUpstreamTransport` is exported for the manager; the single default
+  lives in `config.DefaultUpstreamTimeout`.
+- **Decision on the tunnel CLI loggers.** `tunnel`, `tunnel-spike` and the edge
+  handler keep `slog.Default()`: they are human-run commands whose records go
+  to stderr as plain text, and `proxy.WithLogger` already allows injection when
+  one needs it. No new task.
+
+Evidence: `TestReloadReusesUpstreamTransport`,
+`TestChangedUpstreamTimeoutClosesIdleConnectionsOfPreviousTransport` (fails with
+`CloseIdleConnections` removed; checked by mutation) and
+`TestUpstreamTimeoutDefaultsAndRejectsOutOfRange`. `scripts/verify.sh` 7/7 OK on
+Go 1.27.2. Requests in flight at the moment of replacement can still leave one
+idle connection on the old transport for up to `IdleConnTimeout`; accepted.
+
+## ARCH-006 — proxy hardening and one log stream — 2026-10-18 (committed `c097ed5`)
 
 - **Bounded upstream transport.** Routes without a custom transport used
   `http.DefaultTransport`, so an upstream that accepted a connection and never

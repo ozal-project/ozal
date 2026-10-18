@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func writeConfig(t *testing.T, contents string) string {
@@ -473,5 +474,30 @@ func TestValidateStaticRoutes(t *testing.T) {
 				t.Fatalf("Validate accepted %+v", r)
 			}
 		})
+	}
+}
+
+func TestUpstreamTimeoutDefaultsAndRejectsOutOfRange(t *testing.T) {
+	doc := func(extra string) []byte {
+		return []byte(`{"listen": ":8888", ` + extra + `"routes": [{"host": "a.localhost", "target": "http://localhost:9000"}]}`)
+	}
+	cfg, err := Parse(doc(""))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got := cfg.UpstreamTimeout(); got != DefaultUpstreamTimeout {
+		t.Fatalf("default = %v, want %v", got, DefaultUpstreamTimeout)
+	}
+	cfg, err = Parse(doc(`"upstream_timeout_seconds": 5, `))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got := cfg.UpstreamTimeout(); got != 5*time.Second {
+		t.Fatalf("configured = %v, want 5s", got)
+	}
+	for _, bad := range []string{"-1", "3601"} {
+		if _, err := Parse(doc(`"upstream_timeout_seconds": ` + bad + `, `)); err == nil {
+			t.Errorf("upstream_timeout_seconds %s was accepted", bad)
+		}
 	}
 }

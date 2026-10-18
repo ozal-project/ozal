@@ -283,6 +283,15 @@ the unreachable upstream plus a hint. It is off by default and meant for local
 development only — those pages reveal internal hostnames and addresses, so
 never enable them on a public edge.
 
+### Slow upstreams
+
+An upstream that accepts a connection but never starts answering would hold the
+visitor's request open forever. Switchboard waits up to
+`upstream_timeout_seconds` (default 60, at most 3600) for the response headers
+and then answers `504`; an unreachable upstream answers `502`. The limit never
+applies to the response body, so downloads and streams keep working. The
+setting is applied on reload; connections to unchanged settings are reused.
+
 ### Real deployment (HTTPS via Let's Encrypt)
 
 Set `tls.enabled: true` and point real DNS at the box. Switchboard then

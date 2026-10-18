@@ -272,3 +272,16 @@ tells "too slow" (504) from "unreachable" (502). `slog.SetDefault` in the
 composition root routes `log.Printf` through the same JSON handler, so one
 line unified every log. A `map` of functions replaces four copied `if`s, and
 `signal.NotifyContext` cancels them all on SIGTERM.
+
+## 2026-10-18 — who owns a resource across reloads
+
+A resource that outlives one request needs an owner with a lifetime. The
+transport was built per snapshot, so reloads threw away warm connections and
+leaked idle ones. The route manager already solved this for the OIDC gate and
+the sessions: keep the installed object while its settings are unchanged, build
+a new one when they change, and release the old one at the swap.
+`CloseIdleConnections` only affects idle connections, so in-flight requests
+finish normally. A test that counts connections races with net/http returning a
+connection to its pool, so the deterministic check compares transport identity
+and the closing test waits a moment before reloading. Mutating the fix (removing
+the close) and seeing the test fail proves the test actually guards it.

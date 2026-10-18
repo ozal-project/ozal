@@ -938,7 +938,7 @@ func TestSilentUpstreamTimesOutWith504(t *testing.T) {
 // Routes may point at internal hosts: an HTTP_PROXY variable in the process
 // environment must never reroute that traffic.
 func TestUpstreamTransportIsBounded(t *testing.T) {
-	tr := newUpstreamTransport(7 * time.Second)
+	tr := NewUpstreamTransport(7 * time.Second)
 	if tr.Proxy != nil {
 		t.Error("upstream transport must not honor proxy environment variables")
 	}

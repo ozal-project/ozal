@@ -56,7 +56,6 @@ Every `SEC-*` and `BUG-*` finding is closed (2026-10-17).
 |---|---|---|---|
 | `ARCH-004` | Embedded SQLite store with migration runner (sessions, later tunnels/passkeys). Store and runner are committed (`7d0c56e`, `cmd/switchboard migrate`); wiring into `auth`/sessions is still pending. Local operator scripts now expose `scripts/migrate.sh up\|status -db PATH` and `scripts/new-migration.sh name`; verification is recorded in the learning log. | In progress | Sessions survive restart; migrations numbered and immutable. |
 | `ARCH-005` | Remove duplicated clone helpers in `routemanager` (`cloneRoute`, `cloneConfig` wrapper). | Ready | Single `config.Clone`; tests pass. |
-| `ARCH-007` | Follow-ups of `ARCH-006` (2026-10-18): (a) every snapshot builds its own upstream transport, so a reload leaves the old one's idle connections open until `IdleConnTimeout` (90 s): close them when a snapshot is replaced; (b) the 60 s response-header limit is only an option (`proxy.WithResponseHeaderTimeout`): expose it in the config with validation; (c) the `tunnel`/`tunnel-spike` proxies still use `slog.Default()` instead of an injected logger. | Ready | A reload leaves no idle upstream connections of the previous generation (test); the limit is configurable and rejects non-positive values; tunnel paths log through the same injected logger. |
 
 ### Alpha release gates
 
