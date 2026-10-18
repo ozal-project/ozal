@@ -18,6 +18,16 @@ func WithEvents(broker *events.Broker) Option {
 	return func(h *Handler) { h.broker = broker }
 }
 
+// WithCertificateStatus adds the origin-certificate panel. A nil provider is
+// ignored, so the autocert mode simply omits the panel.
+func WithCertificateStatus(provider func() CertificateStatus) Option {
+	return func(h *Handler) {
+		if provider != nil {
+			h.certificate = provider
+		}
+	}
+}
+
 const heartbeat = 15 * time.Second
 
 type eventView struct {

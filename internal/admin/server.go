@@ -31,10 +31,11 @@ type routeManager interface {
 
 // Handler serves the administrative dashboard and authenticated mutations.
 type Handler struct {
-	manager routeManager
-	sink    events.Sink
-	broker  *events.Broker
-	mux     *http.ServeMux
+	manager     routeManager
+	sink        events.Sink
+	broker      *events.Broker
+	certificate func() CertificateStatus
+	mux         *http.ServeMux
 }
 
 func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
@@ -96,6 +97,22 @@ func loopbackHost(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
+// CertificateStatus is the public listener's origin-certificate state as
+// the trust console displays it. The composition root projects the
+// certificate manager into this shape, so admin needs no dependency on the
+// certificate package.
+type CertificateStatus struct {
+	Host        string
+	Mode        string
+	Valid       bool
+	NotAfter    string
+	LastOutcome string
+	LastError   string
+	LastAttempt string
+	NextAttempt string
+	Pending     int
+}
+
 type statusView struct {
 	Active      string
 	Protected   int
@@ -103,6 +120,7 @@ type statusView struct {
 	Static      int
 	HasActivity bool
 	GeneratedAt string
+	Certificate *CertificateStatus
 	Routes      []routeView
 }
 
@@ -129,6 +147,10 @@ func (h *Handler) status(w http.ResponseWriter, _ *http.Request) {
 		HasActivity: h.broker != nil,
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
 		Routes:      make([]routeView, len(statuses)),
+	}
+	if h.certificate != nil {
+		status := h.certificate()
+		view.Certificate = &status
 	}
 	for i, status := range statuses {
 		healthPath := status.Route.HealthPath

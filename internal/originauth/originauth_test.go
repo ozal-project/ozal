@@ -165,11 +165,12 @@ func serverCert(t *testing.T) tls.Certificate {
 }
 
 // startServer runs a TLS listener configured by ServerTLS and answers "ok" to
-// every connection whose handshake the policy lets through.
+// every connection whose handshake the policy lets through. It opts into the
+// ACME validation exemption, like the autocert HTTP-01/TLS-ALPN listener.
 func startServer(t *testing.T, roots *x509.CertPool, sink events.Sink) string {
 	t.Helper()
 	base := &tls.Config{Certificates: []tls.Certificate{serverCert(t)}}
-	listener, err := tls.Listen("tcp", "127.0.0.1:0", ServerTLS(base, roots, sink))
+	listener, err := tls.Listen("tcp", "127.0.0.1:0", ServerTLS(base, roots, sink, AllowACMEValidation()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,11 +246,12 @@ func TestServerTLSRequiresOurClientCertificate(t *testing.T) {
 	}
 }
 
-// ACME tls-alpn-01 validation connects without a client certificate: only that
-// exact exchange may skip the client-certificate policy.
+// ACME tls-alpn-01 validation connects without a client certificate: only the
+// exact exchange may skip the client-certificate policy, and only on a
+// listener that opted into the exemption.
 func TestServerTLSLetsACMEChallengesThrough(t *testing.T) {
 	roots := poolOf(t, newAuthority(t, "origin-pull-ca"))
-	cfg := ServerTLS(&tls.Config{}, roots, events.Discard)
+	cfg := ServerTLS(&tls.Config{}, roots, events.Discard, AllowACMEValidation())
 
 	acme, err := cfg.GetConfigForClient(&tls.ClientHelloInfo{SupportedProtos: []string{"acme-tls/1"}})
 	if err != nil || acme != nil {
@@ -264,6 +266,68 @@ func TestServerTLSLetsACMEChallengesThrough(t *testing.T) {
 		if strict != nil && strict.MinVersion < tls.VersionTLS12 {
 			t.Errorf("hello %v: MinVersion = %x, want at least TLS 1.2", protos, strict.MinVersion)
 		}
+	}
+}
+
+// Regression for DNS-01 mode: a listener that never answers an ACME
+// tls-alpn-01 validation must not exempt it. Without the fix the exact ACME
+// hello skipped the client-certificate policy and reached net/http.
+func TestServerTLSWithoutOptInRefusesACMEHello(t *testing.T) {
+	roots := poolOf(t, newAuthority(t, "origin-pull-ca"))
+	cfg := ServerTLS(&tls.Config{}, roots, events.Discard)
+
+	strict, err := cfg.GetConfigForClient(&tls.ClientHelloInfo{SupportedProtos: []string{"acme-tls/1"}})
+	if err != nil {
+		t.Fatalf("GetConfigForClient: %v", err)
+	}
+	if strict == nil || strict.ClientAuth != tls.RequestClientCert || strict.VerifyConnection == nil {
+		t.Fatal("an acme-tls/1 hello must be held to the client-certificate policy by default")
+	}
+	d := Decide(nil, roots, time.Now())
+	if d.Allowed {
+		t.Fatal("a connection without a client certificate must be refused")
+	}
+}
+
+// A real connection offering acme-tls/1 against a listener without the
+// opt-in must fail the handshake instead of reaching the handler. The server
+// answers "ok" only when its handshake policy accepted the connection.
+func TestServerTLSWithoutOptInRejectsRealACMEConnection(t *testing.T) {
+	roots := poolOf(t, newAuthority(t, "origin-pull-ca"))
+	base := &tls.Config{Certificates: []tls.Certificate{serverCert(t)}, NextProtos: []string{"acme-tls/1"}}
+	listener, err := tls.Listen("tcp", "127.0.0.1:0", ServerTLS(base, roots, events.Discard))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { listener.Close() })
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer conn.Close()
+				if err := conn.(*tls.Conn).Handshake(); err != nil {
+					return
+				}
+				_, _ = conn.Write([]byte("ok"))
+			}()
+		}
+	}()
+
+	client, err := tls.Dial("tcp", listener.Addr().String(), &tls.Config{
+		InsecureSkipVerify: true, //nolint:gosec // the test only observes the handshake outcome
+		NextProtos:         []string{"acme-tls/1"},
+	})
+	if err != nil {
+		return // the handshake failed outright: the door is closed
+	}
+	defer client.Close()
+	_ = client.SetDeadline(time.Now().Add(3 * time.Second))
+	buf := make([]byte, 2)
+	if _, err := client.Read(buf); err == nil {
+		t.Fatal("the acme-tls/1 connection without a client certificate was answered")
 	}
 }
 

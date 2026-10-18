@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"reflect"
 	"slices"
 	"sort"
 	"sync"
@@ -561,6 +562,7 @@ func sameServerConfig(a, b config.Config) bool {
 		a.TLS.CacheDir == b.TLS.CacheDir &&
 		a.TLS.Email == b.TLS.Email &&
 		a.TLS.OriginClientCAFile == b.TLS.OriginClientCAFile &&
+		reflect.DeepEqual(a.TLS.DNS01, b.TLS.DNS01) &&
 		slices.Equal(a.TLS.Domains, b.TLS.Domains)
 }
 

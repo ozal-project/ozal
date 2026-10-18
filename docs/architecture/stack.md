@@ -13,7 +13,7 @@ project.
 |---|---|---|
 | Language | Go (minimum `go 1.26`, recommended toolchain `go1.27.2`) | Single static binary, excellent `net/http` and `crypto/*`, the maintainer's chosen learning language |
 | HTTP, TLS, proxy | stdlib `net/http`, `crypto/tls`, `httputil.ReverseProxy` (migrate to `Rewrite`) | Mature and enough; post-quantum hybrid key exchange (X25519MLKEM768) on by default |
-| Public certificates | `golang.org/x/crypto/acme/autocert` today → **`caddyserver/certmagic` + `libdns/cloudflare`** for the origin certificate behind the Cloudflare proxy (`EDGE-007`, decided 2026-10-18) | autocert has no DNS-01. The origin sits behind a proxy and a restricted firewall, so HTTP-01/TLS-ALPN validation cannot reach it; DNS-01 needs no inbound connection and keeps a publicly trusted certificate (the site stays valid if the proxy is ever removed). CertMagic adds a sizeable transitive tree and a DNS-edit API token to guard; the alternative of writing DNS-01 on `x/crypto/acme` was rejected for renewal/storage risk in a security-critical path. Versions seen 2026-10-18: certmagic v0.25.6, libdns/cloudflare v0.2.2, libdns v1.1.1. |
+| Public certificates | `golang.org/x/crypto/acme/autocert` today → **own bounded manager on the existing `golang.org/x/crypto/acme` + Cloudflare DNS API via stdlib `net/http`** (`EDGE-007`, revised 2026-10-18) | DNS-01 validates without inbound challenge connections and preserves a publicly trusted origin certificate behind Cloudflare. Initial scope is one name, `preview.octaviosantacruz.com`, with zero new Go modules. Learning and dependency control justify owning the lifecycle only with explicit storage, cleanup, retry and renewal acceptance; see [lifecycle contract](#public-origin-certificate-contract). CertMagic is a fallback if maintaining this bounded implementation proves too costly. |
 | Upstream OIDC login | `coreos/go-oidc` + `golang.org/x/oauth2` | Already in use and well reviewed |
 | JOSE / JWT | `go-jose/go-jose/v4` | Already a dependency; reused for the OIDC provider |
 | Config | JSON with `DisallowUnknownFields` | Already in use; strict and dependency-free |
@@ -35,7 +35,7 @@ project.
 | Area | Options | Decide by |
 |---|---|---|
 | VPS provider | Hetzner CX23, reachable over WireGuard at 10.8.0.1 | Private loopback-only Switchboard/Portfolio staging installed (2026-10-17 America/Asuncion); public EDGE-001 remains gated. Builds and application databases stay in the homelab. [TUN-001](tunnel-local-spike.md) remains the owned-transport lab; Cloudflare Tunnel is optional. |
-| DNS provider for DNS-01 | Cloudflare DNS (already in use) | Deferred: only needed if Switchboard terminates TLS (`EDGE-002`) |
+| Wildcard DNS-01 scope | Cloudflare DNS is selected for single-host `EDGE-007`; decide wildcard ownership, concurrent TXT handling and manager suitability separately in `EDGE-002` | Before wildcard public deployment; not part of `EDGE-007` |
 | Email for one-time codes | SMTP relay, Resend, Amazon SES | Q1 (blocks `ID-002`) |
 | Private CA / ACME server | Own implementation on `crypto/x509` (preferred, learning) with Pebble as reference | Q2 |
 | Policy language | Own JSON policies, Cedar (`cedar-go`), CEL | Q2 |
@@ -48,6 +48,68 @@ project.
 | Postgres adapter | Only if Switchboard runs on two or more edges (shared state, HA) | When multi-edge is planned |
 | Go → TypeScript types for the admin API | `tygo` or hand-written | Q2 (with `UI-002`) |
 | Releases | GoReleaser, checksums, SBOM, cosign | Q1 |
+
+## Public origin certificate contract
+
+This is the accepted design for `EDGE-007`. The DNS-01 manager described here
+is implemented in `internal/certs` (uncommitted working tree, 2026-10-18) with
+simulated-ACME/DNS/storage tests; the autocert HTTP-01 path remains for
+listeners without `tls.dns01`. Real staging and production issuance still need
+an operator-supplied DNS token and are not claimed as verified. The
+[renewal exercise](../learning/EDGE-007-renewal-exercise.md)
+prepares its first pure decision; the full lifecycle is covered by the
+package's tests, not by the exercise alone.
+
+- **Bounded ownership:** one configured hostname and Cloudflare DNS, using the
+  existing `x/crypto/acme` protocol client and a small `net/http` adapter. Do not
+  write ACME/JWS or cryptographic primitives. Wildcards, multi-edge coordination,
+  additional DNS providers and a general certificate platform are outside this
+  task; `EDGE-002` retains the future wildcard decision.
+- **Consumer port:** the listener declares the minimum interface,
+  `GetCertificate(*tls.ClientHelloInfo) (*tls.Certificate, error)`, and passes it
+  to `tls.Config.GetCertificate`. `cmd/switchboard` wires the implementation;
+  storage, DNS, scheduling and issuance stay out of the listener. A later
+  implementation can replace the manager without changing this TLS contract.
+- **Account and storage:** configure the ACME directory and registration email;
+  persist the ACME account identity/key separately from the certificate key.
+  Use private permissions, validate hostname, chain, lifetime and key matching
+  against the system roots (or an explicit `certificate_roots_file` bundle for
+  isolated staging),
+  then durably store a complete certificate/key generation before one atomic
+  activation. Recover the last complete generation after a crash; never pair
+  files from different generations. Keep staging and production state separate.
+  Token references use existing `file:`/`env:` resolution and a token scoped to
+  the required zone; never log or persist resolved credentials in config.
+- **DNS ownership:** save the exact record ID returned by Cloudflare along with
+  its zone, name and value, and delete only the record owned by that issuance.
+  Use bounded propagation polling and cancellable network requests before
+  requesting validation. Cleanup also runs after issuance errors, with a fresh
+  bounded cleanup context when the parent was cancelled. Persist cleanup intent
+  and retry owned orphan cleanup on recovery; an ambiguous create timeout must
+  be reconciled conservatively, never by deleting every TXT at the name or
+  assuming that an identical value proves ownership. Test that unrelated TXT
+  records survive. A local successful DNS lookup is not proof that all ACME
+  validation vantage points have observed the value.
+- **Renewal ownership:** inject time into the pure renewal decision; start with
+  the last third of the actual certificate lifetime, independent of its length.
+  Serialize issuance/renewal into one active attempt in one process, reject a
+  second writer to the same state, and cancel/join workers on shutdown. Use
+  bounded exponential backoff with jitter and honor server rate-limit retry
+  times; do not spin on failed authorizations. Retain the old valid certificate
+  after renewal failure. With no valid certificate, TLS must fail closed and
+  readiness must not report success.
+- **Visibility:** emit `cert.renewed` and `cert.renewal_failed` with safe hostname,
+  expiry and error-code metadata, and show expiry, last renewal outcome and next
+  attempt in the trust console. Never include keys, tokens or challenge values.
+- **Acceptance order:** fixed-clock core tests and simulated ACME/DNS/storage
+  failures first; then Let's Encrypt staging through a direct test path using
+  explicit staging-root trust and a valid origin client certificate where
+  required. Never disable TLS verification or weaken Cloudflare Full (strict)
+  to test staging. Production issuance and Cloudflare end-to-end verification
+  follow separately, respecting the existing exposure gates. Prove renewal,
+  failure recovery and restart with persisted state, not only first issuance.
+  DNS-01 mode needs neither port 80 nor an ACME TLS-ALPN exemption; remove that
+  exemption for this mode while preserving `originauth` checks.
 
 ## Private pilot renewal
 

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"flag"
 	"fmt"
@@ -12,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -19,6 +22,7 @@ import (
 
 	"github.com/octaviosantacruz/switchboard/internal/admin"
 	"github.com/octaviosantacruz/switchboard/internal/auth"
+	"github.com/octaviosantacruz/switchboard/internal/certs"
 	"github.com/octaviosantacruz/switchboard/internal/config"
 	"github.com/octaviosantacruz/switchboard/internal/events"
 	"github.com/octaviosantacruz/switchboard/internal/originauth"
@@ -89,6 +93,18 @@ func main() {
 	}
 	cfg := manager.Config()
 
+	// EDGE-007: with tls.dns01 configured, Switchboard owns the origin
+	// certificate lifecycle. The manager holds the single-writer lock on its
+	// state directory until shutdown.
+	var certificateManager *certs.Manager
+	closeCertificates := func() {}
+	if cfg.TLS.Enabled && cfg.TLS.DNS01 != nil {
+		certificateManager, closeCertificates, err = startCertificateManager(ctx, &cfg, sink)
+		if err != nil {
+			log.Fatalf("certificate manager: %v", err)
+		}
+	}
+
 	hup := make(chan os.Signal, 1)
 	signal.Notify(hup, syscall.SIGHUP)
 	defer signal.Stop(hup)
@@ -112,13 +128,13 @@ func main() {
 		log.Printf("  %s -> %s", r.Host, r.Destination())
 	}
 
-	adminServer, err := startAdmin(&cfg, manager, sink, broker)
+	adminServer, err := startAdmin(&cfg, manager, sink, broker, certificateStatus(certificateManager))
 	if err != nil {
 		log.Fatalf("admin listener: %v", err)
 	}
 	servers := []*http.Server{adminServer}
 	if cfg.TLS.Enabled {
-		tlsServers, err := startTLS(&cfg, manager, sink)
+		tlsServers, err := startTLS(&cfg, manager, sink, certificateManager)
 		if err != nil {
 			log.Fatalf("public listener: %v", err)
 		}
@@ -141,6 +157,7 @@ func main() {
 			log.Printf("shutdown %s: %v", s.Addr, err)
 		}
 	}
+	closeCertificates()
 }
 
 // Timeouts guard the listener itself against slow-client attacks
@@ -154,14 +171,14 @@ const (
 	idleTimeout       = 120 * time.Second
 )
 
-func startAdmin(cfg *config.Config, manager *routemanager.Manager, sink events.Sink, broker *events.Broker) (*http.Server, error) {
+func startAdmin(cfg *config.Config, manager *routemanager.Manager, sink events.Sink, broker *events.Broker, certificate func() admin.CertificateStatus) (*http.Server, error) {
 	listener, err := net.Listen("tcp", cfg.Admin.Listen)
 	if err != nil {
 		return nil, err
 	}
 	server := &http.Server{
 		Addr:              cfg.Admin.Listen,
-		Handler:           admin.New(manager, sink, admin.WithEvents(broker)),
+		Handler:           admin.New(manager, sink, admin.WithEvents(broker), admin.WithCertificateStatus(certificate)),
 		ReadHeaderTimeout: readHeaderTimeout,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
@@ -201,11 +218,147 @@ func startPlain(cfg *config.Config, handler http.Handler) (*http.Server, error) 
 	return server, nil
 }
 
+// certificateProvider is the minimum the public listener needs from the
+// certificate manager: one method, declared here by the consumer. The
+// manager satisfies it, and a future implementation can replace it without
+// touching this file's TLS contract.
+type certificateProvider interface {
+	GetCertificate(*tls.ClientHelloInfo) (*tls.Certificate, error)
+}
+
+// certificateStatus projects the manager state into the console's shape.
+// A nil manager (autocert mode) omits the certificate panel.
+func certificateStatus(manager *certs.Manager) func() admin.CertificateStatus {
+	if manager == nil {
+		return nil
+	}
+	return func() admin.CertificateStatus {
+		status := manager.Status()
+		return admin.CertificateStatus{
+			Host:        status.Host,
+			Mode:        "ACME DNS-01",
+			Valid:       status.Valid,
+			NotAfter:    formatTime(status.NotAfter),
+			LastOutcome: status.LastOutcome,
+			LastError:   status.LastError,
+			LastAttempt: formatTime(status.LastAttempt),
+			NextAttempt: formatTime(status.NextAttempt),
+			Pending:     status.PendingIntents,
+		}
+	}
+}
+
+func formatTime(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
+}
+
+// startCertificateManager builds the bounded DNS-01 stack and starts its
+// renewal loop. The file store holds an exclusive lock on the state
+// directory, so a second process pointed at the same state fails here
+// instead of racing on the account, the generations or the DNS intents.
+func startCertificateManager(ctx context.Context, cfg *config.Config, sink events.Sink) (*certs.Manager, func(), error) {
+	token, err := config.ResolveSecret(cfg.TLS.DNS01.DNSToken)
+	if err != nil {
+		return nil, nil, fmt.Errorf("tls.dns01.dns_token: %w", err)
+	}
+	state, err := certs.OpenFileStore(cfg.TLS.DNS01.StateDir, cfg.TLS.DNS01.DirectoryURL)
+	if err != nil {
+		return nil, nil, err
+	}
+	closeState := func() { state.Close() }
+	dnsProvider, err := certs.NewCloudflareClient(certs.CloudflareConfig{Token: token})
+	if err != nil {
+		closeState()
+		return nil, nil, err
+	}
+	issuer, err := certs.NewACMEIssuer(certs.ACMEConfig{
+		DirectoryURL: cfg.TLS.DNS01.DirectoryURL,
+		Email:        cfg.TLS.Email,
+		DNS:          dnsProvider,
+	}, state)
+	if err != nil {
+		closeState()
+		return nil, nil, err
+	}
+	var roots *x509.CertPool
+	if cfg.TLS.DNS01.CertificateRootsFile != "" {
+		bundle, err := os.ReadFile(cfg.TLS.DNS01.CertificateRootsFile)
+		if err != nil {
+			closeState()
+			return nil, nil, fmt.Errorf("read tls.dns01.certificate_roots_file: %w", err)
+		}
+		roots = x509.NewCertPool()
+		if !roots.AppendCertsFromPEM(bundle) {
+			closeState()
+			return nil, nil, errors.New("tls.dns01.certificate_roots_file contains no certificate")
+		}
+	}
+	manager, err := certs.NewManager(certs.ManagerConfig{
+		RootCAs: roots,
+		Host:    cfg.TLS.Domains[0],
+		Sink:    sink,
+	}, state, issuer)
+	if err != nil {
+		closeState()
+		return nil, nil, err
+	}
+	return manager, runCertificateManager(ctx, manager, closeState), nil
+}
+
+// startTLS serves public HTTPS. The autocert path also binds :80 for HTTP-01
+// challenges; the DNS-01 path binds only :443, because validation never
+// reaches this host.
+func startTLS(cfg *config.Config, handler http.Handler, sink events.Sink, certificateManager *certs.Manager) ([]*http.Server, error) {
+	if cfg.TLS.DNS01 != nil {
+		return startManagedTLS(cfg, handler, sink, certificateManager)
+	}
+	return startAutocertTLS(cfg, handler, sink)
+}
+
+// startManagedTLS serves :443 with the configured DNS-01 manager. The client
+// certificate policy is applied without the ACME ALPN exemption: this
+// listener answers no tls-alpn-01 validation, so an acme-tls/1 connection
+// without a client certificate is refused like any other.
+func startManagedTLS(cfg *config.Config, handler http.Handler, sink events.Sink, certificateManager *certs.Manager) ([]*http.Server, error) {
+	if certificateManager == nil {
+		return nil, errors.New("dns-01 listener requires the certificate manager")
+	}
+	tlsConfig, handler, err := managedTLSConfig(cfg, handler, sink, certificateManager)
+	if err != nil {
+		return nil, err
+	}
+
+	listener, err := net.Listen("tcp", ":443")
+	if err != nil {
+		return nil, err
+	}
+	server := &http.Server{
+		Addr:              ":443",
+		Handler:           handler,
+		TLSConfig:         tlsConfig,
+		ReadHeaderTimeout: readHeaderTimeout,
+		IdleTimeout:       idleTimeout,
+	}
+	go func() {
+		log.Printf("switchboard listening on :443 (HTTPS, ACME DNS-01 for %s)", cfg.TLS.Domains[0])
+		if err := server.ServeTLS(listener, "", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("public listener :443: %v", err)
+		}
+	}()
+	if status := certificateManager.Status(); !status.Valid {
+		log.Printf("origin certificate not available yet: TLS handshakes fail closed until issuance succeeds")
+	}
+	return []*http.Server{server}, nil
+}
+
 // startAutocertTLS is the HTTP-01 path: HTTPS on :443 with autocert, plus a
 // plain HTTP server on :80 that answers challenges and redirects everything
 // else. Both ports bind synchronously: an occupied port must fail startup,
 // not a goroutine.
-func startTLS(cfg *config.Config, handler http.Handler, sink events.Sink) ([]*http.Server, error) {
+func startAutocertTLS(cfg *config.Config, handler http.Handler, sink events.Sink) ([]*http.Server, error) {
 	manager := &autocert.Manager{
 		Cache:      autocert.DirCache(cfg.TLS.CacheDir),
 		Prompt:     autocert.AcceptTOS,
@@ -225,7 +378,10 @@ func startTLS(cfg *config.Config, handler http.Handler, sink events.Sink) ([]*ht
 		if err != nil {
 			return nil, fmt.Errorf("tls.origin_client_ca_file: %w", err)
 		}
-		tlsConfig = originauth.ServerTLS(tlsConfig, roots, sink)
+		// autocert may answer a tls-alpn-01 challenge, which cannot present
+		// a client certificate: opt into the exact exemption here, never in
+		// the DNS-01 path.
+		tlsConfig = originauth.ServerTLS(tlsConfig, roots, sink, originauth.AllowACMEValidation())
 		handler = originauth.RequireVerified(handler)
 	}
 
@@ -270,4 +426,40 @@ func startTLS(cfg *config.Config, handler http.Handler, sink events.Sink) ([]*ht
 	}()
 
 	return []*http.Server{httpsServer, challengeServer}, nil
+}
+
+// managedTLSConfig applies the origin trust boundary without an ALPN exception.
+func managedTLSConfig(cfg *config.Config, handler http.Handler, sink events.Sink, provider certificateProvider) (*tls.Config, http.Handler, error) {
+	tlsConfig := &tls.Config{
+		GetCertificate: provider.GetCertificate,
+		MinVersion:     tls.VersionTLS12,
+	}
+	if cfg.TLS.OriginClientCAFile != "" {
+		// Fail closed at startup: an unreadable or empty bundle must stop the
+		// listener, never leave it open.
+		bundle, err := os.ReadFile(cfg.TLS.OriginClientCAFile)
+		if err != nil {
+			return nil, nil, fmt.Errorf("read tls.origin_client_ca_file: %w", err)
+		}
+		roots, err := originauth.LoadPool(bundle)
+		if err != nil {
+			return nil, nil, fmt.Errorf("tls.origin_client_ca_file: %w", err)
+		}
+		tlsConfig = originauth.ServerTLS(tlsConfig, roots, sink)
+		handler = originauth.RequireVerified(handler)
+	}
+
+	return tlsConfig, handler, nil
+}
+
+type certificateWorker interface{ Run(context.Context) }
+
+// runCertificateManager owns cancellation and waits for DNS cleanup before
+// releasing the single-writer storage lock. Calling close twice is safe.
+func runCertificateManager(ctx context.Context, manager certificateWorker, release func()) func() {
+	workerCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() { defer close(done); manager.Run(workerCtx) }()
+	var once sync.Once
+	return func() { once.Do(func() { cancel(); <-done; release() }) }
 }

@@ -313,6 +313,37 @@ claim falls back to the peer instead of failing the request. Refactoring the
 Trust stage into one `trustStage(resolve)` function removed the duplicated
 strip-then-store logic: the difference between the two stages is one function.
 
+## 2026-10-18 — owning a certificate lifecycle (EDGE-007)
+
+`x/crypto/acme` is a protocol client, not a manager: it signs JWS, fetches
+nonces and polls authorizations, but choosing when to renew, where to store the
+result and what to do after a crash is the caller's job. The package keeps
+those jobs separate on purpose. `RenewalDue` is six lines of pure arithmetic
+(the boundary is `notAfter - lifetime/3`) and takes `now` as an argument, so
+every test runs without sleeping. The manager owns exactly one goroutine that
+may attempt issuance (`atomic.Bool.CompareAndSwap`), keeps the previous
+generation in service until a validated replacement is durably on disk, and
+fails closed when there is none: a handshake without a valid certificate is
+rejected instead of answered.
+
+Two details made the difference between "works in tests" and "safe on a box".
+First, a crash can interrupt anything, so the file store writes `cert.pem`,
+`key.pem`, fsyncs them, and only then writes a completion marker; `Load` scans
+for the newest directory that has the marker, which makes an interrupted save
+invisible and never pairs a certificate with another generation's key. The
+second is DNS cleanup: the TXT record is deleted by the exact record ID the API
+returned, the intent to delete it is persisted *before* the create call, and a
+create with an ambiguous outcome (timeout, 5xx) is recorded but never guessed
+at — recovery reports it instead of deleting by name. An unrelated
+`_acme-challenge` record survives every path, which the simulated-provider
+tests assert directly.
+
+The ACME client also taught a subtle lesson: it retries 429 responses itself,
+honoring `Retry-After` by sleeping inside the call, which in a five-minute
+attempt looks like a hang. Setting `Client.RetryBackoff` to stop on rate limits
+returns the error to the manager, which schedules the retry — the component
+that owns time should own waiting.
+
 ## 2026-10-18 — a rate limiter that can say when it is full (SHD-001)
 
 A token bucket answers yes or no; the caller that wants a `Retry-After`

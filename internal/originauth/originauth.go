@@ -36,6 +36,22 @@ const OriginDenied events.Type = "origin.denied"
 // acmeALPN is the protocol of ACME tls-alpn-01 validation.
 const acmeALPN = "acme-tls/1"
 
+// Option adjusts the client-certificate policy.
+type Option func(*options)
+
+type options struct {
+	allowACMEValidation bool
+}
+
+// AllowACMEValidation keeps the tls-alpn-01 exemption: the exact ACME
+// validation exchange skips the client-certificate policy because it cannot
+// present one. It belongs to listeners that may answer autocert's TLS-ALPN
+// challenge. A DNS-01 listener never receives such a connection and must
+// NOT set it — there the exemption is an open door.
+func AllowACMEValidation() Option {
+	return func(o *options) { o.allowACMEValidation = true }
+}
+
 // Decision is the outcome of checking one client certificate chain.
 type Decision struct {
 	Allowed bool
@@ -87,19 +103,25 @@ func LoadPool(pemData []byte) (*x509.CertPool, error) {
 }
 
 // ServerTLS returns base with the client-certificate policy applied to every
-// handshake except ACME tls-alpn-01 validation, which cannot present one.
-// Denials are emitted to sink. Go verifies nothing itself here (RequestClientCert):
-// VerifyConnection owns the decision so each refusal gets a code and an event.
-func ServerTLS(base *tls.Config, roots *x509.CertPool, sink events.Sink) *tls.Config {
+// handshake. Denials are emitted to sink. Go verifies nothing itself here
+// (RequestClientCert): VerifyConnection owns the decision so each refusal
+// gets a code and an event. The policy is strict by default; only
+// AllowACMEValidation re-opens the exact tls-alpn-01 validation exchange.
+func ServerTLS(base *tls.Config, roots *x509.CertPool, sink events.Sink, opts ...Option) *tls.Config {
 	if sink == nil {
 		sink = events.Discard
 	}
+	var cfgOpts options
+	for _, opt := range opts {
+		opt(&cfgOpts)
+	}
 	cfg := base.Clone()
 	cfg.GetConfigForClient = func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
-		// Only the exact validation exchange skips the policy; a hello that
-		// also offers HTTP does not. net/http would serve such a connection,
-		// so RequireVerified closes that door at the request layer.
-		if slices.Equal(hello.SupportedProtos, []string{acmeALPN}) {
+		// Only the exact validation exchange skips the policy, and only
+		// when the listener opted in; a hello that also offers HTTP does
+		// not. net/http would serve such a connection, so RequireVerified
+		// closes that door at the request layer.
+		if cfgOpts.allowACMEValidation && slices.Equal(hello.SupportedProtos, []string{acmeALPN}) {
 			return nil, nil // use the unmodified base configuration
 		}
 		remote := ""

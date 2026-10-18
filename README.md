@@ -308,7 +308,60 @@ Authenticated Origin Pulls with your zone's own certificate) instead of
 trusting source IP ranges. Every refused connection emits an `origin.denied`
 event with a code (`no_certificate`, `untrusted`, `expired`, `invalid`). An
 unreadable or empty bundle stops startup, and changing the file needs a
-restart. ACME certificate issuance keeps working.
+restart. ACME certificate issuance keeps working — on the autocert path the
+tls-alpn-01 validation exchange stays exempt (it cannot present a client
+certificate); on the DNS-01 path below that exemption is gone on purpose.
+
+### Origin certificate by DNS-01 (`tls.dns01`)
+
+Behind a proxy with a restricted firewall nothing can reach ports 80/443 to
+validate a certificate, so Switchboard can issue its own origin certificate
+with the ACME DNS-01 challenge instead: it writes a `_acme-challenge` TXT
+record through the Cloudflare API, waits for the value to be visible, lets the
+CA validate, and removes exactly the record it created (by its API ID, on
+success and on every failure path, with a persisted intent so a crash does not
+lose the cleanup). No port 80, no inbound connection.
+
+```json
+{
+  "tls": {
+    "enabled": true,
+    "domains": ["preview.example.com"],
+    "email": "you@example.com",
+    "origin_client_ca_file": "/etc/switchboard/origin-ca.pem",
+    "dns01": {
+      "state_dir": "/var/lib/switchboard/origin-cert",
+      "directory_url": "https://acme-v02.api.letsencrypt.org/directory",
+      "dns_token": "file:/etc/switchboard/cloudflare-token"
+    }
+  }
+}
+```
+
+- One hostname, one Cloudflare zone, zone-scoped API token (`dns_token` is a
+  secret reference, `file:` or `env:`; the resolved value is never logged).
+- `state_dir` holds the ACME account (separate from every certificate key),
+  the complete certificate generations and the DNS cleanup intents, all with
+  owner-only permissions. It is claimed for one ACME directory forever, so
+  staging and production can never mix — use a different directory for each.
+- Renewal starts in the last third of the certificate's real lifetime, retries
+  with bounded jittered backoff, honors the CA's rate-limit `Retry-After`, and
+  keeps serving the previous certificate when renewal fails. With no valid
+  certificate the listener refuses handshakes (fail closed); `/_/status` shows
+  expiry, last outcome and next attempt.
+- `cert.renewed` and `cert.renewal_failed` events carry the hostname, a stable
+  code and the next attempt — never keys, tokens or challenge values.
+- Certificate chains are verified against the system roots before activation.
+  For a direct staging test, set `tls.dns01.certificate_roots_file` to an absolute
+  path containing the explicitly trusted staging CA roots; this replaces the
+  system pool for certificate validation. Use a separate state directory and
+  remove that setting for production. This trust is separate from
+  `origin_client_ca_file`, which authenticates inbound clients.
+- A second process pointed at the same `state_dir` is refused at startup.
+  Shutdown cancels and joins the renewal worker, including bounded DNS cleanup,
+  before releasing the state lock.
+- Changing DNS-01 or Telegram settings requires a restart; reload rejects the
+  change and keeps the installed snapshot.
 
 ### Slow upstreams
 

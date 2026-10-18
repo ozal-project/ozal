@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -56,6 +57,21 @@ type TLS struct {
 	// issued by it (Authenticated Origin Pulls with the zone's own
 	// certificate). Changing it requires a restart.
 	OriginClientCAFile string `json:"origin_client_ca_file,omitempty"`
+	// DNS01 switches the public listener to Switchboard's own bounded ACME
+	// DNS-01 manager (EDGE-007): no port 80 and no inbound validation, one
+	// hostname, Cloudflare DNS. Nil keeps the autocert HTTP-01 path.
+	DNS01 *DNS01 `json:"dns01,omitempty"`
+}
+
+// DNS01 configures the own certificate manager. DNSToken is a secret
+// reference (file: or env:) for a zone-scoped API token; the resolved value
+// never reaches config, logs or events.
+type DNS01 struct {
+	// CertificateRootsFile optionally supplies explicit roots for staging certificates.
+	CertificateRootsFile string `json:"certificate_roots_file,omitempty"`
+	StateDir             string `json:"state_dir"`
+	DirectoryURL         string `json:"directory_url"`
+	DNSToken             string `json:"dns_token"`
 }
 
 type Auth struct {
@@ -244,11 +260,19 @@ func Validate(cfg Config) (*Config, error) {
 		if len(cfg.TLS.Domains) == 0 {
 			return nil, fmt.Errorf("config: tls.enabled requires at least one domain")
 		}
-		if cfg.TLS.CacheDir == "" {
-			return nil, fmt.Errorf("config: tls.enabled requires cache_dir")
+		if cfg.TLS.DNS01 == nil {
+			if cfg.TLS.CacheDir == "" {
+				return nil, fmt.Errorf("config: tls.enabled requires cache_dir")
+			}
+		} else {
+			if err := normalizeDNS01(&cfg.TLS); err != nil {
+				return nil, err
+			}
 		}
 	} else if cfg.TLS.OriginClientCAFile != "" {
 		return nil, fmt.Errorf("config: tls.origin_client_ca_file requires tls.enabled")
+	} else if cfg.TLS.DNS01 != nil {
+		return nil, fmt.Errorf("config: tls.dns01 requires tls.enabled")
 	}
 
 	if err := ValidateSecretReference("admin.token", cfg.Admin.Token); err != nil {
@@ -322,6 +346,53 @@ func Validate(cfg Config) (*Config, error) {
 	return &cfg, nil
 }
 
+// normalizeDNS01 validates the own-manager TLS configuration and normalizes
+// the single hostname it serves. The scope is deliberately one hostname and
+// one state directory: staging and production are separated by pointing the
+// directory elsewhere, not by sharing one registration.
+func normalizeDNS01(tls *TLS) error {
+	if len(tls.Domains) != 1 {
+		return fmt.Errorf("config: tls.dns01 supports exactly one domain today, got %d", len(tls.Domains))
+	}
+	host, err := NormalizeHost(tls.Domains[0])
+	if err != nil || strings.Contains(host, ":") {
+		return fmt.Errorf("config: tls.domains[0] %q is not a plain hostname", tls.Domains[0])
+	}
+	tls.Domains[0] = host
+
+	dns01 := tls.DNS01
+	if dns01.StateDir == "" {
+		return fmt.Errorf("config: tls.dns01 requires state_dir")
+	}
+	if !filepath.IsAbs(dns01.StateDir) {
+		return fmt.Errorf("config: tls.dns01 state_dir %q must be an absolute path", dns01.StateDir)
+	}
+	dns01.StateDir = filepath.Clean(dns01.StateDir)
+	if dns01.CertificateRootsFile != "" {
+		if !filepath.IsAbs(dns01.CertificateRootsFile) {
+			return fmt.Errorf("config: tls.dns01 certificate_roots_file must be an absolute path")
+		}
+		dns01.CertificateRootsFile = filepath.Clean(dns01.CertificateRootsFile)
+	}
+	if tls.Email == "" {
+		return fmt.Errorf("config: tls.dns01 requires tls.email for the ACME account")
+	}
+	if dns01.DirectoryURL == "" {
+		return fmt.Errorf("config: tls.dns01 requires directory_url")
+	}
+	parsed, err := url.Parse(dns01.DirectoryURL)
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+		return fmt.Errorf("config: tls.dns01 directory_url %q must be an absolute https URL", dns01.DirectoryURL)
+	}
+	if strings.TrimSpace(dns01.DNSToken) == "" {
+		return fmt.Errorf("config: tls.dns01 requires dns_token")
+	}
+	if err := ValidateSecretReference("tls.dns01.dns_token", dns01.DNSToken); err != nil {
+		return fmt.Errorf("config: %w", err)
+	}
+	return nil
+}
+
 func hostOf(rawURL string) (string, error) {
 	u, err := ParseTarget(rawURL)
 	if err != nil {
@@ -338,6 +409,10 @@ func hostOf(rawURL string) (string, error) {
 func Clone(source Config) Config {
 	clone := source
 	clone.TLS.Domains = slices.Clone(source.TLS.Domains)
+	if source.TLS.DNS01 != nil {
+		dns01 := *source.TLS.DNS01
+		clone.TLS.DNS01 = &dns01
+	}
 	clone.TrustedProxies = slices.Clone(source.TrustedProxies)
 	if source.RateLimit != nil {
 		limit := *source.RateLimit
