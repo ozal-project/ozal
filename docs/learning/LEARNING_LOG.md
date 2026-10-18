@@ -7,6 +7,12 @@ Format: `YYYY-MM-DD · ID · topic — what clicked (link to code)`
 
 ## v0.1 Edge
 
+- 2026-10-18 · SHD-002 · header policy and log safety — HSTS only means
+  something over TLS, so it is set conditionally; baseline security headers go
+  before the host check so even a rejected 421 carries them. Same principle
+  for logs: a denial anyone can trigger must aggregate, or the log becomes the
+  attack surface ([server.go](../../internal/admin/server.go),
+  [originauth.go](../../internal/originauth/originauth.go)).
 - 2026-10-17 · REL-002 · fuzzing invariants — a fuzz target is only useful
   when it asserts a property, not just "does not panic": round-trip,
   idempotence and allowlist membership turn random bytes into security

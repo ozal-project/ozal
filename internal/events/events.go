@@ -35,6 +35,9 @@ type Event struct {
 	Reason     string
 	Error      string
 	RemoteAddr string
+	// Count, when > 0, summarises repeated identical events that were
+	// suppressed inside an aggregation window (see originauth denials).
+	Count int
 }
 
 // Sink receives events. Emit must not block: callers are on the request path
@@ -59,7 +62,7 @@ func (s SlogSink) Emit(e Event) {
 	if s.Logger == nil {
 		return
 	}
-	attrs := make([]slog.Attr, 0, 6)
+	attrs := make([]slog.Attr, 0, 7)
 	for _, field := range []struct{ key, value string }{
 		{"actor", e.Actor},
 		{"host", e.Host},
@@ -71,6 +74,9 @@ func (s SlogSink) Emit(e Event) {
 		if field.value != "" {
 			attrs = append(attrs, slog.String(field.key, field.value))
 		}
+	}
+	if e.Count > 0 {
+		attrs = append(attrs, slog.Int("count", e.Count))
 	}
 	s.Logger.LogAttrs(context.Background(), slog.LevelInfo, string(e.Type), attrs...)
 }

@@ -12,7 +12,7 @@ func TestSlogSinkEmitsOneJSONRecordPerEvent(t *testing.T) {
 	sink := SlogSink{Logger: slog.New(slog.NewJSONHandler(&buf, nil))}
 
 	sink.Emit(Event{Type: AccessDenied, Actor: "user-1", Host: "app.localhost", Code: "domain_not_allowed", Reason: "email domain"})
-	sink.Emit(Event{Type: LoginSucceeded, Actor: "user-1", Host: "app.localhost"})
+	sink.Emit(Event{Type: LoginSucceeded, Actor: "user-1", Host: "app.localhost", Count: 3})
 
 	lines := bytes.Split(bytes.TrimSpace(buf.Bytes()), []byte("\n"))
 	if len(lines) != 2 {
@@ -27,6 +27,16 @@ func TestSlogSinkEmitsOneJSONRecordPerEvent(t *testing.T) {
 	}
 	if _, ok := first["time"]; !ok {
 		t.Fatal("record has no time field")
+	}
+	if _, ok := first["count"]; ok {
+		t.Fatalf("record without suppressed events carries count: %v", first)
+	}
+	var second map[string]any
+	if err := json.Unmarshal(lines[1], &second); err != nil {
+		t.Fatalf("second record is not JSON: %v", err)
+	}
+	if second["count"] != float64(3) {
+		t.Fatalf("second record count = %v, want 3", second["count"])
 	}
 }
 

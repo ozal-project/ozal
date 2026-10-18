@@ -69,6 +69,8 @@ func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	setSecurityHeaders(w, r)
+
 	// DNS rebinding makes a browser connect to 127.0.0.1 while sending an
 	// attacker-controlled Host header; the admin plane only answers names of
 	// the local machine.
@@ -77,6 +79,21 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.mux.ServeHTTP(w, r)
+}
+
+// setSecurityHeaders applies the baseline policy to every admin response.
+// Pages override the CSP with their own richer policy; HSTS only goes out on
+// TLS connections (the loopback admin listener is plain HTTP today).
+func setSecurityHeaders(w http.ResponseWriter, r *http.Request) {
+	hdr := w.Header()
+	hdr.Set("Content-Security-Policy", "default-src 'none'; base-uri 'none'; frame-ancestors 'none'")
+	hdr.Set("X-Content-Type-Options", "nosniff")
+	hdr.Set("X-Frame-Options", "DENY")
+	hdr.Set("Referrer-Policy", "no-referrer")
+	hdr.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+	if r.TLS != nil {
+		hdr.Set("Strict-Transport-Security", "max-age=31536000")
+	}
 }
 
 // loopbackHost reports whether an admin Host header names only the local

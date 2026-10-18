@@ -125,6 +125,44 @@ func TestAdminListenerRejectsNonLoopbackHost(t *testing.T) {
 	}
 }
 
+func TestAdminSecurityHeaders(t *testing.T) {
+	manager := &fakeManager{cfg: config.Config{Admin: config.Admin{Token: "secret"}}}
+	handler := New(manager, nil)
+
+	rec := request(handler, http.MethodGet, "/_/status", "", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	for header, want := range map[string]string{
+		"X-Content-Type-Options": "nosniff",
+		"X-Frame-Options":        "DENY",
+		"Referrer-Policy":        "no-referrer",
+	} {
+		if got := rec.Header().Get(header); got != want {
+			t.Errorf("%s = %q, want %q", header, got, want)
+		}
+	}
+	if csp := rec.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "frame-ancestors 'none'") {
+		t.Errorf("CSP = %q, want frame-ancestors 'none'", csp)
+	}
+	if hsts := rec.Header().Get("Strict-Transport-Security"); hsts != "" {
+		t.Errorf("HSTS = %q, want none on plain HTTP", hsts)
+	}
+
+	tlsReq := httptest.NewRequest(http.MethodGet, "https://127.0.0.1:9090/_/status", nil)
+	tlsReq.Host = "127.0.0.1:9090"
+	tlsRec := httptest.NewRecorder()
+	handler.ServeHTTP(tlsRec, tlsReq)
+	if hsts := tlsRec.Header().Get("Strict-Transport-Security"); hsts == "" {
+		t.Error("missing HSTS on a TLS admin response")
+	}
+
+	rebind := requestWithHost(handler, "evil.example", http.MethodGet, "/_/status", "", "")
+	if rebind.Code != http.StatusMisdirectedRequest || rebind.Header().Get("X-Frame-Options") != "DENY" {
+		t.Fatalf("rebound request = %d headers %v, want 421 with security headers", rebind.Code, rebind.Header())
+	}
+}
+
 func TestLoopbackHost(t *testing.T) {
 	cases := []struct {
 		host string

@@ -368,6 +368,13 @@ site was changed. Credentials and restart-safe deployment remain in `EDGE-001`.
 | `3713c5b` | `REL-002`: fuzz targets for `config.Parse` (round-trip invariant), `NormalizeHost` (idempotent), `safeReturnTo` (only allowed absolute HTTP(S) hosts, fixed point) and `stripCookie` (target never survives, idempotent). Seed corpora run with `go test`; `scripts/verify.sh` adds a 1s fuzz pass per target. |
 | `4659f5a` | `REL-001`: `auth.client_secret` and `admin.token` come from `env:`/`file:` references (inline values documented as local-only). Tests cover both sources, an unresolved reference (startup error / `503` on mutations) and that control-plane writes never persist the resolved value. |
 
+## Shield and origin events (2026-10-18)
+
+| Commit | Result |
+|---|---|
+| _uncommitted_ | `SHD-002`: every admin response carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy` and a baseline CSP; pages keep their richer CSP (`frame-ancestors 'none'`). HSTS (`max-age=31536000`) is added only on TLS responses, and the 421 rebinding rejection carries the headers too. Tests assert each header and the HTTP/TLS difference. |
+| _uncommitted_ | `EDGE-006` residual closed: `origin.denied` events aggregate per minute (`denialEmitter`), emitting one event per window with the count of suppressed denials, so an unauthenticated scan cannot flood the log. Fixed-clock test covers first event, suppression and the summary count. |
+
 ## SQLite store (2026-10-17)
 
 | Commit | Result |

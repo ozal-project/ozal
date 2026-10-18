@@ -14,6 +14,7 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/octaviosantacruz/switchboard/internal/events"
@@ -102,15 +103,54 @@ func LoadPool(pemData []byte) (*x509.CertPool, error) {
 	return pool, nil
 }
 
-// ServerTLS returns base with the client-certificate policy applied to every
-// handshake. Denials are emitted to sink. Go verifies nothing itself here
-// (RequestClientCert): VerifyConnection owns the decision so each refusal
-// gets a code and an event. The policy is strict by default; only
-// AllowACMEValidation re-opens the exact tls-alpn-01 validation exchange.
-func ServerTLS(base *tls.Config, roots *x509.CertPool, sink events.Sink, opts ...Option) *tls.Config {
+// denialWindow bounds repeated origin.denied events: a scan that never
+// presents a valid certificate must not be able to flood the event log.
+const denialWindow = time.Minute
+
+// denialEmitter collapses identical denials inside one window into a single
+// event whose Count reports how many were suppressed since the previous one.
+// A denied handshake already fails closed; the event is for operations.
+type denialEmitter struct {
+	sink events.Sink
+	now  func() time.Time
+
+	mu          sync.Mutex
+	windowStart time.Time
+	suppressed  map[Code]int
+}
+
+func newDenialEmitter(sink events.Sink) *denialEmitter {
 	if sink == nil {
 		sink = events.Discard
 	}
+	return &denialEmitter{sink: sink, now: time.Now, suppressed: make(map[Code]int)}
+}
+
+func (d *denialEmitter) emit(code Code, reason, remote string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	now := d.now()
+	if d.windowStart.IsZero() || now.Sub(d.windowStart) >= denialWindow {
+		count := d.suppressed[code]
+		d.windowStart = now
+		d.suppressed = make(map[Code]int)
+		d.sink.Emit(events.Event{
+			Time: now, Type: OriginDenied, Code: string(code),
+			Reason: reason, RemoteAddr: remote, Count: count,
+		})
+		return
+	}
+	d.suppressed[code]++
+}
+
+// ServerTLS returns base with the client-certificate policy applied to every
+// handshake. Denials are aggregated per minute and emitted to sink. Go
+// verifies nothing itself here (RequestClientCert): VerifyConnection owns the
+// decision so each refusal gets a code and an event. The policy is strict by
+// default; only AllowACMEValidation re-opens the exact tls-alpn-01 validation
+// exchange.
+func ServerTLS(base *tls.Config, roots *x509.CertPool, sink events.Sink, opts ...Option) *tls.Config {
+	denials := newDenialEmitter(sink)
 	var cfgOpts options
 	for _, opt := range opts {
 		opt(&cfgOpts)
@@ -138,7 +178,7 @@ func ServerTLS(base *tls.Config, roots *x509.CertPool, sink events.Sink, opts ..
 			if d.Allowed {
 				return nil
 			}
-			sink.Emit(events.Event{Time: now, Type: OriginDenied, Code: string(d.Code), Reason: d.Reason, RemoteAddr: remote})
+			denials.emit(d.Code, d.Reason, remote)
 			return errors.New("origin client certificate rejected")
 		}
 		return strict, nil

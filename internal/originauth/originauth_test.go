@@ -145,6 +145,34 @@ func TestDecide(t *testing.T) {
 	})
 }
 
+func TestDenialsAreAggregatedPerWindow(t *testing.T) {
+	recorder := &events.Recorder{}
+	emitter := newDenialEmitter(recorder)
+	now := time.Unix(1_700_000_000, 0)
+	emitter.now = func() time.Time { return now }
+
+	emitter.emit(Untrusted, "reason", "192.0.2.1")
+	for i := 0; i < 25; i++ {
+		emitter.emit(Untrusted, "reason", "192.0.2.1")
+	}
+	if got := len(recorder.Events()); got != 1 {
+		t.Fatalf("events inside one window = %d, want 1", got)
+	}
+	if first := recorder.Events()[0]; first.Count != 0 || first.Code != string(Untrusted) {
+		t.Fatalf("first event = %+v, want count 0 and the denial code", first)
+	}
+
+	now = now.Add(2 * time.Minute)
+	emitter.emit(Untrusted, "reason", "192.0.2.1")
+	list := recorder.Events()
+	if len(list) != 2 {
+		t.Fatalf("events after the window = %d, want 2", len(list))
+	}
+	if list[1].Count != 25 {
+		t.Fatalf("second event count = %d, want 25 suppressed denials", list[1].Count)
+	}
+}
+
 func TestLoadPoolRejectsUnusableFiles(t *testing.T) {
 	key := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: []byte("x")})
 	for name, data := range map[string][]byte{"empty": nil, "garbage": []byte("not pem"), "private key": key} {
