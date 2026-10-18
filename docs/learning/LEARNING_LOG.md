@@ -7,6 +7,13 @@ Format: `YYYY-MM-DD · ID · topic — what clicked (link to code)`
 
 ## v0.1 Edge
 
+- 2026-10-18 · EDGE-007 · real ACME DNS-01 — the simulated tests were the
+  contract; the operator run proved it end to end: token as a file reference,
+  TXT created and removed by its own API ID, certificate served on :443, and a
+  restart reusing the stored generation instead of re-issuing (serial stable).
+  One state directory belongs to one ACME directory forever, so staging and
+  production never share `origin-cert*`
+  ([certs](../../internal/certs/), [hetzner-public](../../../server-ops/deploy/hetzner-public/README.md)).
 - 2026-10-18 · SHD-002 · header policy and log safety — HSTS only means
   something over TLS, so it is set conditionally; baseline security headers go
   before the host check so even a rejected 421 carries them. Same principle

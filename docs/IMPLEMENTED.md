@@ -368,6 +368,12 @@ site was changed. Credentials and restart-safe deployment remain in `EDGE-001`.
 | `3713c5b` | `REL-002`: fuzz targets for `config.Parse` (round-trip invariant), `NormalizeHost` (idempotent), `safeReturnTo` (only allowed absolute HTTP(S) hosts, fixed point) and `stripCookie` (target never survives, idempotent). Seed corpora run with `go test`; `scripts/verify.sh` adds a 1s fuzz pass per target. |
 | `4659f5a` | `REL-001`: `auth.client_secret` and `admin.token` come from `env:`/`file:` references (inline values documented as local-only). Tests cover both sources, an unresolved reference (startup error / `503` on mutations) and that control-plane writes never persist the resolved value. |
 
+## Origin certificate — real staging issuance (2026-10-18)
+
+| Commit | Result |
+|---|---|
+| _uncommitted_ | `EDGE-007` (part): first **real** ACME DNS-01 issuance against Let's Encrypt staging with the operator's zone-scoped token (file reference, never logged). Certificate `CN=preview.octaviosantacruz.com`, issuer `(STAGING) Baloney Bulgur YE2`, serial `2C3EE27A…`, 18/10 → 21/12. Served on `:443` with SNI; manual restart at 23:40:48 reused the same serial (no re-issuance). `_acme-challenge` TXT removed (NXDOMAIN); `preview` A absent and public 443 unreachable (DNS/firewall untouched); `/` and `/es/` hashes match `portfolio/dist` exactly through the owned tunnel. Residual: production issuance, real renewal window (next attempt 30/11), origin client-auth handshake with the production config, public acceptance. |
+
 ## Shield and origin events (2026-10-18)
 
 | Commit | Result |
