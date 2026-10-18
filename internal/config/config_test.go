@@ -501,3 +501,17 @@ func TestUpstreamTimeoutDefaultsAndRejectsOutOfRange(t *testing.T) {
 		}
 	}
 }
+
+func TestOriginClientCARequiresTLS(t *testing.T) {
+	const routes = `"routes": [{"host": "a.localhost", "target": "http://localhost:9000"}]`
+	if _, err := Parse([]byte(`{"listen": ":8888", "tls": {"origin_client_ca_file": "/etc/switchboard/origin-pull-ca.pem"}, ` + routes + `}`)); err == nil {
+		t.Fatal("tls.origin_client_ca_file without tls.enabled was accepted: it would be silently ignored")
+	}
+	cfg, err := Parse([]byte(`{"listen": ":8888", "tls": {"enabled": true, "domains": ["example.com"], "cache_dir": "/tmp/c", "origin_client_ca_file": "/etc/switchboard/origin-pull-ca.pem"}, ` + routes + `}`))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if cfg.TLS.OriginClientCAFile != "/etc/switchboard/origin-pull-ca.pem" {
+		t.Fatalf("OriginClientCAFile = %q", cfg.TLS.OriginClientCAFile)
+	}
+}

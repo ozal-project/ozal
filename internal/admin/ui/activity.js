@@ -3,7 +3,7 @@
   const byId = (id) => document.getElementById(id);
   const rows = byId("rows");
   const state = byId("state");
-  const labels = {"access.allowed":"Access allowed","access.denied":"Access denied","login.started":"Login started","login.failed":"Login failed","login.succeeded":"Login succeeded","route.created":"Route added","route.deleted":"Route removed","config.reloaded":"Configuration reloaded","tunnel.connected":"Tunnel connected","tunnel.disconnected":"Tunnel disconnected","tunnel.rejected":"Tunnel rejected"};
+  const labels = {"access.allowed":"Access allowed","access.denied":"Access denied","login.started":"Login started","login.failed":"Login failed","login.succeeded":"Login succeeded","route.created":"Route added","route.deleted":"Route removed","config.reloaded":"Configuration reloaded","tunnel.connected":"Tunnel connected","tunnel.disconnected":"Tunnel disconnected","tunnel.rejected":"Tunnel rejected","origin.denied":"Origin pull rejected"};
   const data = [];
   let paused = false;
   let pausedSnapshot = [];
@@ -11,7 +11,7 @@
   let reconnect = false;
   const make = (tag, text, cls) => { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; if (cls) el.className = cls; return el; };
   const classification = (e) => e.error || /\.(denied|failed|rejected)$/.test(e.type) ? "deny" : /\.(allowed|succeeded)$/.test(e.type) ? "allow" : "";
-  const category = (e) => e.type.startsWith("access.") ? "access" : e.type.startsWith("login.") ? "login" : e.type.startsWith("tunnel.") ? "tunnel" : "changes";
+  const category = (e) => e.type.startsWith("access.") || e.type.startsWith("origin.") ? "access" : e.type.startsWith("login.") ? "login" : e.type.startsWith("tunnel.") ? "tunnel" : "changes";
   const display = (e) => {
     const tr = make("tr", undefined, classification(e));
     const decision = make("td");

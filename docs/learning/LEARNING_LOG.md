@@ -285,3 +285,17 @@ finish normally. A test that counts connections races with net/http returning a
 connection to its pool, so the deterministic check compares transport identity
 and the closing test waits a moment before reloading. Mutating the fix (removing
 the close) and seeing the test fail proves the test actually guards it.
+
+## 2026-10-18 — authenticating the proxy, not the network
+
+An IP allowlist says "this packet came from Cloudflare's network", any
+customer's included; a client certificate from our own CA says "this is our
+deployment". Let Go ask for the certificate (`RequestClientCert`) but decide in
+`VerifyConnection`: verification failures then carry a code and an event, and
+the decision is a pure function that is easy to table-test. TLS 1.3 lets the
+client finish its handshake before the server judges its certificate, so a test
+only sees the rejection when it reads. ACME tls-alpn-01 cannot present a client
+certificate, so exactly that hello is exempted — and since net/http would then
+serve plain HTTP on that connection, a second lock (`RequireVerified`) refuses
+any request without a verified peer certificate. Mutating each rule and watching
+a test fail is how I know the tests guard them.

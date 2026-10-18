@@ -51,6 +51,11 @@ type TLS struct {
 	Domains  []string `json:"domains,omitempty"`
 	CacheDir string   `json:"cache_dir,omitempty"`
 	Email    string   `json:"email,omitempty"`
+	// OriginClientCAFile is a PEM trust bundle. When set, the public HTTPS
+	// listener serves only connections that present a client certificate
+	// issued by it (Authenticated Origin Pulls with the zone's own
+	// certificate). Changing it requires a restart.
+	OriginClientCAFile string `json:"origin_client_ca_file,omitempty"`
 }
 
 type Auth struct {
@@ -224,6 +229,8 @@ func Validate(cfg Config) (*Config, error) {
 		if cfg.TLS.CacheDir == "" {
 			return nil, fmt.Errorf("config: tls.enabled requires cache_dir")
 		}
+	} else if cfg.TLS.OriginClientCAFile != "" {
+		return nil, fmt.Errorf("config: tls.origin_client_ca_file requires tls.enabled")
 	}
 
 	if err := ValidateSecretReference("admin.token", cfg.Admin.Token); err != nil {

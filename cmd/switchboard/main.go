@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"log/slog"
@@ -19,6 +20,7 @@ import (
 	"github.com/octaviosantacruz/switchboard/internal/admin"
 	"github.com/octaviosantacruz/switchboard/internal/config"
 	"github.com/octaviosantacruz/switchboard/internal/events"
+	"github.com/octaviosantacruz/switchboard/internal/originauth"
 	"github.com/octaviosantacruz/switchboard/internal/routemanager"
 )
 
@@ -98,7 +100,7 @@ func main() {
 	}
 	servers := []*http.Server{adminServer}
 	if cfg.TLS.Enabled {
-		tlsServers, err := startTLS(&cfg, manager)
+		tlsServers, err := startTLS(&cfg, manager, sink)
 		if err != nil {
 			log.Fatalf("public listener: %v", err)
 		}
@@ -185,12 +187,28 @@ func startPlain(cfg *config.Config, handler http.Handler) (*http.Server, error) 
 // ACME, plus a plain HTTP server on :80 that answers ACME HTTP-01
 // challenges and redirects everything else to HTTPS. Both ports bind
 // synchronously: an occupied port must fail startup, not a goroutine.
-func startTLS(cfg *config.Config, handler http.Handler) ([]*http.Server, error) {
+func startTLS(cfg *config.Config, handler http.Handler, sink events.Sink) ([]*http.Server, error) {
 	manager := &autocert.Manager{
 		Cache:      autocert.DirCache(cfg.TLS.CacheDir),
 		Prompt:     autocert.AcceptTOS,
 		HostPolicy: autocert.HostWhitelist(cfg.TLS.Domains...),
 		Email:      cfg.TLS.Email,
+	}
+
+	tlsConfig := manager.TLSConfig()
+	if cfg.TLS.OriginClientCAFile != "" {
+		// Fail closed at startup: an unreadable or empty bundle must stop the
+		// listener, never leave it open.
+		bundle, err := os.ReadFile(cfg.TLS.OriginClientCAFile)
+		if err != nil {
+			return nil, fmt.Errorf("read tls.origin_client_ca_file: %w", err)
+		}
+		roots, err := originauth.LoadPool(bundle)
+		if err != nil {
+			return nil, fmt.Errorf("tls.origin_client_ca_file: %w", err)
+		}
+		tlsConfig = originauth.ServerTLS(tlsConfig, roots, sink)
+		handler = originauth.RequireVerified(handler)
 	}
 
 	httpsListener, err := net.Listen("tcp", ":443")
@@ -206,7 +224,7 @@ func startTLS(cfg *config.Config, handler http.Handler) ([]*http.Server, error) 
 	httpsServer := &http.Server{
 		Addr:              ":443",
 		Handler:           handler,
-		TLSConfig:         manager.TLSConfig(),
+		TLSConfig:         tlsConfig,
 		ReadHeaderTimeout: readHeaderTimeout,
 		IdleTimeout:       idleTimeout,
 	}

@@ -475,6 +475,7 @@ func sameServerConfig(a, b config.Config) bool {
 		a.TLS.Enabled == b.TLS.Enabled &&
 		a.TLS.CacheDir == b.TLS.CacheDir &&
 		a.TLS.Email == b.TLS.Email &&
+		a.TLS.OriginClientCAFile == b.TLS.OriginClientCAFile &&
 		slices.Equal(a.TLS.Domains, b.TLS.Domains)
 }
 

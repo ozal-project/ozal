@@ -283,6 +283,18 @@ the unreachable upstream plus a hint. It is off by default and meant for local
 development only — those pages reveal internal hostnames and addresses, so
 never enable them on a public edge.
 
+### Restricting the public listener to your proxy (origin client certificate)
+
+With `tls.enabled`, `tls.origin_client_ca_file` points at a PEM bundle: the
+public HTTPS listener then answers only connections that present a client
+certificate issued by it, with the client-authentication key usage. This is how
+the origin recognises the proxy in front of it (for example Cloudflare
+Authenticated Origin Pulls with your zone's own certificate) instead of
+trusting source IP ranges. Every refused connection emits an `origin.denied`
+event with a code (`no_certificate`, `untrusted`, `expired`, `invalid`). An
+unreadable or empty bundle stops startup, and changing the file needs a
+restart. ACME certificate issuance keeps working.
+
 ### Slow upstreams
 
 An upstream that accepts a connection but never starts answering would hold the

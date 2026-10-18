@@ -6,6 +6,32 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## EDGE-006 (part) — origin client-certificate policy — 2026-10-18 (working tree, no commit)
+
+New package `internal/originauth` and `tls.origin_client_ca_file`: when set, the
+public HTTPS listener serves only connections presenting a client certificate
+issued by the configured PEM bundle (the shape of Cloudflare Authenticated
+Origin Pulls with the zone's own certificate). `Decide` is the pure decision
+with stable codes (`origin.allowed`, `no_certificate`, `untrusted`, `expired`,
+`invalid`) and requires the client-authentication key usage. `ServerTLS` applies
+it through `GetConfigForClient`/`VerifyConnection`, refuses below TLS 1.2 and
+emits `origin.denied` with the code and remote address; the activity console
+labels it. ACME tls-alpn-01 validation, which cannot present a certificate, is
+exempted only for a hello offering exactly `acme-tls/1`; because net/http would
+serve a connection that negotiated that protocol, `RequireVerified` rejects
+any request without a verified peer certificate. An unreadable or empty bundle
+stops startup; setting the option without `tls.enabled` is a config error; a
+change needs a restart (`sameServerConfig`).
+
+Evidence: `TestDecide`, `TestLoadPoolRejectsUnusableFiles`,
+`TestServerTLSRequiresOurClientCertificate` (real handshakes: no certificate,
+other CA, expired), `TestServerTLSLetsACMEChallengesThrough`,
+`TestRequireVerifiedFailsClosed`, `TestHTTPServerServesOnlyApprovedClients`
+(real `http.Server`, HTTP/2 preserved) and `TestOriginClientCARequiresTLS`.
+Three mutations were killed by the tests (ACME exemption widened, key-usage
+check dropped, `RequireVerified` disabled). `scripts/verify.sh` 7/7 OK. Not
+exercised against Cloudflare, and `EDGE-006` stays open (see its tracker row).
+
 ## ARCH-007 — upstream transport lifecycle and limit — 2026-10-18 (working tree, no commit)
 
 - **One transport across reloads.** `ARCH-006` made every snapshot build its own

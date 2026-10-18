@@ -61,6 +61,7 @@ scripts/verify.sh                              # full gate before reporting done
   pending-login stores.
 - `internal/proxy/` — host-routed reverse proxy; strips/injects identity headers.
 - `internal/healthcheck/` — background upstream probes.
+- `internal/originauth/` — client-certificate policy for the public HTTPS listener (pure `Decide` + TLS/HTTP adapters).
 - `internal/routemanager/` — builds immutable snapshots, atomic swap, reload,
   route mutations.
 - `internal/admin/` — loopback control plane: status dashboard, bearer-token
