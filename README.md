@@ -119,8 +119,8 @@ To author a future schema change:
 The generator checks contiguous numbering and never overwrites an existing
 file. Applied SQL files stay immutable. The runner owns transactions; do not
 add `BEGIN`/`COMMIT` to migration files. Session persistence in the normal
-application remains pending under `ARCH-004`; creating its table alone does
-not enable it.
+application is enabled only by starting it with `-db PATH` (see sessions below);
+creating its table alone does not enable it.
 
 The module keeps `go 1.26.0` as its language minimum and recommends toolchain
 `go1.27.2`; normal Go toolchain auto-selection uses that patched version.
@@ -344,9 +344,18 @@ never signs or encodes anything into the cookie itself, so there's no
 separate signing secret to manage) and checks the route policy before
 proxying the request.
 
-Sessions are in-memory and per-process: they don't survive a restart and
-aren't shared across replicas. Fine for a single-box deployment; revisit
-if Switchboard is ever run more than once behind a load balancer.
+Sessions live in memory by default: they don't survive a restart and aren't
+shared across replicas — fine for a single-box deployment. Start Switchboard
+with `-db PATH` pointing at a migrated state database (`switchboard migrate
+-db PATH` first; migrations are never applied silently at startup) and
+sessions persist there instead: only the SHA-256 of the session ID is stored,
+expired sessions are rejected on lookup and swept periodically, and the same
+capacity cap applies. Lookups cap validity at the earlier of the issued expiry
+and `created_at + current TTL`, so reducing the TTL takes effect on existing
+sessions, and increasing it never extends the original expiry. Reload candidates
+do not mutate session rows; expired rows are purged on lookup, sweep and creation.
+This is the wiring for later persistent state (tunnels,
+passkeys) on the same database.
 
 **Single host** — the protected route lives on the same host as
 `redirect_url`:

@@ -14,14 +14,16 @@ import (
 
 // ErrStoreFull is returned by Create when the session store is at
 // capacity. A caller sees this as "login failed, try again" — better than
-// an unbounded map growing forever under a sustained burst of logins.
+// an unbounded map or table growing forever under a sustained burst of
+// logins.
 var ErrStoreFull = errors.New("session store is full")
 
 const (
-	// maxSessions caps how many sessions can exist at once, independent of
-	// the periodic cleanup sweep — a burst of logins faster than the sweep
-	// interval shouldn't be able to grow the store without bound.
-	maxSessions = 10_000
+	// MaxSessions caps how many sessions can exist at once, independent of
+	// the periodic sweep — a burst of logins faster than the sweep interval
+	// shouldn't be able to grow the store without bound. Every backend
+	// enforces the same number.
+	MaxSessions = 10_000
 	// SessionCleanupInterval is how often an owner sweeps expired sessions.
 	SessionCleanupInterval = 10 * time.Minute
 )
@@ -31,10 +33,58 @@ type Session struct {
 	ExpiresAt time.Time
 }
 
-// SessionStore is an in-memory, single-instance session store. Sessions
+// SessionBackend is the session storage the Gate and the route manager
+// consume: the in-memory store for a single process without a state
+// database, and the SQLite adapter when sessions must survive a restart.
+// The cookie carries an opaque ID; only the backend decides how to protect
+// it at rest. Implementations must be safe for concurrent use.
+type SessionBackend interface {
+	// Create stores a new session for principal and returns the opaque,
+	// unguessable ID that goes in the session cookie. It returns
+	// ErrStoreFull at capacity.
+	Create(ctx context.Context, principal Principal) (string, error)
+	// Get returns the session for id, or ok=false when it does not exist or
+	// has expired. An expired session is evicted on lookup.
+	Get(ctx context.Context, id string) (Session, bool)
+	// Delete removes the session for id; deleting a missing session is fine.
+	Delete(ctx context.Context, id string)
+	// Sweep removes expired sessions in bulk.
+	Sweep(ctx context.Context)
+}
+
+// NewSessionID returns the opaque session identifier: 256 bits from
+// crypto/rand. Knowing the ID is equivalent to being logged in as that
+// principal, so this randomness is the whole security boundary.
+func NewSessionID() (string, error) {
+	idBytes := make([]byte, 32)
+	if _, err := rand.Read(idBytes); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(idBytes), nil
+}
+
+// SweepLoop sweeps expired sessions on backend until ctx is cancelled. Get
+// already evicts an expired session it happens to look up, but a session
+// nobody ever presents again (an abandoned login) would otherwise sit in
+// storage until the next restart — this bounds that.
+func SweepLoop(ctx context.Context, backend SessionBackend, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			backend.Sweep(ctx)
+		}
+	}
+}
+
+// SessionStore is the in-memory, single-instance SessionBackend. Sessions
 // don't survive a restart and aren't shared across multiple Switchboard
-// processes — acceptable for a single-box deployment, revisit if
-// Switchboard ever runs replicated.
+// processes. It stays the default so a deployment without a state database
+// keeps working; pass a persistent backend to make sessions outlive a
+// restart.
 type SessionStore struct {
 	ttl time.Duration
 
@@ -42,24 +92,25 @@ type SessionStore struct {
 	sessions map[string]Session
 }
 
+var _ SessionBackend = (*SessionStore)(nil)
+
 func NewSessionStore(ttl time.Duration) *SessionStore {
 	return &SessionStore{ttl: ttl, sessions: make(map[string]Session)}
 }
 
-// Create stores a new session for principal and returns its opaque,
-// unguessable ID — this ID is what goes in the session cookie. 256 bits of
-// randomness from crypto/rand is the whole security boundary here: knowing
-// the ID is equivalent to being logged in as that principal.
-func (s *SessionStore) Create(principal Principal) (string, error) {
-	idBytes := make([]byte, 32)
-	if _, err := rand.Read(idBytes); err != nil {
+// Create stores a new session for principal and returns its opaque ID.
+func (s *SessionStore) Create(ctx context.Context, principal Principal) (string, error) {
+	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	id := base64.RawURLEncoding.EncodeToString(idBytes)
+	id, err := NewSessionID()
+	if err != nil {
+		return "", err
+	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if len(s.sessions) >= maxSessions {
+	if len(s.sessions) >= MaxSessions {
 		return "", ErrStoreFull
 	}
 	s.sessions[id] = Session{Principal: principal, ExpiresAt: time.Now().Add(s.ttl)}
@@ -67,26 +118,8 @@ func (s *SessionStore) Create(principal Principal) (string, error) {
 	return id, nil
 }
 
-// StartCleanup periodically sweeps expired sessions until ctx is
-// canceled. Get already evicts an expired session it happens to look up,
-// but a session nobody ever presents again (an abandoned login) would
-// otherwise sit in memory until process restart — this bounds that.
-func (s *SessionStore) StartCleanup(ctx context.Context, interval time.Duration) {
-	ticker := time.NewTicker(interval)
-	go func() {
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				s.sweep()
-			}
-		}
-	}()
-}
-
-func (s *SessionStore) sweep() {
+// Sweep removes expired sessions.
+func (s *SessionStore) Sweep(ctx context.Context) {
 	now := time.Now()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -99,7 +132,10 @@ func (s *SessionStore) sweep() {
 
 // Get returns the session for id, or ok=false if it doesn't exist or has
 // expired. An expired session is evicted on lookup.
-func (s *SessionStore) Get(id string) (Session, bool) {
+func (s *SessionStore) Get(ctx context.Context, id string) (Session, bool) {
+	if ctx.Err() != nil {
+		return Session{}, false
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -114,7 +150,8 @@ func (s *SessionStore) Get(id string) (Session, bool) {
 	return sess, true
 }
 
-func (s *SessionStore) Delete(id string) {
+// Delete removes a session by ID.
+func (s *SessionStore) Delete(ctx context.Context, id string) {
 	s.mu.Lock()
 	delete(s.sessions, id)
 	s.mu.Unlock()

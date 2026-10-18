@@ -35,6 +35,18 @@ func WithEventSink(sink events.Sink) Option {
 	}
 }
 
+// WithSessionBackend supplies the session storage factory. The default is
+// the in-memory store; the composition root passes the SQLite adapter to
+// make sessions survive a restart. The factory is called again when the
+// session TTL changes, because a lifetime change is a policy change.
+func WithSessionBackend(newBackend func(ttl time.Duration) auth.SessionBackend) Option {
+	return func(m *Manager) {
+		if newBackend != nil {
+			m.newSessions = newBackend
+		}
+	}
+}
+
 var (
 	ErrRouteExists   = errors.New("route already exists")
 	ErrRouteNotFound = errors.New("route not found")
@@ -57,7 +69,7 @@ type Snapshot struct {
 	healthCancel  context.CancelFunc
 	gate          *auth.Gate
 	gateCancel    context.CancelFunc
-	sessions      *auth.SessionStore
+	sessions      auth.SessionBackend
 	sessionCancel context.CancelFunc
 	// transport carries every upstream request of this generation. It is the
 	// previous generation's when the timeout is unchanged, so a reload keeps
@@ -78,9 +90,10 @@ type Manager struct {
 	gateCancel          context.CancelFunc
 	gateAuth            config.Auth
 	gateHosts           []string
-	sessions            *auth.SessionStore
+	sessions            auth.SessionBackend
 	sessionTTL          time.Duration
 	sessionCancel       context.CancelFunc
+	newSessions         func(ttl time.Duration) auth.SessionBackend
 	transport           *http.Transport
 	transportTimeout    time.Duration
 	sink                events.Sink
@@ -95,6 +108,7 @@ func New(ctx context.Context, configPath string, healthCheckInterval time.Durati
 		ctx:                 ctx,
 		configPath:          configPath,
 		healthCheckInterval: healthCheckInterval,
+		newSessions:         func(ttl time.Duration) auth.SessionBackend { return auth.NewSessionStore(ttl) },
 		sink:                events.Discard,
 	}
 	for _, opt := range opts {
@@ -263,7 +277,7 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 
 	var gate proxy.AuthGate
 	var oidcGate *auth.Gate
-	var sessions *auth.SessionStore
+	var sessions auth.SessionBackend
 	protectedHosts := protectedRouteHosts(cfg.Routes)
 	if len(protectedHosts) > 0 {
 		// The session store outlives gate rebuilds: adding a protected route
@@ -272,8 +286,8 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 		sessions = m.sessions
 		if sessions == nil || m.sessionTTL != auth.SessionTTL(cfg.Auth) {
 			storeCtx, cancelStore := context.WithCancel(m.ctx)
-			sessions = auth.NewSessionStore(auth.SessionTTL(cfg.Auth))
-			sessions.StartCleanup(storeCtx, auth.SessionCleanupInterval)
+			sessions = m.newSessions(auth.SessionTTL(cfg.Auth))
+			go auth.SweepLoop(storeCtx, sessions, auth.SessionCleanupInterval)
 			sessionCancel = cancelStore
 		}
 		if m.gate != nil && m.gateAuth == cfg.Auth && slices.Equal(m.gateHosts, protectedHosts) {

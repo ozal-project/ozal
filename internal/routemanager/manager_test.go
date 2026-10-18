@@ -592,7 +592,7 @@ func TestSessionsSurviveGateRebuildWhenProtectedHostsChange(t *testing.T) {
 	if manager.sessions == nil {
 		t.Fatal("expected a session store after building the gate")
 	}
-	id, err := manager.sessions.Create(auth.Principal{Subject: "user-1", Email: "ana@example.com", EmailVerified: true})
+	id, err := manager.sessions.Create(ctx, auth.Principal{Subject: "user-1", Email: "ana@example.com", EmailVerified: true})
 	if err != nil {
 		t.Fatalf("Create session: %v", err)
 	}

@@ -18,10 +18,12 @@ import (
 	"golang.org/x/crypto/acme/autocert"
 
 	"github.com/octaviosantacruz/switchboard/internal/admin"
+	"github.com/octaviosantacruz/switchboard/internal/auth"
 	"github.com/octaviosantacruz/switchboard/internal/config"
 	"github.com/octaviosantacruz/switchboard/internal/events"
 	"github.com/octaviosantacruz/switchboard/internal/originauth"
 	"github.com/octaviosantacruz/switchboard/internal/routemanager"
+	"github.com/octaviosantacruz/switchboard/internal/store/sqlite"
 )
 
 const healthCheckInterval = 10 * time.Second
@@ -51,6 +53,7 @@ func main() {
 	}
 
 	configPath := flag.String("config", "config.json", "path to routing config")
+	dbPath := flag.String("db", "", "path to the migrated SQLite state database (empty keeps sessions in memory)")
 	flag.Parse()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -65,7 +68,22 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 	sink := events.Multi{events.SlogSink{Logger: logger}, broker}
-	manager, err := routemanager.New(ctx, *configPath, healthCheckInterval, routemanager.WithEventSink(sink))
+	managerOpts := []routemanager.Option{routemanager.WithEventSink(sink)}
+	if *dbPath != "" {
+		// Sessions survive a restart through the migrated state database.
+		// Migrations stay an explicit operator step: a stale schema stops
+		// startup instead of being applied silently.
+		db, err := openMigratedDB(ctx, *dbPath)
+		if err != nil {
+			log.Fatalf("state database: %v", err)
+		}
+		defer db.Close()
+		managerOpts = append(managerOpts, routemanager.WithSessionBackend(func(ttl time.Duration) auth.SessionBackend {
+			return sqlite.NewSessions(db, ttl)
+		}))
+		log.Printf("sessions: persistent store at %s", *dbPath)
+	}
+	manager, err := routemanager.New(ctx, *configPath, healthCheckInterval, managerOpts...)
 	if err != nil {
 		log.Fatalf("routes: %v", err)
 	}
@@ -183,10 +201,10 @@ func startPlain(cfg *config.Config, handler http.Handler) (*http.Server, error) 
 	return server, nil
 }
 
-// startTLS serves HTTPS on :443 with certificates issued automatically via
-// ACME, plus a plain HTTP server on :80 that answers ACME HTTP-01
-// challenges and redirects everything else to HTTPS. Both ports bind
-// synchronously: an occupied port must fail startup, not a goroutine.
+// startAutocertTLS is the HTTP-01 path: HTTPS on :443 with autocert, plus a
+// plain HTTP server on :80 that answers challenges and redirects everything
+// else. Both ports bind synchronously: an occupied port must fail startup,
+// not a goroutine.
 func startTLS(cfg *config.Config, handler http.Handler, sink events.Sink) ([]*http.Server, error) {
 	manager := &autocert.Manager{
 		Cache:      autocert.DirCache(cfg.TLS.CacheDir),

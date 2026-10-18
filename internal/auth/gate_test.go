@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -30,7 +31,7 @@ func newTestGate() *Gate {
 func TestMiddlewareAllowsValidSession(t *testing.T) {
 	g := newTestGate()
 	want := Principal{Email: "user@example.com", Subject: "sub"}
-	id, _ := g.sessions.Create(want)
+	id, _ := g.sessions.Create(context.Background(), want)
 
 	called := false
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true })
@@ -92,7 +93,7 @@ func TestMiddlewareRedirectsWithInvalidSessionCookie(t *testing.T) {
 
 func TestHandleLogoutClearsSession(t *testing.T) {
 	g := newTestGate()
-	id, _ := g.sessions.Create(Principal{Email: "user@example.com", Subject: "sub"})
+	id, _ := g.sessions.Create(context.Background(), Principal{Email: "user@example.com", Subject: "sub"})
 
 	req := httptest.NewRequest(http.MethodGet, "/_/auth/logout", nil)
 	req.AddCookie(&http.Cookie{Name: SessionCookieName, Value: id})
@@ -100,7 +101,7 @@ func TestHandleLogoutClearsSession(t *testing.T) {
 
 	g.HandleLogout(rec, req)
 
-	if _, ok := g.sessions.Get(id); ok {
+	if _, ok := g.sessions.Get(context.Background(), id); ok {
 		t.Fatal("expected session to be deleted after logout")
 	}
 	if rec.Code != http.StatusSeeOther {

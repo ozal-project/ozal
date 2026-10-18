@@ -52,7 +52,7 @@ type Gate struct {
 	cookieDomain string
 	allowedHosts map[string]bool
 
-	sessions *SessionStore
+	sessions SessionBackend
 	loginKey []byte
 	sink     events.Sink
 }
@@ -74,7 +74,7 @@ func (g *Gate) emit(e events.Event) {
 // routing config) a post-login redirect is allowed to land on. Without
 // this check, an attacker could craft a login link with return_to pointing
 // anywhere and use this Gate as an open redirect once a victim logs in.
-func NewGate(ctx context.Context, cfg config.Auth, allowedHosts []string, sessions *SessionStore, sink events.Sink) (*Gate, error) {
+func NewGate(ctx context.Context, cfg config.Auth, allowedHosts []string, sessions SessionBackend, sink events.Sink) (*Gate, error) {
 	if sessions == nil {
 		return nil, errors.New("auth: NewGate requires a session store")
 	}
@@ -119,7 +119,7 @@ func (g *Gate) Authenticate(r *http.Request) (Principal, bool) {
 	if err != nil {
 		return Principal{}, false
 	}
-	session, ok := g.sessions.Get(cookie.Value)
+	session, ok := g.sessions.Get(r.Context(), cookie.Value)
 	if !ok {
 		return Principal{}, false
 	}
@@ -266,7 +266,7 @@ func (g *Gate) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		Groups:        claims.Groups,
 	}
 
-	sessionID, err := g.sessions.Create(principal)
+	sessionID, err := g.sessions.Create(ctx, principal)
 	if errors.Is(err, ErrStoreFull) {
 		g.emit(events.Event{Type: events.LoginFailed, Actor: principal.Subject, Host: r.Host, Code: "session_store_full", RemoteAddr: r.RemoteAddr})
 		http.Error(w, "too many active sessions, try again shortly", http.StatusServiceUnavailable)
@@ -312,7 +312,7 @@ func (g *Gate) safeReturnTo(returnTo string) string {
 
 func (g *Gate) HandleLogout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(SessionCookieName); err == nil {
-		g.sessions.Delete(cookie.Value)
+		g.sessions.Delete(r.Context(), cookie.Value)
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     SessionCookieName,

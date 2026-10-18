@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
@@ -214,7 +215,7 @@ func TestFullLoginCallbackFlow(t *testing.T) {
 		t.Fatal("missing login.started event")
 	}
 
-	sess, _ := gate.sessions.Get(sessionCookie.Value)
+	sess, _ := gate.sessions.Get(context.Background(), sessionCookie.Value)
 	p := sess.Principal
 	if p.Email != provider.email || p.Subject != provider.sub {
 		t.Errorf("principal = %+v, want email=%q subject=%q", p, provider.email, provider.sub)

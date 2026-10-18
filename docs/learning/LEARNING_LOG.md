@@ -312,3 +312,25 @@ that must be used only on a handler the tunnel alone can reach. Parsing is share
 claim falls back to the peer instead of failing the request. Refactoring the
 Trust stage into one `trustStage(resolve)` function removed the duplicated
 strip-then-store logic: the difference between the two stages is one function.
+
+## 2026-10-18 — sessions that outlive the process (ARCH-004)
+
+The port that made this small was already implicit: the OIDC gate needs three
+operations (create, look up, delete) and the route manager owns the periodic
+sweep, so `auth.SessionBackend` is four methods with `context.Context` first
+— the same shape the in-memory store had, with the context added because the
+SQLite half does I/O. The adapter keeps two details from leaking upward: the
+raw session ID never reaches disk (only `SHA-256(id)` goes into the `id_hash`
+column, so a leaked database file cannot be replayed as cookies) and the
+capacity check is one transaction that first deletes expired rows, then
+counts, then inserts. `_txlock=immediate` is what makes that safe under
+concurrency: the transaction takes the write lock at `BEGIN`, so two logins
+serialize and neither sees the same free slot.
+
+Two smaller decisions worth naming. The startup path refuses to run migrations
+(`openMigratedDB` errors on a pending schema) because applying DDL as a side
+effect of starting a server makes rollbacks and backups unpredictable; the
+operator runs `switchboard migrate` first. And a session TTL change rebuilds
+the backend while every other reload reuses it — a lifetime change is a policy
+change, and keeping old rows under a new policy would be worse than logging
+everyone out.
