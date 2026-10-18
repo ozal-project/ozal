@@ -110,18 +110,22 @@ func runConnector(ctx context.Context, args []string, out io.Writer) error {
 	return nil
 }
 
-// fingerprintFromPEM reads the first CERTIFICATE block. A private key in the
-// file is rejected so a mistaken argument cannot leave a key being read.
+// fingerprintFromPEM returns the fingerprint of the first CERTIFICATE block.
+// Every block in the file is checked, not just the first: a private key
+// anywhere in it is rejected so a mistaken argument cannot leave a key being
+// read. Later certificates (a chain) must be valid but are not enrolled.
 func fingerprintFromPEM(path string) (tunnel.Fingerprint, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return tunnel.Fingerprint{}, errors.New("read connector certificate")
 	}
+	var fp tunnel.Fingerprint
+	found := false
 	for {
 		var block *pem.Block
 		block, data = pem.Decode(data)
 		if block == nil {
-			return tunnel.Fingerprint{}, errors.New("no certificate found in file")
+			break
 		}
 		if block.Type != "CERTIFICATE" {
 			return tunnel.Fingerprint{}, errors.New("file must contain only the public certificate")
@@ -129,6 +133,12 @@ func fingerprintFromPEM(path string) (tunnel.Fingerprint, error) {
 		if _, err := x509.ParseCertificate(block.Bytes); err != nil {
 			return tunnel.Fingerprint{}, errors.New("invalid connector certificate")
 		}
-		return tunnel.FingerprintOf(block.Bytes), nil
+		if !found {
+			fp, found = tunnel.FingerprintOf(block.Bytes), true
+		}
 	}
+	if !found {
+		return tunnel.Fingerprint{}, errors.New("no certificate found in file")
+	}
+	return fp, nil
 }

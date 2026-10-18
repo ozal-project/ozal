@@ -249,3 +249,13 @@ blocked before the origin cannot measure our detector's coverage. Gradual
 independence needs controlled traffic, explicit budgets and a removal/rollback
 drill. Architecture decision documented; public Portfolio stays on Pages.
 No Go code or runtime changed in this documentation task.
+
+## 2026-10-18 — a loop that cannot loop, and reachable advisories
+
+A `for` whose body always returns is an `if` in disguise: it checked only the
+first PEM block, so a certificate followed by a private key passed a check that
+promised "only the public certificate". staticcheck's SA4004 pointed at it; the
+regression test failed before the fix. `pem.Decode` returns the rest of the
+input, and the loop must run until the block is nil. govulncheck reports only
+advisories the code can reach: the fix was a newer toolchain, and an exported
+`GOROOT` silently pins the old standard library even when `go` itself is new.

@@ -4,6 +4,7 @@
 package events
 
 import (
+	"context"
 	"log/slog"
 	"sync"
 	"time"
@@ -70,7 +71,7 @@ func (s SlogSink) Emit(e Event) {
 			attrs = append(attrs, slog.String(field.key, field.value))
 		}
 	}
-	s.Logger.LogAttrs(nil, slog.LevelInfo, string(e.Type), attrs...)
+	s.Logger.LogAttrs(context.Background(), slog.LevelInfo, string(e.Type), attrs...)
 }
 
 // Recorder is an in-memory sink for tests and local inspection.

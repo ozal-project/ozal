@@ -1,10 +1,27 @@
 # Implemented — Switchboard
 
-**Last review:** 2026-10-17
-**Code reviewed up to:** `c24b50c`
+**Last review:** 2026-10-18
+**Code reviewed up to:** `4ec68ac` plus the working-tree changes listed below
 
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
+
+## Toolchain, linters and connector PEM check — 2026-10-18 (working tree, no commit)
+
+`staticcheck` and `govulncheck` installed and run through `scripts/verify.sh`.
+`govulncheck` found nine standard-library advisories reachable under Go 1.27.1;
+Go 1.27.2 fixes them and `golang.org/x/net` moved v0.58.0 → v0.60.0. Reachable
+vulnerabilities: 0 in Switchboard and Server Ops. Remaining advisory GO-2026-5932
+(`x/crypto`, no fix, not called) is tracked as `REL-007`. `staticcheck` findings
+fixed: nil context in `events`, `time.Until` in `tunnelrenew`, an unused variable
+in a `routemanager` test.
+
+`fingerprintFromPEM` (`connector enroll`) inspected only the first PEM block, so
+a certificate followed by a private key was accepted despite the "only the public
+certificate" contract (SA4004 exposed it). It now checks every block. Regression
+test `TestConnectorEnrollRejectsKeyAfterCertificate` failed before the change and
+passes after. Evidence: `scripts/verify.sh` 7/7 OK on Go 1.27.2 with `GOROOT`
+unset (an exported `GOROOT` pointing to 1.27.1 breaks the new toolchain).
 
 ## Cloudflare coexistence decision — 2026-10-18 (working tree, no commit)
 

@@ -87,7 +87,7 @@ func renew(ctx context.Context, hosts Hosts, home, directory string, force bool,
 	if err != nil {
 		return err
 	}
-	if remaining := caInfo.Expires.Sub(time.Now()); remaining < 60*day {
+	if remaining := time.Until(caInfo.Expires); remaining < 60*day {
 		fmt.Fprintf(out, "CA rollover required soon (%d days); trust anchors are not replaced automatically\n", int(remaining/day))
 	}
 	var old []Identity

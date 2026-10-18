@@ -178,13 +178,13 @@ func TestConfigReturnsDeepCopy(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	manager, err := New(ctx, writeConfig(t, cfg), time.Hour)
+	_, err := New(ctx, writeConfig(t, cfg), time.Hour)
 	if err == nil {
 		t.Fatal("expected auth configuration to be required for protected route")
 	}
 
 	cfg.Routes[0].Access = nil
-	manager, err = New(ctx, writeConfig(t, cfg), time.Hour)
+	manager, err := New(ctx, writeConfig(t, cfg), time.Hour)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

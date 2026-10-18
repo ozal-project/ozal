@@ -107,6 +107,24 @@ func TestConnectorCommandLifecycle(t *testing.T) {
 	}
 }
 
+// A certificate followed by a private key is still "a private key in the
+// file": only the first block used to be looked at.
+func TestConnectorEnrollRejectsKeyAfterCertificate(t *testing.T) {
+	dir := t.TempDir()
+	cert, err := os.ReadFile(writeCert(t, dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle := append(cert, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: []byte("x")})...)
+	path := filepath.Join(dir, "bundle.pem")
+	if err := os.WriteFile(path, bundle, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fingerprintFromPEM(path); err == nil {
+		t.Fatal("a file with a private key after the certificate was accepted")
+	}
+}
+
 func TestConnectorEnrollRejectsPrivateKeyFile(t *testing.T) {
 	dir := t.TempDir()
 	key := filepath.Join(dir, "k.pem")
