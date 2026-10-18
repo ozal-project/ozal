@@ -259,3 +259,16 @@ regression test failed before the fix. `pem.Decode` returns the rest of the
 input, and the loop must run until the block is nil. govulncheck reports only
 advisories the code can reach: the fix was a newer toolchain, and an exported
 `GOROOT` silently pins the old standard library even when `go` itself is new.
+
+## 2026-10-18 — a proxy that waits forever
+
+`http.DefaultTransport` bounds dialing and the TLS handshake but not how long
+an upstream may stay silent after the request: `ResponseHeaderTimeout` is zero.
+A bounded transport limits every phase before the body and leaves the body
+alone so streams keep working. Building it field by field, instead of cloning
+the default, also drops `ProxyFromEnvironment`, which would reroute internal
+upstreams if `HTTP_PROXY` were set. `net.Error.Timeout()` through `errors.As`
+tells "too slow" (504) from "unreachable" (502). `slog.SetDefault` in the
+composition root routes `log.Printf` through the same JSON handler, so one
+line unified every log. A `map` of functions replaces four copied `if`s, and
+`signal.NotifyContext` cancels them all on SIGTERM.

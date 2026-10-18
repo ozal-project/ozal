@@ -1,8 +1,10 @@
 package proxy
 
 import (
+	"bytes"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -891,5 +893,83 @@ func TestProtectedRouteStripsSessionCookie(t *testing.T) {
 	}
 	if gotCookie != "app_session=upstream-token" {
 		t.Fatalf("upstream Cookie = %q, want %q", gotCookie, "app_session=upstream-token")
+	}
+}
+
+// An upstream that accepts the connection and never answers must not hold the
+// visitor's request (and its goroutine) forever.
+func TestSilentUpstreamTimesOutWith504(t *testing.T) {
+	release := make(chan struct{})
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	defer upstream.Close()
+	defer close(release) // runs first, so Close is not stuck waiting for the handler
+
+	handler, err := New([]config.Route{{Host: "slow.localhost", Target: upstream.URL}}, nil, nil,
+		WithResponseHeaderTimeout(50*time.Millisecond))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	done := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		req := httptest.NewRequest(http.MethodGet, "http://slow.localhost/", nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		done <- rec
+	}()
+	select {
+	case rec := <-done:
+		if rec.Code != http.StatusGatewayTimeout {
+			t.Fatalf("status = %d, want 504", rec.Code)
+		}
+		if strings.Contains(rec.Body.String(), upstream.Listener.Addr().String()) {
+			t.Fatalf("504 body leaks the upstream address: %q", rec.Body.String())
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("proxy is still waiting for a silent upstream")
+	}
+}
+
+// Routes may point at internal hosts: an HTTP_PROXY variable in the process
+// environment must never reroute that traffic.
+func TestUpstreamTransportIsBounded(t *testing.T) {
+	tr := newUpstreamTransport(7 * time.Second)
+	if tr.Proxy != nil {
+		t.Error("upstream transport must not honor proxy environment variables")
+	}
+	if tr.ResponseHeaderTimeout != 7*time.Second {
+		t.Errorf("ResponseHeaderTimeout = %v, want 7s", tr.ResponseHeaderTimeout)
+	}
+	if tr.DialContext == nil || tr.TLSHandshakeTimeout <= 0 || tr.IdleConnTimeout <= 0 {
+		t.Error("dial, TLS handshake and idle connection must all be bounded")
+	}
+}
+
+func TestForwardedRequestIsLoggedAsStructuredRecord(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer upstream.Close()
+
+	var out bytes.Buffer
+	handler, err := New([]config.Route{{Host: "app.localhost", Target: upstream.URL}}, nil, nil,
+		WithLogger(slog.New(slog.NewJSONHandler(&out, nil))))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "http://app.localhost/a/b?token=secret", nil)
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	line := out.String()
+	for _, want := range []string{`"msg":"proxy.forward"`, `"host":"app.localhost"`, `"path":"/a/b"`, `"method":"GET"`} {
+		if !strings.Contains(line, want) {
+			t.Errorf("log record missing %s: %s", want, line)
+		}
+	}
+	if strings.Contains(line, "secret") {
+		t.Errorf("the query string must never be logged: %s", line)
 	}
 }

@@ -6,6 +6,34 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## ARCH-006 — proxy hardening and one log stream — 2026-10-18 (working tree, no commit)
+
+- **Bounded upstream transport.** Routes without a custom transport used
+  `http.DefaultTransport`, so an upstream that accepted a connection and never
+  answered held the visitor's request and goroutine forever. `proxy` now builds
+  an explicit transport (`newUpstreamTransport`): dial 10 s, TLS handshake 10 s,
+  response headers 60 s (`WithResponseHeaderTimeout`), idle 90 s; the body stays
+  unbounded so downloads and streams work, and `Proxy` is nil so environment
+  proxy variables cannot reroute internal upstreams. A timeout answers `504`,
+  other upstream failures `502`; the visitor never sees the upstream address
+  unless development errors are on.
+- **One structured log.** The per-request `log.Printf` became a `proxy.forward`
+  record (method, host, path, target; never the query string) and upstream
+  failures a `proxy.upstream_error` record, through `slog`. The server path sets
+  the JSON logger as the process default, so existing `log.Printf` lines also
+  come out as JSON. `proxy.WithLogger` injects a logger in tests.
+- **Subcommand table.** `switchboard tunnel|tunnel-spike|connector|migrate` are
+  dispatched from `subcommands()` and all run under a context cancelled by
+  SIGINT/SIGTERM (`connector` and `migrate` ignored signals before).
+- Removed the redundant first `X-Forwarded-For` delete in the proxy rewrite.
+
+Evidence: new tests `TestSilentUpstreamTimesOutWith504`,
+`TestUpstreamTransportIsBounded`, `TestForwardedRequestIsLoggedAsStructuredRecord`
+(failing to compile before the change: the API did not exist) and
+`TestSubcommandsAreRegistered`; existing spoofing, cookie and dev-error tests
+unchanged and passing. `scripts/verify.sh` 7/7 OK on Go 1.27.2. Not exercised
+against a running server; follow-ups in `ARCH-007`.
+
 ## Toolchain, linters and connector PEM check — 2026-10-18 (working tree, no commit)
 
 `staticcheck` and `govulncheck` installed and run through `scripts/verify.sh`.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"io"
 	"log"
 	"log/slog"
 	"net"
@@ -23,34 +24,28 @@ import (
 
 const healthCheckInterval = 10 * time.Second
 
+// subcommands are the one-shot commands run as `switchboard <name> ...`. Each
+// gets a context that SIGINT/SIGTERM cancel, so none can outlive a stop signal.
+func subcommands() map[string]func(context.Context, []string, io.Writer) error {
+	return map[string]func(context.Context, []string, io.Writer) error{
+		"tunnel":       runTunnel,
+		"tunnel-spike": runTunnelSpike,
+		"connector":    runConnector,
+		"migrate":      runMigrate,
+	}
+}
+
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "tunnel" {
-		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-		defer stop()
-		if err := runTunnel(ctx, os.Args[2:], os.Stdout); err != nil {
-			log.Fatalf("tunnel: %v", err)
+	if len(os.Args) > 1 {
+		if run, ok := subcommands()[os.Args[1]]; ok {
+			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			err := run(ctx, os.Args[2:], os.Stdout)
+			stop() // log.Fatalf exits without running deferred calls
+			if err != nil {
+				log.Fatalf("%s: %v", os.Args[1], err)
+			}
+			return
 		}
-		return
-	}
-	if len(os.Args) > 1 && os.Args[1] == "tunnel-spike" {
-		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-		defer stop()
-		if err := runTunnelSpike(ctx, os.Args[2:], os.Stdout); err != nil {
-			log.Fatalf("tunnel-spike: %v", err)
-		}
-		return
-	}
-	if len(os.Args) > 1 && os.Args[1] == "connector" {
-		if err := runConnector(context.Background(), os.Args[2:], os.Stdout); err != nil {
-			log.Fatalf("connector: %v", err)
-		}
-		return
-	}
-	if len(os.Args) > 1 && os.Args[1] == "migrate" {
-		if err := runMigrate(context.Background(), os.Args[2:], os.Stdout); err != nil {
-			log.Fatalf("migrate: %v", err)
-		}
-		return
 	}
 
 	configPath := flag.String("config", "config.json", "path to routing config")
@@ -63,7 +58,11 @@ func main() {
 	// records, one event per line.
 	// The broker keeps recent events for the admin activity page.
 	broker := events.NewBroker()
-	sink := events.Multi{events.SlogSink{Logger: slog.New(slog.NewJSONHandler(os.Stdout, nil))}, broker}
+	// One structured stream: events, and through the default logger also the
+	// proxy's operational records and every log.Printf in the process.
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
+	sink := events.Multi{events.SlogSink{Logger: logger}, broker}
 	manager, err := routemanager.New(ctx, *configPath, healthCheckInterval, routemanager.WithEventSink(sink))
 	if err != nil {
 		log.Fatalf("routes: %v", err)

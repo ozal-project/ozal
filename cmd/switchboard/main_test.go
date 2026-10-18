@@ -52,3 +52,14 @@ func TestStartPlainServesOnAFreePort(t *testing.T) {
 		t.Fatalf("response = %d %q, want 200 ok", resp.StatusCode, body)
 	}
 }
+
+// Every one-shot command must be reachable through the table that main()
+// wraps in a signal-aware context.
+func TestSubcommandsAreRegistered(t *testing.T) {
+	registered := subcommands()
+	for _, name := range []string{"tunnel", "tunnel-spike", "connector", "migrate"} {
+		if registered[name] == nil {
+			t.Errorf("subcommand %q is not registered", name)
+		}
+	}
+}

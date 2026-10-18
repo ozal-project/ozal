@@ -2,8 +2,10 @@
 package proxy
 
 import (
+	"errors"
 	"fmt"
-	"log"
+	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/netip"
@@ -23,11 +25,38 @@ import (
 // Option configures the proxy handler.
 type Option func(*options)
 
+// defaultResponseHeaderTimeout bounds how long an upstream may stay silent
+// after receiving a request. It does not limit the body: a route may stream.
+const defaultResponseHeaderTimeout = 60 * time.Second
+
 type options struct {
-	transport      http.RoundTripper
-	devErrors      bool
-	sink           events.Sink
-	trustedProxies []netip.Prefix
+	transport             http.RoundTripper
+	responseHeaderTimeout time.Duration
+	logger                *slog.Logger
+	devErrors             bool
+	sink                  events.Sink
+	trustedProxies        []netip.Prefix
+}
+
+// WithResponseHeaderTimeout sets how long an upstream may take to start
+// answering. It only applies to the built-in transport: a transport supplied
+// with WithTransport keeps its own limits.
+func WithResponseHeaderTimeout(d time.Duration) Option {
+	return func(o *options) {
+		if d > 0 {
+			o.responseHeaderTimeout = d
+		}
+	}
+}
+
+// WithLogger sets where the proxy writes its operational log (forwarded
+// requests, upstream failures). The default is slog.Default() at New time.
+func WithLogger(logger *slog.Logger) Option {
+	return func(o *options) {
+		if logger != nil {
+			o.logger = logger
+		}
+	}
 }
 
 // WithTransport supplies an outbound transport (for example, a tunnel).
@@ -84,9 +113,14 @@ type AuthGate interface {
 // New builds a host-routed reverse proxy handler from the given routes.
 // It fails fast on invalid or duplicate hosts and targets. checker and gate may be nil.
 func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Option) (http.Handler, error) {
-	cfg := options{sink: events.Discard}
+	cfg := options{sink: events.Discard, responseHeaderTimeout: defaultResponseHeaderTimeout, logger: slog.Default()}
 	for _, opt := range opts {
 		opt(&cfg)
+	}
+	if cfg.transport == nil {
+		// One transport for every route: connections to the same upstream are
+		// reused, and the limits are defined in one place.
+		cfg.transport = newUpstreamTransport(cfg.responseHeaderTimeout)
 	}
 	byHost := make(map[string]route, len(routes))
 
@@ -98,7 +132,7 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 		if _, exists := byHost[host]; exists {
 			return nil, fmt.Errorf("duplicate route host %q", host)
 		}
-		handler, err := upstreamHandler(r, cfg.devErrors, cfg.transport)
+		handler, err := upstreamHandler(r, cfg.devErrors, cfg.transport, cfg.logger)
 		if err != nil {
 			return nil, err
 		}
@@ -171,7 +205,13 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 				req.Header.Set(pipeline.IdentityUserHeader, principal.Subject)
 			}
 		}
-		log.Printf("%s %s%s -> %s", req.Method, host, req.URL.Path, rt.target)
+		// Path only: a query string can carry tokens and must never be logged.
+		cfg.logger.LogAttrs(req.Context(), slog.LevelInfo, "proxy.forward",
+			slog.String("method", req.Method),
+			slog.String("host", host),
+			slog.String("path", req.URL.Path),
+			slog.String("target", rt.target),
+		)
 		rt.handler.ServeHTTP(w, req)
 	})
 
@@ -217,7 +257,7 @@ func writeDevNotFound(w http.ResponseWriter, requested string, byHost map[string
 
 // upstreamHandler builds what a route forwards to. A static root must already
 // exist as a directory so a typo fails at startup instead of serving 404s.
-func upstreamHandler(r config.Route, devErrors bool, transport http.RoundTripper) (http.Handler, error) {
+func upstreamHandler(r config.Route, devErrors bool, transport http.RoundTripper, logger *slog.Logger) (http.Handler, error) {
 	if r.IsStatic() {
 		info, err := os.Stat(r.Root)
 		if err != nil {
@@ -243,13 +283,11 @@ func upstreamHandler(r config.Route, devErrors bool, transport http.RoundTripper
 			} else {
 				pr.Out.Header.Del("Cookie")
 			}
-			// A client-supplied forwarding chain is never trusted: SetXForwarded
-			// appends to an existing X-Forwarded-For, so drop it first.
-			pr.Out.Header.Del("X-Forwarded-For")
 			pr.SetURL(target)
 			pr.SetXForwarded()
-			// Forward a single address from Trust's decision, never an
-			// incoming chain. RemoteAddr still identifies the TCP peer.
+			// A client-supplied forwarding chain is never trusted: forward
+			// a single address from Trust's decision, never an incoming
+			// chain. RemoteAddr still identifies the TCP peer.
 			pr.Out.Header.Del("X-Forwarded-For")
 			if ip, ok := pipeline.ClientIP(pr.In.Context()); ok {
 				pr.Out.Header.Set("X-Forwarded-For", ip.String())
@@ -258,13 +296,53 @@ func upstreamHandler(r config.Route, devErrors bool, transport http.RoundTripper
 			// internal target); keep the public host the client asked for.
 			pr.Out.Host = pr.In.Host
 		},
-	}
-	if devErrors {
-		proxy.ErrorHandler = func(w http.ResponseWriter, req *http.Request, err error) {
-			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			w.WriteHeader(http.StatusBadGateway)
-			fmt.Fprintf(w, "upstream %s is unreachable: %v\nhint: is the app running and listening on that port?\n", target, err)
-		}
+		ErrorHandler: func(w http.ResponseWriter, req *http.Request, err error) {
+			status := http.StatusBadGateway
+			if isTimeout(err) {
+				status = http.StatusGatewayTimeout
+			}
+			// The failure goes to the operator's log; the visitor only gets
+			// the error class unless development errors are on.
+			logger.LogAttrs(req.Context(), slog.LevelWarn, "proxy.upstream_error",
+				slog.String("host", req.Host),
+				slog.String("target", target.String()),
+				slog.Int("status", status),
+				slog.String("error", err.Error()),
+			)
+			if devErrors {
+				w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+				w.WriteHeader(status)
+				fmt.Fprintf(w, "upstream %s is unreachable or too slow: %v\nhint: is the app running and listening on that port?\n", target, err)
+				return
+			}
+			http.Error(w, http.StatusText(status), status)
+		},
 	}
 	return proxy, nil
+}
+
+// newUpstreamTransport builds the transport every route without a custom one
+// forwards through. It is explicit instead of a copy of http.DefaultTransport:
+// routes point at internal hosts, so HTTP_PROXY style variables must never
+// reroute them, and every phase before the body has a limit. The body itself
+// is unbounded on purpose, so downloads and streams keep working.
+func newUpstreamTransport(responseHeaderTimeout time.Duration) *http.Transport {
+	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
+	return &http.Transport{
+		Proxy:                 nil,
+		DialContext:           dialer.DialContext,
+		ForceAttemptHTTP2:     true,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: responseHeaderTimeout,
+		ExpectContinueTimeout: time.Second,
+		IdleConnTimeout:       90 * time.Second,
+		MaxIdleConns:          100,
+	}
+}
+
+// isTimeout reports whether err means the upstream was too slow, as opposed
+// to refusing the connection or being unreachable.
+func isTimeout(err error) bool {
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
 }
