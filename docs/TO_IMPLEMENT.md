@@ -1,7 +1,7 @@
 # To implement — Switchboard
 
 **Last review:** 2026-10-18
-**Code reviewed up to:** `87262f2` (private integrated acceptance `731a204`; SHD-002 and denial aggregation after it)
+**Code reviewed up to:** `ce7840b` (private integrated acceptance `731a204`; SHD-002 and denial aggregation after it)
 **Purpose:** the single source of active work, priorities, blockers and done
 criteria. Closed work moves to [`IMPLEMENTED.md`](IMPLEMENTED.md). Direction
 and the long-range map live in [`VISION.md`](../VISION.md); if another
