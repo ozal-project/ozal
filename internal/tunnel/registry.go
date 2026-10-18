@@ -22,9 +22,10 @@ type Authorizer interface {
 }
 
 var (
-	ErrInvalidName   = errors.New("connector name must be 1-63 characters of a-z, 0-9 or '-'")
-	ErrAlreadyActive = errors.New("an active connector already uses that name or certificate")
-	ErrNotFound      = errors.New("no active connector with that name")
+	ErrInvalidName      = errors.New("connector name must be 1-63 characters of a-z, 0-9 or '-'")
+	ErrAlreadyActive    = errors.New("an active connector already uses that name or certificate")
+	ErrNotFound         = errors.New("no active connector with that name")
+	ErrEnrolmentChanged = errors.New("active connector identity changed or was revoked")
 )
 
 var namePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
@@ -34,6 +35,57 @@ var namePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 type Registry struct {
 	db  *sql.DB
 	now func() time.Time
+}
+
+// Current returns the exact active identity for compare-and-swap maintenance.
+func (r *Registry) Current(ctx context.Context, name string) (Fingerprint, error) {
+	var fp Fingerprint
+	var raw []byte
+	err := r.db.QueryRowContext(ctx, `SELECT cert_sha256 FROM connectors WHERE name = ? AND revoked_at IS NULL`, name).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fp, ErrNotFound
+	}
+	if err != nil {
+		return fp, fmt.Errorf("current connector: %w", err)
+	}
+	copy(fp[:], raw)
+	return fp, nil
+}
+
+// Rotate atomically retires exactly expected and enrols replacement. A stale
+// renewal/rollback must never undo another rotation or an operator revocation.
+func (r *Registry) Rotate(ctx context.Context, name string, expected, replacement Fingerprint) error {
+	if !namePattern.MatchString(name) {
+		return ErrInvalidName
+	}
+	if expected == replacement {
+		return errors.New("replacement must be a different certificate")
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	now := r.now().Unix()
+	result, err := tx.ExecContext(ctx, `UPDATE connectors SET revoked_at = ? WHERE name = ? AND cert_sha256 = ? AND revoked_at IS NULL`, now, name, expected[:])
+	if err != nil {
+		return fmt.Errorf("retire connector: %w", err)
+	}
+	changed, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if changed != 1 {
+		return ErrEnrolmentChanged
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO connectors (name, cert_sha256, created_at) VALUES (?, ?, ?)`, name, replacement[:], now)
+	if isConstraint(err) {
+		return ErrAlreadyActive
+	}
+	if err != nil {
+		return fmt.Errorf("replace connector: %w", err)
+	}
+	return tx.Commit()
 }
 
 func NewRegistry(db *sql.DB) *Registry { return &Registry{db: db, now: time.Now} }

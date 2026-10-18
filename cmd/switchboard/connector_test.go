@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"encoding/pem"
 	"math/big"
 	"os"
@@ -29,6 +30,47 @@ func writeCert(t *testing.T, dir string) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+func TestConnectorAtomicRotationCommand(t *testing.T) {
+	ctx := context.Background()
+	db := filepath.Join(t.TempDir(), "state.db")
+	if err := runMigrate(ctx, []string{"-db", db}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	old, next := writeCert(t, t.TempDir()), writeCert(t, t.TempDir())
+	oldFP, _ := fingerprintFromPEM(old)
+	nextFP, _ := fingerprintFromPEM(next)
+	expected := hex.EncodeToString(oldFP[:])
+	run := func(args ...string) (string, error) {
+		var out bytes.Buffer
+		err := runConnector(ctx, args, &out)
+		return strings.TrimSpace(out.String()), err
+	}
+	if _, err := run("enroll", "-db", db, "-name", "portfolio", "-cert", old); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := run("current", "-db", db, "-name", "portfolio"); err != nil || got != expected {
+		t.Fatalf("current: %s %v", got, err)
+	}
+	if _, err := run("rotate", "-db", db, "-name", "portfolio", "-cert", next, "-expected", "bad"); err == nil {
+		t.Fatal("malformed fingerprint accepted")
+	}
+	if _, err := run("rotate", "-db", db, "-name", "portfolio", "-cert", next, "-expected", expected); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := run("current", "-db", db, "-name", "portfolio"); err != nil || got != hex.EncodeToString(nextFP[:]) {
+		t.Fatalf("rotated current: %s %v", got, err)
+	}
+	if _, err := run("rotate", "-db", db, "-name", "portfolio", "-cert", old, "-expected", expected); err == nil {
+		t.Fatal("stale rotation accepted")
+	}
+	if _, err := run("revoke", "-db", db, "-name", "portfolio"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := run("current", "-db", db, "-name", "portfolio"); err != nil || got != "none" {
+		t.Fatalf("revoked current: %s %v", got, err)
+	}
 }
 
 func TestConnectorCommandLifecycle(t *testing.T) {

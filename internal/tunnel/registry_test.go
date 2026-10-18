@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/octaviosantacruz/switchboard/internal/store/sqlite"
@@ -25,6 +26,37 @@ func newTestRegistry(t *testing.T) *Registry {
 		t.Fatal(err)
 	}
 	return NewRegistry(db)
+}
+
+func TestConcurrentRotationsHaveOneWinner(t *testing.T) {
+	ctx := context.Background()
+	r := newTestRegistry(t)
+	old := FingerprintOf([]byte("old"))
+	if err := r.Enroll(ctx, "portfolio", old); err != nil {
+		t.Fatal(err)
+	}
+	results := make(chan error, 8)
+	var workers sync.WaitGroup
+	for i := range 8 {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			results <- r.Rotate(ctx, "portfolio", old, FingerprintOf([]byte{byte(i)}))
+		}()
+	}
+	workers.Wait()
+	close(results)
+	winners := 0
+	for err := range results {
+		if err == nil {
+			winners++
+		} else if !errors.Is(err, ErrEnrolmentChanged) {
+			t.Fatalf("unexpected race result: %v", err)
+		}
+	}
+	if winners != 1 {
+		t.Fatalf("got %d rotation winners", winners)
+	}
 }
 
 func TestRegistryEnrollLookupRevokeReenroll(t *testing.T) {
@@ -79,5 +111,48 @@ func TestRegistryRejectsBadNames(t *testing.T) {
 		if err := r.Enroll(context.Background(), name, FingerprintOf([]byte(name))); !errors.Is(err, ErrInvalidName) {
 			t.Errorf("name %q: got %v, want ErrInvalidName", name, err)
 		}
+	}
+}
+
+func TestRegistryRotationIsAtomicAndRequiresCurrentIdentity(t *testing.T) {
+	ctx := context.Background()
+	r := newTestRegistry(t)
+	old, next, other := FingerprintOf([]byte("old")), FingerprintOf([]byte("next")), FingerprintOf([]byte("other"))
+	if err := r.Enroll(ctx, "portfolio", old); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Enroll(ctx, "other", other); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Rotate(ctx, "portfolio", old, other); !errors.Is(err, ErrAlreadyActive) {
+		t.Fatalf("duplicate replacement must roll back: %v", err)
+	}
+	if got, err := r.Current(ctx, "portfolio"); err != nil || got != old {
+		t.Fatalf("failed rotation changed active identity: %x %v", got, err)
+	}
+	if err := r.Rotate(ctx, "portfolio", old, next); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := r.Lookup(ctx, old); err != nil || ok {
+		t.Fatalf("old identity still active: %v", err)
+	}
+	if got, err := r.Current(ctx, "portfolio"); err != nil || got != next {
+		t.Fatalf("new identity: %x %v", got, err)
+	}
+	if err := r.Rotate(ctx, "portfolio", old, other); !errors.Is(err, ErrEnrolmentChanged) {
+		t.Fatalf("stale renewal must not overwrite newer identity: %v", err)
+	}
+	if err := r.Revoke(ctx, "portfolio"); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Rotate(ctx, "portfolio", next, old); !errors.Is(err, ErrEnrolmentChanged) {
+		t.Fatalf("rollback must not override operator revocation: %v", err)
+	}
+	if _, err := r.Current(ctx, "portfolio"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("revoked current: %v", err)
+	}
+	records, err := r.List(ctx)
+	if err != nil || len(records) != 3 {
+		t.Fatalf("history: %d %v", len(records), err)
 	}
 }

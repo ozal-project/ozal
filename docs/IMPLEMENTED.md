@@ -6,6 +6,18 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## Cloudflare coexistence decision — 2026-10-18 (working tree, no commit)
+
+Owner-approved [architecture decision](architecture/cloudflare-coexistence.md)
+recorded: public Portfolio stays on Pages; a separate preview will validate
+Cloudflare exterior protection with Switchboard identity/policy and owned
+transport. Responsibilities, origin-bypass acceptance, evidence budgets and
+control-by-control removal/rollback criteria are documented. VISION, active
+tracker and workspace/Server Ops direction aligned. This closes documentation
+only; EDGE-006 remains active implementation work. No deployment or provider
+configuration change is claimed. Validation: local document links, task
+references and whitespace checked; product suites not rerun for prose changes.
+
 Entries before the tracker existed (September 2026) are reconstructed from git
 history and grouped by the original phases.
 
@@ -212,3 +224,43 @@ px and automated axe reported zero WCAG A/AA violations, with empty-table/glyph
 checks incomplete. The local development unit was rebuilt/restarted and both
 console pages plus the font returned 200. Server Ops owns the separate launcher
 and SSH metadata in ports.json; no port registry is copied into Switchboard.
+## Private two-host tunnel delivery — 2026-10-18 (working tree, no commit)
+
+Delivered slice of TUN-002; the task remains open in TO_IMPLEMENT.md.
+`switchboard tunnel edge|connect -tunnel-network CIDR` permits mTLS transport
+on one explicitly configured private subnet; defaults and HTTP/origin limits
+remain loopback-only. Public/wildcard destinations, DNS names, unrelated
+subnets, noncanonical prefixes and prefixes spanning public space are rejected.
+The disposable tunnel-spike command retains its original restrictions.
+
+Verification: new CLI regression failed before implementation (flag absent),
+then passed; the full scripts/verify.sh gate passed (race, fuzz, build; optional
+staticcheck/govulncheck unavailable). Existing separate-process persistent smoke
+passed. A pilot was installed as two enabled user services on Hetzner/homelab,
+with role keys generated locally, public-CSR signing and registry enrolment.
+Real origin marker, EN/ES and selected assets matched. Graceful/abrupt edge
+recovery retained the live connector PID. Revocation closed the session and
+rejected reconnects; a new key/certificate/enrolment restored service. Only
+these new pilot services were interrupted; existing staging was preserved.
+No public listener, DNS cutover or host reboot was performed.
+## Automatic native leaf renewal — 2026-10-18 (working tree, no commit)
+
+Delivered another TUN-002 slice; the task retains its explicit residuals.
+`tunnel renew` and the SSH `renew-agent` live in the existing Go binary.
+`internal/tunnelrenew` handles local Ed25519 key generation, public CSR signing
+with crypto/x509, exact role validation, durable intent and atomic identity
+pointers. Connector replacement uses a transactional expected-fingerprint
+comparison; rollback cannot override an operator's revocation/replacement.
+Both roles are restored before health validation, including an expired pair.
+No new Go dependencies or Python/OpenSSL renewal runtime were added.
+
+Observed: full gate/race/fuzz/build passed. Tests cover rotation collisions and
+concurrency, lost replies, failed candidates, external revocation, key mismatch,
+CA expiry, interrupted journals and the paired recovery/rollback order. A real
+forced renewal replaced both role keys/certificates; the previous connector
+row is revoked and the new one active. Live homelab-origin/content checks
+passed afterward. The daily systemd timer is enabled on the homelab; its first
+normal check succeeded without unnecessary renewal and no pending journal
+remains. Server Ops owns the units and records the operational evidence.
+CA trust-anchor rollover remains a separate managed change. No public exposure,
+DNS/firewall change or host reboot was performed.

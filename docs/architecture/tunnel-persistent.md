@@ -1,9 +1,10 @@
-# TUN-002: registry-backed local commands
+# TUN-002: registry-backed private commands
 
 The `switchboard tunnel edge|connect` commands use certificates supplied from
 files and an explicitly migrated SQLite connector registry. Startup never
-replaces or issues an identity. Both commands are local-only while the exposure
-gates remain open; the [tracker](../TO_IMPLEMENT.md) owns the remaining work.
+replaces or issues an identity. HTTP is loopback-only; mTLS transport may opt
+into one private CIDR. Public exposure remains gated; the
+[tracker](../TO_IMPLEMENT.md) owns the remaining work.
 They run separately from the normal proxy/admin process.
 
 ## Operator flow
@@ -35,17 +36,18 @@ to copy into a command. Run `go run ./cmd/switchboard tunnel edge -h` or
 |---|---|
 | `-cert`, `-key`, `-ca` | Required file paths to the role's leaf chain, private key and trusted CA certificates. |
 | `-host` | Required exact request hostname; unrelated hosts return 404. |
+| `-tunnel-network` | Optional canonical CIDR wholly within RFC1918/IPv6 ULA. Only mTLS ingress/destination may use literal IPs inside it; loopback remains allowed. No wildcard, public address or DNS resolution. Defaults to loopback-only. |
 
 | Edge flags | Meaning |
 |---|---|
 | `-db` | SQLite registry, defaults to `switchboard.db` relative to the process working directory. |
 | `-connector` | Required active registry name that serves this host. The peer's name is resolved from its certificate fingerprint, never a name claimed over the wire. |
 | `-listen` | HTTP loopback IP/port; defaults to `127.0.0.1:0`. |
-| `-tunnel-listen` | mTLS loopback IP/port; defaults to `127.0.0.1:0`. |
+| `-tunnel-listen` | mTLS IP/port; defaults to `127.0.0.1:0`. Private-network binding requires explicit `-tunnel-network`. |
 
 | Connect flags | Meaning |
 |---|---|
-| `-edge` | Required literal loopback IP and nonzero mTLS ingress port printed by the edge. |
+| `-edge` | Required literal IP and nonzero mTLS ingress port printed by the edge. Loopback unless explicitly allowed by `-tunnel-network`. |
 | `-server-name` | Required expected edge DNS identity, checked against the server certificate. |
 | `-root` | Absolute directory for a static site. |
 | `-upstream` | Fixed HTTP origin on a literal loopback IP with a port. Choose exactly one of `-root` and `-upstream`. |
@@ -88,8 +90,40 @@ The build directory above contains only the temporary executable.
 The lab certificate issuer is only a disposable test fixture: its CA key is not
 persisted and its leaves expire after 24 hours. Long-lived operation needs
 operator-provisioned certificates and the rotation work tracked in TUN-002.
-No public deployment, WAN recovery or host-service restart is established by
-this smoke.
+No public deployment or host reboot is established by this local smoke.
+
+## Private two-host pilot
+
+The 2026-10-18 working-tree delivery adds `-tunnel-network` without changing
+the disposable `tunnel-spike` command. An explicit prefix such as
+`10.8.0.0/24` permits only the mTLS transport to cross hosts. It never broadens
+the edge HTTP listener or the connector's fixed HTTP-origin permissions.
+TLS 1.3, certificate-name verification, registry authorization and revocation
+remain mandatory. Prefixes containing public space are rejected even if their
+first address is private.
+
+The operator flow and systemd units are maintained in
+[Server Ops](../../../server-ops/deploy/hetzner-tunnel/README.md): VPS mTLS on
+`10.8.0.1:9443`, HTTP on `127.0.0.1:18889`, outbound homelab connector with
+fixed Portfolio root. The host firewall allows that transport only from
+`10.8.0.4` on wg0. Role keys are generated on their own hosts; only public CSRs
+and certificates cross hosts. This remains an anonymous static route; the
+visitor contract above is unchanged.
+
+Observed on the real pilot: a file unique to the homelab, EN/ES and selected
+CSS/font/SVG/PNG assets matched through the VPS. Graceful edge restart and
+SIGKILL/systemd recovery kept the connector PID unchanged. Revocation closed
+the live session, subsequent retries were rejected, and HTTP returned 502.
+A newly generated connector key/certificate was then enrolled; the pilot is
+left running with that new identity and the old enrolment retained as revoked.
+This demonstrates a manual replacement, not automatic certificate rotation.
+
+Subsequent delivery on 2026-10-18 adds native `switchboard tunnel renew` and a
+daily host timer. It issues fresh local role keys, signs public CSRs, replaces
+the expected connector fingerprint transactionally and verifies the pair after
+restart. A real forced renewal was observed; automated leaf renewal supersedes
+the manual-only operating limitation above. See [renewal](tunnel-renewal.md)
+for journal recovery, rollback, operator revocation and CA-rollover boundaries.
 
 ## Observed verification — 2026-10-17
 

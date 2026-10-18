@@ -34,7 +34,7 @@ project.
 
 | Area | Options | Decide by |
 |---|---|---|
-| VPS provider | External host for the owned public edge; provider undecided | No budget now. Develop both roles locally under [TUN-001](tunnel-local-spike.md). Cloudflare Tunnel remains optional; no purchase blocks implementation. |
+| VPS provider | Hetzner CX23, reachable over WireGuard at 10.8.0.1 | Private loopback-only Switchboard/Portfolio staging installed (2026-10-17 America/Asuncion); public EDGE-001 remains gated. Builds and application databases stay in the homelab. [TUN-001](tunnel-local-spike.md) remains the owned-transport lab; Cloudflare Tunnel is optional. |
 | DNS provider for DNS-01 | Cloudflare DNS (already in use) | Deferred: only needed if Switchboard terminates TLS (`EDGE-002`) |
 | Email for one-time codes | SMTP relay, Resend, Amazon SES | Q1 (blocks `ID-002`) |
 | Private CA / ACME server | Own implementation on `crypto/x509` (preferred, learning) with Pebble as reference | Q2 |
@@ -48,6 +48,14 @@ project.
 | Postgres adapter | Only if Switchboard runs on two or more edges (shared state, HA) | When multi-edge is planned |
 | Go → TypeScript types for the admin API | `tygo` or hand-written | Q2 (with `UI-002`) |
 | Releases | GoReleaser, checksums, SBOM, cosign | Q1 |
+
+## Private pilot renewal
+
+Private pilot leaf renewal is implemented in the existing Go binary with the
+standard crypto/x509, ed25519 and JSON packages. Linux systemd schedules the
+operator command; existing SSH provides authenticated host coordination.
+No Python/OpenSSL runtime or new Go module is required for renewal. The CA
+signer remains on the homelab; the daily timer and unit belong to Server Ops.
 
 ## Rejected
 

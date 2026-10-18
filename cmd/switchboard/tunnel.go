@@ -18,10 +18,16 @@ import (
 	"github.com/octaviosantacruz/switchboard/internal/tunnel"
 )
 
-// runTunnel is the persistent, registry-backed local slice of TUN-002.
+// runTunnel is the persistent, registry-backed slice of TUN-002.
 // Certificates are supplied by the operator and never generated on startup.
-// All listeners and upstreams remain loopback-only pending exposure gates.
+// HTTP listeners/origins remain local; mTLS may opt into one private network.
 func runTunnel(ctx context.Context, args []string, out io.Writer) error {
+	if len(args) > 0 && args[0] == "renew" {
+		return runTunnelRenew(ctx, args[1:], out)
+	}
+	if len(args) > 0 && args[0] == "renew-agent" {
+		return runTunnelRenewAgent(ctx, args[1:], out)
+	}
 	if len(args) == 0 || (args[0] != "edge" && args[0] != "connect") {
 		return errors.New("usage: switchboard tunnel edge|connect [flags]")
 	}
@@ -32,6 +38,7 @@ func runTunnel(ctx context.Context, args []string, out io.Writer) error {
 	keyPath := fs.String("key", "", "persistent private key PEM path")
 	caPath := fs.String("ca", "", "trusted CA certificate PEM path")
 	host := fs.String("host", "", "one allowed request host (required)")
+	network := fs.String("tunnel-network", "", "optional private CIDR allowed for mTLS transport; HTTP remains loopback-only")
 	var dbPath, name, listen, ingress, edgeAddr, serverName, root, upstream string
 	if mode == "edge" {
 		fs.StringVar(&dbPath, "db", defaultDBPath, "migrated SQLite connector registry")
@@ -57,6 +64,10 @@ func runTunnel(ctx context.Context, args []string, out io.Writer) error {
 	if err != nil {
 		return errors.New("-host must be a valid route host")
 	}
+	privateNetwork, err := parseTunnelNetwork(*network)
+	if err != nil {
+		return err
+	}
 	if mode == "edge" {
 		if name == "" {
 			return errors.New("-connector is required")
@@ -64,11 +75,11 @@ func runTunnel(ctx context.Context, args []string, out io.Writer) error {
 		if err := validateLabAddress(listen, true); err != nil {
 			return err
 		}
-		if err := validateLabAddress(ingress, true); err != nil {
+		if err := validateTunnelAddress(ingress, true, privateNetwork); err != nil {
 			return err
 		}
 	} else {
-		if err := validateLabAddress(edgeAddr, false); err != nil {
+		if err := validateTunnelAddress(edgeAddr, false, privateNetwork); err != nil {
 			return err
 		}
 		if serverName == "" {

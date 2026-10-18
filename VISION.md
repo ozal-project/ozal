@@ -58,7 +58,7 @@ with cryptography instead of process.
 
 | Project | Strength | Where Switchboard differs |
 |---|---|---|
-| Cloudflare Tunnel + Access | Tunnels, protected quick tunnels, email OTP | Self-hosted, your domain, no vendor in the path |
+| Cloudflare Tunnel + Access | Tunnels, protected quick tunnels, email OTP | Self-hostable identity/policy and owned transport; optional exterior proxy protection |
 | Pangolin | Self-hosted tunnels, WireGuard, RBAC | Own CA and transparency log; AI-agent principals |
 | Octelium | Broad FOSS ZTNA, VPN, API/AI gateway | Smaller and readable; verifiability as the core thesis |
 | Teleport, HashiCorp Boundary | Infra access, session recording | Homelab-to-small-team scale, one binary |
@@ -69,6 +69,19 @@ with cryptography instead of process.
 
 Feature-count races are a losing game; the thesis above is what makes the
 project worth existing.
+
+## Deployment direction — 2026-10-18
+
+Keep the public Portfolio on Cloudflare Pages. Validate a separate preview as
+Cloudflare proxy → Switchboard VPS → application/owned homelab tunnel.
+Cloudflare initially handles exterior protection; Switchboard owns gateway
+identity and policy. Reduce dependencies one control at a time using measured
+acceptance, recovery and rollback; do not claim global CDN, volumetric DDoS or
+advanced bot parity from one VPS. Inventory actual Workers uses before
+designing substitutes. Essential app behavior must remain portable.
+The [coexistence decision](docs/architecture/cloudflare-coexistence.md) defines
+boundaries and evidence; active work stays in EDGE-006/EDGE-001. This supersedes
+any assumption that dogfooding requires migrating the Portfolio apex.
 
 ## What exists today
 

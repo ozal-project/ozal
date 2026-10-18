@@ -217,3 +217,35 @@ The full repository gate and browser/process checks were run during this session
 no product code changed after the final checks. TUN-002 and UI-001 retain their
 explicit remaining acceptance work in TO_IMPLEMENT.md. No push is part of this
 checkpoint.
+## 2026-10-18 — explicit private transport and two-host mTLS pilot
+
+`netip.Prefix` represents the transport allowlist as a value. Checking both
+containment in an RFC1918/ULA block and prefix length prevents a prefix such
+as 10.0.0.0/7 from including public space. This permission applies only to
+mTLS addresses, not HTTP listeners or connector origins. CLI table tests
+exercise the policy before keys/sockets are opened; the real two-host smoke
+proves the authenticated data path. Graceful and abrupt edge recovery preserve
+the connector process. Revocation and a new key/certificate demonstrate why
+certificate validity and registry enrolment are separate authorization checks.
+Delivered in the working tree without a commit; TUN-002's remaining scope is
+unchanged in TO_IMPLEMENT.md.
+## 2026-10-18 — native leaf renewal and guarded recovery
+
+SQLite transactions make retiring the exact previous fingerprint and enrolling
+the new one a single operation. The expected value prevents stale maintenance
+or rollback from undoing an operator revocation. A fsynced intent journal plus
+atomic symlink replacement makes the multi-host operation resumable; the file
+lock disappears with its process. Go's crypto/x509 signs and verifies public
+CSRs while each host keeps its own private key. Restoring both roles before
+the health probe handles a pair that expired while offline. Native tests and a
+real forced renewal passed; the daily timer was enabled without publishing.
+
+## 2026-10-18 — coexistence and measurable independence
+
+A private mTLS transport proves connector identity, not visitor WAF coverage.
+An exterior proxy can protect the network while Switchboard owns access
+policy; source filtering alone does not identify our deployment. Requests
+blocked before the origin cannot measure our detector's coverage. Gradual
+independence needs controlled traffic, explicit budgets and a removal/rollback
+drill. Architecture decision documented; public Portfolio stays on Pages.
+No Go code or runtime changed in this documentation task.

@@ -1,5 +1,5 @@
-// Package tunnel implements the local TUN-001 experiment. It is not a public
-// deployment configuration: the CLI enforces loopback at both ends.
+// Package tunnel implements authenticated, registry-backed tunnel transport.
+// The CLI defaults to loopback and may explicitly allow one private network.
 package tunnel
 
 import (
