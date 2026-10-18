@@ -23,6 +23,37 @@ timeouts). The certificate renewal test now waits for both activation and its
 event, rather than racing the worker between those two observations. The final
 worktree gate remains the completion evidence below. No push was performed.
 
+## TUN-002 (part) — private integrated VPS acceptance — 2026-10-18 (UTC)
+
+Deployed clean commit `731a204` to the existing private VPS edge and homelab
+connector, preserving registry, role-local keys, identity links and unit names.
+Both binaries have SHA-256
+`5c30643e4b044416dcb0f792cfe8af4560e141be3ffb2d84d8d88a6fddbe2d96`.
+The normal process owns HTTP loopback 18889, admin loopback 9092 and VPN mTLS
+10.8.0.1:9443. No facade hop is used for private acceptance.
+
+Observed: live EN/ES/assets and unique homelab marker; graceful and abrupt edge
+recovery without restarting the connector; disposable route reload; connector
+state and common SSE event; two real TCP peer addresses preserved at the homelab
+origin while forged forwarding/identity headers and the edge cookie disappear.
+A disposable enrolled identity was revoked: active session closed, route 502,
+reconnect rejected, primary Portfolio identity/content preserved. Temporary
+route, origin process and private fixture key were removed; revocation history
+remains. The CA private key never left its host.
+
+Rollback to both original binaries/units and reactivation were exercised with
+live content checks; SQLite was never restored over the active registry.
+The daily renewal timer is enabled/active again. Original staging kept PID
+33655; public preview remains inactive, TCP 80/443 absent, DNS unchanged.
+This closes deployed *private integrated* acceptance only. Public Cloudflare
+IP/TLS/Shield acceptance, protected visitor identity and host reboot remain
+explicit residuals. [Runbook and checkpoint](../../server-ops/deploy/hetzner-tunnel/README.md).
+Final verification rerun after deployment: `scripts/verify.sh` 7/7, including
+race tests, build, fuzz, staticcheck and govulncheck (zero reachable findings;
+one advisory only in required modules). Server Ops `scripts/verify.sh` and
+`bin/check-ports` passed; helper syntax, local link targets and diff checks passed.
+Operational helpers and this evidence are uncommitted; source binary is committed.
+
 ## TUN-002 (part) — integrated connector routes and console — 2026-10-18 (committed with this change)
 
 The ordinary process can own the private registry-backed mTLS listener and

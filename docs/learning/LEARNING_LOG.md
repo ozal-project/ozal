@@ -490,3 +490,10 @@ The language minimum stays independent from the patched toolchain selection.
 Commit checkpoints: `802804a`, `a4d58c1`, `700d572`, `2698e62`, `5c681d3`;
 integrated connector routing is committed with this entry. Deployment acceptance
 remains in the active tracker.
+
+## 2026-10-18 — private integrated deployment acceptance
+
+A rollback restores executable/unit state, never an old registry over live
+revocations. A real TCP-peer proof across the private tunnel establishes only
+that trust boundary; Cloudflare visitor-IP acceptance is a separate test.
+Disposable identities let revocation be tested without rotating Portfolio.
