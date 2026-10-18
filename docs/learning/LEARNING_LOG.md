@@ -14,6 +14,10 @@ Format: `YYYY-MM-DD · ID · topic — what clicked (link to code)`
   One state directory belongs to one ACME directory forever, so staging and
   production never share `origin-cert*`
   ([certs](../../internal/certs/), [hetzner-public](../../../server-ops/deploy/hetzner-public/README.md)).
+  Production repeated the path privately, and the origin boundary held: no
+  certificate and an untrusted leaf both die with a TLS alert, a CA-signed
+  disposable leaf serves the site. `openssl s_client` can exit 0 while
+  printing an alert — trust the full output or a real client (`curl`).
 - 2026-10-18 · SHD-002 · header policy and log safety — HSTS only means
   something over TLS, so it is set conditionally; baseline security headers go
   before the host check so even a rejected 421 carries them. Same principle
