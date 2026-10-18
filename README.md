@@ -122,6 +122,9 @@ add `BEGIN`/`COMMIT` to migration files. Session persistence in the normal
 application remains pending under `ARCH-004`; creating its table alone does
 not enable it.
 
+The module keeps `go 1.26.0` as its language minimum and recommends toolchain
+`go1.27.2`; normal Go toolchain auto-selection uses that patched version.
+
 ## Optional rate limiting
 
 The normal routing config can enable per-IP buckets; requests under `/_/auth/`
