@@ -372,7 +372,7 @@ site was changed. Credentials and restart-safe deployment remain in `EDGE-001`.
 
 | Commit | Result |
 |---|---|
-| _uncommitted_ | `EDGE-007` (part): first **real** ACME DNS-01 issuance against Let's Encrypt staging with the operator's zone-scoped token (file reference, never logged). Certificate `CN=preview.octaviosantacruz.com`, issuer `(STAGING) Baloney Bulgur YE2`, serial `2C3EE27A…`, 18/10 → 21/12. Served on `:443` with SNI; manual restart at 23:40:48 reused the same serial (no re-issuance). `_acme-challenge` TXT removed (NXDOMAIN); `preview` A absent and public 443 unreachable (DNS/firewall untouched); `/` and `/es/` hashes match `portfolio/dist` exactly through the owned tunnel. Residual: production issuance, real renewal window (next attempt 30/11), origin client-auth handshake with the production config, public acceptance. |
+| `87262f2` | `EDGE-007` (part): first **real** ACME DNS-01 issuance against Let's Encrypt staging with the operator's zone-scoped token (file reference, never logged). Certificate `CN=preview.octaviosantacruz.com`, issuer `(STAGING) Baloney Bulgur YE2`, serial `2C3EE27A…`, 18/10 → 21/12. Served on `:443` with SNI; manual restart at 23:40:48 reused the same serial (no re-issuance). `_acme-challenge` TXT removed (NXDOMAIN); `preview` A absent and public 443 unreachable (DNS/firewall untouched); `/` and `/es/` hashes match `portfolio/dist` exactly through the owned tunnel. Residual: production issuance, real renewal window (next attempt 30/11), origin client-auth handshake with the production config, public acceptance. |
 
 ## Shield and origin events (2026-10-18)
 
