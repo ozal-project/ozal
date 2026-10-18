@@ -390,3 +390,27 @@ operator runs `switchboard migrate` first. And a session TTL change rebuilds
 the backend while every other reload reuses it — a lifetime change is a policy
 change, and keeping old rows under a new policy would be worse than logging
 everyone out.
+
+## 2026-10-18 — a chat channel that cannot slow the gate (NTF-001)
+
+Two constraints shaped this adapter. The first is that `events.Sink.Emit` runs
+on the request path, so the alert bridge cannot call the network inline: it
+enqueues per paired chat into a bounded channel and one worker delivers, with
+a drop counter instead of backpressure. Losing an alert is a smaller failure
+than slowing down the login it reports. The second is that the Bot API puts
+the bot token in the request URL — the credential is unavoidable in the path —
+so `errors.As` with `*url.Error` unwraps the transport error before it can be
+formatted into a log line: `Post "https://api.telegram.org/bot<token>/..."`
+would otherwise leak the token everywhere `err` goes. A test asserts the token
+string never appears in an error.
+
+The callback design came from a hard limit rather than taste: Telegram caps
+`callback_data` at 64 bytes, so the signed payload cannot carry context. The
+button carries an action, a nonce and an expiry — three short fields — and the
+HMAC tag is truncated to 128 bits, which fits and is standard practice for
+short-lived tokens. Everything else (who, what, why) stays in the pending
+record the nonce addresses, which is also what makes single-use enforcement
+possible later: consuming a nonce exactly once is the approver's job. Retry
+classification stays boring on purpose: 429 and 5xx get at most two extra
+attempts with capped backoff, honoring the server's `retry_after`; a 4xx never
+retries, because repeating a refusal only burns the rate limit.

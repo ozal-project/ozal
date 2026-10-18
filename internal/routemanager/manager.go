@@ -323,7 +323,7 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 		return nil, err
 	}
 	if current := m.current.Load(); current != nil && !sameServerConfig(current.cfg, *cfg) {
-		return nil, fmt.Errorf("listen, admin listen, and TLS settings cannot change without restarting Switchboard")
+		return nil, fmt.Errorf("listen, admin listen, TLS, and notification settings cannot change without restarting Switchboard")
 	}
 
 	healthCtx, healthCancel := context.WithCancel(m.ctx)
@@ -563,6 +563,7 @@ func sameServerConfig(a, b config.Config) bool {
 		a.TLS.Email == b.TLS.Email &&
 		a.TLS.OriginClientCAFile == b.TLS.OriginClientCAFile &&
 		reflect.DeepEqual(a.TLS.DNS01, b.TLS.DNS01) &&
+		reflect.DeepEqual(a.Notify, b.Notify) &&
 		slices.Equal(a.TLS.Domains, b.TLS.Domains)
 }
 

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -96,6 +97,23 @@ type Admin struct {
 	Token  string `json:"token,omitempty"`
 }
 
+// Notify configures outbound notifications (NTF-001). Channels are opt-in:
+// a nil Notify means Switchboard publishes events to its log and console
+// only.
+type Notify struct {
+	Telegram *Telegram `json:"telegram,omitempty"`
+}
+
+// Telegram configures the bot channel. Token is a secret reference (env: or
+// file:); ChatsFile stores the paired chat IDs and must be writable by the
+// process. APIBase overrides the Bot API root for a self-hosted local Bot
+// API server; it must be https, or http only on loopback.
+type Telegram struct {
+	Token     string `json:"token"`
+	ChatsFile string `json:"chats_file"`
+	APIBase   string `json:"api_base,omitempty"`
+}
+
 // Limit is a token bucket: Rate requests per second with bursts up to Burst.
 type Limit struct {
 	Rate  float64 `json:"rate"`
@@ -129,6 +147,7 @@ type Config struct {
 	// hint, route list on 404). Local-only: it reveals internal addresses.
 	DevErrors bool       `json:"dev_errors,omitempty"`
 	RateLimit *RateLimit `json:"rate_limit,omitempty"`
+	Notify    *Notify    `json:"notify,omitempty"`
 	// UpstreamTimeoutSeconds is how long an upstream may take to start
 	// answering before the visitor gets a 504. Zero means the default (60);
 	// the response body is never limited.
@@ -278,6 +297,35 @@ func Validate(cfg Config) (*Config, error) {
 	if err := ValidateSecretReference("admin.token", cfg.Admin.Token); err != nil {
 		return nil, fmt.Errorf("config: %w", err)
 	}
+	if cfg.Notify != nil {
+		if cfg.Notify.Telegram == nil {
+			return nil, fmt.Errorf("config: notify requires telegram")
+		}
+		telegram := cfg.Notify.Telegram
+		if strings.TrimSpace(telegram.Token) == "" {
+			return nil, fmt.Errorf("config: notify.telegram requires token")
+		}
+		if err := ValidateSecretReference("notify.telegram.token", telegram.Token); err != nil {
+			return nil, fmt.Errorf("config: %w", err)
+		}
+		if telegram.ChatsFile == "" {
+			return nil, fmt.Errorf("config: notify.telegram requires chats_file")
+		}
+		if !filepath.IsAbs(telegram.ChatsFile) {
+			return nil, fmt.Errorf("config: notify.telegram chats_file %q must be an absolute path", telegram.ChatsFile)
+		}
+		telegram.ChatsFile = filepath.Clean(telegram.ChatsFile)
+		if telegram.APIBase != "" {
+			parsed, err := url.Parse(telegram.APIBase)
+			if err != nil || parsed.Host == "" {
+				return nil, fmt.Errorf("config: notify.telegram api_base %q is not a URL", telegram.APIBase)
+			}
+			loopback := parsed.Hostname() == "localhost" || net.ParseIP(parsed.Hostname()) != nil && net.ParseIP(parsed.Hostname()).IsLoopback()
+			if parsed.Scheme != "https" && !(parsed.Scheme == "http" && loopback) {
+				return nil, fmt.Errorf("config: notify.telegram api_base must be https (http only for a loopback Bot API server)")
+			}
+		}
+	}
 
 	anyProtectedRoute := false
 	for _, r := range cfg.Routes {
@@ -414,6 +462,14 @@ func Clone(source Config) Config {
 		clone.TLS.DNS01 = &dns01
 	}
 	clone.TrustedProxies = slices.Clone(source.TrustedProxies)
+	if source.Notify != nil {
+		notifyCopy := *source.Notify
+		if source.Notify.Telegram != nil {
+			telegramCopy := *source.Notify.Telegram
+			notifyCopy.Telegram = &telegramCopy
+		}
+		clone.Notify = &notifyCopy
+	}
 	if source.RateLimit != nil {
 		limit := *source.RateLimit
 		if source.RateLimit.Identity != nil {

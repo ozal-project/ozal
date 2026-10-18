@@ -25,6 +25,8 @@ import (
 	"github.com/octaviosantacruz/switchboard/internal/certs"
 	"github.com/octaviosantacruz/switchboard/internal/config"
 	"github.com/octaviosantacruz/switchboard/internal/events"
+	"github.com/octaviosantacruz/switchboard/internal/notify"
+	"github.com/octaviosantacruz/switchboard/internal/notify/telegram"
 	"github.com/octaviosantacruz/switchboard/internal/originauth"
 	"github.com/octaviosantacruz/switchboard/internal/routemanager"
 	"github.com/octaviosantacruz/switchboard/internal/store/sqlite"
@@ -40,6 +42,7 @@ func subcommands() map[string]func(context.Context, []string, io.Writer) error {
 		"tunnel-spike": runTunnelSpike,
 		"connector":    runConnector,
 		"migrate":      runMigrate,
+		"notify":       runNotify,
 	}
 }
 
@@ -71,7 +74,20 @@ func main() {
 	// proxy's operational records and every log.Printf in the process.
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
+	// The config is loaded here as well to decide whether notifications are
+	// on; the route manager loads and validates it again for routing.
+	loaded, err := config.Load(*configPath)
+	if err != nil {
+		log.Fatalf("config: %v", err)
+	}
+	alertSink, err := notificationSink(ctx, loaded, logger)
+	if err != nil {
+		log.Fatalf("notifications: %v", err)
+	}
 	sink := events.Multi{events.SlogSink{Logger: logger}, broker}
+	if alertSink != nil {
+		sink = append(sink, alertSink)
+	}
 	managerOpts := []routemanager.Option{routemanager.WithEventSink(sink)}
 	if *dbPath != "" {
 		// Sessions survive a restart through the migrated state database.
@@ -246,6 +262,29 @@ func certificateStatus(manager *certs.Manager) func() admin.CertificateStatus {
 			Pending:     status.PendingIntents,
 		}
 	}
+}
+
+// notificationSink builds the Telegram alert bridge when notify.telegram is
+// configured. A nil sink means no channel is enabled: events still reach the
+// log, the broker and the console.
+func notificationSink(ctx context.Context, cfg *config.Config, logger *slog.Logger) (events.Sink, error) {
+	if cfg.Notify == nil || cfg.Notify.Telegram == nil {
+		return nil, nil
+	}
+	token, err := config.ResolveSecret(cfg.Notify.Telegram.Token)
+	if err != nil {
+		return nil, fmt.Errorf("notify.telegram.token: %w", err)
+	}
+	client, err := telegram.New(telegram.Config{Token: token, BaseURL: cfg.Notify.Telegram.APIBase})
+	if err != nil {
+		return nil, err
+	}
+	chats, err := notify.OpenFileChats(cfg.Notify.Telegram.ChatsFile)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("notifications: telegram alerts enabled for %d paired chats", len(chats.IDs()))
+	return notify.NewAlertSink(ctx, client, chats, logger), nil
 }
 
 func formatTime(t time.Time) string {

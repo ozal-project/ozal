@@ -125,6 +125,44 @@ creating its table alone does not enable it.
 The module keeps `go 1.26.0` as its language minimum and recommends toolchain
 `go1.27.2`; normal Go toolchain auto-selection uses that patched version.
 
+## Optional notifications (Telegram)
+
+With a `notify.telegram` block, Switchboard sends login and admin-change
+alerts (logins, route changes, config reloads) to every paired chat:
+
+```json
+"notify": {
+  "telegram": {
+    "token": "file:/etc/switchboard/telegram-token",
+    "chats_file": "/var/lib/switchboard/telegram-chats.json"
+  }
+}
+```
+
+`token` is a secret reference (`env:` or `file:`) like every other
+credential; the bot token never appears in logs or events. `chats_file` keeps
+the paired chat IDs with owner-only permissions and is re-read when it
+changes, so pairing does not need a restart. `api_base` optionally points at a
+self-hosted [local Bot API server](https://github.com/tdlib/telegram-bot-api)
+(https; plain http only on loopback).
+
+Pair a chat — a private one — with a one-time code that only exists while the
+command waits:
+
+```bash
+go run ./cmd/switchboard notify pair -config config.json
+```
+
+Send the printed `/pair CODE` to the bot in the chat you want alerts in. A
+wrong code neither pairs nor ends the command; the code dies with it. Alerts
+never block the request path: a bounded queue drops and counts notifications
+if the API is slow, and the adapter retries 429/5xx answers a couple of times
+with a capped backoff, honoring the server's `retry_after`. Inline-button
+callback data (for the future approval flow) is signed with a key derived from
+the bot token, carries an action, a nonce and an expiry inside Telegram's
+64-byte limit, and is verified in constant time before use. No message is sent
+to any chat unless you configure the block and pair one.
+
 ## Optional rate limiting
 The normal routing config can enable per-IP buckets; requests under `/_/auth/`
 use the separate auth bucket, and an optional per-identity bucket is charged
