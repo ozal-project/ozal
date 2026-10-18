@@ -321,6 +321,14 @@ app and the status page.
 go run ./cmd/switchboard -config config.json
 ```
 
+Check a candidate config without starting anything (deployment runbooks use it
+before installing a file; it never resolves or prints secrets):
+
+```bash
+go run ./cmd/switchboard validate -config config.preview.json
+# config OK: routes=1 protected=0 tunnel=0 tls=true dns01=true trusted_proxies=22 admin=127.0.0.1:9091
+```
+
 ### Local development (plain HTTP)
 
 `config.json`:
