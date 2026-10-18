@@ -1,7 +1,7 @@
 # To implement — Switchboard
 
 **Last review:** 2026-10-18
-**Code reviewed up to:** `16f05bc` plus the CLI/console changes included in this commit
+**Code reviewed up to:** `2ae8941` (private integrated acceptance `731a204`; SHD-002 and denial aggregation after it)
 **Purpose:** the single source of active work, priorities, blockers and done
 criteria. Closed work moves to [`IMPLEMENTED.md`](IMPLEMENTED.md). Direction
 and the long-range map live in [`VISION.md`](../VISION.md); if another
