@@ -3,7 +3,7 @@
   const byId = (id) => document.getElementById(id);
   const rows = byId("rows");
   const state = byId("state");
-  const labels = {"access.allowed":"Access allowed","access.denied":"Access denied","login.started":"Login started","login.failed":"Login failed","login.succeeded":"Login succeeded","route.created":"Route added","route.deleted":"Route removed","config.reloaded":"Configuration reloaded","tunnel.connected":"Tunnel connected","tunnel.disconnected":"Tunnel disconnected","tunnel.rejected":"Tunnel rejected","origin.denied":"Origin pull rejected"};
+  const labels = {"access.allowed":"Access allowed","access.denied":"Access denied","access.rate_limited":"Rate limited","login.started":"Login started","login.failed":"Login failed","login.succeeded":"Login succeeded","route.created":"Route added","route.deleted":"Route removed","config.reloaded":"Configuration reloaded","tunnel.connected":"Tunnel connected","tunnel.disconnected":"Tunnel disconnected","tunnel.rejected":"Tunnel rejected","origin.denied":"Origin pull rejected"};
   const data = [];
   let paused = false;
   let pausedSnapshot = [];

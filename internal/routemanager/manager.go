@@ -76,6 +76,10 @@ type Snapshot struct {
 	// reusing warm connections.
 	transport        *http.Transport
 	transportTimeout time.Duration
+	// rateLimiters are the previous generation's when their settings are
+	// unchanged: rebuilding the buckets would hand every client a fresh
+	// burst on every reload.
+	rateLimiters *rateLimiters
 }
 
 // Manager owns the current routing snapshot. Reloads and mutations are
@@ -96,6 +100,7 @@ type Manager struct {
 	newSessions         func(ttl time.Duration) auth.SessionBackend
 	transport           *http.Transport
 	transportTimeout    time.Duration
+	rateLimiters        *rateLimiters
 	sink                events.Sink
 }
 
@@ -251,6 +256,66 @@ func (m *Manager) persistAndInstall(cfg config.Config) error {
 	return nil
 }
 
+// rateLimiters groups the limiter instances the request pipeline consumes.
+// The identity limiter is nil when the configuration does not define an
+// identity budget.
+type rateLimiters struct {
+	general  pipeline.Allower
+	auth     pipeline.Allower
+	identity pipeline.Allower
+	config   config.RateLimit
+}
+
+// limitersFor returns the installed limiters while their settings are
+// unchanged and builds a fresh set otherwise. Buckets survive every reload
+// that does not touch rate_limit, so a client cannot reset its budget by
+// forcing a reload.
+func (m *Manager) limitersFor(settings *config.RateLimit) *rateLimiters {
+	if settings == nil {
+		return nil
+	}
+	if installed := m.rateLimiters; installed != nil && sameRateLimitSettings(installed.config, *settings) {
+		return installed
+	}
+	const idle = 10 * time.Minute
+	maxKeys := settings.MaxKeys
+	if maxKeys <= 0 {
+		maxKeys = ratelimit.DefaultMaxKeys
+	}
+	limiters := &rateLimiters{
+		general: ratelimit.NewLimiter(settings.General.Rate, settings.General.Burst, idle, ratelimit.WithMaxKeys(maxKeys)),
+		auth:    ratelimit.NewLimiter(settings.Auth.Rate, settings.Auth.Burst, idle, ratelimit.WithMaxKeys(maxKeys)),
+		config:  cloneRateLimit(*settings),
+	}
+	if settings.Identity != nil {
+		limiters.identity = ratelimit.NewLimiter(settings.Identity.Rate, settings.Identity.Burst, idle, ratelimit.WithMaxKeys(maxKeys))
+	}
+	return limiters
+}
+
+func sameRateLimitSettings(a, b config.RateLimit) bool {
+	if a.General != b.General || a.Auth != b.Auth || a.MaxKeys != b.MaxKeys {
+		return false
+	}
+	switch {
+	case a.Identity == nil && b.Identity == nil:
+		return true
+	case a.Identity == nil || b.Identity == nil:
+		return false
+	default:
+		return *a.Identity == *b.Identity
+	}
+}
+
+func cloneRateLimit(source config.RateLimit) config.RateLimit {
+	clone := source
+	if source.Identity != nil {
+		identity := *source.Identity
+		clone.Identity = &identity
+	}
+	return clone
+}
+
 func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 	cfg, err := config.Validate(raw)
 	if err != nil {
@@ -327,22 +392,23 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 	if cfg.DevErrors {
 		proxyOpts = append(proxyOpts, proxy.WithDevErrors())
 	}
+	limiters := m.limitersFor(cfg.RateLimit)
+	if limiters != nil && limiters.identity != nil {
+		// The identity dimension runs inside the proxy, after the policy
+		// allowed the request: only there is the principal known.
+		proxyOpts = append(proxyOpts, proxy.WithIdentityLimiter(limiters.identity))
+	}
 	proxyHandler, err := proxy.New(cfg.Routes, checker, gate, proxyOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("build proxy: %w", err)
 	}
 	handler := withAuthEndpoints(proxyHandler, oidcGate, authEndpointHosts(*cfg, protectedHosts))
-	if rl := cfg.RateLimit; rl != nil {
+	if limiters != nil {
 		// Outside withAuthEndpoints so /_/auth/* is limited too. Trust runs
 		// first for the client IP; the copy inside the proxy is a no-op.
-		const idle = 10 * time.Minute
 		handler = pipeline.Chain(
 			pipeline.TrustWithProxies(trustedProxies),
-			pipeline.RateLimit(
-				ratelimit.NewLimiter(rl.General.Rate, rl.General.Burst, idle),
-				ratelimit.NewLimiter(rl.Auth.Rate, rl.Auth.Burst, idle),
-				"/_/auth/",
-			),
+			pipeline.RateLimit(limiters.general, limiters.auth, "/_/auth/", pipeline.WithRateLimitSink(m.sink)),
 		)(handler)
 	}
 	checker.Start(healthCtx, cfg.Routes, m.healthCheckInterval)
@@ -362,6 +428,7 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 
 		transport:        transport,
 		transportTimeout: transportTimeout,
+		rateLimiters:     limiters,
 	}, nil
 }
 
@@ -400,6 +467,10 @@ func (m *Manager) install(candidate *Snapshot) {
 			oldSessionCancel()
 		}
 	}
+	// Limiters carry no goroutine to stop, but they do carry accumulated
+	// state: keep the installed ones across reloads and drop them only when
+	// rate limiting is disabled or reconfigured.
+	m.rateLimiters = candidate.rateLimiters
 }
 
 func (m *Manager) discard(candidate *Snapshot) {

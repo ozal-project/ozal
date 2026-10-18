@@ -86,12 +86,19 @@ type Limit struct {
 	Burst int     `json:"burst"`
 }
 
-// RateLimit throttles requests per client IP. General applies to every
-// request; Auth applies in addition to paths under /_/auth/ and should be
-// much stricter. A nil RateLimit disables limiting.
+// RateLimit throttles requests per client IP and route. General applies to
+// every request; Auth applies in addition to paths under /_/auth/ and should
+// be much stricter. Identity, when present, adds one budget per
+// authenticated principal, charged only after the access policy allowed the
+// request. A nil RateLimit disables limiting.
 type RateLimit struct {
-	General Limit `json:"general"`
-	Auth    Limit `json:"auth"`
+	General  Limit  `json:"general"`
+	Auth     Limit  `json:"auth"`
+	Identity *Limit `json:"identity,omitempty"`
+	// MaxKeys caps how many distinct buckets each limiter keeps; zero
+	// selects the built-in default. It is the memory bound of the stage: a
+	// scan that varies its key cannot grow the maps without limit.
+	MaxKeys int `json:"max_keys,omitempty"`
 }
 
 type Config struct {
@@ -118,6 +125,10 @@ const (
 	DefaultUpstreamTimeout = 60 * time.Second
 	// maxUpstreamTimeoutSeconds keeps a typo from disabling the protection.
 	maxUpstreamTimeoutSeconds = 3600
+	// minRateLimitKeys and maxRateLimitKeys bound rate_limit.max_keys; zero
+	// (omitted) selects the ratelimit package's default.
+	minRateLimitKeys = 100
+	maxRateLimitKeys = 1_000_000
 )
 
 // UpstreamTimeout returns the configured response-header limit, or the default.
@@ -166,10 +177,17 @@ func Validate(cfg Config) (*Config, error) {
 		cfg.TrustedProxies[i] = prefix.String()
 	}
 	if cfg.RateLimit != nil {
-		for name, l := range map[string]Limit{"general": cfg.RateLimit.General, "auth": cfg.RateLimit.Auth} {
+		limits := map[string]Limit{"general": cfg.RateLimit.General, "auth": cfg.RateLimit.Auth}
+		if cfg.RateLimit.Identity != nil {
+			limits["identity"] = *cfg.RateLimit.Identity
+		}
+		for name, l := range limits {
 			if l.Rate <= 0 || l.Burst < 1 {
 				return nil, fmt.Errorf("config: rate_limit.%s needs rate > 0 and burst >= 1", name)
 			}
+		}
+		if n := cfg.RateLimit.MaxKeys; n != 0 && (n < minRateLimitKeys || n > maxRateLimitKeys) {
+			return nil, fmt.Errorf("config: rate_limit.max_keys must be between %d and %d (or omitted)", minRateLimitKeys, maxRateLimitKeys)
 		}
 	}
 	if cfg.UpstreamTimeoutSeconds < 0 || cfg.UpstreamTimeoutSeconds > maxUpstreamTimeoutSeconds {
@@ -323,6 +341,10 @@ func Clone(source Config) Config {
 	clone.TrustedProxies = slices.Clone(source.TrustedProxies)
 	if source.RateLimit != nil {
 		limit := *source.RateLimit
+		if source.RateLimit.Identity != nil {
+			identity := *source.RateLimit.Identity
+			limit.Identity = &identity
+		}
 		clone.RateLimit = &limit
 	}
 	clone.Routes = make([]Route, len(source.Routes))

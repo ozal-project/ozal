@@ -14,14 +14,15 @@ import (
 type Type string
 
 const (
-	AccessAllowed  Type = "access.allowed"
-	AccessDenied   Type = "access.denied"
-	LoginStarted   Type = "login.started"
-	LoginFailed    Type = "login.failed"
-	LoginSucceeded Type = "login.succeeded"
-	RouteCreated   Type = "route.created"
-	RouteDeleted   Type = "route.deleted"
-	ConfigReloaded Type = "config.reloaded"
+	AccessAllowed     Type = "access.allowed"
+	AccessDenied      Type = "access.denied"
+	AccessRateLimited Type = "access.rate_limited"
+	LoginStarted      Type = "login.started"
+	LoginFailed       Type = "login.failed"
+	LoginSucceeded    Type = "login.succeeded"
+	RouteCreated      Type = "route.created"
+	RouteDeleted      Type = "route.deleted"
+	ConfigReloaded    Type = "config.reloaded"
 )
 
 // Event is one decision or change with the context needed to explain it.

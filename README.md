@@ -126,20 +126,32 @@ The module keeps `go 1.26.0` as its language minimum and recommends toolchain
 `go1.27.2`; normal Go toolchain auto-selection uses that patched version.
 
 ## Optional rate limiting
-
 The normal routing config can enable per-IP buckets; requests under `/_/auth/`
-use the separate auth bucket. The feature is disabled when `rate_limit` is absent.
+use the separate auth bucket, and an optional per-identity bucket is charged
+after the access policy allows a request. The feature is disabled when
+`rate_limit` is absent.
 
 ```json
 "rate_limit": {
-  "general": { "rate": 20, "burst": 40 },
-  "auth": { "rate": 1, "burst": 3 }
+  "general":  { "rate": 20, "burst": 40 },
+  "auth":     { "rate": 1,  "burst": 3 },
+  "identity": { "rate": 10, "burst": 30 },
+  "max_keys": 10000
 }
 ```
 
 Rates are requests per second. Client keys come from the trust stage, not raw
-visitor forwarding headers. Excess requests return 429 with `Retry-After: 1`.
-Buckets reset on config reload; identity/route-specific limits remain pending.
+visitor forwarding headers, and include the route host, so one busy hostname
+does not spend another's budget. `identity` is a separate budget per
+authenticated principal (the value after login); omit it to disable that
+dimension. `max_keys` caps how many distinct buckets each limiter keeps
+(default 10000): a scan that varies its key cannot grow the maps without
+bound, and at capacity new keys are refused rather than evicting a bucket that
+still owes a restriction. A refused request answers `429` with the real
+`Retry-After` (rounded up to whole seconds, minimum 1) and emits an
+`access.rate_limited` event into the activity feed. Buckets survive a config
+reload while the settings do not change; changing `rate_limit` starts with
+fresh buckets.
 The local tunnel experiment is separate from this normal configuration path.
 
 ## Local trust activity

@@ -313,6 +313,31 @@ claim falls back to the peer instead of failing the request. Refactoring the
 Trust stage into one `trustStage(resolve)` function removed the duplicated
 strip-then-store logic: the difference between the two stages is one function.
 
+## 2026-10-18 — a rate limiter that can say when it is full (SHD-001)
+
+A token bucket answers yes or no; the caller that wants a `Retry-After`
+header needs the third answer, "not yet, and here is when". `Bucket.RetryAfter`
+computes the missing fraction of a token and converts it to time with one
+`math.Ceil`, which makes the header honest: the tests assert both directions —
+a request at the advertised wait is allowed, and a wait that is one nanosecond
+short is not. The two dimensions that were missing from the stage have
+different homes because the pipeline has a fixed order: the route host is
+known before authentication, so the stage appends it to the IP key, while the
+identity only exists after the OIDC gate, so the per-identity budget is
+charged inside the proxy right after the policy allows the request — a
+rate-limited request is never logged as allowed.
+
+Capacity is where failing closed does not mean failing dumb. At `max_keys` the
+limiter first reclaims buckets that are already refilled to full, because
+dropping one of those gives nothing away, and only then refuses the new key:
+evicting a bucket that still owes a restriction would let someone with many
+keys reset a victim's budget. The reload lesson was the opposite of the usual
+one: state that is *deliberately* kept (sessions, upstream transport) needed
+the same treatment for buckets, because rebuilding a limiter is a silent
+"everyone gets a fresh burst". Reusing the installed limiters while their
+settings are unchanged takes six lines and one regression test that spends a
+burst, reloads, and expects the 429 to still be there.
+
 ## 2026-10-18 — sessions that outlive the process (ARCH-004)
 
 The port that made this small was already implicit: the OIDC gate needs three

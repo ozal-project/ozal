@@ -34,6 +34,15 @@ type options struct {
 	trustedProxies        []netip.Prefix
 	assertVisitor         bool
 	tunnelTrust           bool
+	identityLimiter       pipeline.Allower
+}
+
+// WithIdentityLimiter adds the identity dimension of the ratelimit stage:
+// after the access policy allows a request, one bucket per authenticated
+// principal is charged. It is independent from the per-IP stage because the
+// identity only exists after authentication.
+func WithIdentityLimiter(limiter pipeline.Allower) Option {
+	return func(o *options) { o.identityLimiter = limiter }
 }
 
 // WithVisitorAssertion makes the proxy tell its upstream who the visitor is
@@ -204,6 +213,25 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 				})
 				http.Error(w, "access denied", http.StatusForbidden)
 				return
+			}
+			// The identity dimension of the ratelimit stage: it runs here
+			// because only now is the identity known to be authentic. A
+			// refused request never counts as allowed.
+			if cfg.identityLimiter != nil {
+				if allowed, wait := cfg.identityLimiter.Allow("identity|" + principal.Subject); !allowed {
+					pipeline.WriteRetryAfter(w, wait)
+					cfg.sink.Emit(events.Event{
+						Time:       time.Now(),
+						Type:       events.AccessRateLimited,
+						Actor:      principal.Subject,
+						Host:       host,
+						Code:       "identity",
+						Reason:     "rate limit reached",
+						RemoteAddr: req.RemoteAddr,
+					})
+					http.Error(w, "too many requests", http.StatusTooManyRequests)
+					return
+				}
 			}
 			cfg.sink.Emit(events.Event{
 				Time:       time.Now(),
