@@ -6,7 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"regexp"
+	"github.com/octaviosantacruz/switchboard/internal/config"
 	"time"
 )
 
@@ -27,8 +27,6 @@ var (
 	ErrNotFound         = errors.New("no active connector with that name")
 	ErrEnrolmentChanged = errors.New("active connector identity changed or was revoked")
 )
-
-var namePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
 // Registry stores enrolled connectors in the SQLite state database
 // (migration 002). It implements Authorizer.
@@ -55,7 +53,7 @@ func (r *Registry) Current(ctx context.Context, name string) (Fingerprint, error
 // Rotate atomically retires exactly expected and enrols replacement. A stale
 // renewal/rollback must never undo another rotation or an operator revocation.
 func (r *Registry) Rotate(ctx context.Context, name string, expected, replacement Fingerprint) error {
-	if !namePattern.MatchString(name) {
+	if config.ValidateConnectorName(name) != nil {
 		return ErrInvalidName
 	}
 	if expected == replacement {
@@ -99,7 +97,7 @@ type Record struct {
 }
 
 func (r *Registry) Enroll(ctx context.Context, name string, fp Fingerprint) error {
-	if !namePattern.MatchString(name) {
+	if config.ValidateConnectorName(name) != nil {
 		return ErrInvalidName
 	}
 	_, err := r.db.ExecContext(ctx,

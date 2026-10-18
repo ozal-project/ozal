@@ -414,3 +414,79 @@ possible later: consuming a nonce exactly once is the approver's job. Retry
 classification stays boring on purpose: 429 and 5xx get at most two extra
 attempts with capped backoff, honoring the server's `retry_after`; a 4xx never
 retries, because repeating a refusal only burns the rate limit.
+
+
+## 2026-10-18 — closing the worktree review defects (SHD-001, ARCH-004, EDGE-007)
+
+A route budget must use the router's canonical hostname, otherwise spelling
+variants buy extra bursts. The failing regression exercised both DNS root dots
+and equivalent IPv6 forms, on normal and auth paths. Persistent sessions also
+need the current policy at lookup: recreating a Go wrapper does not recreate
+SQLite rows. Their effective expiry is the earlier of the issued expiry and
+creation plus current TTL; candidate construction makes no database changes.
+
+Cancellation is a request, not a join. The certificate worker now exposes a
+completion channel; shutdown cancels it, waits through its bounded DNS cleanup,
+and only then releases the single-writer lock. sync.Once makes the close
+operation idempotent. DNS-01 uses the strict origin policy without the autocert
+ALPN exception. Chain validation receives explicit roots in the pure core;
+the shell loads system roots or an explicitly configured staging bundle, and
+untrusted certificates embedded in a chain never establish trust by themselves.
+Parent directories are synced before a certificate generation can activate.
+
+The Go minimum stays 1.26; the recommended toolchain is pinned at 1.27.2 to
+address the standard-library findings from the previous gate. DNS-01 and
+notification settings now participate in the restart guard so reload cannot
+advertise an adapter configuration the process did not construct.
+
+
+Validation: the pre-fix host-key, SQLite TTL and malformed-chain regressions
+failed as expected; affected-package race tests then passed. The full
+`scripts/verify.sh` passed 7/7 on Go 1.27.2, including staticcheck and
+govulncheck (no reachable vulnerabilities; one required-module advisory has
+no reachable call). Real issuance, pairing/alert delivery and deployment
+acceptance remain in the active tracker.
+
+
+## 2026-10-18 — routing to a tunnel without a facade (TUN-002, partial)
+
+The transport is an adapter, not a second proxy. The router now receives a
+consumer-declared `ConnectorRoutes` port and builds an explicit transport per
+configured connector before swapping snapshots. No import cycle or raw tunnel
+state enters the proxy: an absent adapter fails construction, and the transport
+opens yamux streams exclusively. Route reloads retain the edge and its sessions;
+listener and identity configuration remains process-owned and requires restart.
+
+A bounded round trip is not finished when response headers arrive. The shared
+slot stays occupied until Body.Close, and sync.Once makes release idempotent.
+Wrapping a body also changes its method set: HTTP 101 needs io.ReadWriteCloser,
+so the wrapper must preserve Write. The bidirectional echo regression covers
+that protocol seam and verifies the slot is returned after upgraded shutdown.
+
+The normal pipeline resolves visitor IP from the trusted peer once, strips
+spoofed assertions, and emits the internal claim only into the tunnel. The
+connector still chooses its fixed origin. Protected tunnel routes fail closed
+until visitor identity can be asserted and enforced; mTLS peer identity alone
+never authorizes an application user. Connection events now share the console
+broker, and attachment is displayed separately from application readiness.
+
+
+Verification: affected-package race tests and the full seven-step gate passed
+with Go 1.27.2, including staticcheck and govulncheck (zero reachable). The
+separate-process configured-tunnel smoke passed restart/reconnect/revocation.
+Browser checks observed the common tunnel event, online route state, no JS
+errors and no overflow at the four activity breakpoints; axe had zero violations
+and flagged existing decorative contrast for manual review. The ordinary VPS
+pilot and public exposure were not modified.
+
+## 2026-10-18 — feature commit boundaries
+
+Shared composition/configuration files were staged as cumulative feature trees,
+without replacing the live worktree. Each intermediate tree passed the race
+suite in an isolated copy. A renewal test must wait for the certificate and its
+event: activation can legitimately become visible before event emission finishes.
+The language minimum stays independent from the patched toolchain selection.
+
+Commit checkpoints: `802804a`, `a4d58c1`, `700d572`, `2698e62`, `5c681d3`;
+integrated connector routing is committed with this entry. Deployment acceptance
+remains in the active tracker.

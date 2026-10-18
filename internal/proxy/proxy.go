@@ -27,6 +27,7 @@ type Option func(*options)
 
 type options struct {
 	transport             http.RoundTripper
+	connectorTransports   map[string]http.RoundTripper
 	responseHeaderTimeout time.Duration
 	logger                *slog.Logger
 	devErrors             bool
@@ -86,6 +87,12 @@ func WithLogger(logger *slog.Logger) Option {
 // The trust and authorization stages still run before forwarding.
 func WithTransport(transport http.RoundTripper) Option {
 	return func(o *options) { o.transport = transport }
+}
+
+// WithConnectorTransports supplies only explicitly configured tunnel destinations.
+// A missing connector transport fails construction; there is no TCP fallback.
+func WithConnectorTransports(transports map[string]http.RoundTripper) Option {
+	return func(o *options) { o.connectorTransports = transports }
 }
 
 // WithTrustedProxies allows only these TCP peers to supply CF-Connecting-IP.
@@ -155,7 +162,20 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 		if _, exists := byHost[host]; exists {
 			return nil, fmt.Errorf("duplicate route host %q", host)
 		}
-		handler, err := upstreamHandler(r, cfg.devErrors, cfg.assertVisitor, cfg.transport, cfg.logger)
+		transport, assertVisitor := cfg.transport, cfg.assertVisitor
+		destination := r
+		if r.Connector != "" {
+			if r.Target != "" || r.Root != "" || r.RequiresAuth() {
+				return nil, fmt.Errorf("route %s: unsupported connector destination or protected route", r.Host)
+			}
+			transport = cfg.connectorTransports[r.Connector]
+			if transport == nil {
+				return nil, fmt.Errorf("route %s: connector transport unavailable", r.Host)
+			}
+			destination.Target = "http://tunnel.invalid"
+			assertVisitor = true
+		}
+		handler, err := upstreamHandler(destination, cfg.devErrors, assertVisitor, transport, cfg.logger)
 		if err != nil {
 			return nil, err
 		}

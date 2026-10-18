@@ -129,6 +129,7 @@ type routeView struct {
 	Policy         string
 	Kind           string
 	IsStatic       bool
+	IsTunnel       bool
 	Host           string
 	Target         string
 	HealthPath     string
@@ -188,8 +189,16 @@ func (h *Handler) status(w http.ResponseWriter, _ *http.Request) {
 			state = "Not probed"
 			stateClass = "unknown"
 		}
+		if status.Route.Connector != "" {
+			kind = "Tunnel connector"
+			state, stateClass = "Connector offline", "unhealthy"
+			if status.ConnectorConnected {
+				state, stateClass = "Connector connected", "healthy"
+			}
+			healthPath = "Not probed"
+		}
 		view.Routes[i] = routeView{
-			Access: access, Policy: policyLabel(status.Route), Kind: kind, IsStatic: status.Route.IsStatic(),
+			Access: access, Policy: policyLabel(status.Route), Kind: kind, IsStatic: status.Route.IsStatic(), IsTunnel: status.Route.Connector != "",
 			Host:           status.Route.Host,
 			Target:         status.Route.Destination(),
 			HealthPath:     healthPath,

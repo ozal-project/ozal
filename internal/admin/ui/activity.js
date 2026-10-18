@@ -63,7 +63,9 @@
       const items = overview.routes.map((route) => {
         const li = make("li"); li.append(make("span", route.host, "host"));
         const mode = make("div", undefined, "route-access"); mode.append(make("span", route.protected ? "Protected" : "Public", route.protected ? "tag protected" : "tag"), make("span", route.kind));
-        li.append(mode, make("span", route.policy, "subtext")); return li;
+        li.append(mode, make("span", route.policy, "subtext"));
+        if (route.connector) li.append(make("span", route.connector + " · " + route.connection, "subtext"));
+        return li;
       });
       byId("route-list").replaceChildren(...items);
       if (!items.length) byId("route-list").append(make("li", "No routes configured.", "muted"));

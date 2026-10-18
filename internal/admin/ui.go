@@ -23,22 +23,36 @@ func (h *Handler) consoleCSS(w http.ResponseWriter, _ *http.Request) {
 }
 
 type accessRoute struct {
-	Host      string `json:"host"`
-	Protected bool   `json:"protected"`
-	Kind      string `json:"kind"`
-	Policy    string `json:"policy"`
+	Host       string `json:"host"`
+	Protected  bool   `json:"protected"`
+	Kind       string `json:"kind"`
+	Policy     string `json:"policy"`
+	Connector  string `json:"connector,omitempty"`
+	Connection string `json:"connection,omitempty"`
 }
 
 // overview exposes an explicit projection, never the raw/resolved config.
 func (h *Handler) overview(w http.ResponseWriter, _ *http.Request) {
 	cfg := h.manager.Config()
+	statuses := h.manager.RouteStatuses()
+	connections := make(map[string]bool, len(statuses))
+	for _, status := range statuses {
+		connections[status.Route.Host] = status.ConnectorConnected
+	}
 	routes := make([]accessRoute, 0, len(cfg.Routes))
 	for _, route := range cfg.Routes {
 		kind := "HTTP proxy"
 		if route.IsStatic() {
 			kind = "Static files"
 		}
-		routes = append(routes, accessRoute{Host: route.Host, Protected: route.RequiresAuth(), Kind: kind, Policy: policyLabel(route)})
+		view := accessRoute{Host: route.Host, Protected: route.RequiresAuth(), Kind: kind, Policy: policyLabel(route)}
+		if route.Connector != "" {
+			view.Kind, view.Connector, view.Connection = "Tunnel connector", route.Connector, "Connector offline"
+			if connections[route.Host] {
+				view.Connection = "Connector connected"
+			}
+		}
+		routes = append(routes, view)
 	}
 	writeJSON(w, http.StatusOK, struct {
 		Routes []accessRoute `json:"routes"`

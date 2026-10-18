@@ -57,6 +57,71 @@ the registered normal Switchboard service. No new persistent host port or
 systemd unit is installed. HTTP origins reject credentials, paths, queries,
 fragments and non-loopback destinations; the edge cannot supply a new upstream.
 
+## Normal process integration — 2026-10-18 (local delivery)
+
+The ordinary `switchboard -config PATH -db STATE` process can now own the mTLS
+listener and route directly to enrolled connectors. This removes the separate
+loopback facade→edge hop and preserves the trusted visitor IP selected on the
+public request. The standalone commands above remain available.
+
+```json
+{
+  "listen": "127.0.0.1:8888",
+  "tunnel": {
+    "listen": "10.8.0.1:9443",
+    "network": "10.8.0.0/24",
+    "cert_file": "/etc/switchboard/tunnel/edge.crt",
+    "key_file": "/etc/switchboard/tunnel/edge.key",
+    "ca_file": "/etc/switchboard/tunnel/ca.crt"
+  },
+  "routes": [{"host": "preview.example.com", "connector": "portfolio"}]
+}
+```
+
+The state database must already be migrated and the named connector actively
+enrolled. The listener defaults to no private-network exception: only literal
+loopback binds are accepted unless `network` explicitly permits one wholly
+private subnet. Wildcard/public binds are rejected. TLS 1.3, verified client
+authentication and registry authorization remain mandatory. Certificates are
+operator-supplied; no identity or migration is generated silently.
+
+A route selects exactly one of `target`, `root`, or `connector`. A connector
+route has no HTTP health probe, `spa`, or visitor access policy in this delivery.
+**Protected connector routes fail configuration validation** until the signed
+visitor-identity contract is implemented; connector identity and visitor
+identity remain distinct. The connector still enforces its fixed host/origin.
+Forwarding, identity headers and the edge session cookie are stripped, while
+the visitor IP assertion is emitted only into the authenticated transport.
+
+Route changes and admin route mutations use the normal atomic snapshot swap;
+a mapping to an unenrolled or revoked connector rejects the candidate. An
+actively enrolled but disconnected connector is a valid destination and
+answers 502, with no direct-TCP fallback. Reload retains live tunnel sessions;
+listener, network, and identity-file settings require a restart. The request
+capacity is shared across integrated connector routes (32 responses in flight)
+and held until body close, including bidirectional HTTP upgrades. Cancellation
+and shutdown join the listener worker before closing state.
+
+The activity console consumes connect/disconnect/rejection events from the
+same broker as access events. Its route overview shows connector name and
+attachment state; the route debug view explicitly distinguishes attachment
+from application functionality. No host/process dashboard is introduced.
+
+Reproduce the separate-process smoke with disposable identities, database and
+loopback listeners:
+
+```bash
+go build -o /tmp/switchboard-configured-check ./cmd/switchboard
+python3 scripts/smoke-tunnel-configured.py --binary /tmp/switchboard-configured-check
+```
+
+It proves trusted visitor IP and spoof stripping, unknown-host rejection,
+offline 502, live mapping reload, rejection preserving the previous mapping,
+console status, edge restart with the same connector PID, reconnect, live
+revocation, and graceful shutdown. It does not publish or change the existing
+VPS pilot, DNS, TLS, or systemd units. Deployment acceptance and protected-app
+identity remain open under TUN-002/EDGE-001.
+
 ## Current visitor contract
 
 These commands expose one **anonymous** HTTP/static route. They have no OIDC or
@@ -80,9 +145,9 @@ never reaches the application.
 
 Limit: the edge itself still learns the address from its own transport peer (or
 `CF-Connecting-IP` from a configured trusted proxy). A separate Switchboard in
-front of `tunnel edge` over loopback is therefore the visitor, not the real
-client; running the edge inside the public Switchboard process (`TUN-002`
-host→connector routes) removes that hop.
+front of standalone `tunnel edge` over loopback still hides the real client.
+The normal-process integration above removes that hop; deployment acceptance
+of that path on the VPS remains pending.
 
 ## Reproduce the process smoke
 

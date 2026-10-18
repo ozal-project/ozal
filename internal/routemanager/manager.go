@@ -54,11 +54,23 @@ var (
 	ErrPersistence   = errors.New("config persistence failed")
 )
 
+// ConnectorRoutes is the process-owned tunnel adapter. Route construction
+// validates enrolment; live attachment is projected separately from HTTP health.
+type ConnectorRoutes interface {
+	TransportFor(ctx context.Context, name string) (http.RoundTripper, error)
+	ConnectorConnected(name string) bool
+}
+
+func WithConnectorRoutes(routes ConnectorRoutes) Option {
+	return func(m *Manager) { m.connectorRoutes = routes }
+}
+
 // RouteStatus combines the immutable route configuration with its latest
 // health observation.
 type RouteStatus struct {
-	Route  config.Route
-	Health healthcheck.Status
+	Route              config.Route
+	Health             healthcheck.Status
+	ConnectorConnected bool
 }
 
 // Snapshot is immutable after construction except for the checker state. Its
@@ -103,6 +115,7 @@ type Manager struct {
 	transportTimeout    time.Duration
 	rateLimiters        *rateLimiters
 	sink                events.Sink
+	connectorRoutes     ConnectorRoutes
 }
 
 // New builds and installs the initial snapshot from configPath.
@@ -230,6 +243,9 @@ func (m *Manager) RouteStatuses() []RouteStatus {
 			Route:  cloneRoute(route),
 			Health: snapshot.checker.Status(route.Host),
 		}
+		if route.Connector != "" && m.connectorRoutes != nil {
+			statuses[i].ConnectorConnected = m.connectorRoutes.ConnectorConnected(route.Connector)
+		}
 	}
 	return statuses
 }
@@ -323,7 +339,7 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 		return nil, err
 	}
 	if current := m.current.Load(); current != nil && !sameServerConfig(current.cfg, *cfg) {
-		return nil, fmt.Errorf("listen, admin listen, TLS, and notification settings cannot change without restarting Switchboard")
+		return nil, fmt.Errorf("listen, admin listen, TLS, tunnel, and notification settings cannot change without restarting Switchboard")
 	}
 
 	healthCtx, healthCancel := context.WithCancel(m.ctx)
@@ -389,6 +405,24 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 	if transport == nil || m.transportTimeout != transportTimeout {
 		transport = proxy.NewUpstreamTransport(transportTimeout)
 	}
+	connectorTransports := make(map[string]http.RoundTripper)
+	for _, route := range cfg.Routes {
+		if route.Connector == "" || connectorTransports[route.Connector] != nil {
+			continue
+		}
+		if m.connectorRoutes == nil {
+			return nil, fmt.Errorf("connector route %s requires an active tunnel adapter", route.Host)
+		}
+		outbound, err := m.connectorRoutes.TransportFor(m.ctx, route.Connector)
+		if err != nil {
+			return nil, fmt.Errorf("connector route %s: %w", route.Host, err)
+		}
+		if outbound == nil {
+			return nil, fmt.Errorf("connector route %s: missing transport", route.Host)
+		}
+		connectorTransports[route.Connector] = outbound
+	}
+	proxyOpts = append(proxyOpts, proxy.WithConnectorTransports(connectorTransports))
 	proxyOpts = append(proxyOpts, proxy.WithTrustedProxies(trustedProxies), proxy.WithEventSink(m.sink), proxy.WithTransport(transport))
 	if cfg.DevErrors {
 		proxyOpts = append(proxyOpts, proxy.WithDevErrors())
@@ -564,6 +598,7 @@ func sameServerConfig(a, b config.Config) bool {
 		a.TLS.OriginClientCAFile == b.TLS.OriginClientCAFile &&
 		reflect.DeepEqual(a.TLS.DNS01, b.TLS.DNS01) &&
 		reflect.DeepEqual(a.Notify, b.Notify) &&
+		reflect.DeepEqual(a.Tunnel, b.Tunnel) &&
 		slices.Equal(a.TLS.Domains, b.TLS.Domains)
 }
 

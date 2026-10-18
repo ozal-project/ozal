@@ -20,6 +20,7 @@ const DefaultAdminListen = "127.0.0.1:9090"
 type Route struct {
 	Host         string        `json:"host"`
 	Target       string        `json:"target,omitempty"`
+	Connector    string        `json:"connector,omitempty"`
 	Root         string        `json:"root,omitempty"`          // static site directory; alternative to Target
 	SPA          bool          `json:"spa,omitempty"`           // static only: unknown paths fall back to index.html
 	HealthPath   string        `json:"health_path,omitempty"`   // defaults to "/" if empty
@@ -36,6 +37,9 @@ func (r Route) IsStatic() bool {
 // Destination is the human-readable upstream: the target URL, or the site
 // directory for static routes.
 func (r Route) Destination() string {
+	if r.Connector != "" {
+		return "connector:" + r.Connector
+	}
 	if r.IsStatic() {
 		return r.Root
 	}
@@ -148,6 +152,7 @@ type Config struct {
 	DevErrors bool       `json:"dev_errors,omitempty"`
 	RateLimit *RateLimit `json:"rate_limit,omitempty"`
 	Notify    *Notify    `json:"notify,omitempty"`
+	Tunnel    *Tunnel    `json:"tunnel,omitempty"`
 	// UpstreamTimeoutSeconds is how long an upstream may take to start
 	// answering before the visitor gets a 504. Zero means the default (60);
 	// the response body is never limited.
@@ -237,14 +242,23 @@ func Validate(cfg Config) (*Config, error) {
 	if len(cfg.Routes) == 0 {
 		return nil, fmt.Errorf("config: at least one route is required")
 	}
+	if err := validateTunnel(cfg.Tunnel); err != nil {
+		return nil, err
+	}
 	seenHosts := make(map[string]struct{}, len(cfg.Routes))
 	for i := range cfg.Routes {
 		r := &cfg.Routes[i]
 		if r.Host == "" {
 			return nil, fmt.Errorf("config: route missing host: %+v", *r)
 		}
-		if (r.Target == "") == (r.Root == "") {
-			return nil, fmt.Errorf("config: route %q needs exactly one of target or root", r.Host)
+		destinations := 0
+		for _, value := range []string{r.Target, r.Root, r.Connector} {
+			if value != "" {
+				destinations++
+			}
+		}
+		if destinations != 1 {
+			return nil, fmt.Errorf("config: route %q needs exactly one of target, root or connector", r.Host)
 		}
 		host, err := NormalizeHost(r.Host)
 		if err != nil {
@@ -255,6 +269,21 @@ func Validate(cfg Config) (*Config, error) {
 		}
 		seenHosts[host] = struct{}{}
 		r.Host = host
+		if r.Connector != "" {
+			if cfg.Tunnel == nil {
+				return nil, fmt.Errorf("config: connector route %q requires tunnel settings", host)
+			}
+			if err := ValidateConnectorName(r.Connector); err != nil {
+				return nil, err
+			}
+			if r.RequiresAuth() {
+				return nil, fmt.Errorf("config: protected connector routes require the visitor identity contract (not implemented)")
+			}
+			if r.HealthPath != "" || r.SPA {
+				return nil, fmt.Errorf("config: connector route %q cannot set health_path or spa", host)
+			}
+			continue
+		}
 		if r.IsStatic() {
 			if !filepath.IsAbs(r.Root) {
 				return nil, fmt.Errorf("config: route %q root %q must be an absolute path", r.Host, r.Root)
@@ -457,6 +486,10 @@ func hostOf(rawURL string) (string, error) {
 func Clone(source Config) Config {
 	clone := source
 	clone.TLS.Domains = slices.Clone(source.TLS.Domains)
+	if source.Tunnel != nil {
+		tunnel := *source.Tunnel
+		clone.Tunnel = &tunnel
+	}
 	if source.TLS.DNS01 != nil {
 		dns01 := *source.TLS.DNS01
 		clone.TLS.DNS01 = &dns01

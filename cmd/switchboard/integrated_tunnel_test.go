@@ -1,0 +1,233 @@
+package main
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/octaviosantacruz/switchboard/internal/admin"
+	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/octaviosantacruz/switchboard/internal/events"
+	"github.com/octaviosantacruz/switchboard/internal/proxy"
+	"github.com/octaviosantacruz/switchboard/internal/routemanager"
+	"github.com/octaviosantacruz/switchboard/internal/tunnel"
+)
+
+func TestIntegratedTunnelRoutesReloadAndPreserveVisitorIP(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	directory := t.TempDir()
+	pki := filepath.Join(directory, "pki")
+	if err := tunnel.InitLab(pki); err != nil {
+		t.Fatal(err)
+	}
+	dbPath := filepath.Join(directory, "state.db")
+	if err := runMigrate(ctx, []string{"-db", dbPath}, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	db, err := openMigratedDB(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	registry := tunnel.NewRegistry(db)
+	fp, err := fingerprintFromPEM(filepath.Join(pki, "connector.crt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.Enroll(ctx, "portfolio", fp); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.Enroll(ctx, "offline", tunnel.FingerprintOf([]byte("offline fixture"))); err != nil {
+		t.Fatal(err)
+	}
+	tunnelConfig := &config.Tunnel{Listen: "127.0.0.1:0", CertFile: filepath.Join(pki, "edge.crt"), KeyFile: filepath.Join(pki, "edge.key"), CAFile: filepath.Join(pki, "ca.crt")}
+	recorder := &events.Recorder{}
+	broker := events.NewBroker()
+	sink := events.Multi{recorder, broker}
+	integrated, err := startIntegratedTunnel(ctx, tunnelConfig, db, sink)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer integrated.Close()
+	cfg := config.Config{Listen: "127.0.0.1:0", Tunnel: tunnelConfig, TrustedProxies: []string{"127.0.0.1/32"}, Routes: []config.Route{{Host: "app.localhost", Connector: "portfolio"}}}
+	configPath := filepath.Join(directory, "routing.json")
+	write := func() {
+		t.Helper()
+		data, err := json.Marshal(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(configPath, data, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write()
+	manager, err := routemanager.New(ctx, configPath, time.Hour, routemanager.WithConnectorRoutes(integrated), routemanager.WithEventSink(sink))
+	if err != nil {
+		t.Fatal(err)
+	}
+	public := httptest.NewServer(manager)
+	defer public.Close()
+	var requests atomic.Int64
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		_ = json.NewEncoder(w).Encode(map[string]string{"ip": r.Header.Get("X-Forwarded-For"), "internal": r.Header.Get("X-Switchboard-Visitor-IP"), "identity": r.Header.Get("X-Auth-Request-Email"), "cookie": r.Header.Get("Cookie")})
+	}))
+	defer origin.Close()
+	connectorHandler, err := proxy.New([]config.Route{{Host: "app.localhost", Target: origin.URL}}, nil, nil, proxy.WithAuthenticatedTunnelTrust())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cert, roots, err := tunnel.LoadIdentity(filepath.Join(pki, "connector.crt"), filepath.Join(pki, "connector.key"), filepath.Join(pki, "ca.crt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	connectorTLS, err := tunnel.ClientTLS(cert, roots, "edge.localhost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	connectCtx, disconnect := context.WithCancel(ctx)
+	connectorDone := make(chan error, 1)
+	go func() {
+		connectorDone <- tunnel.Connect(connectCtx, integrated.address, connectorTLS, connectorHandler)
+	}()
+	defer func() {
+		disconnect()
+		select {
+		case <-connectorDone:
+		case <-time.After(5 * time.Second):
+			t.Error("connector did not stop")
+		}
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	for !integrated.ConnectorConnected("portfolio") {
+		if time.Now().After(deadline) {
+			t.Fatal("connector did not attach")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	do := func() (*http.Response, map[string]string) {
+		t.Helper()
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, public.URL+"/", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Host = "app.localhost"
+		request.Header.Set("CF-Connecting-IP", "203.0.113.47")
+		request.Header.Set("X-Switchboard-Visitor-IP", "6.6.6.6")
+		request.Header.Set("X-Auth-Request-Email", "forged@example.com")
+		request.Header.Set("Cookie", "sb_session=forged; harmless=kept")
+		response, err := public.Client().Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer response.Body.Close()
+		values := map[string]string{}
+		if response.StatusCode == http.StatusOK {
+			if err := json.NewDecoder(response.Body).Decode(&values); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			_, _ = io.Copy(io.Discard, response.Body)
+		}
+		return response, values
+	}
+	response, values := do()
+	if response.StatusCode != http.StatusOK || values["ip"] != "203.0.113.47" || values["internal"] != "" || values["identity"] != "" || values["cookie"] != "harmless=kept" {
+		t.Fatalf("tunnel response %d: %+v", response.StatusCode, values)
+	}
+	if !recorder.Has(tunnel.TunnelConnected) {
+		t.Fatal("connect event missing from common sink")
+	}
+	// Reload changes only the route mapping, with the established session retained.
+	cfg.Routes[0].Connector = "offline"
+	write()
+	if err := manager.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	if response, _ := do(); response.StatusCode != http.StatusBadGateway {
+		t.Fatalf("offline route: %d", response.StatusCode)
+	}
+	if requests.Load() != 1 {
+		t.Fatal("offline connector fell back to the HTTP origin")
+	}
+	cfg.Routes[0].Connector = "portfolio"
+	write()
+	if err := manager.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	if response, _ := do(); response.StatusCode != http.StatusOK {
+		t.Fatalf("restored route: %d", response.StatusCode)
+	}
+	// Unenrolled and listener changes reject the whole candidate.
+	cfg.Routes[0].Connector = "unknown"
+	write()
+	if err := manager.Reload(); err == nil {
+		t.Fatal("unenrolled connector accepted")
+	}
+	if response, _ := do(); response.StatusCode != http.StatusOK {
+		t.Fatal("failed reload replaced working mapping")
+	}
+	cfg.Routes[0].Connector = "portfolio"
+	cfg.Tunnel.Listen = "127.0.0.1:12345"
+	write()
+	if err := manager.Reload(); err == nil {
+		t.Fatal("transport-listener change accepted without restart")
+	}
+	control := admin.New(manager, sink, admin.WithEvents(broker))
+	status := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/_/status", nil)
+	control.ServeHTTP(status, request)
+	if !strings.Contains(status.Body.String(), "Connector connected") || strings.Contains(status.Body.String(), "upstream responses are healthy") {
+		t.Fatal("console lacks connector state")
+	}
+	adminServer := httptest.NewServer(control)
+	defer adminServer.Close()
+	streamClient := &http.Client{Timeout: 2 * time.Second}
+	stream, err := streamClient.Get(adminServer.URL + "/_/events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	scanner := bufio.NewScanner(stream.Body)
+	found := false
+	for scanner.Scan() {
+		if strings.Contains(scanner.Text(), "tunnel.connected") {
+			found = true
+			break
+		}
+	}
+	stream.Body.Close()
+	if !found {
+		t.Fatal("tunnel event missing from live console stream")
+	}
+	disconnect()
+	deadline = time.Now().Add(5 * time.Second)
+	for integrated.ConnectorConnected("portfolio") {
+		if time.Now().After(deadline) {
+			t.Fatal("disconnected connector stayed live")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if response, _ := do(); response.StatusCode != http.StatusBadGateway {
+		t.Fatalf("disconnected route: %d", response.StatusCode)
+	}
+	if !recorder.Has(tunnel.TunnelDisconnected) {
+		t.Fatal("disconnect event missing")
+	}
+}
+
+func TestIntegratedTunnelRequiresState(t *testing.T) {
+	if _, err := startIntegratedTunnel(context.Background(), &config.Tunnel{}, nil, nil); err == nil {
+		t.Fatal("tunnel started without migrated registry")
+	}
+}

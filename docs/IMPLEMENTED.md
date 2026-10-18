@@ -1,10 +1,99 @@
 # Implemented — Switchboard
 
 **Last review:** 2026-10-18
-**Code reviewed up to:** `4ec68ac` plus the working-tree changes listed below
+**Code reviewed up to:** baseline `0ddb606`; feature commits listed below.
 
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
+
+## Feature commit checkpoints — 2026-10-18
+
+| Scope | Commit |
+|---|---|
+| Patched Go toolchain | `802804a` |
+| ARCH-004 persistent sessions | `a4d58c1` |
+| SHD-001 rate limits | `700d572` |
+| EDGE-007 DNS-01 certificates | `2698e62` |
+| NTF-001 Telegram notifications | `5c681d3` |
+| TUN-002 integrated connector routes | Committed with this change |
+
+Each intermediate feature tree passed `go test -race ./...` in a disposable
+copy (later checks limited package-build concurrency to avoid resource-induced
+timeouts). The certificate renewal test now waits for both activation and its
+event, rather than racing the worker between those two observations. The final
+worktree gate remains the completion evidence below. No push was performed.
+
+## TUN-002 (part) — integrated connector routes and console — 2026-10-18 (committed with this change)
+
+The ordinary process can own the private registry-backed mTLS listener and
+forward `route.connector` directly through the existing proxy pipeline. The
+listener, state database and identities are explicit; public/wildcard transport
+binds, ambiguous destinations and protected connector routes fail closed.
+The fixed-origin connector receives the visitor IP selected at the edge,
+without the separate facade hop. No direct-TCP fallback is possible.
+
+Route/admin reload validates every mapping before installing it, retains the
+edge's live sessions, and rejects process-owned listener/identity changes.
+Disconnected destinations return 502; revocation closes the live session and
+prevents reconnect. The integrated transport has a shared 32-response cap,
+released on body close exactly once, and preserves bidirectional HTTP upgrades.
+Connect/disconnect/rejection events use the common broker/SSE; safe connector
+name and attachment state appear in the existing route console.
+
+Evidence: `TestIntegratedTunnelRoutesReloadAndPreserveVisitorIP`,
+`TestIntegratedTunnelRequiresState`, `TestTunnelRouteValidationFailsClosed`,
+`TestConnectorRouteRequiresExplicitTransport`, the configured transport
+capacity/revocation/upgrade tests, and `TestConnectorStatusProjectionAndEscaping`.
+`scripts/verify.sh` completed 7/7 on Go 1.27.2 with staticcheck and govulncheck
+(no reachable vulnerabilities; the existing unreachable module advisory remains).
+`scripts/smoke-tunnel-configured.py` passed using separate ordinary-edge and
+connector processes: trusted visitor IP/spoof stripping, unknown-host rejection,
+offline 502, mapping reload, failed-candidate preservation, console projection,
+edge restart with the same connector PID, reconnect and live revocation.
+
+Browser acceptance on that disposable process: connection state and tunnel
+SSE event observed; activity at 320/768/1024/1440 px and routes at 320 px had no
+page overflow. Skip-link keyboard focus worked, page errors/console were empty,
+and axe WCAG A/AA reported zero violations, with contrast of existing decorative
+marks left as manual-review items. No host services, VPS pilot, DNS or public
+listener were changed. TUN-002 remains open for visitor identity assertions
+and deployed acceptance; see the active tracker and
+[configuration contract](architecture/tunnel-persistent.md#normal-process-integration--2026-10-18-local-delivery).
+
+## Worktree review corrections — 2026-10-18 (feature commits below)
+
+The defects found in the local review are corrected; this closes the review
+fixes, not the remaining deployment acceptance of `SHD-001`, `ARCH-004`,
+`EDGE-007` or `NTF-001`.
+
+- Rate-limit keys use the router's canonical host: equivalent DNS and IPv6
+  forms share both the general and authentication budget.
+- SQLite sessions obey the earlier of issued expiry and creation plus current
+  TTL. Lookup, sweep and creation purge expired rows under that policy;
+  building a reload candidate does not mutate the installed store.
+- Certificate shutdown cancels and joins the worker before releasing the
+  state lock, including bounded DNS cleanup. DNS-01 has no ACME ALPN
+  client-authentication exemption.
+- Certificate chains must verify against explicit trusted roots. The shell
+  uses system roots by default or an operator-configured staging bundle;
+  embedded roots never establish trust. New generation parents are synced
+  before activation.
+- Reload rejects process-owned DNS-01/notification setting changes and keeps
+  the installed snapshot. The recommended toolchain is `go1.27.2`, while the
+  language minimum remains `go 1.26.0`.
+
+Evidence: `TestRateLimitEquivalentHostsShareBudget`,
+`TestSessionsApplyCurrentTTLWithoutExtendingOriginalExpiry`,
+`TestCertificateShutdownWaitsBeforeReleasingState`,
+`TestManagedTLSNeverExemptsACMEClientAuthentication`,
+`TestParseGenerationRejectsBrokenChain`, the intermediate-chain regressions,
+and `TestReloadRejectsProcessOwnedAdapterChanges`. The host-key, persisted-TTL
+and malformed-chain regressions failed against the pre-fix working tree.
+`go test -race` for the affected packages passed; `scripts/verify.sh` completed
+7/7 with Go 1.27.2 (format, vet, uncached race tests, build, four short fuzz
+passes, staticcheck, govulncheck, diff check). govulncheck reported no reachable
+vulnerabilities; one advisory remains in a required module without a reachable
+call. No real ACME issuance, Telegram message or deployment was performed.
 
 ## TUN-002 (part) — visitor address across the tunnel — 2026-10-18 (working tree, no commit)
 

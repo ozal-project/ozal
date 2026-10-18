@@ -52,7 +52,7 @@ project.
 ## Public origin certificate contract
 
 This is the accepted design for `EDGE-007`. The DNS-01 manager described here
-is implemented in `internal/certs` (uncommitted working tree, 2026-10-18) with
+is implemented in `internal/certs` (commit `2698e62`, 2026-10-18) with
 simulated-ACME/DNS/storage tests; the autocert HTTP-01 path remains for
 listeners without `tls.dns01`. Real staging and production issuance still need
 an operator-supplied DNS token and are not claimed as verified. The

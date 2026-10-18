@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"reflect"
 	"sync"
 	"syscall"
 	"time"
@@ -89,6 +90,10 @@ func main() {
 		sink = append(sink, alertSink)
 	}
 	managerOpts := []routemanager.Option{routemanager.WithEventSink(sink)}
+	var configuredEdge *configuredTunnel
+	if loaded.Tunnel != nil && *dbPath == "" {
+		log.Fatal("tunnel configuration requires -db pointing at migrated state")
+	}
 	if *dbPath != "" {
 		// Sessions survive a restart through the migrated state database.
 		// Migrations stay an explicit operator step: a stale schema stops
@@ -102,12 +107,31 @@ func main() {
 			return sqlite.NewSessions(db, ttl)
 		}))
 		log.Printf("sessions: persistent store at %s", *dbPath)
+		if loaded.Tunnel != nil {
+			configuredEdge, err = startIntegratedTunnel(ctx, loaded.Tunnel, db, sink)
+			if err != nil {
+				log.Fatalf("tunnel listener: %v", err)
+			}
+			defer configuredEdge.Close()
+			managerOpts = append(managerOpts, routemanager.WithConnectorRoutes(configuredEdge))
+			log.Printf("tunnel listener: %s (registry authorization required)", configuredEdge.address)
+			go func() {
+				<-configuredEdge.done
+				if ctx.Err() == nil {
+					log.Printf("tunnel listener stopped: %v", configuredEdge.err)
+					stop()
+				}
+			}()
+		}
 	}
 	manager, err := routemanager.New(ctx, *configPath, healthCheckInterval, managerOpts...)
 	if err != nil {
 		log.Fatalf("routes: %v", err)
 	}
 	cfg := manager.Config()
+	if !reflect.DeepEqual(loaded.Tunnel, cfg.Tunnel) {
+		log.Fatal("tunnel configuration changed during startup; restart with a stable config")
+	}
 
 	// EDGE-007: with tls.dns01 configured, Switchboard owns the origin
 	// certificate lifecycle. The manager holds the single-writer lock on its
@@ -201,7 +225,7 @@ func startAdmin(cfg *config.Config, manager *routemanager.Manager, sink events.S
 		IdleTimeout:       idleTimeout,
 	}
 	go func() {
-		log.Printf("switchboard admin listening on %s", cfg.Admin.Listen)
+		log.Printf("switchboard admin listening on %s", listener.Addr())
 		if cfg.Admin.Token == "" {
 			log.Printf("admin mutations disabled: set admin.token in config")
 		}
@@ -226,7 +250,7 @@ func startPlain(cfg *config.Config, handler http.Handler) (*http.Server, error) 
 		IdleTimeout:       idleTimeout,
 	}
 	go func() {
-		log.Printf("switchboard listening on %s (plain HTTP)", cfg.Listen)
+		log.Printf("switchboard listening on %s (plain HTTP)", listener.Addr())
 		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Printf("public listener %s: %v", cfg.Listen, err)
 		}

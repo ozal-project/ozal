@@ -51,18 +51,19 @@ type liveSession struct {
 // checks attaches as "default". With one, the leaf certificate must be an
 // enrolled, non-revoked connector, and revocation closes a live session.
 type Edge struct {
-	mu         sync.Mutex
-	sessions   map[string]*liveSession
-	sink       events.Sink
-	auth       Authorizer
-	revalidate time.Duration
+	mu           sync.Mutex
+	sessions     map[string]*liveSession
+	sink         events.Sink
+	auth         Authorizer
+	revalidate   time.Duration
+	requestSlots chan struct{}
 }
 
 func NewEdge(sink events.Sink) *Edge {
 	if sink == nil {
 		sink = events.Discard
 	}
-	return &Edge{sink: sink, sessions: map[string]*liveSession{}, revalidate: 5 * time.Second}
+	return &Edge{sink: sink, sessions: map[string]*liveSession{}, revalidate: 5 * time.Second, requestSlots: make(chan struct{}, 32)}
 }
 
 // UseAuthorizer turns on registry-based authorization. Call before Serve.

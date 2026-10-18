@@ -192,6 +192,36 @@ reload while the settings do not change; changing `rate_limit` starts with
 fresh buckets.
 The local tunnel experiment is separate from this normal configuration path.
 
+## Routes through persistent connectors
+
+The ordinary process can own the mTLS tunnel listener and forward an anonymous
+route directly to an enrolled connector:
+
+```json
+"tunnel": {
+  "listen": "127.0.0.1:9443",
+  "cert_file": "/etc/switchboard/tunnel/edge.crt",
+  "key_file": "/etc/switchboard/tunnel/edge.key",
+  "ca_file": "/etc/switchboard/tunnel/ca.crt"
+},
+"routes": [{ "host": "preview.example.com", "connector": "portfolio" }]
+```
+
+Start with `switchboard -config PATH -db STATE` after explicitly migrating the
+state and enrolling `portfolio`. One destination per route: `target`, `root`,
+or `connector`. A private bind requires an explicit wholly private `network`
+CIDR; public/wildcard tunnel binds are refused. Connector routes reload without
+restarting the listener or dropping sessions, and an offline connector returns
+502 without a direct-origin fallback. Tunnel listener/identity changes require
+a process restart. Protected connector routes are rejected until their visitor
+identity contract is implemented; no certificate identifying a connector is
+interpreted as a visitor login.
+
+The normal trust stage resolves the visitor IP once, and the tunnel carries it
+to the connector without a facade hop. Connection events and safe attachment
+status appear in the existing console. See the
+[configuration contract and process smoke](docs/architecture/tunnel-persistent.md#normal-process-integration--2026-10-18-local-delivery).
+
 ## Local trust activity
 
 The normal admin listener serves `/_/activity` and a live SSE feed at `/_/events`,
