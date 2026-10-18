@@ -274,7 +274,7 @@ func (e *Edge) Handler(host string) (http.Handler, func(), error) {
 // HandlerFor routes host to the connector enrolled under the given name.
 func (e *Edge) HandlerFor(host, connector string) (http.Handler, func(), error) {
 	transport := &http.Transport{DialContext: e.dialer(connector), DisableKeepAlives: true, ResponseHeaderTimeout: 10 * time.Second}
-	handler, err := proxy.New([]config.Route{{Host: host, Target: "http://tunnel.invalid"}}, nil, nil, proxy.WithTransport(transport), proxy.WithEventSink(e.sink))
+	handler, err := proxy.New([]config.Route{{Host: host, Target: "http://tunnel.invalid"}}, nil, nil, proxy.WithTransport(transport), proxy.WithEventSink(e.sink), proxy.WithVisitorAssertion())
 	if err != nil {
 		return nil, nil, err
 	}

@@ -6,6 +6,29 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## TUN-002 (part) — visitor address across the tunnel — 2026-10-18 (working tree, no commit)
+
+Each side of the tunnel stripped forwarding headers, so the connector and the
+application only ever saw the tunnel peer. The edge now sends the address its
+trust stage selected in `X-Switchboard-Visitor-IP` (`proxy.WithVisitorAssertion`,
+set by `Edge.HandlerFor`); the connector runs `pipeline.TrustAuthenticatedTunnel`
+(`proxy.WithAuthenticatedTunnelTrust`, set in `tunnel connect` and the spike), so
+one valid unicast address in the header becomes the visitor address and the
+application gets a single `X-Forwarded-For`. The header is believed only there:
+every other stage strips it in any `-`/`_` spelling, an aliased claim is
+rejected whole, malformed/repeated/unspecified/multicast/scoped values fall back
+to the tunnel peer, and it never reaches the application. Shared parsing moved to
+`parseVisitorAddr`/`headerValues` so `CF-Connecting-IP` keeps the same rules.
+
+Evidence: `TestAuthenticatedTunnelTakesVisitorIPFromTheEdgeAssertion`,
+`TestVisitorAssertionIsNeverTrustedOnOrdinaryListeners`,
+`TestVisitorAssertionIsSentOnlyWhenAskedAndNeverFromTheClient`,
+`TestAuthenticatedTunnelTrustFeedsTheApplicationTheVisitorAddress` and the real
+mTLS path in `TestVisitorAddressCrossesTheTunnelAndCannotBeForged`; four
+mutations killed (header not stripped, assertion ignored, first of many values
+accepted, edge not asserting). `scripts/verify.sh` 7/7 OK. `TUN-002` stays open
+(see its tracker row); limits in `tunnel-persistent.md`.
+
 ## EDGE-006 (part) — origin client-certificate policy — 2026-10-18 (working tree, no commit)
 
 New package `internal/originauth` and `tls.origin_client_ca_file`: when set, the

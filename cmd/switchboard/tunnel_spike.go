@@ -82,7 +82,7 @@ func runTunnelSpike(ctx context.Context, args []string, out io.Writer) error {
 		if err != nil {
 			return err
 		}
-		handler, err := proxy.New([]config.Route{route}, nil, nil)
+		handler, err := proxy.New([]config.Route{route}, nil, nil, proxy.WithAuthenticatedTunnelTrust())
 		if err != nil {
 			return err
 		}

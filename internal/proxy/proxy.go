@@ -32,6 +32,24 @@ type options struct {
 	devErrors             bool
 	sink                  events.Sink
 	trustedProxies        []netip.Prefix
+	assertVisitor         bool
+	tunnelTrust           bool
+}
+
+// WithVisitorAssertion makes the proxy tell its upstream who the visitor is
+// through pipeline.VisitorIPHeader. Use it only when the upstream is a tunnel
+// connector that runs WithAuthenticatedTunnelTrust: to any other upstream the
+// header is meaningless, and applications get X-Forwarded-For.
+func WithVisitorAssertion() Option {
+	return func(o *options) { o.assertVisitor = true }
+}
+
+// WithAuthenticatedTunnelTrust is for a handler reachable only through the
+// mutually authenticated tunnel (the connector side): the visitor address is
+// taken from the edge's assertion instead of CF-Connecting-IP. It replaces
+// WithTrustedProxies.
+func WithAuthenticatedTunnelTrust() Option {
+	return func(o *options) { o.tunnelTrust = true }
 }
 
 // WithResponseHeaderTimeout sets how long an upstream may take to start
@@ -128,7 +146,7 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 		if _, exists := byHost[host]; exists {
 			return nil, fmt.Errorf("duplicate route host %q", host)
 		}
-		handler, err := upstreamHandler(r, cfg.devErrors, cfg.transport, cfg.logger)
+		handler, err := upstreamHandler(r, cfg.devErrors, cfg.assertVisitor, cfg.transport, cfg.logger)
 		if err != nil {
 			return nil, err
 		}
@@ -213,7 +231,11 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 
 	// The trust stage runs before anything reads the request: spoofed
 	// identity headers never survive to the forwarding handler.
-	return pipeline.Chain(pipeline.TrustWithProxies(cfg.trustedProxies))(forward), nil
+	trust := pipeline.TrustWithProxies(cfg.trustedProxies)
+	if cfg.tunnelTrust {
+		trust = pipeline.TrustAuthenticatedTunnel()
+	}
+	return pipeline.Chain(trust)(forward), nil
 }
 
 // stripCookie returns a Cookie header value without the named cookie, keeping
@@ -253,7 +275,7 @@ func writeDevNotFound(w http.ResponseWriter, requested string, byHost map[string
 
 // upstreamHandler builds what a route forwards to. A static root must already
 // exist as a directory so a typo fails at startup instead of serving 404s.
-func upstreamHandler(r config.Route, devErrors bool, transport http.RoundTripper, logger *slog.Logger) (http.Handler, error) {
+func upstreamHandler(r config.Route, devErrors, assertVisitor bool, transport http.RoundTripper, logger *slog.Logger) (http.Handler, error) {
 	if r.IsStatic() {
 		info, err := os.Stat(r.Root)
 		if err != nil {
@@ -287,6 +309,9 @@ func upstreamHandler(r config.Route, devErrors bool, transport http.RoundTripper
 			pr.Out.Header.Del("X-Forwarded-For")
 			if ip, ok := pipeline.ClientIP(pr.In.Context()); ok {
 				pr.Out.Header.Set("X-Forwarded-For", ip.String())
+				if assertVisitor {
+					pr.Out.Header.Set(pipeline.VisitorIPHeader, ip.String())
+				}
 			}
 			// SetURL clears the outbound Host (the transport would use the
 			// internal target); keep the public host the client asked for.

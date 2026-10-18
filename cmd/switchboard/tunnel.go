@@ -104,7 +104,7 @@ func runTunnel(ctx context.Context, args []string, out io.Writer) error {
 		}
 		// This slice serves anonymous routes. The connector's trust stage
 		// strips identity/forwarding headers rather than trusting edge claims.
-		handler, err := proxy.New([]config.Route{route}, nil, nil)
+		handler, err := proxy.New([]config.Route{route}, nil, nil, proxy.WithAuthenticatedTunnelTrust())
 		if err != nil {
 			return err
 		}

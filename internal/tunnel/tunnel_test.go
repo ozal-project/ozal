@@ -21,6 +21,7 @@ import (
 
 	"github.com/octaviosantacruz/switchboard/internal/config"
 	"github.com/octaviosantacruz/switchboard/internal/events"
+	"github.com/octaviosantacruz/switchboard/internal/pipeline"
 	"github.com/octaviosantacruz/switchboard/internal/proxy"
 )
 
@@ -390,5 +391,46 @@ func TestLabIdentitiesAndExactAuthorization(t *testing.T) {
 	}
 	if !AuthorizeConnector([]string{"connector.localhost"}, "connector.localhost") {
 		t.Fatal("exact identity denied")
+	}
+}
+
+// The visitor's address must survive the whole path: public side -> edge ->
+// mTLS tunnel -> connector -> application. Nothing the visitor sends may
+// replace it, and the internal assertion header never reaches the application.
+func TestVisitorAddressCrossesTheTunnelAndCannotBeForged(t *testing.T) {
+	l := newLab(t)
+	var gotXFF, gotAssertion string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotXFF = r.Header.Get("X-Forwarded-For")
+		gotAssertion = r.Header.Get(pipeline.VisitorIPHeader)
+		_, _ = io.WriteString(w, "ok")
+	}))
+	defer upstream.Close()
+	local, err := proxy.New([]config.Route{{Host: "portfolio.localhost", Target: upstream.URL}}, nil, nil, proxy.WithAuthenticatedTunnelTrust())
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.connect(t, local)
+	edge, closeTransport, err := l.edge.Handler("portfolio.localhost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeTransport()
+
+	req := httptest.NewRequest("GET", "http://portfolio.localhost/", nil)
+	req.RemoteAddr = "198.51.100.7:4242"
+	req.Header.Set(pipeline.VisitorIPHeader, "203.0.113.99")
+	req.Header.Set("X_Switchboard_Visitor_Ip", "203.0.113.99")
+	req.Header.Set("X-Forwarded-For", "203.0.113.99")
+	rec := httptest.NewRecorder()
+	edge.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+	}
+	if gotXFF != "198.51.100.7" {
+		t.Errorf("application saw X-Forwarded-For %q, want 198.51.100.7", gotXFF)
+	}
+	if gotAssertion != "" {
+		t.Errorf("the internal assertion header reached the application: %q", gotAssertion)
 	}
 }

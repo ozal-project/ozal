@@ -63,10 +63,26 @@ These commands expose one **anonymous** HTTP/static route. They have no OIDC or
 visitor-assertion flags. Each side runs the existing trust stage; client-supplied
 identity headers, forwarding headers and the edge session cookie are stripped.
 The connector does not interpret HTTP headers as an authenticated visitor
-identity. Original visitor IP/identity attribution is not preserved end to end.
-The authenticated certificate identifies the connector to the edge; it does not
-identify the visitor to an application. Protected-app visitor assertions remain
-an explicit TUN-002 requirement in the tracker.
+*identity*. The authenticated certificate identifies the connector to the edge;
+it does not identify the visitor to an application. Protected-app visitor
+identity assertions remain an explicit TUN-002 requirement in the tracker.
+
+**Visitor address (2026-10-18).** The edge puts the address its own trust stage
+selected into `X-Switchboard-Visitor-IP` (`pipeline.VisitorIPHeader`) on every
+request sent into the tunnel. The connector runs `TrustAuthenticatedTunnel`:
+because its handler is reachable only through the mutually authenticated tunnel,
+the edge is the only party that can have set the header, so one valid unicast
+address in it becomes the visitor address and the application receives it as a
+single `X-Forwarded-For`. Everywhere else the header is client input: it is
+stripped in every `-`/`_` spelling and never believed. A missing, malformed,
+repeated or aliased assertion falls back to the tunnel peer. The internal header
+never reaches the application.
+
+Limit: the edge itself still learns the address from its own transport peer (or
+`CF-Connecting-IP` from a configured trusted proxy). A separate Switchboard in
+front of `tunnel edge` over loopback is therefore the visitor, not the real
+client; running the edge inside the public Switchboard process (`TUN-002`
+host→connector routes) removes that hop.
 
 ## Reproduce the process smoke
 

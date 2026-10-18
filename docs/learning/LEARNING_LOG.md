@@ -299,3 +299,16 @@ certificate, so exactly that hello is exempted — and since net/http would then
 serve plain HTTP on that connection, a second lock (`RequireVerified`) refuses
 any request without a verified peer certificate. Mutating each rule and watching
 a test fail is how I know the tests guard them.
+
+## 2026-10-18 — who is allowed to say who the visitor is
+
+A header is only as trustworthy as the channel it arrived on. Over the public
+listener any client can send `X-Switchboard-Visitor-IP`, so every ordinary stage
+strips it; inside the mutually authenticated tunnel only the edge can, so the
+connector believes it. The trust decision belongs to the *listener*, not to the
+header name, which is why it is a separate stage (`TrustAuthenticatedTunnel`)
+that must be used only on a handler the tunnel alone can reach. Parsing is shared
+(`parseVisitorAddr`) so no path accepts a weaker address than another, and a bad
+claim falls back to the peer instead of failing the request. Refactoring the
+Trust stage into one `trustStage(resolve)` function removed the duplicated
+strip-then-store logic: the difference between the two stages is one function.

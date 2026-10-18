@@ -973,3 +973,63 @@ func TestForwardedRequestIsLoggedAsStructuredRecord(t *testing.T) {
 		t.Errorf("the query string must never be logged: %s", line)
 	}
 }
+
+func TestVisitorAssertionIsSentOnlyWhenAskedAndNeverFromTheClient(t *testing.T) {
+	var gotAssertion, gotXFF string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAssertion = r.Header.Get(pipeline.VisitorIPHeader)
+		gotXFF = r.Header.Get("X-Forwarded-For")
+	}))
+	defer upstream.Close()
+
+	for name, tc := range map[string]struct {
+		opts          []Option
+		wantAssertion string
+	}{
+		"toward an application":       {nil, ""},
+		"toward the tunnel connector": {[]Option{WithVisitorAssertion()}, "198.51.100.7"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			gotAssertion, gotXFF = "", ""
+			handler, err := New([]config.Route{{Host: "app.localhost", Target: upstream.URL}}, nil, nil, tc.opts...)
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			req := httptest.NewRequest(http.MethodGet, "http://app.localhost/", nil)
+			req.RemoteAddr = "198.51.100.7:4242"
+			req.Header.Set(pipeline.VisitorIPHeader, "203.0.113.99") // forged by the visitor
+			req.Header.Set("X-Forwarded-For", "203.0.113.99")
+			handler.ServeHTTP(httptest.NewRecorder(), req)
+			if gotAssertion != tc.wantAssertion {
+				t.Errorf("assertion = %q, want %q", gotAssertion, tc.wantAssertion)
+			}
+			if gotXFF != "198.51.100.7" {
+				t.Errorf("X-Forwarded-For = %q, want the real peer only", gotXFF)
+			}
+		})
+	}
+}
+
+func TestAuthenticatedTunnelTrustFeedsTheApplicationTheVisitorAddress(t *testing.T) {
+	var gotXFF, gotAssertion string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotXFF = r.Header.Get("X-Forwarded-For")
+		gotAssertion = r.Header.Get(pipeline.VisitorIPHeader)
+	}))
+	defer upstream.Close()
+	handler, err := New([]config.Route{{Host: "app.localhost", Target: upstream.URL}}, nil, nil, WithAuthenticatedTunnelTrust())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "http://app.localhost/", nil)
+	req.RemoteAddr = "10.8.0.1:51000" // the edge, as seen through the tunnel
+	req.Header.Set(pipeline.VisitorIPHeader, "198.51.100.23")
+	req.Header.Set("X-Forwarded-For", "203.0.113.99")
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+	if gotXFF != "198.51.100.23" {
+		t.Errorf("application saw X-Forwarded-For %q, want the visitor", gotXFF)
+	}
+	if gotAssertion != "" {
+		t.Errorf("the internal assertion header reached the application: %q", gotAssertion)
+	}
+}

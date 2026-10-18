@@ -5,7 +5,7 @@ Decisions about languages, libraries and tools. A new dependency is added here
 standard library: writing the piece yourself is often the point of this
 project.
 
-**Last reviewed:** 2026-10-07
+**Last reviewed:** 2026-10-18
 
 ## Decided
 
@@ -13,7 +13,7 @@ project.
 |---|---|---|
 | Language | Go (minimum `go 1.26`, developed on 1.27) | Single static binary, excellent `net/http` and `crypto/*`, the maintainer's chosen learning language |
 | HTTP, TLS, proxy | stdlib `net/http`, `crypto/tls`, `httputil.ReverseProxy` (migrate to `Rewrite`) | Mature and enough; post-quantum hybrid key exchange (X25519MLKEM768) on by default |
-| Public certificates | `golang.org/x/crypto/acme/autocert` today → **CertMagic** for DNS-01 wildcards | autocert has no DNS-01; CertMagic (Caddy's library) does, via libdns providers |
+| Public certificates | `golang.org/x/crypto/acme/autocert` today → **`caddyserver/certmagic` + `libdns/cloudflare`** for the origin certificate behind the Cloudflare proxy (`EDGE-007`, decided 2026-10-18) | autocert has no DNS-01. The origin sits behind a proxy and a restricted firewall, so HTTP-01/TLS-ALPN validation cannot reach it; DNS-01 needs no inbound connection and keeps a publicly trusted certificate (the site stays valid if the proxy is ever removed). CertMagic adds a sizeable transitive tree and a DNS-edit API token to guard; the alternative of writing DNS-01 on `x/crypto/acme` was rejected for renewal/storage risk in a security-critical path. Versions seen 2026-10-18: certmagic v0.25.6, libdns/cloudflare v0.2.2, libdns v1.1.1. |
 | Upstream OIDC login | `coreos/go-oidc` + `golang.org/x/oauth2` | Already in use and well reviewed |
 | JOSE / JWT | `go-jose/go-jose/v4` | Already a dependency; reused for the OIDC provider |
 | Config | JSON with `DisallowUnknownFields` | Already in use; strict and dependency-free |

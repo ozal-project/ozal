@@ -113,3 +113,93 @@ func TestTrustCapturesImmutableProxyList(t *testing.T) {
 		}
 	})).ServeHTTP(httptest.NewRecorder(), r)
 }
+
+func TestAuthenticatedTunnelTakesVisitorIPFromTheEdgeAssertion(t *testing.T) {
+	cases := []struct {
+		name   string
+		values []string
+		want   string
+	}{
+		{"IPv4", []string{"198.51.100.23"}, "198.51.100.23"},
+		{"IPv6", []string{"2001:db8::23"}, "2001:db8::23"},
+		{"mapped IPv4", []string{"::ffff:198.51.100.23"}, "198.51.100.23"},
+		{"absent keeps the tunnel peer", nil, "10.8.0.1"},
+		{"empty", []string{""}, "10.8.0.1"},
+		{"malformed", []string{"not-an-ip"}, "10.8.0.1"},
+		{"comma chain", []string{"198.51.100.23, 203.0.113.9"}, "10.8.0.1"},
+		{"repeated", []string{"198.51.100.23", "198.51.100.24"}, "10.8.0.1"},
+		{"scoped", []string{"fe80::1%eth0"}, "10.8.0.1"},
+		{"unspecified", []string{"0.0.0.0"}, "10.8.0.1"},
+		{"multicast", []string{"ff02::1"}, "10.8.0.1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "http://app.localhost/", nil)
+			req.RemoteAddr = "10.8.0.1:51000"
+			req.Header[VisitorIPHeader] = tc.values
+			var got string
+			var leaked bool
+			TrustAuthenticatedTunnel()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				ip, _ := ClientIP(r.Context())
+				got = ip.String()
+				for name := range r.Header {
+					leaked = leaked || len(name) > 0 && http.CanonicalHeaderKey(name) == VisitorIPHeader
+				}
+			})).ServeHTTP(httptest.NewRecorder(), req)
+			if got != tc.want {
+				t.Errorf("client IP = %s, want %s", got, tc.want)
+			}
+			if leaked {
+				t.Error("the internal assertion header reached the application")
+			}
+		})
+	}
+
+	t.Run("underscore alias rejects the whole claim", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "http://app.localhost/", nil)
+		req.RemoteAddr = "10.8.0.1:51000"
+		req.Header["X_Switchboard_Visitor_Ip"] = []string{"198.51.100.23"}
+		req.Header[VisitorIPHeader] = []string{"198.51.100.23"}
+		var got string
+		TrustAuthenticatedTunnel()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ip, _ := ClientIP(r.Context())
+			got = ip.String()
+		})).ServeHTTP(httptest.NewRecorder(), req)
+		if got != "10.8.0.1" {
+			t.Errorf("client IP = %s: an aliased claim must be ignored entirely", got)
+		}
+	})
+}
+
+// Everywhere except behind an authenticated tunnel, the assertion header is
+// just client input: it is never believed and never forwarded.
+func TestVisitorAssertionIsNeverTrustedOnOrdinaryListeners(t *testing.T) {
+	trusted := []netip.Prefix{netip.MustParsePrefix("203.0.113.0/24")}
+	for name, stage := range map[string]Stage{
+		"no trusted proxies":   Trust,
+		"trusted proxy peer":   TrustWithProxies(trusted),
+		"untrusted proxy peer": TrustWithProxies([]netip.Prefix{netip.MustParsePrefix("192.0.2.0/24")}),
+	} {
+		t.Run(name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "http://app.localhost/", nil)
+			req.RemoteAddr = "203.0.113.9:1234"
+			req.Header[VisitorIPHeader] = []string{"198.51.100.23"}
+			req.Header["X_Switchboard_Visitor_Ip"] = []string{"198.51.100.23"}
+			var got string
+			var remaining []string
+			stage(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				ip, _ := ClientIP(r.Context())
+				got = ip.String()
+				for name := range r.Header {
+					remaining = append(remaining, name)
+				}
+			})).ServeHTTP(httptest.NewRecorder(), req)
+			if got != "203.0.113.9" {
+				t.Errorf("client IP = %s, want the transport peer", got)
+			}
+			if len(remaining) != 0 {
+				t.Errorf("assertion headers reached the handler: %v", remaining)
+			}
+		})
+	}
+}
