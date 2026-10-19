@@ -1,7 +1,7 @@
 # To implement — Switchboard
 
-**Last review:** 2026-10-18
-**Code reviewed up to:** `ce7840b` (private integrated acceptance `731a204`; SHD-002 and denial aggregation after it)
+**Last review:** 2026-10-19
+**Code reviewed up to:** `aa49358` (wildcard certificate, EDGE-002); CI observed on hosted runners, see `REL-003`
 **Purpose:** the single source of active work, priorities, blockers and done
 criteria. Closed work moves to [`IMPLEMENTED.md`](IMPLEMENTED.md). Direction
 and the long-range map live in [`VISION.md`](../VISION.md); if another
@@ -34,7 +34,7 @@ infrastructure access · `TLOG` transparency log · `AI` AI-assisted decisions �
 
 Every `SEC-*` and `BUG-*` finding is closed (2026-10-17).
 
-1. `REL-003` (workflow committed in `b2602e9`, awaiting first green PR), `REL-005`–`REL-006`: CI, GoReleaser → tag `v0.1.0-alpha.1`.<br>`REL-001`–`REL-002` and `REL-004` closed (secret references, fuzz, quickstart).
+1. `REL-003` (hosted CI observed and green on `master`; a green pull request run remains), `REL-005`–`REL-006`: CI, GoReleaser → tag `v0.1.0-alpha.1`.<br>`REL-001`–`REL-002` and `REL-004` closed (secret references, fuzz, quickstart).
 2. Follow the [Cloudflare coexistence decision](architecture/cloudflare-coexistence.md):
    keep the public Portfolio on Pages; start `EDGE-006` with the actual provider
    configuration inventory and origin-boundary acceptance contract. A separate
@@ -61,7 +61,7 @@ Every `SEC-*` and `BUG-*` finding is closed (2026-10-17).
 
 | ID | Task | State | Done when |
 |---|---|---|---|
-| `REL-003` | CI on GitHub Actions: `scripts/verify.sh` on Linux, macOS, Windows. Workflow is `.github/workflows/ci.yml` (commit `b2602e9`); hosted CI has not been observed. | In progress | Green on a pull request. |
+| `REL-003` | CI on GitHub Actions: `scripts/verify.sh` on Linux, macOS, Windows. Workflow is `.github/workflows/ci.yml` (commit `b2602e9`). **Observed 2026-10-19:** every run on `master` from 2026-10-18 was red because Windows checked files out as CRLF and `gofmt -l` listed the whole tree (fixed by `.gitattributes` and `core.autocrlf=false`, `ccd5609`); that exposed nine Windows-only test failures, none a product bug (POSIX-path fixtures and Unix permission bits), fixed in `9542359`: seven config tests are skipped on Windows with the reason stated and the mode assertions are conditional. Run `39189670980` (`9542359`) is green on ubuntu, macOS and Windows. The image and linters are pinned in `5bb3cfe` (`ubuntu-24.04` because `ubuntu-latest` moves to 26.04 until 2026-11-19; `staticcheck` v0.8.2, `govulncheck` v1.9.0); that commit has not run on a hosted runner yet. | In progress | Green on a pull request (so far only a push to `master` is green); the pinned workflow observed green; decide whether to make the skipped Windows fixtures portable or keep Windows as a build/test target only. |
 | `REL-005` | GoReleaser config, checksums, SBOM. | Ready | Snapshot build produces artifacts locally. |
 | `REL-006` | Tag `v0.1.0-alpha.1` after every gate above is green. | Blocked on `REL-002`–`REL-005` | Tag pushed with release notes. |
 | `REL-007` | Dependency advisories: `govulncheck` reports GO-2026-5932 in `golang.org/x/crypto` v0.57.0 with no fixed version; the code does not call the affected symbols (2026-10-18, Go 1.27.2). | Blocked on upstream fix | Re-run `govulncheck` before each release; bump `x/crypto` when a fix exists and keep the gate at 0 reachable. |

@@ -1,10 +1,22 @@
 # Implemented — Switchboard
 
-**Last review:** 2026-10-18
+**Last review:** 2026-10-19
 **Code reviewed up to:** baseline `0ddb606`; feature commits listed below.
 
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
+
+## REL-003 (part) — hosted CI observed — 2026-10-19
+
+Eight consecutive runs on `master` (2026-10-18 to 2026-10-19) failed only on
+`windows-latest`, at `gofmt`: the runner's default `core.autocrlf=true` rewrote
+every file to CRLF. `.gitattributes` (`* text=auto eol=lf`) and a workflow step fix
+it (`ccd5609`). The gate then reached the tests and showed nine Windows-only
+failures in `internal/config` and `cmd/switchboard`, caused by POSIX absolute-path
+fixtures and Unix permission bits; seven tests skip on Windows with the reason in
+code, mode assertions are conditional (`9542359`). Run `39189670980` is green on
+Linux (1m05s), macOS (36s) and Windows (5m37s). Not closed: `REL-003` asks for a
+green pull request, and the pinning commit `5bb3cfe` has not run yet.
 
 ## EDGE-002 (part) — single-level wildcard certificate — 2026-10-19 (committed with this change)
 

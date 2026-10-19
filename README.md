@@ -251,17 +251,20 @@ In progress (Phase 1 hardening, see [TO_IMPLEMENT.md](docs/TO_IMPLEMENT.md)):
 - [x] Authorization by claims (allowed emails/domains/required groups)
 - [x] Strict route validation (duplicates, HTTP(S) targets, normalized hosts/cookies)
 - [x] Verified identity headers propagated upstream; client-forged values stripped
-- [ ] Secrets via env/file, not only inline JSON
+- [x] Secrets via `env:`/`file:` references, not only inline JSON (`REL-001`)
 - [x] `LICENSE` (MIT)
-- [ ] CI and the rest of Phase 6's open-source hygiene items
+- [x] CI on Linux, macOS and Windows runs `scripts/verify.sh` (green on `master` since 2026-10-19; Windows skips seven config tests with POSIX path fixtures)
+- [ ] The rest of Phase 6's open-source hygiene: release artifacts and the `v0.1.0-alpha.1` tag (`REL-005`, `REL-006`)
 
 ## Next work
 
-The next engineering block closes the remaining hardening debt before adding
-more proxy behavior:
+The next engineering block is the release work that makes the alpha usable by
+someone else, before adding more proxy behavior:
 
-1. Add CI that runs `scripts/verify.sh` (including the short fuzz pass) on each
-   supported platform.
+1. Release engineering (`REL-005`, `REL-006`): GoReleaser artifacts with
+   checksums, then the `v0.1.0-alpha.1` tag. CI already runs
+   `scripts/verify.sh` (including the short fuzz pass) on Linux, macOS and
+   Windows.
 
 After that comes Phase 4: multiple upstreams with round-robin selection,
 active and passive health checks, safe retries, circuit breaking, per-route
