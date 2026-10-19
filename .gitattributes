@@ -1,0 +1,2 @@
+# Line endings are part of the source: gofmt and the verify gate expect LF on every OS.
+* text=auto eol=lf

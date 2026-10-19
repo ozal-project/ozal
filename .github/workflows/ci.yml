@@ -20,8 +20,12 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      # Windows runners default to core.autocrlf=true, which rewrites every
+      # file to CRLF and makes gofmt list the whole tree. Set before checkout.
+      - name: Keep LF line endings
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
       - name: Install optional linters
