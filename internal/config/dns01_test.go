@@ -20,6 +20,7 @@ func dns01Config(t *testing.T, tlsJSON string) *Config {
 }
 
 func TestDNS01ConfigAcceptsTheBoundedScope(t *testing.T) {
+	skipOnWindows(t, "POSIX absolute-path fixtures")
 	cfg := dns01Config(t, `{
 		"enabled": true,
 		"domains": ["Preview.Example.COM"],
@@ -55,6 +56,7 @@ func TestDNS01ConfigAcceptsTheBoundedScope(t *testing.T) {
 }
 
 func TestDNS01ConfigRefusals(t *testing.T) {
+	skipOnWindows(t, "POSIX absolute-path fixtures")
 	valid := func() string {
 		return `{
 			"enabled": true,
@@ -104,6 +106,7 @@ func TestDNS01ConfigRefusals(t *testing.T) {
 }
 
 func TestDNS01ConfigDoesNotRequireAutocertCache(t *testing.T) {
+	skipOnWindows(t, "POSIX absolute-path fixtures")
 	cfg := dns01Config(t, `{
 		"enabled": true,
 		"domains": ["preview.example.com"],

@@ -20,6 +20,7 @@ func notifyConfig(t *testing.T, notifyJSON string) *Config {
 }
 
 func TestNotifyConfigAcceptsLocalBotAPI(t *testing.T) {
+	skipOnWindows(t, "POSIX absolute-path fixtures")
 	cfg := notifyConfig(t, `{
 		"telegram": {
 			"token": "env:TELEGRAM_BOT_TOKEN",
@@ -41,6 +42,7 @@ func TestNotifyConfigAcceptsLocalBotAPI(t *testing.T) {
 }
 
 func TestNotifyConfigRefusals(t *testing.T) {
+	skipOnWindows(t, "POSIX absolute-path fixtures")
 	tests := []struct {
 		name   string
 		notify string

@@ -375,7 +375,7 @@ func TestWriteAtomicRoundTripsAndPreservesPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Stat: %v", err)
 	}
-	if got := info.Mode().Perm(); got != 0o640 {
+	if got := info.Mode().Perm(); hasUnixPermissions() && got != 0o640 {
 		t.Fatalf("mode = %o, want 640", got)
 	}
 }
@@ -448,6 +448,7 @@ func TestValidateHealthPathMustBeAbsolute(t *testing.T) {
 }
 
 func TestValidateStaticRoutes(t *testing.T) {
+	skipOnWindows(t, "POSIX absolute-path fixtures")
 	route := func(r Route) Config {
 		r.Host = "site.localhost"
 		return Config{Listen: ":8888", Routes: []Route{r}}

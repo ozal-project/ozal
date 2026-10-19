@@ -67,7 +67,7 @@ func TestTunnelSpikeInitCreatesPrivateDisposableIdentities(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if info.Mode().Perm() != 0600 {
+		if hasUnixPermissions() && info.Mode().Perm() != 0600 {
 			t.Errorf("%s mode=%v", name, info.Mode())
 		}
 	}

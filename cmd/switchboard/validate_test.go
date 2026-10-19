@@ -19,6 +19,7 @@ func writeValidateConfig(t *testing.T, content string) string {
 }
 
 func TestValidateAcceptsACandidate(t *testing.T) {
+	skipOnWindows(t, "POSIX absolute-path fixtures")
 	path := writeValidateConfig(t, `{
 	  "listen": "127.0.0.1:18888",
 	  "tls": {
