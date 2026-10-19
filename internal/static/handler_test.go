@@ -20,6 +20,8 @@ func newSite(t *testing.T) string {
 		"site/docs/index.html":          "docs",
 		"site/assets/app.js":            "js",
 		"site/.env":                     "SECRET=site",
+		"site/_headers":                 "/*\n  X-Frame-Options: DENY",
+		"site/_redirects":               "/old /new 301",
 		"site/.well-known/security.txt": "contact",
 		"secret.txt":                    "outside the site",
 	}
@@ -143,5 +145,23 @@ func TestHandlerOnlyAllowsReads(t *testing.T) {
 	rec := serve(h, http.MethodPost, "/")
 	if rec.Code != http.StatusMethodNotAllowed || rec.Header().Get("Allow") != "GET, HEAD" {
 		t.Errorf("POST / = %d Allow %q, want 405 GET, HEAD", rec.Code, rec.Header().Get("Allow"))
+	}
+}
+
+// Pages reads _headers and _redirects to configure the host; it does not
+// publish them. Serving them would hand out the site's routing and caching
+// rules, and a SPA fallback must not turn them into the home page either.
+func TestHandlerDoesNotPublishPagesControlFiles(t *testing.T) {
+	for _, spa := range []bool{false, true} {
+		h := Handler{Dir: newSite(t), SPA: spa}
+		for _, target := range []string{"/_headers", "/_redirects", "/./_headers", "/a/../_redirects"} {
+			rec := serve(h, http.MethodGet, target)
+			if rec.Code != http.StatusNotFound {
+				t.Errorf("spa=%v GET %s = %d, want 404", spa, target, rec.Code)
+			}
+			if strings.Contains(rec.Body.String(), "X-Frame-Options") || strings.Contains(rec.Body.String(), "/old") {
+				t.Errorf("spa=%v GET %s leaked the control file: %q", spa, target, rec.Body.String())
+			}
+		}
 	}
 }

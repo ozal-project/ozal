@@ -10,6 +10,7 @@ package static
 import (
 	"io/fs"
 	"path"
+	"slices"
 	"strings"
 )
 
@@ -17,11 +18,16 @@ import (
 // ACME challenges, app links).
 const wellKnown = ".well-known"
 
+// controlFiles are the Cloudflare Pages files that configure a site (response
+// headers and redirects). Like Pages, a site honours them at its root and never
+// publishes them as content.
+var controlFiles = []string{"_headers", "_redirects"}
+
 // Resolve maps an already-decoded URL path to a name relative to the site
 // root, in the form io/fs expects: "." for the root itself, no leading slash,
 // forward slashes only. It reports false for paths that must never reach the
-// filesystem: relative paths, backslashes, NUL bytes, and hidden files such as
-// .git or .env.
+// filesystem: relative paths, backslashes, NUL bytes, hidden files such as
+// .git or .env, and the root-level Pages control files.
 //
 // ".." segments cannot climb above the root: path.Clean resolves "/a/../.."
 // to "/", the same way a browser would.
@@ -37,6 +43,9 @@ func Resolve(urlPath string) (string, bool) {
 		if strings.HasPrefix(segment, ".") && segment != wellKnown {
 			return "", false
 		}
+	}
+	if slices.Contains(controlFiles, name) {
+		return "", false
 	}
 	return name, fs.ValidPath(name)
 }
