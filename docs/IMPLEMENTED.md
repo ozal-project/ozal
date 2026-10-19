@@ -6,6 +6,35 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## EDGE-002 (part) — single-level wildcard certificate — 2026-10-19 (committed with this change)
+
+The own certificate manager now serves one certificate name that may be
+`*.octaviosantacruz.com`. Wildcard rules live in the pure `internal/certs/names.go`
+(`ValidateName`, `Covers`, `ProbeName`, `ChallengeFQDN`, `StorageKey`); the
+listener, ACME issuer, store and config only call them. Evidence: table tests for
+every helper (including the apex and two-label refusals), manager tests that serve
+`preview.` and `sigea.` and refuse the apex, `a.b.` and an empty SNI, an ACME test
+against the fake CA that checks the challenge TXT is created at
+`_acme-challenge.<base>` (never a literal `*`) and cleaned up, storage and config
+tests (a wildcard without `tls.dns01` is refused at load), and a green
+`scripts/verify.sh`. **Not yet proven:** issuance against real Let's Encrypt.
+
+## PAGES (part) — control files are not content — 2026-10-19 (committed `af40aeb`)
+
+`static.Resolve` refuses `/_headers` and `/_redirects` at the site root (as
+Pages does), also through `/./` and `..` forms and in SPA mode; nested files with
+those names stay ordinary. A table test, a handler test and the fuzz invariant
+fail without the change. Deployed to the homelab connector binary
+(`switchboard.before-control-files` kept for rollback); the public preview now
+answers `404` for both. Applying them (`PAGES-003`) remains open.
+
+## SigeaWeb served through Switchboard — local smoke — 2026-10-19
+
+SigeaWeb built to a scratch directory (956 KB) and served by the new binary in
+`spa` mode: client routes (`/privacy`, `/dev-notes`, `/join`) and unknown paths fall
+back to `index.html`, a missing asset answers `404`, `/_headers` and `/.env` are
+refused. No public deployment of this site is established.
+
 ## EDGE-006 (part) — visitor address in the origin log — 2026-10-19
 
 `proxy.forward` now records `client_ip`, the address selected by the trust stage

@@ -106,7 +106,10 @@ func (s *FileStore) hostDir(host string) (string, error) {
 	if host == "" || strings.ContainsAny(host, `/\`) || strings.Contains(host, "..") {
 		return "", fmt.Errorf("%w: refusing host %q as a directory name", ErrStorage, host)
 	}
-	return filepath.Join(s.dir, generationsDir, host), nil
+	if !IsWildcard(host) && strings.HasPrefix(host, wildcardDirPrefix) {
+		return "", fmt.Errorf("%w: %q is reserved for wildcard certificates", ErrStorage, host)
+	}
+	return filepath.Join(s.dir, generationsDir, StorageKey(host)), nil
 }
 
 // Save writes cert.pem and key.pem into a fresh generation directory and

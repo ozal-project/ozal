@@ -10,9 +10,10 @@
 // cloudflare.go are adapters for one technology each. cmd/switchboard is the
 // only place that constructs them.
 //
-// The scope is deliberately bounded: one hostname, Cloudflare DNS, no
-// wildcards. Wildcards stay in EDGE-002; replacing the manager later must
-// not change the tls.Config.GetCertificate contract the listener uses.
+// The scope is deliberately bounded: one certificate name, Cloudflare DNS.
+// The name is a hostname or one single-level wildcard (EDGE-002, names.go);
+// several independent names stay out of scope. Replacing the manager later
+// must not change the tls.Config.GetCertificate contract the listener uses.
 package certs
 
 import (

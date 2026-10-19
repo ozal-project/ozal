@@ -34,6 +34,7 @@ type fakeDNS struct {
 	insertBeforeErr  bool
 	deleteErr        error
 	created, deleted int
+	createdNames     []string
 }
 
 func newFakeDNS() *fakeDNS {
@@ -58,6 +59,7 @@ func (f *fakeDNS) CreateTXT(ctx context.Context, name, value string) (DNSRecord,
 	record := DNSRecord{ZoneID: "zone-1", ID: id, Name: name, Value: value}
 	f.records[id] = record
 	f.created++
+	f.createdNames = append(f.createdNames, name)
 	return record, nil
 }
 
@@ -221,7 +223,8 @@ func (f *fakeACME) handle(w http.ResponseWriter, r *http.Request) {
 		f.mu.Unlock()
 		writeJSON(w, http.StatusOK, map[string]any{
 			"status":     status,
-			"identifier": map[string]string{"type": "dns", "value": f.host},
+			"identifier": map[string]string{"type": "dns", "value": baseOf(f.host)},
+			"wildcard":   IsWildcard(f.host),
 			"challenges": []map[string]any{{
 				"type":   "dns-01",
 				"url":    f.base + "/chall/1",

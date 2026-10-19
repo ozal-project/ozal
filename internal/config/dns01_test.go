@@ -85,6 +85,10 @@ func TestDNS01ConfigRefusals(t *testing.T) {
 		{"missing token", func(tls *TLS) { tls.DNS01.DNSToken = " " }, "requires dns_token"},
 		{"empty file reference", func(tls *TLS) { tls.DNS01.DNSToken = "file: " }, "names no file"},
 		{"hostname with port", func(tls *TLS) { tls.Domains[0] = "preview.example.com:443" }, "plain hostname"},
+		{"wildcard over a public suffix", func(tls *TLS) { tls.Domains[0] = "*.com" }, "registered domain"},
+		{"wildcard not at the left", func(tls *TLS) { tls.Domains[0] = "a.*.example.com" }, "plain hostname"},
+		{"wildcard without a dot", func(tls *TLS) { tls.Domains[0] = "*example.com" }, "plain hostname"},
+		{"double wildcard", func(tls *TLS) { tls.Domains[0] = "*.*.example.com" }, "plain hostname"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -119,5 +123,35 @@ func TestDNS01ConfigDoesNotRequireAutocertCache(t *testing.T) {
 	}`)
 	if cfg.TLS.CacheDir != "" {
 		t.Fatalf("cache_dir = %q, want it unused in dns-01 mode", cfg.TLS.CacheDir)
+	}
+}
+
+func TestDNS01ConfigAcceptsASingleLevelWildcard(t *testing.T) {
+	skipOnWindows(t, "POSIX absolute-path fixtures")
+	cfg := dns01Config(t, `{
+		"enabled": true,
+		"domains": ["*.Example.COM"],
+		"email": "ops@example.com",
+		"dns01": {
+			"state_dir": "/var/lib/switchboard/certs",
+			"directory_url": "https://acme.example/directory",
+			"dns_token": "env:TOKEN"
+		}
+	}`)
+	if got := cfg.TLS.Domains[0]; got != "*.example.com" {
+		t.Fatalf("domain = %q, want the wildcard normalized", got)
+	}
+}
+
+// autocert cannot answer a wildcard: only the DNS-01 manager can, so a
+// wildcard without tls.dns01 must fail at load time, not at the first handshake.
+func TestWildcardRequiresDNS01(t *testing.T) {
+	path := writeConfig(t, `{
+		"listen": ":8888",
+		"tls": {"enabled": true, "domains": ["*.example.com"], "email": "ops@example.com", "cache_dir": "/var/lib/switchboard/acme"},
+		"routes": [{"host": "a.localhost", "target": "http://localhost:9000"}]
+	}`)
+	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "wildcard") {
+		t.Fatalf("Load error = %v, want it to refuse a wildcard without tls.dns01", err)
 	}
 }

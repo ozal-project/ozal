@@ -35,7 +35,7 @@ project.
 | Area | Options | Decide by |
 |---|---|---|
 | VPS provider | Hetzner CX23, reachable over WireGuard at 10.8.0.1 | Private loopback-only Switchboard/Portfolio staging installed (2026-10-17 America/Asuncion); public EDGE-001 remains gated. Builds and application databases stay in the homelab. [TUN-001](tunnel-local-spike.md) remains the owned-transport lab; Cloudflare Tunnel is optional. |
-| Wildcard DNS-01 scope | Cloudflare DNS is selected for single-host `EDGE-007`; decide wildcard ownership, concurrent TXT handling and manager suitability separately in `EDGE-002` | Before wildcard public deployment; not part of `EDGE-007` |
+| Wildcard DNS-01 scope | **Decided 2026-10-19 (owner): one wildcard certificate (`*.octaviosantacruz.com`) from the same own manager**, not CertMagic and not several independent names. The manager still serves one certificate *name*; `internal/certs/names.go` holds every wildcard rule (single-label coverage, apex excluded, base-domain challenge TXT, `_wildcard.` storage key). One manager means one ACME attempt and one challenge record at a time, so there is no concurrent-TXT case. The apex stays on Pages. Trade-off: the private key covers every subdomain, so each hostname still needs its own Cloudflare origin-pull credential and route; revisit if a second independent name or zone is needed | Implemented in `EDGE-002`; staging then production issuance acceptance pending |
 | Email for one-time codes | SMTP relay, Resend, Amazon SES | Q1 (blocks `ID-002`) |
 | Private CA / ACME server | Own implementation on `crypto/x509` (preferred, learning) with Pebble as reference | Q2 |
 | Policy language | Own JSON policies, Cedar (`cedar-go`), CEL | Q2 |
@@ -64,7 +64,7 @@ package's tests, not by the exercise alone.
   existing `x/crypto/acme` protocol client and a small `net/http` adapter. Do not
   write ACME/JWS or cryptographic primitives. Wildcards, multi-edge coordination,
   additional DNS providers and a general certificate platform are outside this
-  task; `EDGE-002` retains the future wildcard decision.
+  task; `EDGE-002` extends the same manager to one wildcard name (2026-10-19).
 - **Consumer port:** the listener declares the minimum interface,
   `GetCertificate(*tls.ClientHelloInfo) (*tls.Certificate, error)`, and passes it
   to `tls.Config.GetCertificate`. `cmd/switchboard` wires the implementation;

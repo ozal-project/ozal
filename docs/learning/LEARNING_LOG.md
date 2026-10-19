@@ -522,3 +522,13 @@ Resolving the visitor address safely is not the same as being able to prove it:
 A log line must read what the pipeline decided from the request context, never
 a header, or a spoofed value would reach the evidence. Table-driven tests cover
 the trusted, untrusted, spoofed-header and duplicated-assertion cases.
+
+## 2026-10-19 — wildcards and a pure name core
+
+A wildcard changes four unrelated things at once (which names a certificate
+covers, what an ACME challenge record is called, how a name is stored and how a
+chain is verified). Putting those rules in one pure file with tests means the
+shells never parse a `*` themselves. Wildcards cover exactly one label, never
+the apex, and the CA's own answer (the authorized identifier) is checked rather
+than trusted. `os.OpenInRoot` and `Resolve` showed the same lesson for files:
+deny the control files in the pure resolver and keep the kernel check as a backstop.

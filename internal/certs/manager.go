@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"log/slog"
 	mrand "math/rand/v2"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -32,7 +31,8 @@ const (
 // ManagerConfig configures the certificate manager. Test callers inject Now
 // and Jitter and shrink the timing fields to keep the loop deterministic.
 type ManagerConfig struct {
-	// Host is the single DNS name this manager serves certificates for.
+	// Host is the single certificate name this manager serves: a hostname, or
+	// a single-level wildcard such as "*.example.com" (see names.go).
 	Host string
 	// RootCAs overrides system certificate roots, for explicit staging trust.
 	RootCAs *x509.CertPool
@@ -136,7 +136,7 @@ func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 	if hello == nil {
 		return nil, errors.New("certs: no client hello")
 	}
-	if !strings.EqualFold(hello.ServerName, m.cfg.Host) {
+	if !Covers(m.cfg.Host, hello.ServerName) {
 		return nil, fmt.Errorf("certs: this listener serves %q, not %q", m.cfg.Host, hello.ServerName)
 	}
 	active := m.current.Load()

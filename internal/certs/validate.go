@@ -44,7 +44,7 @@ func ParseGeneration(certPEM, keyPEM []byte, host string, now time.Time, roots *
 		intermediates.AddCert(issuer)
 	}
 	if _, err := leaf.Verify(x509.VerifyOptions{
-		Roots: roots, Intermediates: intermediates, DNSName: host,
+		Roots: roots, Intermediates: intermediates, DNSName: ProbeName(host),
 		CurrentTime: now, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	}); err != nil {
 		return tls.Certificate{}, fmt.Errorf("%w: verify certificate chain: %v", ErrInvalidGeneration, err)

@@ -16,6 +16,7 @@ import (
 	"net"
 	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -157,7 +158,12 @@ func (i *ACMEIssuer) authorize(ctx context.Context, client *acme.Client, host, a
 		return fmt.Errorf("%w: derive challenge value: %v", ErrDNS, err)
 	}
 
-	fqdn := "_acme-challenge." + host
+	// The CA names the identifier it validates: the base domain for a
+	// wildcard. An authorization for anything else is never presented.
+	if got := authz.Identifier.Value; got != "" && !strings.EqualFold(got, baseOf(host)) {
+		return fmt.Errorf("%w: the CA authorized %q, expected %q", ErrDNS, got, baseOf(host))
+	}
+	fqdn := ChallengeFQDN(host)
 	record, intentID, err := i.present(ctx, fqdn, value)
 	if err != nil {
 		return err

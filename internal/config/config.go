@@ -309,6 +309,11 @@ func Validate(cfg Config) (*Config, error) {
 			return nil, fmt.Errorf("config: tls.enabled requires at least one domain")
 		}
 		if cfg.TLS.DNS01 == nil {
+			for _, domain := range cfg.TLS.Domains {
+				if strings.Contains(domain, "*") {
+					return nil, fmt.Errorf("config: wildcard domain %q requires tls.dns01 (autocert cannot issue wildcards)", domain)
+				}
+			}
 			if cfg.TLS.CacheDir == "" {
 				return nil, fmt.Errorf("config: tls.enabled requires cache_dir")
 			}
@@ -424,16 +429,26 @@ func Validate(cfg Config) (*Config, error) {
 }
 
 // normalizeDNS01 validates the own-manager TLS configuration and normalizes
-// the single hostname it serves. The scope is deliberately one hostname and
+// the single name it serves (a hostname or one wildcard). The scope is one name and
 // one state directory: staging and production are separated by pointing the
 // directory elsewhere, not by sharing one registration.
 func normalizeDNS01(tls *TLS) error {
 	if len(tls.Domains) != 1 {
 		return fmt.Errorf("config: tls.dns01 supports exactly one domain today, got %d", len(tls.Domains))
 	}
-	host, err := NormalizeHost(tls.Domains[0])
+	// A single-level wildcard ("*.example.com") is a plain hostname with one
+	// leading label that stands for any single subdomain; the rest is
+	// validated like any other host.
+	wildcard := strings.HasPrefix(tls.Domains[0], "*.")
+	host, err := NormalizeHost(strings.TrimPrefix(tls.Domains[0], "*."))
 	if err != nil || strings.Contains(host, ":") {
 		return fmt.Errorf("config: tls.domains[0] %q is not a plain hostname", tls.Domains[0])
+	}
+	if wildcard {
+		if !strings.Contains(host, ".") {
+			return fmt.Errorf("config: tls.domains[0] %q: a wildcard must sit above a registered domain", tls.Domains[0])
+		}
+		host = "*." + host
 	}
 	tls.Domains[0] = host
 
