@@ -267,12 +267,19 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 				req.Header.Set(pipeline.IdentityUserHeader, principal.Subject)
 			}
 		}
+		// The address the trust stage selected, never a header read here: a
+		// peer outside trusted_proxies cannot choose what is logged.
+		clientIP := ""
+		if ip, ok := pipeline.ClientIP(req.Context()); ok {
+			clientIP = ip.String()
+		}
 		// Path only: a query string can carry tokens and must never be logged.
 		cfg.logger.LogAttrs(req.Context(), slog.LevelInfo, "proxy.forward",
 			slog.String("method", req.Method),
 			slog.String("host", host),
 			slog.String("path", req.URL.Path),
 			slog.String("target", rt.target),
+			slog.String("client_ip", clientIP),
 		)
 		rt.handler.ServeHTTP(w, req)
 	})

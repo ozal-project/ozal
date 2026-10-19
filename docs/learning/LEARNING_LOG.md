@@ -514,3 +514,11 @@ A rollback restores executable/unit state, never an old registry over live
 revocations. A real TCP-peer proof across the private tunnel establishes only
 that trust boundary; Cloudflare visitor-IP acceptance is a separate test.
 Disposable identities let revocation be tested without rotating Portfolio.
+
+## 2026-10-19 — visitor IP in the origin log
+
+Resolving the visitor address safely is not the same as being able to prove it:
+`proxy.forward` now logs the address chosen by the trust stage as `client_ip`.
+A log line must read what the pipeline decided from the request context, never
+a header, or a spoofed value would reach the evidence. Table-driven tests cover
+the trusted, untrusted, spoofed-header and duplicated-assertion cases.

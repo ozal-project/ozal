@@ -2,12 +2,15 @@ package proxy
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"slices"
@@ -971,6 +974,50 @@ func TestForwardedRequestIsLoggedAsStructuredRecord(t *testing.T) {
 	}
 	if strings.Contains(line, "secret") {
 		t.Errorf("the query string must never be logged: %s", line)
+	}
+}
+
+func TestForwardRecordCarriesTheResolvedClientIP(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer upstream.Close()
+
+	cloudflare := []netip.Prefix{netip.MustParsePrefix("173.245.48.0/20"), netip.MustParsePrefix("2400:cb00::/32")}
+	tests := []struct {
+		name       string
+		remoteAddr string
+		headers    map[string][]string
+		want       string
+	}{
+		{"trusted proxy asserts the visitor", "173.245.48.10:443", map[string][]string{"Cf-Connecting-Ip": {"190.104.190.61"}}, "190.104.190.61"},
+		{"trusted IPv6 proxy asserts an IPv6 visitor", "[2400:cb00::1]:443", map[string][]string{"Cf-Connecting-Ip": {"2001:db8::7"}}, "2001:db8::7"},
+		{"untrusted peer cannot choose its own address", "203.0.113.9:5555", map[string][]string{"Cf-Connecting-Ip": {"1.2.3.4"}}, "203.0.113.9"},
+		{"forwarding headers never identify the visitor", "173.245.48.10:443", map[string][]string{"X-Forwarded-For": {"1.2.3.4"}}, "173.245.48.10"},
+		{"duplicated assertion falls back to the peer", "173.245.48.10:443", map[string][]string{"Cf-Connecting-Ip": {"1.1.1.1", "2.2.2.2"}}, "173.245.48.10"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			handler, err := New([]config.Route{{Host: "app.localhost", Target: upstream.URL}}, nil, nil,
+				WithTrustedProxies(cloudflare),
+				WithLogger(slog.New(slog.NewJSONHandler(&out, nil))))
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			req := httptest.NewRequest(http.MethodGet, "http://app.localhost/", nil)
+			req.RemoteAddr = tc.remoteAddr
+			maps.Copy(req.Header, tc.headers)
+			handler.ServeHTTP(httptest.NewRecorder(), req)
+
+			var record struct {
+				ClientIP string `json:"client_ip"`
+			}
+			if err := json.Unmarshal(out.Bytes(), &record); err != nil {
+				t.Fatalf("log record is not JSON: %v: %s", err, out.String())
+			}
+			if record.ClientIP != tc.want {
+				t.Errorf("client_ip = %q, want %q: %s", record.ClientIP, tc.want, out.String())
+			}
+		})
 	}
 }
 

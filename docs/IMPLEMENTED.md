@@ -6,6 +6,18 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## EDGE-006 (part) — visitor address in the origin log — 2026-10-19
+
+`proxy.forward` now records `client_ip`, the address selected by the trust stage
+(`pipeline.ClientIP`), never a raw header. Table-driven test
+`TestForwardRecordCarriesTheResolvedClientIP` covers a trusted IPv4/IPv6 proxy,
+an untrusted peer sending `CF-Connecting-IP`, forwarding headers and a duplicated
+assertion; it fails without the change. `scripts/verify.sh` passed. Deployed to
+the VPS preview (binary sha256 `7f61ea68…a4b9`, previous binary kept as
+`switchboard.prev`): eight external requests, including spoofed forwarding
+headers, all logged the real visitor address. Evidence and open items live in the
+[`hetzner-public` runbook](../../server-ops/deploy/hetzner-public/README.md).
+
 ## Feature commit checkpoints — 2026-10-18
 
 | Scope | Commit |
