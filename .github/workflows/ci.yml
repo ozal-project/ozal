@@ -15,7 +15,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # ubuntu-latest moves to Ubuntu 26.04 between 2026-10-19 and 2026-11-19;
+        # pinned so one commit cannot pass on one image and fail on the other.
+        os: [ubuntu-24.04, macos-latest, windows-latest]
     defaults:
       run:
         shell: bash
@@ -28,10 +30,11 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+      # Pinned: an unpinned linter changes the gate without any commit.
       - name: Install optional linters
-        if: matrix.os == 'ubuntu-latest'
+        if: startsWith(matrix.os, 'ubuntu')
         run: |
-          go install honnef.co/go/tools/cmd/staticcheck@latest
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install honnef.co/go/tools/cmd/staticcheck@v0.8.2
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
       - name: Gate
         run: scripts/verify.sh
