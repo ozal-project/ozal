@@ -12,3 +12,6 @@ config.json
 *.db
 *.db-wal
 *.db-shm
+
+# Release output (goreleaser)
+/dist/

@@ -52,7 +52,7 @@ project.
 | CI | GitHub Actions (Linux/macOS/Windows) | Q1 |
 | Postgres adapter | Only if Switchboard runs on two or more edges (shared state, HA) | When multi-edge is planned |
 | Go → TypeScript types for the admin API | Hand-written in `web/console/src/lib/api.ts` for now; `tygo` if the API grows | Q2 (with `UI-002`) |
-| Releases | GoReleaser, checksums, SBOM, cosign | Q1 |
+| Releases | GoReleaser (`.goreleaser.yaml`, tested with v2.3.2), SHA-256 checksums, SPDX SBOM by syft (v1.14.0); cosign later (`LAB-010`). Build tools, not module dependencies | Q1 (config in place 2026-10-20) |
 
 ## Public origin certificate contract
 

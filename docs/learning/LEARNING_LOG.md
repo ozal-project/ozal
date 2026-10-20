@@ -600,3 +600,12 @@ host, including Switchboard's own session. Refuse headers by what they can
 reach, not by how common they are. And substitution is where open redirects
 hide: `/go/* /:splat` is safe until the visitor's path starts with `/`, so
 check the result after substituting, not only the rule.
+
+
+## 2026-10-20 — a reproducible build is checked, not configured (REL-005)
+
+`-trimpath` and a commit-based `mod_timestamp` looked sufficient, yet two
+snapshot builds of one commit differed. The cause was a default: GoReleaser's
+ldflags inject `-X main.date`, and although no such variable exists the
+linker flags still feed the build ID. Rebuilding twice and comparing hashes
+is the only proof; a release tool's defaults are part of the input.

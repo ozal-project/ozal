@@ -6,6 +6,28 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## REL-005 — GoReleaser, checksums and SBOM — 2026-10-20 (committed with this change)
+
+`.goreleaser.yaml` (version 2): `CGO_ENABLED=0` static builds of
+`./cmd/switchboard` for linux, darwin and windows on amd64 and arm64;
+`tar.gz` archives (`zip` on Windows) with `LICENSE`, `README.md`,
+`QUICKSTART.md` and both example configs; `checksums.txt` (SHA-256); one
+SPDX 2.3 SBOM per archive from syft; draft GitHub release with a git
+changelog. `/dist/` is ignored.
+
+- **Evidence (2026-10-20, `cf0000a`, GoReleaser v2.3.2 and syft v1.14.0
+  release binaries verified against their published checksums):**
+  `goreleaser check` OK; `goreleaser release --snapshot --clean` built the
+  six targets; `sha256sum -c checksums.txt` OK for all 12 files; the
+  linux/amd64 binary ran `validate` on `config.example.json`; the SBOM
+  lists the 18 module packages.
+- **Reproducible:** GoReleaser's default `ldflags` stamp the build date,
+  which changed every binary's build ID on each run. With `-s -w` only,
+  `-trimpath` and `mod_timestamp` from the commit, two builds a minute
+  apart gave identical hashes for all six binaries.
+- **Not here:** tag workflow and publishing (`REL-006`), signatures and
+  provenance (`LAB-010`).
+
 ## PAGES-003 — `_redirects` and `_headers` for deployed sites — 2026-10-20 (committed with this change)
 
 A deployment may carry Cloudflare Pages-style `_redirects` and `_headers` at
