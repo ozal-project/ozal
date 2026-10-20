@@ -20,7 +20,10 @@
   // The token lives only in this component's memory: never storage or cookies.
   let token = $state("");
   let pending = $state("");
-  let notice = $state("");
+  // Feedback belongs next to the button that caused it: a message at the top
+  // of the page is out of sight when the click happened further down.
+  let notice = $state<{ site: string; text: string; ok: boolean } | null>(null);
+  let tokenInput = $state<HTMLInputElement | null>(null);
 
   async function load() {
     loading = true;
@@ -37,15 +40,20 @@
   onMount(() => { load(); const t = setInterval(load, 15_000); return () => clearInterval(t); });
 
   async function restore(site: string, id: string) {
-    notice = "";
-    if (!token.trim()) return (notice = "Paste the admin token to roll back.");
+    notice = null;
+    if (!token.trim()) {
+      notice = { site, text: "Paste the admin token above first; it is needed to change the live build.", ok: false };
+      tokenInput?.scrollIntoView({ behavior: "smooth", block: "center" });
+      tokenInput?.focus({ preventScroll: true });
+      return;
+    }
     pending = id;
     try {
       await rollback(token.trim(), site, id);
-      notice = `${site} now serves ${id.slice(0, 12)}.`;
+      notice = { site, text: `${site} now serves ${id.slice(0, 12)}.`, ok: true };
       await load();
     } catch (e) {
-      notice = (e as Error).message;
+      notice = { site, text: (e as Error).message, ok: false };
     } finally {
       pending = "";
     }
@@ -74,8 +82,7 @@
   <Panel index="00" label="Rollback" title="Admin token" sub="Needed only to change which build is live. Kept in this page's memory, never stored." class="mb-6">
     <div class="flex max-w-xl flex-col gap-2">
       <Label for="token" class="text-muted-foreground flex items-center gap-1.5 font-mono text-[0.68rem] font-medium tracking-[0.12em] uppercase"><KeyIcon class="size-3.5" /> Admin token</Label>
-      <Input id="token" type="password" bind:value={token} placeholder="Bearer token from admin.token" autocomplete="off" spellcheck={false} class="font-mono" />
-      {#if notice}<p class="text-sm" role="status">{notice}</p>{/if}
+      <Input id="token" type="password" bind:ref={tokenInput} bind:value={token} placeholder="Bearer token from admin.token" autocomplete="off" spellcheck={false} class="font-mono" />
     </div>
   </Panel>
 
@@ -91,6 +98,9 @@
     <div class="space-y-6">
       {#each sites as site, i (site.name)}
         <Panel index={String(i + 1).padStart(2, "0")} label="Site" title={site.name} sub={`live since ${when(site.changed_at)}`} bodyClass="p-0">
+          {#if notice?.site === site.name}
+            <p class={["border-b px-5 py-3 text-sm", notice.ok ? "text-foreground" : "text-destructive"]} role="status">{notice.text}</p>
+          {/if}
           <div class="overflow-x-auto">
             <Table.Root>
               <Table.Header><Table.Row>
