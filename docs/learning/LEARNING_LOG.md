@@ -609,3 +609,12 @@ snapshot builds of one commit differed. The cause was a default: GoReleaser's
 ldflags inject `-X main.date`, and although no such variable exists the
 linker flags still feed the build ID. Rebuilding twice and comparing hashes
 is the only proof; a release tool's defaults are part of the input.
+
+
+## 2026-10-20 — test the property, not the fields you remember (ARCH-005)
+
+A deep-copy test that names three slices protects those three. Filling the
+whole struct by reflection and asserting "no pointer or backing array is
+shared" protects the next field too. `reflect.Value.Pointer` gives a slice's
+backing array address, which is what aliasing means for slices; and a test
+is only trusted after breaking the code it guards and watching it fail.

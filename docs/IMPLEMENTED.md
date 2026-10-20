@@ -6,6 +6,17 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## ARCH-005 — one deep-copy helper for config — 2026-10-20 (committed with this change)
+
+`routemanager` had its own `cloneConfig` (a wrapper) and `cloneRoute` (a
+second copy of the route logic). Both are gone: `config.Clone` and the new
+`config.CloneRoute` are the only deep-copy helpers. The routemanager test
+that checked one access policy was replaced by `TestCloneSharesNothing`,
+which fills every pointer and slice reachable from `Config` by reflection
+and fails if any is shared between source and clone, so a field added later
+is covered without touching the test. Checked by mutation: dropping the
+`TrustedProxies` copy makes it fail.
+
 ## REL-005 — GoReleaser, checksums and SBOM — 2026-10-20 (committed with this change)
 
 `.goreleaser.yaml` (version 2): `CGO_ENABLED=0` static builds of

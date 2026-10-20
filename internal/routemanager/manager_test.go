@@ -202,31 +202,6 @@ func TestConfigReturnsDeepCopy(t *testing.T) {
 	}
 }
 
-func TestCloneConfigDeepCopiesAccessPolicy(t *testing.T) {
-	source := routeConfig("http://localhost:9000")
-	source.Routes[0].Access = &config.AccessPolicy{
-		AllowedEmails:  []string{"user@example.com"},
-		AllowedDomains: []string{"example.com"},
-		RequiredGroups: []string{"operators"},
-	}
-
-	clone := cloneConfig(source)
-	clone.Routes[0].Access.AllowedEmails[0] = "changed@example.com"
-	clone.Routes[0].Access.AllowedDomains[0] = "changed.example"
-	clone.Routes[0].Access.RequiredGroups[0] = "changed"
-
-	policy := source.Routes[0].Access
-	if policy.AllowedEmails[0] != "user@example.com" {
-		t.Fatalf("source allowed emails mutated: %v", policy.AllowedEmails)
-	}
-	if policy.AllowedDomains[0] != "example.com" {
-		t.Fatalf("source allowed domains mutated: %v", policy.AllowedDomains)
-	}
-	if policy.RequiredGroups[0] != "operators" {
-		t.Fatalf("source required groups mutated: %v", policy.RequiredGroups)
-	}
-}
-
 func TestAddAndDeleteRoutePersistAndInstallTogether(t *testing.T) {
 	firstUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "first")

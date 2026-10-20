@@ -189,7 +189,7 @@ func (m *Manager) AddRoute(route config.Route) error {
 		}
 	}
 
-	cfg := cloneConfig(current.cfg)
+	cfg := config.Clone(current.cfg)
 	route.Host = host
 	cfg.Routes = append(cfg.Routes, route)
 	return m.persistAndInstall(cfg)
@@ -212,7 +212,7 @@ func (m *Manager) DeleteRoute(host string) error {
 		return fmt.Errorf("invalid route host %q: %w", host, err)
 	}
 
-	cfg := cloneConfig(current.cfg)
+	cfg := config.Clone(current.cfg)
 	index := -1
 	for i, route := range cfg.Routes {
 		if route.Host == normalizedHost {
@@ -233,7 +233,7 @@ func (m *Manager) Config() config.Config {
 	if snapshot == nil {
 		return config.Config{}
 	}
-	return cloneConfig(snapshot.cfg)
+	return config.Clone(snapshot.cfg)
 }
 
 // RouteStatuses returns one consistent routing generation and a copy of each
@@ -246,7 +246,7 @@ func (m *Manager) RouteStatuses() []RouteStatus {
 	statuses := make([]RouteStatus, len(snapshot.cfg.Routes))
 	for i, route := range snapshot.cfg.Routes {
 		statuses[i] = RouteStatus{
-			Route:  cloneRoute(route),
+			Route:  config.CloneRoute(route),
 			Health: snapshot.checker.Status(route.Host),
 		}
 		if route.Connector != "" && m.connectorRoutes != nil {
@@ -461,7 +461,7 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 	}
 
 	return &Snapshot{
-		cfg:           cloneConfig(*cfg),
+		cfg:           config.Clone(*cfg),
 		handler:       handler,
 		checker:       checker,
 		healthCancel:  healthCancel,
@@ -610,20 +610,4 @@ func sameServerConfig(a, b config.Config) bool {
 		reflect.DeepEqual(a.Tunnel, b.Tunnel) &&
 		reflect.DeepEqual(a.Pages, b.Pages) &&
 		slices.Equal(a.TLS.Domains, b.TLS.Domains)
-}
-
-func cloneConfig(source config.Config) config.Config {
-	return config.Clone(source)
-}
-
-func cloneRoute(route config.Route) config.Route {
-	clone := route
-	if route.Access != nil {
-		access := *route.Access
-		access.AllowedEmails = slices.Clone(route.Access.AllowedEmails)
-		access.AllowedDomains = slices.Clone(route.Access.AllowedDomains)
-		access.RequiredGroups = slices.Clone(route.Access.RequiredGroups)
-		clone.Access = &access
-	}
-	return clone
 }

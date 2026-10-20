@@ -585,14 +585,20 @@ func Clone(source Config) Config {
 	}
 	clone.Routes = make([]Route, len(source.Routes))
 	for i, route := range source.Routes {
-		clone.Routes[i] = route
-		if route.Access != nil {
-			access := *route.Access
-			access.AllowedEmails = slices.Clone(route.Access.AllowedEmails)
-			access.AllowedDomains = slices.Clone(route.Access.AllowedDomains)
-			access.RequiredGroups = slices.Clone(route.Access.RequiredGroups)
-			clone.Routes[i].Access = &access
-		}
+		clone.Routes[i] = CloneRoute(route)
+	}
+	return clone
+}
+
+// CloneRoute returns a deep copy of one route.
+func CloneRoute(route Route) Route {
+	clone := route
+	if route.Access != nil {
+		access := *route.Access
+		access.AllowedEmails = slices.Clone(route.Access.AllowedEmails)
+		access.AllowedDomains = slices.Clone(route.Access.AllowedDomains)
+		access.RequiredGroups = slices.Clone(route.Access.RequiredGroups)
+		clone.Access = &access
 	}
 	return clone
 }
