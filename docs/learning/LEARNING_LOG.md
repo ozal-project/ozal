@@ -572,3 +572,11 @@ small visual vocabulary reused by the console and the project page. Two technica
 notes: Tailwind 4 utilities beat `@layer components`, so a component class cannot
 restyle a library component that already sets the same utility; and a grid item needs
 `min-w-0` before an overflowing `<pre>` will scroll instead of widening the page.
+
+
+## 2026-10-20 — branch names are part of CI configuration
+
+Renaming the default branch on GitHub does not rewrite a workflow's explicit
+push filter. The CI filter now uses `main`; the pull-request trigger remains
+independent of that filter. A local gate verifies the checkout, while a hosted
+run is required to verify that GitHub actually schedules the workflow.

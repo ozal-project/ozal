@@ -654,3 +654,12 @@ normal check succeeded without unnecessary renewal and no pending journal
 remains. Server Ops owns the units and records the operational evidence.
 CA trust-anchor rollover remains a separate managed change. No public exposure,
 DNS/firewall change or host reboot was performed.
+
+
+## CI follows the main branch — 2026-10-20
+
+The workspace branch normalization renamed Switchboard's default branch from
+`master` to `main`. The CI push filter now follows `main`; pull requests keep
+their existing trigger. This is a REL-003 maintenance slice, not closure of
+its hosted-run and pull-request acceptance criteria. Validation and the
+publication commit are reported with this change.
