@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/octaviosantacruz/switchboard/internal/pages"
 )
 
 // newSite builds a site directory next to a secret file it must never serve.
@@ -174,7 +176,7 @@ func TestHandlerFollowsTheLiveDeployment(t *testing.T) {
 		}
 	}
 	current, deployed := "", false
-	h := Handler{Live: func() (string, bool) { return current, deployed }}
+	h := Handler{Live: func() (pages.Live, bool) { return pages.Live{Dir: current}, deployed }}
 	get := func() (int, string) {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
@@ -191,5 +193,42 @@ func TestHandlerFollowsTheLiveDeployment(t *testing.T) {
 	current = v2 // a deploy or rollback: the next request sees it
 	if code, body := get(); code != http.StatusOK || body != "two" {
 		t.Fatalf("live v2: %d %q", code, body)
+	}
+}
+
+func TestHandlerAppliesTheDeploymentRules(t *testing.T) {
+	dir := newSite(t)
+	rules, err := pages.ParseRules(
+		[]byte("/about.html /about-us 301\n/go/* /:splat 302\n"),
+		[]byte("/*\n  X-Frame-Options: DENY\n/docs/*\n  Cache-Control: no-store\n"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := Handler{Live: func() (pages.Live, bool) { return pages.Live{Dir: dir, Rules: rules}, true }}
+	get := func(target string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
+		return rec
+	}
+
+	// The file exists, and the redirect still wins (Cloudflare Pages does the same).
+	if rec := get("/about.html"); rec.Code != http.StatusMovedPermanently || rec.Header().Get("Location") != "/about-us" {
+		t.Fatalf("/about.html = %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+	rec := get("/docs/")
+	if rec.Code != http.StatusOK || rec.Header().Get("X-Frame-Options") != "DENY" || rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("/docs/ = %d %v", rec.Code, rec.Header())
+	}
+	if rec.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatal("rules must not drop the nosniff baseline")
+	}
+	// A raw "//" in the visitor's path must not turn into an off-site redirect.
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.URL.Path = "/go//evil.example"
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if loc := rec.Header().Get("Location"); strings.HasPrefix(loc, "//") {
+		t.Fatalf("open redirect to %q", loc)
 	}
 }

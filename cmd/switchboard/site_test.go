@@ -65,7 +65,7 @@ func TestSiteDeployListRollbackEndToEnd(t *testing.T) {
 	}
 	server := httptest.NewServer(admin.New(tokenOnlyManager{}, nil, admin.WithPages(store)))
 	defer server.Close()
-	site := static.Handler{Live: func() (string, bool) { return store.LiveDir("blog") }}
+	site := static.Handler{Live: func() (pages.Live, bool) { return store.Live("blog") }}
 	visit := func() string {
 		rec := httptest.NewRecorder()
 		site.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))

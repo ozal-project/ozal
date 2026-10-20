@@ -18,6 +18,7 @@ import (
 	"github.com/octaviosantacruz/switchboard/internal/auth"
 	"github.com/octaviosantacruz/switchboard/internal/config"
 	"github.com/octaviosantacruz/switchboard/internal/events"
+	"github.com/octaviosantacruz/switchboard/internal/pages"
 	"github.com/octaviosantacruz/switchboard/internal/pipeline"
 	"github.com/octaviosantacruz/switchboard/internal/static"
 )
@@ -39,10 +40,10 @@ type options struct {
 	sites                 SiteDirs
 }
 
-// SiteDirs resolves a deployed site to the directory it currently serves
-// (pages.Store implements it). Declared here, by its consumer.
+// SiteDirs resolves a deployed site to what it currently serves: directory
+// and rules (pages.Store implements it). Declared here, by its consumer.
 type SiteDirs interface {
-	LiveDir(site string) (string, bool)
+	Live(site string) (pages.Live, bool)
 }
 
 // WithSites enables "site" routes. Without it they fail construction.
@@ -346,7 +347,7 @@ func upstreamHandler(r config.Route, devErrors, assertVisitor bool, transport ht
 			return nil, fmt.Errorf("route %s: site routes require pages to be enabled", r.Host)
 		}
 		site := r.Site
-		return static.Handler{Live: func() (string, bool) { return sites.LiveDir(site) }, SPA: r.SPA}, nil
+		return static.Handler{Live: func() (pages.Live, bool) { return sites.Live(site) }, SPA: r.SPA}, nil
 	}
 	if r.IsStatic() {
 		info, err := os.Stat(r.Root)

@@ -154,3 +154,48 @@ func hasIndex(files []File) bool {
 	}
 	return false
 }
+
+// RulesInvalid refuses a deployment whose _redirects or _headers does not
+// parse: a typo must fail the deploy, not silently drop a security header.
+const RulesInvalid Code = "rules.invalid"
+
+// Rule files at the deployment root. The static handler never serves them.
+const (
+	RedirectsFile = "_redirects"
+	HeadersFile   = "_headers"
+)
+
+// LoadRules reads and parses a deployment's rule files; a missing file has
+// no rules. Reads go through os.Root and are capped like the parser's limit.
+func LoadRules(dir string) (*Rules, error) {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, fmt.Errorf("open deployment: %w", err)
+	}
+	defer root.Close()
+	read := func(name string) ([]byte, error) {
+		f, err := root.Open(name)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		defer f.Close()
+		return io.ReadAll(io.LimitReader(f, MaxRulesFileBytes+1))
+	}
+	redirects, err := read(RedirectsFile)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", RedirectsFile, err)
+	}
+	headers, err := read(HeadersFile)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", HeadersFile, err)
+	}
+	rules, err := ParseRules(redirects, headers)
+	var invalid *RulesError
+	if errors.As(err, &invalid) {
+		return nil, refused(RulesInvalid, invalid.Error())
+	}
+	return rules, err
+}

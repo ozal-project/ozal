@@ -7,6 +7,8 @@ import (
 	"os"
 	"path"
 	"strings"
+
+	"github.com/octaviosantacruz/switchboard/internal/pages"
 )
 
 const indexFile = "index.html"
@@ -15,12 +17,14 @@ const indexFile = "index.html"
 // served through its index.html. With SPA set, a missing extensionless path
 // falls back to the root index.html so client-side routers work.
 //
-// Live, when set, replaces Dir: it is asked once per request for the
-// directory of the live deployment (PAGES-002), so a deploy or rollback takes
-// effect on the next request and a request never mixes two deployments.
+// Live, when set, replaces Dir: it is asked once per request for the live
+// deployment (PAGES-002), so a deploy or rollback takes effect on the next
+// request and a request never mixes two deployments. Its rules (PAGES-003)
+// come with it: a matching _redirects rule answers before any file, and
+// _headers rules are added to the files served.
 type Handler struct {
 	Dir  string
-	Live func() (dir string, ok bool)
+	Live func() (pages.Live, bool)
 	SPA  bool
 }
 
@@ -37,11 +41,19 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dir := h.Dir
+	var rules *pages.Rules
 	if h.Live != nil {
-		if dir, ok = h.Live(); !ok {
+		live, ok := h.Live()
+		if !ok {
 			http.Error(w, "this site has no deployment yet", http.StatusServiceUnavailable)
 			return
 		}
+		dir, rules = live.Dir, live.Rules
+	}
+	// Like Cloudflare Pages, a redirect applies even where a file exists.
+	if to, status, ok := rules.Redirect(r.URL.Path); ok {
+		http.Redirect(w, r, to, status)
+		return
 	}
 
 	file, info, err := open(dir, name)
@@ -67,6 +79,9 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
+	for _, header := range rules.Headers(r.URL.Path) {
+		w.Header().Set(header.Name, header.Value)
+	}
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	http.ServeContent(w, r, info.Name(), info.ModTime(), file)
 }

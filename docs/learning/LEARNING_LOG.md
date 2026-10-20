@@ -590,3 +590,13 @@ clean with `path.Clean` and judge the original. Defence in depth is cheap with
 `os.Root`: even a wrong path check cannot write outside the directory it was
 opened on. And sizes in headers are claims: count the bytes actually copied,
 reading one past the budget to detect an overflow without writing it.
+
+
+## 2026-10-20 — a config file in a site is input from the site's author (PAGES-003)
+
+`_headers` looks harmless until a site on a shared parent domain sets
+`Set-Cookie: ...; Domain=.example.com` and plants a cookie on every other
+host, including Switchboard's own session. Refuse headers by what they can
+reach, not by how common they are. And substitution is where open redirects
+hide: `/go/* /:splat` is safe until the visitor's path starts with `/`, so
+check the result after substituting, not only the rule.

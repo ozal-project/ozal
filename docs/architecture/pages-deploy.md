@@ -85,5 +85,23 @@ so no new public surface is added.
 3. Admin API, CLI, events.
 4. Console Sites page; `publish-site.py` switches to `switchboard deploy`.
 
-Non-goals here: `_headers`/`_redirects` (`PAGES-003`), Git builds
-(`PAGES-004`), previews (`PAGES-005`).
+Non-goals here: Git builds (`PAGES-004`), previews (`PAGES-005`).
+
+## Rules files (`PAGES-003`, 2026-10-20)
+
+`_redirects` and `_headers` at a deployment's root are parsed by the pure
+`pages.ParseRules` (table tests and `FuzzRules`). They are validated during
+`Deploy` (refusal `rules.invalid` with file and line) and reloaded from disk
+by `NewStore` and `Rollback`; a deployment whose rules no longer parse fails
+the start rather than serving without its headers. The parsed `*Rules`
+travels in `pages.Live` with the directory, so one atomic pointer swap
+changes files and rules together. The static handler answers a matching
+redirect before looking at files and adds matching headers to files it
+serves; `nosniff` stays a baseline a site cannot change.
+
+Security choices: `Set-Cookie` is refused because every site shares the
+parent domain with Switchboard's own session cookie; placeholders may not
+reach a destination's host; a relative destination that becomes `//` or
+`/\` after substitution is not followed (fuzzed); control characters in
+the substituted value are refused. Limits: 256 KiB per file, 1000-byte
+lines, 2100 redirects (100 with placeholders), 100 header rules.

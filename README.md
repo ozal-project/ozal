@@ -427,6 +427,32 @@ back; every deploy, rollback and refusal appears in Activity. The CLI sends
 the token over plain HTTP only to a loopback address: for a remote edge, use an
 SSH tunnel to its admin listener. Design: [pages-deploy.md](docs/architecture/pages-deploy.md).
 
+A deployment may carry Cloudflare Pages-style `_redirects` and `_headers`
+files at its root (a subset of the syntax; they are never served):
+
+```text
+# _redirects: SOURCE DESTINATION [301|302|303|307|308]
+/old            /new
+/blog/*         /posts/:splat
+/u/:name        https://example.com/people/:name  302
+
+# _headers: a pattern, then indented headers; "! Name" removes one
+/*
+  X-Frame-Options: DENY
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+```
+
+The first matching redirect wins, even over an existing file; every matching
+header rule applies in order. Both files are checked at deploy time and an
+invalid one refuses the deploy (`rules.invalid`, with the line). Refused on
+purpose: `200` rewrites, absolute-URL patterns, placeholders in a destination
+host, and headers a site must not set (`Set-Cookie`, which could plant a
+cookie for every host under the parent domain, hop-by-hop and framing headers,
+`Location`, `X-Content-Type-Options`). A redirect built from the visitor's
+path never becomes protocol-relative (`//host`). Rollback restores a
+deployment's rules with its files.
+
 Route hosts are matched case-insensitively and normalized without a trailing
 DNS dot. Duplicate normalized hosts are rejected, and upstream targets must
 be absolute `http://` or `https://` URLs.

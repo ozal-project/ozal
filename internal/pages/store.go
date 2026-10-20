@@ -50,6 +50,13 @@ type Site struct {
 	Deployments []Deployment `json:"deployments"`
 }
 
+// Live is what a site serves right now: a deployment directory and the
+// rules parsed from its _redirects and _headers. Both change together.
+type Live struct {
+	Dir   string
+	Rules *Rules
+}
+
 // Store keeps deployments on disk under dir and their history in SQLite.
 // The live directory of every site is also held in an atomic pointer, so the
 // request path reads it without touching the database or the disk.
@@ -61,7 +68,7 @@ type Store struct {
 	now   func() time.Time
 
 	mu   sync.Mutex // serialises deploys and rollbacks
-	live atomic.Pointer[map[string]string]
+	live atomic.Pointer[map[string]Live]
 }
 
 // NewStore opens the store and loads which deployment each site serves.
@@ -81,16 +88,26 @@ func NewStore(ctx context.Context, db *sql.DB, dir string, keep int, limit Limit
 		return nil, fmt.Errorf("load live deployments: %w", err)
 	}
 	defer rows.Close()
-	live := map[string]string{}
+	live := map[string]Live{}
 	for rows.Next() {
 		var site, id string
 		if err := rows.Scan(&site, &id); err != nil {
 			return nil, fmt.Errorf("load live deployments: %w", err)
 		}
-		live[site] = s.deploymentDir(site, id)
+		live[site] = Live{Dir: s.deploymentDir(site, id)}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("load live deployments: %w", err)
+	}
+	// Rules were checked when each deployment was uploaded; one that no
+	// longer parses (a stricter binary) fails the start instead of serving
+	// the site without its headers.
+	for site, l := range live {
+		rules, err := LoadRules(l.Dir)
+		if err != nil {
+			return nil, fmt.Errorf("site %s: %w", site, err)
+		}
+		live[site] = Live{Dir: l.Dir, Rules: rules}
 	}
 	s.live.Store(&live)
 	return s, nil
@@ -99,10 +116,10 @@ func NewStore(ctx context.Context, db *sql.DB, dir string, keep int, limit Limit
 // Limits returns the per-deployment limits the store enforces.
 func (s *Store) Limits() Limits { return s.limit }
 
-// LiveDir returns the directory a site currently serves.
-func (s *Store) LiveDir(site string) (string, bool) {
-	dir, ok := (*s.live.Load())[site]
-	return dir, ok
+// Live returns what a site currently serves.
+func (s *Store) Live(site string) (Live, bool) {
+	l, ok := (*s.live.Load())[site]
+	return l, ok
 }
 
 func (s *Store) siteDir(site string) string { return filepath.Join(s.dir, "sites", site) }
@@ -133,6 +150,10 @@ func (s *Store) Deploy(ctx context.Context, site string, archive io.Reader) (Dep
 		return Deployment{}, err
 	}
 	id := ManifestHash(manifest.Files)
+	rules, err := LoadRules(staging)
+	if err != nil {
+		return Deployment{}, err
+	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -165,7 +186,7 @@ func (s *Store) Deploy(ctx context.Context, site string, archive io.Reader) (Dep
 	if err := tx.Commit(); err != nil {
 		return Deployment{}, fmt.Errorf("record deployment: %w", err)
 	}
-	s.swap(site, final)
+	s.swap(site, Live{Dir: final, Rules: rules})
 	s.prune(ctx, site, id)
 	return s.deployment(ctx, site, id)
 }
@@ -189,6 +210,10 @@ func (s *Store) Rollback(ctx context.Context, site, id string) (Deployment, erro
 	if info, err := os.Stat(filepath.Join(dir, "index.html")); err != nil || info.IsDir() {
 		return Deployment{}, fmt.Errorf("deployment %s files are missing", id)
 	}
+	rules, err := LoadRules(dir)
+	if err != nil {
+		return Deployment{}, err
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Deployment{}, fmt.Errorf("rollback: %w", err)
@@ -200,7 +225,7 @@ func (s *Store) Rollback(ctx context.Context, site, id string) (Deployment, erro
 	if err := tx.Commit(); err != nil {
 		return Deployment{}, fmt.Errorf("rollback: %w", err)
 	}
-	s.swap(site, dir)
+	s.swap(site, Live{Dir: dir, Rules: rules})
 	return s.deployment(ctx, site, id)
 }
 
@@ -263,13 +288,13 @@ func setLive(ctx context.Context, tx *sql.Tx, site, id string, now time.Time) er
 
 // swap publishes a new live map: copy, change one entry, store. Readers keep
 // whichever complete map they loaded; none ever sees a partial update.
-func (s *Store) swap(site, dir string) {
+func (s *Store) swap(site string, l Live) {
 	current := *s.live.Load()
-	next := make(map[string]string, len(current)+1)
+	next := make(map[string]Live, len(current)+1)
 	for k, v := range current {
 		next[k] = v
 	}
-	next[site] = dir
+	next[site] = l
 	s.live.Store(&next)
 }
 

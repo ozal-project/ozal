@@ -59,11 +59,11 @@ func site(t *testing.T, body string) *os.File {
 
 func liveIndex(t *testing.T, s *Store, name string) string {
 	t.Helper()
-	dir, ok := s.LiveDir(name)
+	live, ok := s.Live(name)
 	if !ok {
 		t.Fatalf("site %q has no live deployment", name)
 	}
-	got, err := os.ReadFile(filepath.Join(dir, "index.html"))
+	got, err := os.ReadFile(filepath.Join(live.Dir, "index.html"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestDeployRollbackAndRestart(t *testing.T) {
 	db, dir := migratedDB(t), t.TempDir()
 	s := newStore(t, db, dir, DefaultKeep)
 
-	if _, ok := s.LiveDir("blog"); ok {
+	if _, ok := s.Live("blog"); ok {
 		t.Fatal("a site nobody deployed must not be live")
 	}
 	first, err := s.Deploy(ctx, "blog", site(t, "v1"))
@@ -211,4 +211,51 @@ func TestSameSecondDeploysKeepTheirOrder(t *testing.T) {
 			t.Fatalf("position %d is %s, want newest-first by upload order", i, d.ID[:8])
 		}
 	}
+}
+
+func TestDeployCarriesItsRules(t *testing.T) {
+	ctx := context.Background()
+	db, dir := migratedDB(t), t.TempDir()
+	s := newStore(t, db, dir, DefaultKeep)
+
+	// A typo in _headers fails the deploy and leaves the live site alone.
+	bad := archive(t, entry{name: "index.html", body: "bad"}, entry{name: "_headers", body: "/*\n  Set-Cookie: s=1\n"})
+	if _, err := s.Deploy(ctx, "blog", bad); !isRefusal(err, RulesInvalid) {
+		t.Fatalf("deploy with invalid rules: %v, want %s", err, RulesInvalid)
+	}
+	if _, ok := s.Live("blog"); ok {
+		t.Fatal("a refused deploy must not become live")
+	}
+
+	withRules := archive(t, entry{name: "index.html", body: "v1"}, entry{name: "_redirects", body: "/old /new\n"})
+	first, err := s.Deploy(ctx, "blog", withRules)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Deploy(ctx, "blog", site(t, "v2")); err != nil {
+		t.Fatal(err)
+	}
+	if live, _ := s.Live("blog"); hasRedirect(live, "/old") {
+		t.Fatal("v2 has no _redirects: the v1 rule must be gone")
+	}
+	if _, err := s.Rollback(ctx, "blog", first.ID); err != nil {
+		t.Fatal(err)
+	}
+	if live, _ := s.Live("blog"); !hasRedirect(live, "/old") {
+		t.Fatal("rolling back to v1 must bring its rules back")
+	}
+	// After a restart the rules are read from disk again.
+	if live, _ := newStore(t, db, dir, DefaultKeep).Live("blog"); !hasRedirect(live, "/old") {
+		t.Fatal("rules must survive a restart")
+	}
+}
+
+func hasRedirect(l Live, path string) bool {
+	_, _, ok := l.Rules.Redirect(path)
+	return ok
+}
+
+func isRefusal(err error, code Code) bool {
+	var refusal *RefusedError
+	return errors.As(err, &refusal) && refusal.Code == code
 }

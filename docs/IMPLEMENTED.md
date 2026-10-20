@@ -6,6 +6,31 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## PAGES-003 — `_redirects` and `_headers` for deployed sites — 2026-10-20 (committed with this change)
+
+A deployment may carry Cloudflare Pages-style `_redirects` and `_headers` at
+its root (a subset; design in [pages-deploy.md](architecture/pages-deploy.md#rules-files-pages-003-2026-10-20)).
+
+- **Core:** `pages.ParseRules` (pure): `SOURCE DESTINATION [301|302|303|307|308]`,
+  `:name` segments and a final `*` (`:splat`); header blocks with
+  `! Name` detach. Table tests for matching, joining and refusals with line
+  numbers, plus `FuzzRules` (in the gate): parsing never panics and a
+  redirect to a site path never leaves the site.
+- **Security:** `Set-Cookie` refused (every site shares the parent domain
+  with the session cookie), as are hop-by-hop/framing headers, `Location` and
+  `X-Content-Type-Options`; placeholders cannot reach a destination host;
+  `//` or `/\` after substitution and control characters are not followed.
+- **Shell:** `pages.LoadRules` reads through `os.Root` with a size cap;
+  `Deploy` refuses invalid rules (`rules.invalid`) before anything goes
+  live; `NewStore` and `Rollback` reload them. `pages.Live{Dir, Rules}`
+  replaces the bare directory in the live map, so files and rules switch in
+  one pointer swap; `proxy.SiteDirs` and `static.Handler.Live` take it.
+- **Serving:** a matching redirect answers before any file (as on Pages);
+  matching headers are added to served files; `nosniff` stays.
+- **Not in scope:** `200` rewrites, absolute-URL patterns, rules for
+  `root` routes (their directory is mutable, so nothing would invalidate a
+  cache).
+
 ## PAGES-002 — deployed static sites with history and rollback — 2026-10-20 (committed with this change)
 
 Design: [pages-deploy.md](architecture/pages-deploy.md). A route with `"site"`

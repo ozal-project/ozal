@@ -22,6 +22,7 @@ import (
 	"github.com/octaviosantacruz/switchboard/internal/auth"
 	"github.com/octaviosantacruz/switchboard/internal/config"
 	"github.com/octaviosantacruz/switchboard/internal/events"
+	"github.com/octaviosantacruz/switchboard/internal/pages"
 	"github.com/octaviosantacruz/switchboard/internal/pipeline"
 )
 
@@ -552,9 +553,9 @@ func TestNewRejectsMissingStaticRoot(t *testing.T) {
 
 type fakeSites map[string]string
 
-func (f fakeSites) LiveDir(site string) (string, bool) {
+func (f fakeSites) Live(site string) (pages.Live, bool) {
 	dir, ok := f[site]
-	return dir, ok
+	return pages.Live{Dir: dir}, ok
 }
 
 func TestSiteRouteServesTheLiveDeployment(t *testing.T) {
