@@ -5,7 +5,7 @@ Decisions about languages, libraries and tools. A new dependency is added here
 standard library: writing the piece yourself is often the point of this
 project.
 
-**Last reviewed:** 2026-10-18
+**Last reviewed:** 2026-10-19
 
 ## Decided
 
@@ -36,6 +36,10 @@ project.
 |---|---|---|
 | VPS provider | Hetzner CX23, reachable over WireGuard at 10.8.0.1 | Private loopback-only Switchboard/Portfolio staging installed (2026-10-17 America/Asuncion); public EDGE-001 remains gated. Builds and application databases stay in the homelab. [TUN-001](tunnel-local-spike.md) remains the owned-transport lab; Cloudflare Tunnel is optional. |
 | Wildcard DNS-01 scope | **Decided 2026-10-19 (owner): one wildcard certificate (`*.octaviosantacruz.com`) from the same own manager**, not CertMagic and not several independent names. The manager still serves one certificate *name*; `internal/certs/names.go` holds every wildcard rule (single-label coverage, apex excluded, base-domain challenge TXT, `_wildcard.` storage key). One manager means one ACME attempt and one challenge record at a time, so there is no concurrent-TXT case. The apex stays on Pages. Trade-off: the private key covers every subdomain, so each hostname still needs its own Cloudflare origin-pull credential and route; revisit if a second independent name or zone is needed | Implemented in `EDGE-002`; staging then production issuance acceptance pending |
+| Durable audit / checkpoints | Stdlib JSONL + SHA-256 hash chain + Ed25519 checkpoints; optional AuditAnchor adapter; RFC 9162/Merkle later. No new module for the local log | Before `AUD-001`; [contract](audit-contract.md) |
+| Shield challenge | Own proof-of-work + WebCrypto + signed clearance cookie; no third-party CAPTCHA. Evaluate Cap/Anubis/mCaptcha for UX and replay handling | Before `SHD-003`; [design](shield-challenge.md) |
+| Identity integration with apps | Transport-only, coexistence, signed assertion (JWT/JWKS or mTLS-bound header), shared IdP/token exchange, or Switchboard as IdP (out of scope) | Before `ARCH-009` implementation; [options](identity-integration.md) |
+| Learning-lab tooling | External tools only (`pprof`, `benchstat`, `hey`/`k6`, TLA+/Alloy, axe/Lighthouse, `h2spec`, `testssl.sh`); no runtime dependency without a `stack.md` entry | Per `LAB-*`; [tracker](../TO_IMPLEMENT.md) |
 | Email for one-time codes | SMTP relay, Resend, Amazon SES | Q1 (blocks `ID-002`) |
 | Private CA / ACME server | Own implementation on `crypto/x509` (preferred, learning) with Pebble as reference | Q2 |
 | Policy language | Own JSON policies, Cedar (`cedar-go`), CEL | Q2 |

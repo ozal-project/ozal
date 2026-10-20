@@ -1,7 +1,7 @@
 # To implement — Switchboard
 
 **Last review:** 2026-10-19
-**Code reviewed up to:** `aa49358` (wildcard certificate, EDGE-002); CI observed on hosted runners, see `REL-003`
+**Code reviewed up to:** `46f4c1e` (README and tracker aligned with observed CI; wildcard `aa49358`); CI observed on hosted runners, see `REL-003`
 **Purpose:** the single source of active work, priorities, blockers and done
 criteria. Closed work moves to [`IMPLEMENTED.md`](IMPLEMENTED.md). Direction
 and the long-range map live in [`VISION.md`](../VISION.md); if another
@@ -25,10 +25,11 @@ date and evidence, plus one line in
 task in two places.
 
 ID prefixes: `SEC` security finding · `BUG` defect · `REL` release hygiene ·
-`ARCH` architecture · `EDGE` edge/deployment · `TUN` tunnels · `ID` identity ·
-`SHD` Shield/WAF · `NTF` notifications · `PKI` private CA · `ACC`
-infrastructure access · `TLOG` transparency log · `AI` AI-assisted decisions ·
-`AGT` AI-agent gateway · `UI` dashboard · `PAGES` static sites.
+`ARCH` architecture · `AUD` durable audit · `EDGE` edge/deployment · `TUN`
+tunnels · `ID` identity · `SHD` Shield/WAF · `NTF` notifications · `PKI`
+private CA · `ACC` infrastructure access · `TLOG` transparency log · `AI`
+AI-assisted decisions · `AGT` AI-agent gateway · `UI` dashboard · `PAGES`
+static sites · `LAB` learning lab (not a release commitment).
 
 ## Recommended order
 
@@ -46,6 +47,19 @@ Every `SEC-*` and `BUG-*` finding is closed (2026-10-17).
    Cloudflare Tunnel is an optional transport, not a development prerequisite.
 3. Identity (`ID-*`), then `NTF-001`, `SHD-001`.
 
+### Release contract and learning labs
+
+A VISION pillar is not a release promise. `REL-008` requires every release to
+record its **promise, evidence, non-goals, rollback/recovery and residual
+risks**. A claim stronger than the evidence (“verifiable”, “transparent”,
+“production-ready”) is a release blocker.
+
+`LAB-*` entries are learning work, not release commitments. They do not gate a
+release unless the owner explicitly promotes one into a release table with an
+acceptance criterion. Keep the broad VISION; narrow what each release promises.
+Cross-project coordination stays in the workspace `TO_IMPLEMENT.md`
+(`CROSS-006`, `CROSS-008`, `CROSS-010`, `CROSS-012`, `CROSS-013`), not here.
+
 ---
 
 ## Release v0.1 · Edge (October–December 2026)
@@ -56,6 +70,20 @@ Every `SEC-*` and `BUG-*` finding is closed (2026-10-17).
 |---|---|---|---|
 | `ARCH-004` | Embedded SQLite store with migration runner (sessions, later tunnels/passkeys). Store and runner are committed (`7d0c56e`, `cmd/switchboard migrate`); the local session wiring is included below and deployment acceptance remains pending. Local operator scripts now expose `scripts/migrate.sh up\|status -db PATH` and `scripts/new-migration.sh name`; verification is recorded in the learning log. **Wired 2026-10-18 (commit `a4d58c1`):** `auth.SessionBackend` port (consumer-declared) with the in-memory store and `sqlite.Sessions` (migration 001 reuse, SHA-256 IDs at rest, purge+capacity in one immediate transaction); `switchboard -db PATH` selects persistence after `openMigratedDB` refuses a stale schema. Tests cover restart-by-close/reopen survival, expiry rejection/eviction, capacity, cancellation and the TTL-driven factory. Review correction: existing rows are bounded by the earlier of issued expiry and creation plus the current TTL; expired rows are purged under that policy on lookup/sweep/create, without mutating storage while building a reload candidate. | In progress | Sessions survive restart (proven at the database boundary); migrations numbered and immutable. Residual: deployment acceptance with `-db` on the real unit and backup coverage of the state file. |
 | `ARCH-005` | Remove duplicated clone helpers in `routemanager` (`cloneRoute`, `cloneConfig` wrapper). | Ready | Single `config.Clone`; tests pass. |
+| `ARCH-008` | `switchboard policy explain`: explain an authorization decision for an example Principal using the existing pure `auth.Authorize`; no second policy engine. [Design](architecture/policy-explain.md). | Ready (design proposed) | Flags, output and scope limit as designed; `-json` and `-expect`; tests for allowlist/domain/group/`auth_required`/anonymous; no listeners bound; no secrets printed; `scripts/verify.sh` green. |
+| `ARCH-009` | Identity integration with apps that already authenticate: choose transport-only, coexistence, signed assertion or shared IdP; avoid double login and define what each proves. [Decision record](architecture/identity-integration.md). | Ready (decision pending) | One option accepted with threat model and acceptance test; disposable app plan; direct-bypass and header-spoofing tests defined; no app integration claimed as SSO before its acceptance. |
+
+### Audit (proposed contract)
+
+[Contract](architecture/audit-contract.md). The contract is a proposal; none of
+these tasks is a v0.1 release promise. Keep live activity (`events.Broker`) and
+durable audit separate.
+
+| ID | Task | State | Done when |
+|---|---|---|---|
+| `AUD-001` | Durable audit writer: append-only JSONL, sequence, hash chain, `fsync`, rotation, owner-only permissions, safe event schema. | Ready (design proposed) | Unit tests for encoding/chain/rotation; `required` vs `best_effort` failure semantics implemented per route; no secrets; a real append + restart passes. |
+| `AUD-002` | Signed checkpoints and `switchboard audit verify`: Ed25519 checkpoint, external copy, verification from a retained checkpoint, tamper/truncation detection. | Blocked on `AUD-001` | Checkpoint signing/verification, key rotation, tamper/reorder/truncate tests; a real `SIGKILL` recovery drill; verification against a checkpoint copied outside the host. Do not claim tamper evidence without that drill. |
+| `AUD-003` | Optional AuditAnchor adapter: batch export, stored receipts, no request-path dependency. Coordination: workspace `CROSS-012`. | Planned (P3, optional) | Adapter can be disabled without affecting the gateway; local audit remains authoritative; receipts verified; independence boundary documented (same admin/host is not a witness). |
 
 ### Alpha release gates
 
@@ -65,6 +93,7 @@ Every `SEC-*` and `BUG-*` finding is closed (2026-10-17).
 | `REL-005` | GoReleaser config, checksums, SBOM. | Ready | Snapshot build produces artifacts locally. |
 | `REL-006` | Tag `v0.1.0-alpha.1` after every gate above is green. | Blocked on `REL-002`–`REL-005` | Tag pushed with release notes. |
 | `REL-007` | Dependency advisories: `govulncheck` reports GO-2026-5932 in `golang.org/x/crypto` v0.57.0 with no fixed version; the code does not call the affected symbols (2026-10-18, Go 1.27.2). | Blocked on upstream fix | Re-run `govulncheck` before each release; bump `x/crypto` when a fix exists and keep the gate at 0 reachable. |
+| `REL-008` | Release contract: record promise, evidence, non-goals, rollback/recovery and residual risks for every release; keep VISION broad and release claims narrow. | Ready | Template used for `v0.1.0-alpha.1`; release notes distinguish durable/tamper-evident/transparent claims; no promise lacks a test or deployment evidence; labs are labeled as labs. |
 
 ### Edge, tunnels, identity, Shield, notifications
 
@@ -76,13 +105,14 @@ Every `SEC-*` and `BUG-*` finding is closed (2026-10-17).
 | `EDGE-002` | Wildcard TLS via DNS-01 for `*.octaviosantacruz.com`, so a second public host (`sigea.octaviosantacruz.com`, the SigeaWeb test site) needs no new certificate. Decision 2026-10-19: extend the own manager to one wildcard name, no CertMagic ([stack](architecture/stack.md)). | In progress 2026-10-19 (working tree): `internal/certs/names.go` (pure: `ValidateName`, `Covers`, `ProbeName`, `ChallengeFQDN`, `StorageKey`), `GetCertificate` serves any single-label subdomain and refuses the apex and two-label names, chain verification against a concrete probe name, ACME order for `*.base` with the challenge TXT at `_acme-challenge.<base>` and a check that the CA authorized the base domain, safe `_wildcard.<base>` storage key that a plain name cannot alias, `tls.domains` accepts one `*.` name only with `tls.dns01`; tests with the fake ACME CA pass and `scripts/verify.sh` is green. **Pending:** real Let's Encrypt staging issuance (the `--wildcard --staging` path of the `hetzner-public` renderer), then production issuance and renewal, then a second host serving through the tunnel. | Wildcard issuance and renewal verified against Let's Encrypt staging then production with the TXT cleaned up and the apex untouched; `preview` keeps serving across the switch; one extra host served end to end; no new Go module. |
 | `EDGE-003` | Route hosts without a port match any listener port (local-dev ergonomics). | Ready | `app.localhost` route works on `:8888`; tests. |
 | `EDGE-004` | Multiple upstreams per route, round-robin, active + passive health. | Planned | Failed upstream receives no new traffic; tests. |
-| `TUN-002` | Named persistent connectors: configuration/reload integration, authenticated enrolment/revocation, automatic reconnect/backoff, heartbeats, status and an explicit visitor-identity propagation contract. Reuse the local TUN-001 transport. | In progress on `spike/tun-001-local`. Registry/reconnect checkpoint committed in `16f05bc`; `scripts/verify.sh` rerun green (2026-10-17): migration `002_create_connectors` (enrolment by leaf-certificate SHA-256, revocation keeps history); `tunnel.Registry` + `switchboard connector enroll\|revoke\|list`; `Edge` with named connectors, registry authorization and revocation that closes live sessions (revalidation every 5s); `ConnectLoop` with jittered exponential backoff and observable `Link` status; tests for enrol/revoke/unenrolled-cert/edge-restart reattach. **CLI delivery included in this commit:** `switchboard tunnel edge\|connect` requires certificate/key/CA files, uses the migrated registry and active enrolment, routes the host to a named connector, reconnects automatically and joins workers on shutdown; HTTP remains loopback-only; the 2026-10-18 working-tree delivery permits mTLS on one explicitly configured private CIDR via `-tunnel-network`, retaining mandatory registry/TLS checks. CLI race tests and [separate-process Portfolio smoke](architecture/tunnel-persistent.md) passed with graceful/abrupt edge restart and live revocation. **Private two-host pilot (2026-10-18, working tree):** enabled user services on VPS/homelab, mTLS via 10.8.0.1:9443 with explicit 10.8.0.0/24 allowlist, HTTP edge on loopback 18889, local role keys and public CSR signing. Real homelab-origin/EN/ES/assets, graceful and abrupt edge recovery with stable connector PID, live revocation/reconnect rejection and replacement with a new connector key/certificate were verified. Existing staging remains active; public TLS/DNS and host reboot are not established. **Automatic leaf renewal (2026-10-18, working tree):** native Go `tunnel renew`/SSH role agent, local Ed25519 keys and x509 signing, daily systemd timer, seven-day threshold, durable batch recovery and guarded rollback; registry rotation is transactional and rejects stale/revoked identities. Real forced renewal passed. **Visitor address contract (2026-10-18, committed with this task):** the edge asserts the visitor IP to the connector inside the authenticated tunnel and the application receives it as `X-Forwarded-For` ([contract](architecture/tunnel-persistent.md)). **Normal-process integration (2026-10-18, committed with this change):** `tunnel` settings + `route.connector` wire the private mTLS listener/registry into `switchboard -db`; host→connector mappings reload atomically with sessions retained, no direct-TCP fallback, shared request cap and HTTP upgrades preserved. Common broker events and connector attachment state appear in the activity/route console. Race/integration tests and the separate-process smoke verify trusted visitor IP with spoof stripping, offline/revoked failures, reload rejection, restart/reconnect and shutdown. **Remaining:** protected-app visitor *identity* assertions (protected connector routes are rejected until that contract exists), and public EDGE-001/EDGE-006/EDGE-007/SHD-001 acceptance. **Private integrated deployment accepted (2026-10-18 UTC):** clean `731a204` binary on both hosts; live homelab content, reload, console/SSE, actual TCP peer IP with spoof stripping, graceful/abrupt edge recovery with stable connector PID, disposable-identity revocation/reconnect denial, and real rollback/reactivation passed. Renewal timer restored; original staging unchanged. This does not establish Cloudflare visitor IP or public TLS. [Operations and checkpoint](../../server-ops/deploy/hetzner-tunnel/README.md#proceso-integrado--aceptación-privada-2026-10-18-utc). CA trust-anchor rollover remains a separate planned operation. | Survives edge restart and network drop without manual restart; identities and fixed upstream permissions enforced; tests. Public deployment remains EDGE-001. |
+| `TUN-002` | Named persistent connectors: configuration/reload integration, authenticated enrolment/revocation, automatic reconnect/backoff, heartbeats, status and an explicit visitor-identity propagation contract. Reuse the local TUN-001 transport. | In progress on `spike/tun-001-local`. Registry/reconnect checkpoint committed in `16f05bc`; `scripts/verify.sh` rerun green (2026-10-17): migration `002_create_connectors` (enrolment by leaf-certificate SHA-256, revocation keeps history); `tunnel.Registry` + `switchboard connector enroll\|revoke\|list`; `Edge` with named connectors, registry authorization and revocation that closes live sessions (revalidation every 5s); `ConnectLoop` with jittered exponential backoff and observable `Link` status; tests for enrol/revoke/unenrolled-cert/edge-restart reattach. **CLI delivery included in this commit:** `switchboard tunnel edge\|connect` requires certificate/key/CA files, uses the migrated registry and active enrolment, routes the host to a named connector, reconnects automatically and joins workers on shutdown; HTTP remains loopback-only; the 2026-10-18 working-tree delivery permits mTLS on one explicitly configured private CIDR via `-tunnel-network`, retaining mandatory registry/TLS checks. CLI race tests and [separate-process Portfolio smoke](architecture/tunnel-persistent.md) passed with graceful/abrupt edge restart and live revocation. **Private two-host pilot (2026-10-18, working tree):** enabled user services on VPS/homelab, mTLS via 10.8.0.1:9443 with explicit 10.8.0.0/24 allowlist, HTTP edge on loopback 18889, local role keys and public CSR signing. Real homelab-origin/EN/ES/assets, graceful and abrupt edge recovery with stable connector PID, live revocation/reconnect rejection and replacement with a new connector key/certificate were verified. Existing staging remains active; public TLS/DNS and host reboot are not established. **Automatic leaf renewal (2026-10-18, working tree):** native Go `tunnel renew`/SSH role agent, local Ed25519 keys and x509 signing, daily systemd timer, seven-day threshold, durable batch recovery and guarded rollback; registry rotation is transactional and rejects stale/revoked identities. Real forced renewal passed. **Visitor address contract (2026-10-18, committed with this task):** the edge asserts the visitor IP to the connector inside the authenticated tunnel and the application receives it as `X-Forwarded-For` ([contract](architecture/tunnel-persistent.md)). **Normal-process integration (2026-10-18, committed with this change):** `tunnel` settings + `route.connector` wire the private mTLS listener/registry into `switchboard -db`; host→connector mappings reload atomically with sessions retained, no direct-TCP fallback, shared request cap and HTTP upgrades preserved. Common broker events and connector attachment state appear in the activity/route console. Race/integration tests and the separate-process smoke verify trusted visitor IP with spoof stripping, offline/revoked failures, reload rejection, restart/reconnect and shutdown. **One connector, several hosts (2026-10-19, working tree):** `tunnel connect` accepts repeatable `-route HOST=root:DIR|upstream:URL` beside `-host`, so the single enrolled identity (and its automatic renewal, which is hard-wired to the `edge` and `connector` roles) also serves the SIGEA site API; a second connector would have had no renewal. Tests: `connectorRoutes` refusals and bound, and an end-to-end test through the integrated edge with a static host, an upstream host and an unserved host. Deployed to the homelab connector 2026-10-19; the preview stayed `200`. **Remaining:** protected-app visitor *identity* assertions (protected connector routes are rejected until that contract exists), and public EDGE-001/EDGE-006/EDGE-007/SHD-001 acceptance. **Private integrated deployment accepted (2026-10-18 UTC):** clean `731a204` binary on both hosts; live homelab content, reload, console/SSE, actual TCP peer IP with spoof stripping, graceful/abrupt edge recovery with stable connector PID, disposable-identity revocation/reconnect denial, and real rollback/reactivation passed. Renewal timer restored; original staging unchanged. This does not establish Cloudflare visitor IP or public TLS. [Operations and checkpoint](../../server-ops/deploy/hetzner-tunnel/README.md#proceso-integrado--aceptación-privada-2026-10-18-utc). CA trust-anchor rollover remains a separate planned operation. | Survives edge restart and network drop without manual restart; identities and fixed upstream permissions enforced; tests. Public deployment remains EDGE-001. |
 | `TUN-003` | `sb share <url> --allow <emails>`: ephemeral protected shares; guest list enforced on the agent via signed assertion (Ed25519). | Planned | Share dies with the agent; non-listed email denied. |
 | `ID-001` | Email one-time codes / magic links. | Planned | Rate-limited; codes single-use and short-lived. |
 | `ID-002` | Email delivery provider. | Blocked: choose provider | Decision recorded in `stack.md`. |
 | `ID-003` | Passkeys (WebAuthn) registration and login. | Planned | Works on desktop and phone; step-up supported. |
 | `ID-004` | OIDC provider: discovery, JWKS, key rotation, authorization code + PKCE. | Planned | A sample app signs in via Switchboard. |
 | `SHD-001` | Rate limiting stage (per IP, identity, route; strict on `/_/auth/*`). | In progress 2026-10-18 (commit `700d572`): beyond the `6185098` delivery, keys now carry the route host, an optional per-identity budget (`rate_limit.identity`) is charged after the access policy allow, `Retry-After` reports the real refill wait, each limiter has an explicit key cap (`rate_limit.max_keys`, fail closed at capacity without evicting restricted buckets), buckets survive reloads while their settings are unchanged, and refusals emit `access.rate_limited` into the activity feed. `go test -race ./internal/ratelimit ./internal/pipeline ./internal/proxy ./internal/routemanager` green; route-dimension and reload-preservation regressions included. Review correction: route keys use the same canonical host as routing; equivalent DNS/IPv6 spellings share a budget. Residual: real-traffic acceptance on protected routes before public exposure; per-path budgets are not implemented (route = host). | Complete the remaining key dimensions and verify limits on protected routes before public exposure. |
+| `SHD-003` | Shield challenge: privacy-friendly proof-of-work + signed clearance cookie + per-route policy; in the spirit of Turnstile/Anubis, not a parity claim. [Design](architecture/shield-challenge.md). | Planned (design proposed; after SHD-001 real-traffic acceptance) | Log-only mode first; signed challenge, single-use nonce, host/action binding, clearance TTL; token/replay/expiry/tamper tests; accessible fallback; no third-party JS; events/metrics; explicit fail-open/closed policy; no claim of human verification or DDoS protection. |
 | `NTF-001` | `Notifier` port + Telegram adapter: alerts for logins and admin changes; chat pairing code. | In progress 2026-10-18 (commit `5c681d3`): `internal/notify` (Notifier port, non-blocking alert sink with bounded queue, one-time pairing code, signed callback data with nonce/expiry) + `internal/notify/telegram` (net/http Bot API: bounded retries honoring `retry_after`, timeouts, token never in errors) + `switchboard notify pair` + `notify.telegram` config (secret reference, `chats_file`, loopback-only http `api_base`). Simulated-server tests cover send/retry/refusals/pairing; callback signing is verified pure. Notification settings require restart; reload rejects changes rather than claiming to activate an adapter that was only constructed at startup. Residual: accept the real run with the owner's bot token (pairing + one alert, explicitly authorized); approvals are not implemented (the nonce and expiry are ready for the approver). | Pairing and an alert work end to end; callback data signed. |
 
 ### Pages (static sites)
@@ -109,11 +139,46 @@ Pure Go first, Svelte only where a feature needs it (see
 
 ---
 
+## Learning labs (not release commitments)
+
+These are learning modules, not v0.1 features. Each leaves an artifact and a
+line in the learning log; a lab that finds a product defect opens a `BUG-*` or
+`SEC-*` task with a regression test. No lab gates a release unless the owner
+promotes it explicitly. Some labs deepen existing work (`LAB-004` with
+`ARCH-004`/`CROSS-008`, `LAB-007` with `UI-001`, `LAB-008` with `EDGE-007`/PKI,
+`LAB-010` with `REL-005`/`REL-006`): the lab owns the learning artifact, while
+the release or CROSS task owns any product commitment. Cross-project work stays
+in the workspace tracker: `CROSS-012` (AuditAnchor, optional) and `CROSS-013`
+(Server Ops service catalog/publish), not duplicated here.
+
+| ID | Lab | State | Done when |
+|---|---|---|---|
+| `LAB-001` | Performance and profiling: proxy overhead, p50/p99, throughput, allocs, TLS handshakes, routing/auth/rate-limit cost; `pprof`, `benchstat`, load test. | Ready (lab) | Benchmark suite + `docs/performance.md`; one optimization with before/after; no regression. |
+| `LAB-002` | Failure drills: slow/5xx upstream, tunnel kill, certificate expiry, disk full/read-only, clock skew, `SIGKILL`; assert fail-closed and recovery. | Ready (lab) | Drill script, recovery evidence, runbook and a blameless postmortem of the `origin-cert` startup failure. |
+| `LAB-003` | Threat model + OWASP ASVS: STRIDE across trust boundaries, assets/adversaries, abuse cases, ASVS Level 2 subset. | Ready (lab) | `docs/security/threat-model.md`, ASVS matrix, abuse tests and fixes for findings. |
+| `LAB-004` | Backup/restore and SQLite durability: `VACUUM INTO`/`.backup`, WAL, restore to a clean host, corruption/disk-full drill, RPO/RTO; config, certs, tunnels and sessions. | Ready (lab) | Script or command + restore drill + docs; state required for a working deployment is recoverable and the rest is explicitly regenerable. |
+| `LAB-005` | Test quality: property-based invariants for `NormalizeHost`, `Authorize`, cookie stripping and ACME/tunnel state; mutation testing; differential proxy tests against Caddy/nginx. | Ready (lab) | Property tests, mutation report, differential harness; weak tests or bugs fixed and recorded. |
+| `LAB-006` | CLI quick wins: `switchboard doctor`, `init`, JSON Schema, shell completion, `version`, backup/restore entry points. | Ready (lab) | Commands + tests + docs; `doctor` gives actionable diagnostics and never prints secrets. |
+| `LAB-007` | Accessibility and UX: WCAG 2.2 AA for the console and any challenge, keyboard/screen reader/contrast/reduced motion, accessible fallback. | Planned (after alpha) | Audit with axe/Lighthouse plus manual checks; blocking issues fixed; fallback documented. |
+| `LAB-008` | Conformance/interop: OIDC conformance suite, ACME with `certbot`/`lego` when PKI exists, HTTP/2 with `h2spec`, TLS with `testssl.sh`, gRPC with `grpcurl`. | Planned (after alpha) | Report with versions, passes/failures and deviations; fixes or explicit non-goals recorded. |
+| `LAB-009` | SRE: SLIs/SLOs, error budget, dashboard, game day, MTTR and postmortems. | Planned (after alpha) | SLO doc + dashboard + game-day report; recovery measured, not asserted. |
+| `LAB-010` | Supply chain/release security: GoReleaser, cosign, syft SBOM, SLSA, reproducible builds, `gosec`, `gitleaks`, Renovate/Dependabot. | Planned (lab; overlaps `REL-005`/`REL-006`) | Signed release + SBOM + reproducibility evidence + CI checks; no new runtime dependency. |
+| `LAB-011` | Docs site and community: versioned docs, changelog, `CONTRIBUTING`, `SECURITY.md`, issue templates and a demo. | Planned | A new user can install and route an app without the author; release notes are public. |
+| `LAB-012` | Formal methods: TLA+ or Alloy models for session/auth, ACME or tunnel; invariants such as no unauthorized access, no duplicate active generation, no split brain. | Planned (lab) | Spec + model-checking output + a proven invariant or a bug found and fixed. |
+| `LAB-013` | Protocol deep dive: choose one of HTTP/3/QUIC, gRPC, PROXY protocol, DPoP or SPIFFE/SPIRE. | Planned (lab) | Spike + write-up + decision; merge only if a product need exists. |
+| `LAB-014` | HA/distributed lab: Postgres adapter, leader election, shared sessions and consistency. | Planned (lab) | Disposable lab; explicit decision whether it belongs to this product; single-binary default remains unchanged. |
+
+Optional explorations without an ID yet: hardware-backed keys (TPM/HSM/YubiKey)
+and eBPF network observability. Pick a concrete question before assigning a
+lab; do not add them to a release.
+
+---
+
 ## Later releases (planned, refined at the start of each quarter)
 
 | Release | IDs | Scope |
 |---|---|---|
-| v0.2 PKI (Jan–Mar 2027) | `PKI-*`, `SHD-0xx`, `UI-002` | ACME server, internal CA, mTLS agent/origin, developer certs, SSH CA, workload identity; rules language + compiler, PoW challenge; `UI-002`: JSON admin API + first Svelte island, a policy simulator over the pure `auth.Authorize` (blocked on `UI-001`) |
+| v0.2 PKI (Jan–Mar 2027) | `PKI-*`, `SHD-003`, `UI-002` | ACME server, internal CA, mTLS agent/origin, developer certs, SSH CA, workload identity; rules language + compiler, PoW challenge (`SHD-003`); `UI-002`: JSON admin API + first Svelte island, a policy simulator over the pure `auth.Authorize` (blocked on `UI-001`; `ARCH-008` is the CLI-first step) |
 | v0.3 Access (Apr–Jun 2027) | `ACC-*`, `NTF-*`, `SHD-0xx` | SSH/DB over tunnels, JIT with Telegram approvals, session recording, credential injection, CAEP/SSF, SCIM; Coraza + CRS, API schema validation, leaked credentials, CSP reporting |
 | v0.4 Trust (Jul–Sep 2027) | `TLOG-*`, `AI-*`, `AGT-*`, `SHD-0xx` | Transparency log, witnesses, risk signals and explanations, AI-agent/MCP gateway; Web Bot Auth, Firewall for AI, DLP |
 

@@ -114,6 +114,23 @@ Today's mapping: `auth/authz.go` → `policy`, `auth/principal.go` →
 `identity`, `auth/oidc.go` → `oidc`, `proxy` → `httpedge` + `pipeline`,
 `routemanager` → `routing`.
 
+## Proposed extensions (not current behavior)
+
+These design records keep future work aligned with the pattern; none is
+implemented or a release promise:
+
+- [Durable audit contract](audit-contract.md): a separate append-only audit
+  writer and signed checkpoints, not `events.Broker`.
+- [Policy explain](policy-explain.md): a diagnostic CLI over the pure
+  `auth.Authorize`, with no second policy engine.
+- [Shield challenge](shield-challenge.md): a proof-of-work stage in the
+  `shield` position of the pipeline, with a signed clearance cookie.
+- [Identity integration](identity-integration.md): how an app behind the edge
+  trusts (or does not trust) the gateway's identity.
+
+`LAB-*` learning labs are tracked in [TO_IMPLEMENT](../TO_IMPLEMENT.md); they
+are experiments and artifacts, not commitments.
+
 ## Go rules that make the pattern real
 
 1. **`context.Context` is the first parameter** of anything that blocks or does

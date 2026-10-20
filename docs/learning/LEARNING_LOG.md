@@ -532,3 +532,12 @@ shells never parse a `*` themselves. Wildcards cover exactly one label, never
 the apex, and the CA's own answer (the authorized identifier) is checked rather
 than trusted. `os.OpenInRoot` and `Resolve` showed the same lesson for files:
 deny the control files in the pure resolver and keep the kernel check as a backstop.
+
+## 2026-10-19 — extend the small seam, not the risky machine
+
+Serving a second site from the same tunnel looked like it needed a second connector,
+which meant generalising the certificate renewal that rotates live credentials. The
+connector already built its proxy from a list of routes and the CLI only passed one.
+Allowing several fixed routes was a 60-line, test-first change; the renewal code stayed
+untouched. Before generalising a risky mechanism, look for the narrow place where the
+need can be met without it.

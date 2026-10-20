@@ -271,6 +271,22 @@ active and passive health checks, safe retries, circuit breaking, per-route
 timeouts, explicit WebSocket/SSE coverage and request IDs. The full ordered
 backlog remains in [TO_IMPLEMENT.md](docs/TO_IMPLEMENT.md).
 
+### Design records (proposed, not shipped)
+
+These documents record proposed work and its limits; they are not features yet:
+
+- [Durable audit contract](docs/architecture/audit-contract.md) — append-only
+  audit, signed checkpoints and failure semantics.
+- [Policy explain](docs/architecture/policy-explain.md) — explain an
+  authorization decision with the existing pure `Authorize`.
+- [Shield challenge](docs/architecture/shield-challenge.md) — a self-hosted
+  proof-of-work challenge, not a Turnstile parity claim.
+- [Identity integration](docs/architecture/identity-integration.md) — how apps
+  behind the edge trust (or do not trust) the gateway identity.
+
+Learning labs live in [TO_IMPLEMENT.md](docs/TO_IMPLEMENT.md) under `LAB-*`;
+they are not release commitments.
+
 ## Roadmap
 
 Done: project scaffold, host-based routing, request logging (plain

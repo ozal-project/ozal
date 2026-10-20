@@ -439,6 +439,14 @@ main release; if a quarter slips, Shield items move first.
 4. **Cut scope, never quality.** If a quarter slips, its last items move to the
    stretch list.
 5. **Re-read this file every quarter** and change it on purpose.
+6. **A release promises only what has evidence.** Release notes record the
+   promise, evidence, non-goals, rollback/recovery and residual risks. A claim
+   stronger than the evidence (“verifiable”, “transparent”, “production-ready”)
+   is a release blocker.
+7. **Engineering labs are learning, not release commitments.** Performance,
+   failure drills, threat models, accessibility, conformance and formal methods
+   live in the tracker as `LAB-*`; they do not gate a release unless the owner
+   explicitly promotes one.
 
 ## Open questions
 
