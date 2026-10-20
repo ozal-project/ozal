@@ -21,6 +21,19 @@ var consoleApp embed.FS
 // inline scripts, so 'unsafe-inline' is never needed.
 const consoleCSP = "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'"
 
+// consoleTypes fixes the Content-Type of every file kind Vite emits. Without
+// it ServeContent asks the OS mime table, and on Windows the registry may
+// answer something other than text/javascript, which nosniff then refuses.
+var consoleTypes = map[string]string{
+	".html":  "text/html; charset=utf-8",
+	".js":    "text/javascript; charset=utf-8",
+	".css":   "text/css; charset=utf-8",
+	".txt":   "text/plain; charset=utf-8",
+	".ttf":   "font/ttf",
+	".woff":  "font/woff",
+	".woff2": "font/woff2",
+}
+
 // consoleRoutes are the client-side pages; each one is served index.html.
 var consoleRoutes = map[string]bool{"/": true, "/activity": true, "/routes": true, "/simulator": true}
 
@@ -47,6 +60,9 @@ func (h *Handler) console(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hdr := w.Header()
+	if ctype, ok := consoleTypes[path.Ext(name)]; ok {
+		hdr.Set("Content-Type", ctype)
+	}
 	hdr.Set("Content-Security-Policy", consoleCSP)
 	hdr.Set("X-Content-Type-Options", "nosniff")
 	if strings.HasPrefix(name, "assets/") {

@@ -106,15 +106,17 @@ func TestTunnelSpikeDefaultEdgeStopsOnCancellation(t *testing.T) {
 }
 
 func TestConnectorRoutesAreFixedAndBounded(t *testing.T) {
-	routes, err := connectorRoutes("portfolio.localhost", "/srv/portfolio", "", []string{
+	// Absolute on every OS: "/srv/x" has no drive letter, so Windows rejects it.
+	portfolio, docs := filepath.Join(t.TempDir(), "portfolio"), filepath.Join(t.TempDir(), "docs")
+	routes, err := connectorRoutes("portfolio.localhost", portfolio, "", []string{
 		"api.localhost=upstream:http://127.0.0.1:5177",
-		"docs.localhost=root:/srv/docs",
+		"docs.localhost=root:" + docs,
 	})
 	if err != nil {
 		t.Fatalf("connectorRoutes: %v", err)
 	}
-	if len(routes) != 3 || routes[0].Host != "portfolio.localhost" || routes[0].Root != "/srv/portfolio" ||
-		routes[1].Target != "http://127.0.0.1:5177" || routes[2].Root != "/srv/docs" {
+	if len(routes) != 3 || routes[0].Host != "portfolio.localhost" || routes[0].Root != portfolio ||
+		routes[1].Target != "http://127.0.0.1:5177" || routes[2].Root != docs {
 		t.Fatalf("routes = %+v", routes)
 	}
 

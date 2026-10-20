@@ -206,6 +206,11 @@ func TestIntegratedTunnelRoutesReloadAndPreserveVisitorIP(t *testing.T) {
 			break
 		}
 	}
+	// Scan also stops on a read error (the 2s client timeout included); report
+	// it instead of the misleading "event missing".
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("live console stream: %v", err)
+	}
 	stream.Body.Close()
 	if !found {
 		t.Fatal("tunnel event missing from live console stream")
