@@ -1,0 +1,62 @@
+@import "tailwindcss";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
+
+/* Same identity as the admin console (web/console/src/app.css). */
+@font-face {
+  font-family: "Manrope";
+  src: url("/fonts/manrope.ttf") format("truetype");
+  font-weight: 200 800;
+  font-display: swap;
+}
+
+@theme {
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  --color-ink: oklch(0.94 0.01 85);
+  --color-muted: oklch(0.72 0.012 80);
+  --color-paper: oklch(0.145 0.006 75);
+  --color-panel: oklch(0.19 0.007 75);
+  --color-line: oklch(0.29 0.01 75);
+  --color-amber: oklch(0.83 0.11 75);
+  --color-amber-deep: oklch(0.29 0.03 70);
+  --color-green: oklch(0.82 0.07 155);
+  --color-red: oklch(0.78 0.11 25);
+}
+
+@layer base {
+  html { color-scheme: dark; scroll-behavior: smooth; }
+  body { @apply bg-paper text-ink font-sans antialiased; }
+  ::selection { background: var(--color-amber); color: var(--color-paper); }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 3px; border-radius: 4px; }
+}
+
+@layer components {
+  .jack-field {
+    background-image: radial-gradient(oklch(0.32 0.012 75 / 0.55) 1px, transparent 1.2px);
+    background-size: 22px 22px;
+  }
+  .plate { @apply text-muted font-mono text-[0.7rem] font-medium tracking-[0.18em] uppercase; }
+  .plate b { @apply text-amber font-semibold; }
+  .lamp {
+    @apply inline-block size-2.5 shrink-0 rounded-full;
+    background: radial-gradient(circle at 35% 35%, oklch(1 0 0 / 0.75), transparent 45%), var(--lamp, var(--color-muted));
+    box-shadow: 0 0 0 1px oklch(0 0 0 / 0.4), 0 0 12px 1px color-mix(in oklch, var(--lamp, transparent) 70%, transparent);
+  }
+  .lamp-on { --lamp: var(--color-green); }
+  .lamp-off { --lamp: var(--color-red); }
+  .lamp-wait { --lamp: var(--color-amber); }
+  .lamp-idle { --lamp: oklch(0.45 0.01 75); box-shadow: 0 0 0 1px oklch(0 0 0 / 0.4); }
+  .panel {
+    @apply bg-panel border-line relative rounded-xl border;
+    box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.05), 0 1px 2px oklch(0 0 0 / 0.35), 0 18px 40px -22px oklch(0 0 0 / 0.8);
+  }
+  .cord { stroke: var(--color-amber); fill: none; stroke-linecap: round; }
+  .btn { @apply inline-flex items-center gap-2 rounded-lg px-4 py-2.5 font-mono text-[0.8rem] font-medium tracking-wide uppercase transition-colors; }
+  .btn-primary { @apply bg-amber text-paper hover:bg-amber/85; }
+  .btn-ghost { @apply border-line hover:border-amber/60 hover:text-amber border; }
+  .code { @apply bg-paper/80 border-line overflow-x-auto rounded-lg border p-4 font-mono text-[0.8rem] leading-relaxed; }
+}
+
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation: none !important; transition: none !important; } }

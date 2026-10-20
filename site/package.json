@@ -1,0 +1,20 @@
+{
+  "name": "switchboard-site",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Public project page for Switchboard. Static output, served by Switchboard Pages.",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro check && astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/check": "0.9.10",
+    "@fontsource/ibm-plex-mono": "5.3.0",
+    "@tailwindcss/vite": "4.3.3",
+    "astro": "7.3.5",
+    "tailwindcss": "4.3.3",
+    "typescript": "6.0.3"
+  }
+}
