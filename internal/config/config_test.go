@@ -516,3 +516,37 @@ func TestOriginClientCARequiresTLS(t *testing.T) {
 		t.Fatalf("OriginClientCAFile = %q", cfg.TLS.OriginClientCAFile)
 	}
 }
+
+func TestValidateSiteRoutes(t *testing.T) {
+	pagesDir := t.TempDir() // absolute on every OS
+	withPages := func(r Route) Config {
+		r.Host = "blog.localhost"
+		return Config{Listen: ":8888", Pages: &Pages{Dir: pagesDir}, Routes: []Route{r}}
+	}
+
+	got, err := Validate(withPages(Route{Site: "blog", SPA: true}))
+	if err != nil {
+		t.Fatalf("Validate(site route): %v", err)
+	}
+	if r := got.Routes[0]; !r.IsStatic() || r.Destination() != "site:blog" {
+		t.Fatalf("site route: IsStatic = %v, Destination = %q", r.IsStatic(), r.Destination())
+	}
+
+	rejected := map[string]Config{
+		"site without pages":     {Listen: ":8888", Routes: []Route{{Host: "blog.localhost", Site: "blog"}}},
+		"site and root":          withPages(Route{Site: "blog", Root: pagesDir}),
+		"site and target":        withPages(Route{Site: "blog", Target: "http://localhost:9000"}),
+		"site name with a slash": withPages(Route{Site: "../etc"}),
+		"uppercase site name":    withPages(Route{Site: "Blog"}),
+		"site with health_path":  withPages(Route{Site: "blog", HealthPath: "/health"}),
+		"relative pages dir":     {Listen: ":8888", Pages: &Pages{Dir: "pages"}, Routes: []Route{{Host: "blog.localhost", Site: "blog"}}},
+		"negative keep":          {Listen: ":8888", Pages: &Pages{Dir: pagesDir, Keep: -1}, Routes: []Route{{Host: "blog.localhost", Site: "blog"}}},
+	}
+	for name, cfg := range rejected {
+		t.Run(name, func(t *testing.T) {
+			if _, err := Validate(cfg); err == nil {
+				t.Fatalf("Validate accepted %+v", cfg)
+			}
+		})
+	}
+}

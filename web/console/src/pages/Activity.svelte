@@ -20,10 +20,11 @@
     "route.created": "Route added", "route.deleted": "Route removed", "config.reloaded": "Configuration reloaded",
     "tunnel.connected": "Tunnel connected", "tunnel.disconnected": "Tunnel disconnected", "tunnel.rejected": "Tunnel rejected",
     "origin.denied": "Origin pull rejected",
+    "pages.deployed": "Site deployed", "pages.rolled_back": "Site rolled back", "pages.refused": "Deployment refused",
   };
   const categories = [
     { value: "all", label: "All events" }, { value: "access", label: "Access decisions" }, { value: "login", label: "Logins" },
-    { value: "changes", label: "Configuration changes" }, { value: "tunnel", label: "Tunnels" },
+    { value: "changes", label: "Configuration changes" }, { value: "tunnel", label: "Tunnels" }, { value: "pages", label: "Deployments" },
   ];
 
   let events = $state<AccessEvent[]>([]);
@@ -35,9 +36,9 @@
   let routesError = $state(false);
 
   const outcome = (e: AccessEvent) =>
-    e.error || /\.(denied|failed|rejected)$/.test(e.type) ? "deny" : /\.(allowed|succeeded)$/.test(e.type) ? "allow" : "info";
+    e.error || /\.(denied|failed|rejected|refused)$/.test(e.type) ? "deny" : /\.(allowed|succeeded|deployed|rolled_back)$/.test(e.type) ? "allow" : "info";
   const group = (e: AccessEvent) =>
-    e.type.startsWith("access.") || e.type.startsWith("origin.") ? "access" : e.type.startsWith("login.") ? "login" : e.type.startsWith("tunnel.") ? "tunnel" : "changes";
+    e.type.startsWith("access.") || e.type.startsWith("origin.") ? "access" : e.type.startsWith("login.") ? "login" : e.type.startsWith("tunnel.") ? "tunnel" : e.type.startsWith("pages.") ? "pages" : "changes";
 
   const shown = $derived(frozen ?? events);
   const filtered = $derived(

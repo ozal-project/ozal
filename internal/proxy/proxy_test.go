@@ -550,6 +550,35 @@ func TestNewRejectsMissingStaticRoot(t *testing.T) {
 	}
 }
 
+type fakeSites map[string]string
+
+func (f fakeSites) LiveDir(site string) (string, bool) {
+	dir, ok := f[site]
+	return dir, ok
+}
+
+func TestSiteRouteServesTheLiveDeployment(t *testing.T) {
+	live := t.TempDir()
+	if err := os.WriteFile(filepath.Join(live, "index.html"), []byte("deployed"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	routes := []config.Route{{Host: "blog.localhost", Site: "blog"}, {Host: "empty.localhost", Site: "empty"}}
+	if _, err := New(routes, nil, nil); err == nil {
+		t.Fatal("New accepted site routes without a deployment store")
+	}
+	handler, err := New(routes, nil, nil, WithSites(fakeSites{"blog": live}))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	for host, want := range map[string]int{"blog.localhost": http.StatusOK, "empty.localhost": http.StatusServiceUnavailable} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://"+host+"/", nil))
+		if rec.Code != want {
+			t.Fatalf("%s: status %d, want %d", host, rec.Code, want)
+		}
+	}
+}
+
 func TestStripCookie(t *testing.T) {
 	cases := []struct {
 		name   string

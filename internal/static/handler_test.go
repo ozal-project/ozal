@@ -165,3 +165,31 @@ func TestHandlerDoesNotPublishPagesControlFiles(t *testing.T) {
 		}
 	}
 }
+
+func TestHandlerFollowsTheLiveDeployment(t *testing.T) {
+	v1, v2 := t.TempDir(), t.TempDir()
+	for dir, body := range map[string]string{v1: "one", v2: "two"} {
+		if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	current, deployed := "", false
+	h := Handler{Live: func() (string, bool) { return current, deployed }}
+	get := func() (int, string) {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+		return rec.Code, rec.Body.String()
+	}
+
+	if code, _ := get(); code != http.StatusServiceUnavailable {
+		t.Fatalf("no deployment yet: status %d, want 503", code)
+	}
+	current, deployed = v1, true
+	if code, body := get(); code != http.StatusOK || body != "one" {
+		t.Fatalf("live v1: %d %q", code, body)
+	}
+	current = v2 // a deploy or rollback: the next request sees it
+	if code, body := get(); code != http.StatusOK || body != "two" {
+		t.Fatalf("live v2: %d %q", code, body)
+	}
+}

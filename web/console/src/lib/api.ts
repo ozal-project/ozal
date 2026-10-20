@@ -89,3 +89,31 @@ export async function explain(token: string, host: string, principal: Report["pr
   if (!res.ok) throw new ExplainError(body.error ?? `Request failed (HTTP ${res.status}).`, res.status);
   return body as Report;
 }
+
+// Static-site deployments (PAGES-002).
+export type Deployment = { site: string; id: string; created_at: string; files: number; bytes: number; live: boolean };
+export type Site = { name: string; live: string; changed_at: string; deployments: Deployment[] };
+
+export class PagesDisabledError extends Error {}
+
+export async function fetchSites(): Promise<Site[]> {
+  const res = await fetch("/_/api/sites", { cache: "no-store" });
+  if (res.status === 404) throw new PagesDisabledError("Pages are not enabled on this edge.");
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return ((await res.json()) as { sites: Site[] }).sites ?? [];
+}
+
+// rollback makes a retained deployment live. Like explain, the token is
+// passed per call and never stored.
+export async function rollback(token: string, site: string, id: string): Promise<Deployment> {
+  const res = await fetch(`/_/api/sites/${encodeURIComponent(site)}/rollback`, {
+    method: "POST",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ id }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 401) throw new Error("The admin token was rejected.");
+  if (!res.ok) throw new Error(body.error ?? `Request failed (HTTP ${res.status}).`);
+  return body as Deployment;
+}

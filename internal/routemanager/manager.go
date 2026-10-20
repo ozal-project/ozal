@@ -65,6 +65,11 @@ func WithConnectorRoutes(routes ConnectorRoutes) Option {
 	return func(m *Manager) { m.connectorRoutes = routes }
 }
 
+// WithSites serves "site" routes from the deployment store (PAGES-002).
+func WithSites(sites proxy.SiteDirs) Option {
+	return func(m *Manager) { m.sites = sites }
+}
+
 // RouteStatus combines the immutable route configuration with its latest
 // health observation.
 type RouteStatus struct {
@@ -116,6 +121,7 @@ type Manager struct {
 	rateLimiters        *rateLimiters
 	sink                events.Sink
 	connectorRoutes     ConnectorRoutes
+	sites               proxy.SiteDirs
 }
 
 // New builds and installs the initial snapshot from configPath.
@@ -423,6 +429,9 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 		connectorTransports[route.Connector] = outbound
 	}
 	proxyOpts = append(proxyOpts, proxy.WithConnectorTransports(connectorTransports))
+	if m.sites != nil {
+		proxyOpts = append(proxyOpts, proxy.WithSites(m.sites))
+	}
 	proxyOpts = append(proxyOpts, proxy.WithTrustedProxies(trustedProxies), proxy.WithEventSink(m.sink), proxy.WithTransport(transport))
 	if cfg.DevErrors {
 		proxyOpts = append(proxyOpts, proxy.WithDevErrors())
@@ -599,6 +608,7 @@ func sameServerConfig(a, b config.Config) bool {
 		reflect.DeepEqual(a.TLS.DNS01, b.TLS.DNS01) &&
 		reflect.DeepEqual(a.Notify, b.Notify) &&
 		reflect.DeepEqual(a.Tunnel, b.Tunnel) &&
+		reflect.DeepEqual(a.Pages, b.Pages) &&
 		slices.Equal(a.TLS.Domains, b.TLS.Domains)
 }
 

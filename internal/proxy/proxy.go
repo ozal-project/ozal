@@ -36,6 +36,18 @@ type options struct {
 	assertVisitor         bool
 	tunnelTrust           bool
 	identityLimiter       pipeline.Allower
+	sites                 SiteDirs
+}
+
+// SiteDirs resolves a deployed site to the directory it currently serves
+// (pages.Store implements it). Declared here, by its consumer.
+type SiteDirs interface {
+	LiveDir(site string) (string, bool)
+}
+
+// WithSites enables "site" routes. Without it they fail construction.
+func WithSites(sites SiteDirs) Option {
+	return func(o *options) { o.sites = sites }
 }
 
 // WithIdentityLimiter adds the identity dimension of the ratelimit stage:
@@ -165,7 +177,7 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 		transport, assertVisitor := cfg.transport, cfg.assertVisitor
 		destination := r
 		if r.Connector != "" {
-			if r.Target != "" || r.Root != "" || r.RequiresAuth() {
+			if r.Target != "" || r.IsStatic() || r.RequiresAuth() {
 				return nil, fmt.Errorf("route %s: unsupported connector destination or protected route", r.Host)
 			}
 			transport = cfg.connectorTransports[r.Connector]
@@ -175,7 +187,7 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 			destination.Target = "http://tunnel.invalid"
 			assertVisitor = true
 		}
-		handler, err := upstreamHandler(destination, cfg.devErrors, assertVisitor, transport, cfg.logger)
+		handler, err := upstreamHandler(destination, cfg.devErrors, assertVisitor, transport, cfg.sites, cfg.logger)
 		if err != nil {
 			return nil, err
 		}
@@ -326,7 +338,16 @@ func writeDevNotFound(w http.ResponseWriter, requested string, byHost map[string
 
 // upstreamHandler builds what a route forwards to. A static root must already
 // exist as a directory so a typo fails at startup instead of serving 404s.
-func upstreamHandler(r config.Route, devErrors, assertVisitor bool, transport http.RoundTripper, logger *slog.Logger) (http.Handler, error) {
+func upstreamHandler(r config.Route, devErrors, assertVisitor bool, transport http.RoundTripper, sites SiteDirs, logger *slog.Logger) (http.Handler, error) {
+	if r.Site != "" {
+		// A site may have no deployment yet: that is a 503 at request time,
+		// not a startup error, so the first deploy can follow the route.
+		if sites == nil {
+			return nil, fmt.Errorf("route %s: site routes require pages to be enabled", r.Host)
+		}
+		site := r.Site
+		return static.Handler{Live: func() (string, bool) { return sites.LiveDir(site) }, SPA: r.SPA}, nil
+	}
 	if r.IsStatic() {
 		info, err := os.Stat(r.Root)
 		if err != nil {

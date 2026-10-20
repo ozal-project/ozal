@@ -3,13 +3,15 @@
   import Activity from "./pages/Activity.svelte";
   import Routes from "./pages/Routes.svelte";
   import Simulator from "./pages/Simulator.svelte";
+  import Sites from "./pages/Sites.svelte";
   import Wordmark from "$lib/brand/Wordmark.svelte";
   import BugIcon from "@lucide/svelte/icons/bug";
 
   const nav: { path: Page; jack: string; label: string; hint: string }[] = [
     { path: "/activity", jack: "01", label: "Activity", hint: "Live access decisions" },
     { path: "/routes", jack: "02", label: "Routes", hint: "Hostnames, health, policy" },
-    { path: "/simulator", jack: "03", label: "Policy simulator", hint: "Ask the engine why" },
+    { path: "/sites", jack: "03", label: "Sites", hint: "Deployments and rollback" },
+    { path: "/simulator", jack: "04", label: "Policy simulator", hint: "Ask the engine why" },
   ];
 
   const go = (e: MouseEvent, path: Page) => {
@@ -73,6 +75,7 @@
     <main class="mx-auto w-full max-w-[1320px] flex-1 px-5 py-10 md:px-10">
       {#if route.path === "/activity"}<Activity />
       {:else if route.path === "/routes"}<Routes />
+      {:else if route.path === "/sites"}<Sites />
       {:else}<Simulator />{/if}
     </main>
   </div>

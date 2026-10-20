@@ -29,6 +29,7 @@ import (
 	"github.com/octaviosantacruz/switchboard/internal/notify"
 	"github.com/octaviosantacruz/switchboard/internal/notify/telegram"
 	"github.com/octaviosantacruz/switchboard/internal/originauth"
+	"github.com/octaviosantacruz/switchboard/internal/pages"
 	"github.com/octaviosantacruz/switchboard/internal/routemanager"
 	"github.com/octaviosantacruz/switchboard/internal/store/sqlite"
 )
@@ -45,6 +46,7 @@ func subcommands() map[string]func(context.Context, []string, io.Writer) error {
 		"migrate":      runMigrate,
 		"notify":       runNotify,
 		"policy":       runPolicy,
+		"site":         runSite,
 		"validate":     runValidate,
 	}
 }
@@ -96,6 +98,10 @@ func main() {
 	if loaded.Tunnel != nil && *dbPath == "" {
 		log.Fatal("tunnel configuration requires -db pointing at migrated state")
 	}
+	if loaded.Pages != nil && *dbPath == "" {
+		log.Fatal("pages configuration requires -db pointing at migrated state")
+	}
+	var adminOpts []admin.Option
 	if *dbPath != "" {
 		// Sessions survive a restart through the migrated state database.
 		// Migrations stay an explicit operator step: a stale schema stops
@@ -109,6 +115,17 @@ func main() {
 			return sqlite.NewSessions(db, ttl)
 		}))
 		log.Printf("sessions: persistent store at %s", *dbPath)
+		if loaded.Pages != nil {
+			// PAGES-002: deployments live under pages.dir and their history
+			// in the state database; site routes read the live pointer.
+			store, err := pages.NewStore(ctx, db, loaded.Pages.Dir, loaded.Pages.Keep, pages.DefaultLimits)
+			if err != nil {
+				log.Fatalf("pages: %v", err)
+			}
+			managerOpts = append(managerOpts, routemanager.WithSites(store))
+			adminOpts = append(adminOpts, admin.WithPages(store))
+			log.Printf("pages: deployments under %s", loaded.Pages.Dir)
+		}
 		if loaded.Tunnel != nil {
 			configuredEdge, err = startIntegratedTunnel(ctx, loaded.Tunnel, db, sink)
 			if err != nil {
@@ -131,8 +148,8 @@ func main() {
 		log.Fatalf("routes: %v", err)
 	}
 	cfg := manager.Config()
-	if !reflect.DeepEqual(loaded.Tunnel, cfg.Tunnel) {
-		log.Fatal("tunnel configuration changed during startup; restart with a stable config")
+	if !reflect.DeepEqual(loaded.Tunnel, cfg.Tunnel) || !reflect.DeepEqual(loaded.Pages, cfg.Pages) {
+		log.Fatal("tunnel or pages configuration changed during startup; restart with a stable config")
 	}
 
 	// EDGE-007: with tls.dns01 configured, Switchboard owns the origin
@@ -170,7 +187,7 @@ func main() {
 		log.Printf("  %s -> %s", r.Host, r.Destination())
 	}
 
-	adminServer, err := startAdmin(&cfg, manager, sink, broker, certificateStatus(certificateManager))
+	adminServer, err := startAdmin(&cfg, manager, sink, broker, certificateStatus(certificateManager), adminOpts...)
 	if err != nil {
 		log.Fatalf("admin listener: %v", err)
 	}
@@ -213,14 +230,14 @@ const (
 	idleTimeout       = 120 * time.Second
 )
 
-func startAdmin(cfg *config.Config, manager *routemanager.Manager, sink events.Sink, broker *events.Broker, certificate func() admin.CertificateStatus) (*http.Server, error) {
+func startAdmin(cfg *config.Config, manager *routemanager.Manager, sink events.Sink, broker *events.Broker, certificate func() admin.CertificateStatus, extra ...admin.Option) (*http.Server, error) {
 	listener, err := net.Listen("tcp", cfg.Admin.Listen)
 	if err != nil {
 		return nil, err
 	}
 	server := &http.Server{
 		Addr:              cfg.Admin.Listen,
-		Handler:           admin.New(manager, sink, admin.WithEvents(broker), admin.WithCertificateStatus(certificate)),
+		Handler:           admin.New(manager, sink, append([]admin.Option{admin.WithEvents(broker), admin.WithCertificateStatus(certificate)}, extra...)...),
 		ReadHeaderTimeout: readHeaderTimeout,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,

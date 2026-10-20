@@ -23,6 +23,10 @@ const (
 	RouteCreated      Type = "route.created"
 	RouteDeleted      Type = "route.deleted"
 	ConfigReloaded    Type = "config.reloaded"
+	// Deployments of static sites (PAGES-002). Host carries the site name.
+	PagesDeployed   Type = "pages.deployed"
+	PagesRolledBack Type = "pages.rolled_back"
+	PagesRefused    Type = "pages.refused"
 )
 
 // Event is one decision or change with the context needed to explain it.

@@ -14,9 +14,14 @@ const indexFile = "index.html"
 // Handler serves files from Dir. It never lists directories: a directory is
 // served through its index.html. With SPA set, a missing extensionless path
 // falls back to the root index.html so client-side routers work.
+//
+// Live, when set, replaces Dir: it is asked once per request for the
+// directory of the live deployment (PAGES-002), so a deploy or rollback takes
+// effect on the next request and a request never mixes two deployments.
 type Handler struct {
-	Dir string
-	SPA bool
+	Dir  string
+	Live func() (dir string, ok bool)
+	SPA  bool
 }
 
 // ServeHTTP implements http.Handler.
@@ -31,8 +36,15 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	dir := h.Dir
+	if h.Live != nil {
+		if dir, ok = h.Live(); !ok {
+			http.Error(w, "this site has no deployment yet", http.StatusServiceUnavailable)
+			return
+		}
+	}
 
-	file, info, err := h.open(name)
+	file, info, err := open(dir, name)
 	if err == nil && info.IsDir() {
 		file.Close()
 		if !strings.HasSuffix(r.URL.Path, "/") {
@@ -41,10 +53,10 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			redirectToDir(w, r, name)
 			return
 		}
-		file, info, err = h.open(path.Join(name, indexFile))
+		file, info, err = open(dir, path.Join(name, indexFile))
 	}
 	if errors.Is(err, fs.ErrNotExist) && h.SPA && path.Ext(name) == "" {
-		file, info, err = h.open(indexFile)
+		file, info, err = open(dir, indexFile)
 	}
 	if err != nil || info.IsDir() {
 		if file != nil {
@@ -59,10 +71,10 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, info.Name(), info.ModTime(), file)
 }
 
-// open opens name inside Dir. os.OpenInRoot fails if name, or any symlink it
-// follows, would leave Dir.
-func (h Handler) open(name string) (*os.File, fs.FileInfo, error) {
-	file, err := os.OpenInRoot(h.Dir, name)
+// open opens name inside dir. os.OpenInRoot fails if name, or any symlink it
+// follows, would leave dir.
+func open(dir, name string) (*os.File, fs.FileInfo, error) {
+	file, err := os.OpenInRoot(dir, name)
 	if err != nil {
 		return nil, nil, err
 	}

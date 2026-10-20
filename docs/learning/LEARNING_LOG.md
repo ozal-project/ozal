@@ -580,3 +580,13 @@ Renaming the default branch on GitHub does not rewrite a workflow's explicit
 push filter. The CI filter now uses `main`; the pull-request trigger remains
 independent of that filter. A local gate verifies the checkout, while a hosted
 run is required to verify that GitHub actually schedules the workflow.
+
+
+## 2026-10-20 — archive extraction is a parser of hostile input (PAGES-002)
+
+Three lessons. A normalisation step can turn a refused name into an accepted
+one: trimming `./` from `.//` leaves `/`, and the fuzzer found it in seconds;
+clean with `path.Clean` and judge the original. Defence in depth is cheap with
+`os.Root`: even a wrong path check cannot write outside the directory it was
+opened on. And sizes in headers are claims: count the bytes actually copied,
+reading one past the budget to detect an overflow without writing it.

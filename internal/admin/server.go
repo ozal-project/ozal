@@ -35,6 +35,7 @@ type Handler struct {
 	sink        events.Sink
 	broker      *events.Broker
 	certificate func() CertificateStatus
+	pages       deployments
 	mux         *http.ServeMux
 }
 
@@ -53,6 +54,9 @@ func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 	h.mux.HandleFunc("POST /_/api/policy/explain", h.requireBearer(h.explainPolicy))
 	for _, opt := range opts {
 		opt(h)
+	}
+	if h.pages != nil {
+		h.registerSites()
 	}
 	if h.broker != nil {
 		h.mux.HandleFunc("GET /_/overview", h.overview)

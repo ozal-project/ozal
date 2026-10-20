@@ -22,16 +22,17 @@ type Route struct {
 	Target       string        `json:"target,omitempty"`
 	Connector    string        `json:"connector,omitempty"`
 	Root         string        `json:"root,omitempty"`          // static site directory; alternative to Target
+	Site         string        `json:"site,omitempty"`          // deployed site (pages.dir); alternative to Root
 	SPA          bool          `json:"spa,omitempty"`           // static only: unknown paths fall back to index.html
 	HealthPath   string        `json:"health_path,omitempty"`   // defaults to "/" if empty
 	AuthRequired bool          `json:"auth_required,omitempty"` // legacy shorthand for access: {}
 	Access       *AccessPolicy `json:"access,omitempty"`
 }
 
-// IsStatic reports whether the route serves files from Root instead of
-// proxying to Target.
+// IsStatic reports whether the route serves files (a fixed Root or a
+// deployed Site) instead of proxying to Target.
 func (r Route) IsStatic() bool {
-	return r.Root != ""
+	return r.Root != "" || r.Site != ""
 }
 
 // Destination is the human-readable upstream: the target URL, or the site
@@ -39,6 +40,9 @@ func (r Route) IsStatic() bool {
 func (r Route) Destination() string {
 	if r.Connector != "" {
 		return "connector:" + r.Connector
+	}
+	if r.Site != "" {
+		return "site:" + r.Site
 	}
 	if r.IsStatic() {
 		return r.Root
@@ -130,6 +134,19 @@ type Telegram struct {
 	APIBase   string `json:"api_base,omitempty"`
 }
 
+// Pages enables deployed static sites (PAGES-002): archives uploaded
+// through the admin API are stored under Dir, and a route with "site"
+// serves the live deployment. Keep is how many deployments per site are
+// retained (zero selects the default). Changing it requires a restart.
+type Pages struct {
+	Dir  string `json:"dir"`
+	Keep int    `json:"keep,omitempty"`
+}
+
+// siteNamePattern: a site name becomes a directory name, so it follows the
+// same DNS-label rule as connector names (and pages.ValidSiteName).
+var siteNamePattern = connectorNamePattern
+
 // Limit is a token bucket: Rate requests per second with bursts up to Burst.
 type Limit struct {
 	Rate  float64 `json:"rate"`
@@ -165,6 +182,7 @@ type Config struct {
 	RateLimit *RateLimit `json:"rate_limit,omitempty"`
 	Notify    *Notify    `json:"notify,omitempty"`
 	Tunnel    *Tunnel    `json:"tunnel,omitempty"`
+	Pages     *Pages     `json:"pages,omitempty"`
 	// UpstreamTimeoutSeconds is how long an upstream may take to start
 	// answering before the visitor gets a 504. Zero means the default (60);
 	// the response body is never limited.
@@ -175,6 +193,8 @@ type Config struct {
 const (
 	// DefaultUpstreamTimeout applies when upstream_timeout_seconds is unset.
 	DefaultUpstreamTimeout = 60 * time.Second
+	// maxPagesKeep bounds pages.keep: every retained deployment is a full copy.
+	maxPagesKeep = 100
 	// maxUpstreamTimeoutSeconds keeps a typo from disabling the protection.
 	maxUpstreamTimeoutSeconds = 3600
 	// minRateLimitKeys and maxRateLimitKeys bound rate_limit.max_keys; zero
@@ -257,6 +277,15 @@ func Validate(cfg Config) (*Config, error) {
 	if err := validateTunnel(cfg.Tunnel); err != nil {
 		return nil, err
 	}
+	if cfg.Pages != nil {
+		if !filepath.IsAbs(cfg.Pages.Dir) {
+			return nil, fmt.Errorf("config: pages.dir %q must be an absolute path", cfg.Pages.Dir)
+		}
+		if cfg.Pages.Keep < 0 || cfg.Pages.Keep > maxPagesKeep {
+			return nil, fmt.Errorf("config: pages.keep must be between 0 (default) and %d", maxPagesKeep)
+		}
+		cfg.Pages.Dir = filepath.Clean(cfg.Pages.Dir)
+	}
 	seenHosts := make(map[string]struct{}, len(cfg.Routes))
 	for i := range cfg.Routes {
 		r := &cfg.Routes[i]
@@ -264,13 +293,13 @@ func Validate(cfg Config) (*Config, error) {
 			return nil, fmt.Errorf("config: route missing host: %+v", *r)
 		}
 		destinations := 0
-		for _, value := range []string{r.Target, r.Root, r.Connector} {
+		for _, value := range []string{r.Target, r.Root, r.Connector, r.Site} {
 			if value != "" {
 				destinations++
 			}
 		}
 		if destinations != 1 {
-			return nil, fmt.Errorf("config: route %q needs exactly one of target, root or connector", r.Host)
+			return nil, fmt.Errorf("config: route %q needs exactly one of target, root, site or connector", r.Host)
 		}
 		host, err := NormalizeHost(r.Host)
 		if err != nil {
@@ -293,6 +322,18 @@ func Validate(cfg Config) (*Config, error) {
 			}
 			if r.HealthPath != "" || r.SPA {
 				return nil, fmt.Errorf("config: connector route %q cannot set health_path or spa", host)
+			}
+			continue
+		}
+		if r.Site != "" {
+			if cfg.Pages == nil {
+				return nil, fmt.Errorf("config: site route %q requires pages settings", host)
+			}
+			if !siteNamePattern.MatchString(r.Site) {
+				return nil, fmt.Errorf("config: route %q site name must be 1-63 characters of a-z, 0-9 or '-' with alphanumeric ends", host)
+			}
+			if r.HealthPath != "" {
+				return nil, fmt.Errorf("config: route %q serves a site and cannot set health_path", host)
 			}
 			continue
 		}
@@ -516,6 +557,10 @@ func Clone(source Config) Config {
 	if source.Tunnel != nil {
 		tunnel := *source.Tunnel
 		clone.Tunnel = &tunnel
+	}
+	if source.Pages != nil {
+		pages := *source.Pages
+		clone.Pages = &pages
 	}
 	if source.TLS.DNS01 != nil {
 		dns01 := *source.TLS.DNS01

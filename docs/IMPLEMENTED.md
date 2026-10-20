@@ -1,10 +1,52 @@
 # Implemented — Switchboard
 
-**Last review:** 2026-10-19
+**Last review:** 2026-10-20
 **Code reviewed up to:** baseline `0ddb606`; feature commits listed below.
 
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
+
+## PAGES-002 — deployed static sites with history and rollback — 2026-10-20 (committed with this change)
+
+Design: [pages-deploy.md](architecture/pages-deploy.md). A route with `"site"`
+serves the live deployment of a site stored under `pages.dir`; `switchboard site
+deploy|list|rollback` drives the loopback admin API (`POST
+/_/api/sites/{site}/deployments` with a tar.gz body, `GET /_/api/sites`, `POST
+.../rollback`, bearer token for both mutations).
+
+- **Core:** `pages.CheckEntry` (pure; codes `entry.unsafe_path`, `entry.link`,
+  `entry.type`, `entry.too_large`, `entry.too_deep`; 28-case table and
+  `FuzzCheckEntry`, now in the gate's fuzz step). The fuzzer found a real
+  bug during development: trimming `./` from `.//` produced `/`, an absolute
+  path past the earlier check; fixed by cleaning instead of trimming, seed kept
+  in `testdata`. `ManifestHash` names a deployment by its sorted file list.
+- **Extraction:** `pages.Extract` writes through `os.Root`, counts real bytes
+  against per-file and total limits, refuses duplicates (`O_EXCL`), entry
+  floods and archives without a root `index.html`. Tests with hand-built
+  hostile archives: zip slip, absolute path, symlink-then-file, hard link,
+  FIFO, file and total bombs, duplicates, garbage input; none writes outside
+  the staging directory.
+- **Store:** migration `003_create_deployments`; staging directory renamed to
+  the immutable `<id>` directory, then one transaction and one
+  `atomic.Pointer` swap; restart reloads the live map; retention keeps
+  `pages.keep` (default 5); same-second deploys ordered by insertion. No
+  symlinks, so Windows keeps working.
+- **Serving:** `static.Handler.Live` resolves the directory per request
+  (`503` before the first deploy); `proxy.WithSites`/`routemanager.WithSites`;
+  `pages` changes require a restart (reload rejects them).
+- **Console:** Sites page (history, live lamp, rollback with a token kept in
+  memory only); Activity labels and filters `pages.deployed`,
+  `pages.rolled_back`, `pages.refused`.
+- **CLI:** refuses symlinks and special files in the source directory; sends
+  the token over plain HTTP only to loopback.
+
+Evidence: `scripts/verify.sh` green (race tests, fuzz, linters, console build).
+Local run with a migrated database: `503` before the first deploy; Portfolio
+(88 files) and the project page (36 files) deployed through the CLI; a second
+build served; rollback from the CLI and from the console both observed; a
+zip-slip upload refused with `entry.unsafe_path` and nothing written outside
+`sites/`; events visible in Activity. Not deployed to the VPS: that is
+`PAGES-006`.
 
 ## SITE-001 — public project page — 2026-10-20 (committed with this change)
 

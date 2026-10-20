@@ -253,7 +253,8 @@ In progress (Phase 1 hardening, see [TO_IMPLEMENT.md](docs/TO_IMPLEMENT.md)):
 - [x] Verified identity headers propagated upstream; client-forged values stripped
 - [x] Secrets via `env:`/`file:` references, not only inline JSON (`REL-001`)
 - [x] `LICENSE` (MIT)
-- [x] CI on Linux, macOS and Windows runs `scripts/verify.sh` (green on `master` since 2026-10-19; Windows skips seven config tests with POSIX path fixtures)
+- [x] CI on Linux, macOS and Windows runs `scripts/verify.sh` (green on `main`, last observed 2026-10-20; Windows skips seven config tests with POSIX path fixtures)
+- [x] Deployed static sites with history and rollback (`PAGES-002`)
 - [ ] The rest of Phase 6's open-source hygiene: release artifacts and the `v0.1.0-alpha.1` tag (`REL-005`, `REL-006`)
 
 ## Next work
@@ -397,6 +398,34 @@ files (`.git`, `.env`) are refused except `.well-known`; files are opened
 with `os.OpenInRoot`, so neither `..` nor a symlink can leave the directory.
 `spa: true` serves the root `index.html` for unknown extensionless paths, for
 client-side routers. Static routes take `access` policies like any other.
+
+#### Deployed sites (`site` instead of `root`)
+
+With a `pages` block, Switchboard stores the builds itself and switches
+between them atomically, with history and rollback:
+
+```json
+"pages": { "dir": "/var/lib/switchboard/pages", "keep": 5 },
+"routes": [{ "host": "blog.example.com", "site": "blog", "spa": false }]
+```
+
+```bash
+switchboard migrate -db state.db up          # adds the deployments table
+export SWITCHBOARD_ADMIN_TOKEN=...           # the admin.token value
+switchboard site deploy -site blog ./dist    # pack, upload, make live
+switchboard site list                        # history, * marks the live one
+switchboard site rollback -site blog -to <id>
+```
+
+`pages` requires `-db`. A deployment is named by the SHA-256 of its file list,
+so uploading the same build twice reuses it. The admin API refuses archives
+with `..`, absolute paths, links, special files, more than 20 000 entries,
+files over 100 MiB or more than 500 MiB in total (counting the bytes actually
+written), and writes through `os.Root`. A site with no deployment yet answers
+`503`. The console's **Sites** page shows each site's history and can roll
+back; every deploy, rollback and refusal appears in Activity. The CLI sends
+the token over plain HTTP only to a loopback address: for a remote edge, use an
+SSH tunnel to its admin listener. Design: [pages-deploy.md](docs/architecture/pages-deploy.md).
 
 Route hosts are matched case-insensitively and normalized without a trailing
 DNS dot. Duplicate normalized hosts are rejected, and upstream targets must

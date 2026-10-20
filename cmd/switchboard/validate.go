@@ -29,8 +29,11 @@ func runValidate(_ context.Context, args []string, out io.Writer) error {
 		return err
 	}
 	protected := 0
-	tunnels := 0
+	tunnels, sites := 0, 0
 	for _, r := range cfg.Routes {
+		if r.Site != "" {
+			sites++
+		}
 		if r.RequiresAuth() {
 			protected++
 		}
@@ -42,7 +45,8 @@ func runValidate(_ context.Context, args []string, out io.Writer) error {
 	if adminListen == "" {
 		adminListen = config.DefaultAdminListen
 	}
-	fmt.Fprintf(out, "config OK: routes=%d protected=%d tunnel=%d tls=%t dns01=%t trusted_proxies=%d admin=%s\n",
-		len(cfg.Routes), protected, tunnels, cfg.TLS.Enabled, cfg.TLS.DNS01 != nil, len(proxies), adminListen)
+	// sites= goes last so existing checks of the line's prefix keep matching.
+	fmt.Fprintf(out, "config OK: routes=%d protected=%d tunnel=%d tls=%t dns01=%t trusted_proxies=%d admin=%s sites=%d\n",
+		len(cfg.Routes), protected, tunnels, cfg.TLS.Enabled, cfg.TLS.DNS01 != nil, len(proxies), adminListen, sites)
 	return nil
 }

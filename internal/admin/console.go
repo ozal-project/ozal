@@ -35,7 +35,7 @@ var consoleTypes = map[string]string{
 }
 
 // consoleRoutes are the client-side pages; each one is served index.html.
-var consoleRoutes = map[string]bool{"/": true, "/activity": true, "/routes": true, "/simulator": true}
+var consoleRoutes = map[string]bool{"/": true, "/activity": true, "/routes": true, "/sites": true, "/simulator": true}
 
 // console serves the embedded app: a real file when one exists, index.html
 // for a known client route, 404 otherwise. Control-plane paths under /_/ never
