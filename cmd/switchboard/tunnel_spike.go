@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/octaviosantacruz/switchboard/internal/config"
@@ -176,4 +177,56 @@ func labRoute(host, root, upstream string) (config.Route, error) {
 		return config.Route{}, err
 	}
 	return config.Route{Host: host, Target: upstream}, nil
+}
+
+// maxConnectorRoutes bounds how many hosts one connector may serve. Every route
+// is fixed when the process starts; the cap keeps that list reviewable.
+const maxConnectorRoutes = 8
+
+// connectorRoutes builds the fixed routes a connector serves: the primary one
+// from -host plus -root or -upstream, then any -route HOST=root:DIR or
+// HOST=upstream:URL. One connector identity serving several hosts means one
+// certificate to renew, instead of one identity per site.
+func connectorRoutes(host, root, upstream string, extra []string) ([]config.Route, error) {
+	primary, err := labRoute(host, root, upstream)
+	if err != nil {
+		return nil, err
+	}
+	routes := []config.Route{primary}
+	seen := map[string]bool{host: true}
+	for _, spec := range extra {
+		rawHost, rest, ok := strings.Cut(spec, "=")
+		if !ok {
+			return nil, fmt.Errorf("-route %q must be HOST=root:DIR or HOST=upstream:URL", spec)
+		}
+		kind, value, ok := strings.Cut(rest, ":")
+		if !ok {
+			return nil, fmt.Errorf("-route %q must be HOST=root:DIR or HOST=upstream:URL", spec)
+		}
+		normalized, err := config.NormalizeHost(rawHost)
+		if err != nil {
+			return nil, fmt.Errorf("-route %q: host is not valid", spec)
+		}
+		if seen[normalized] {
+			return nil, fmt.Errorf("-route host %q is already served by this connector", normalized)
+		}
+		seen[normalized] = true
+		var route config.Route
+		switch kind {
+		case "root":
+			route, err = labRoute(normalized, value, "")
+		case "upstream":
+			route, err = labRoute(normalized, "", value)
+		default:
+			return nil, fmt.Errorf("-route %q: kind must be root or upstream", spec)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("-route %q: %w", spec, err)
+		}
+		routes = append(routes, route)
+	}
+	if len(routes) > maxConnectorRoutes {
+		return nil, fmt.Errorf("a connector serves at most %d routes", maxConnectorRoutes)
+	}
+	return routes, nil
 }

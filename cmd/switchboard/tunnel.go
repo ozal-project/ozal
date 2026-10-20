@@ -40,6 +40,7 @@ func runTunnel(ctx context.Context, args []string, out io.Writer) error {
 	host := fs.String("host", "", "one allowed request host (required)")
 	network := fs.String("tunnel-network", "", "optional private CIDR allowed for mTLS transport; HTTP remains loopback-only")
 	var dbPath, name, listen, ingress, edgeAddr, serverName, root, upstream string
+	var extraRoutes []string
 	if mode == "edge" {
 		fs.StringVar(&dbPath, "db", defaultDBPath, "migrated SQLite connector registry")
 		fs.StringVar(&name, "connector", "", "enrolled connector name for this host (required)")
@@ -50,6 +51,10 @@ func runTunnel(ctx context.Context, args []string, out io.Writer) error {
 		fs.StringVar(&serverName, "server-name", "", "expected edge certificate DNS name (required)")
 		fs.StringVar(&root, "root", "", "fixed absolute static site directory")
 		fs.StringVar(&upstream, "upstream", "", "fixed HTTP loopback origin")
+		fs.Func("route", "additional fixed route HOST=root:DIR or HOST=upstream:URL (repeatable)", func(v string) error {
+			extraRoutes = append(extraRoutes, v)
+			return nil
+		})
 	}
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
@@ -94,7 +99,7 @@ func runTunnel(ctx context.Context, args []string, out io.Writer) error {
 		return err
 	}
 	if mode == "connect" {
-		route, err := labRoute(normalized, root, upstream)
+		routes, err := connectorRoutes(normalized, root, upstream, extraRoutes)
 		if err != nil {
 			return err
 		}
@@ -104,7 +109,7 @@ func runTunnel(ctx context.Context, args []string, out io.Writer) error {
 		}
 		// This slice serves anonymous routes. The connector's trust stage
 		// strips identity/forwarding headers rather than trusting edge claims.
-		handler, err := proxy.New([]config.Route{route}, nil, nil, proxy.WithAuthenticatedTunnelTrust())
+		handler, err := proxy.New(routes, nil, nil, proxy.WithAuthenticatedTunnelTrust())
 		if err != nil {
 			return err
 		}

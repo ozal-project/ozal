@@ -18,6 +18,20 @@ code, mode assertions are conditional (`9542359`). Run `39189670980` is green on
 Linux (1m05s), macOS (36s) and Windows (5m37s). Not closed: `REL-003` asks for a
 green pull request, and the pinning commit `5bb3cfe` has not run yet.
 
+## TUN-002 (part) — one connector, several hosts — 2026-10-19 (working tree, no commit)
+
+`switchboard tunnel connect` takes repeatable `-route HOST=root:DIR|upstream:URL` in
+addition to `-host` and `-root`/`-upstream`. `connectorRoutes` (pure) validates every
+route with the existing lab rules (absolute roots, fixed loopback HTTP upstreams, no
+credentials, no path), refuses duplicate hosts and caps a connector at eight routes.
+This avoids a second connector identity, whose leaf certificate the renewal flow
+(fixed to the `edge` and `connector` roles) would not renew. Evidence: table test for
+the refusals and the cap; `TestOneConnectorServesSeveralHosts` drives the real
+integrated edge and connector and checks a static host, an upstream host and a host the
+connector was not started with (not served). `scripts/verify.sh` passed. Deployed to
+the homelab connector (previous binary and unit kept as `*.before-multiroute`); the
+preview kept answering `200` after the restart.
+
 ## EDGE-002 (part) — single-level wildcard certificate — 2026-10-19 (committed with this change)
 
 The own certificate manager now serves one certificate name that may be

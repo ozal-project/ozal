@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -101,5 +102,52 @@ func TestTunnelSpikeDefaultEdgeStopsOnCancellation(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("edge CLI leaked workers")
+	}
+}
+
+func TestConnectorRoutesAreFixedAndBounded(t *testing.T) {
+	routes, err := connectorRoutes("portfolio.localhost", "/srv/portfolio", "", []string{
+		"api.localhost=upstream:http://127.0.0.1:5177",
+		"docs.localhost=root:/srv/docs",
+	})
+	if err != nil {
+		t.Fatalf("connectorRoutes: %v", err)
+	}
+	if len(routes) != 3 || routes[0].Host != "portfolio.localhost" || routes[0].Root != "/srv/portfolio" ||
+		routes[1].Target != "http://127.0.0.1:5177" || routes[2].Root != "/srv/docs" {
+		t.Fatalf("routes = %+v", routes)
+	}
+
+	// The extra routes are optional: without them it is exactly the old single route.
+	only, err := connectorRoutes("portfolio.localhost", "", "http://127.0.0.1:8000", nil)
+	if err != nil || len(only) != 1 || only[0].Target != "http://127.0.0.1:8000" {
+		t.Fatalf("single route = %+v, %v", only, err)
+	}
+
+	for name, extra := range map[string][]string{
+		"missing separator":      {"api.localhost"},
+		"unknown kind":           {"api.localhost=proxy:http://127.0.0.1:1"},
+		"no kind prefix":         {"api.localhost=/srv/docs"},
+		"relative root":          {"api.localhost=root:docs"},
+		"public upstream":        {"api.localhost=upstream:http://192.0.2.1:80"},
+		"https upstream":         {"api.localhost=upstream:https://127.0.0.1:443"},
+		"upstream with path":     {"api.localhost=upstream:http://127.0.0.1:80/api"},
+		"upstream credentials":   {"api.localhost=upstream:http://user:pw@127.0.0.1:80"},
+		"duplicates the primary": {"portfolio.localhost=root:/srv/other"},
+		"duplicate extra":        {"a.localhost=root:/srv/a", "A.localhost=root:/srv/b"},
+		"empty host":             {"=root:/srv/a"},
+		"bad host":               {"not a host=root:/srv/a"},
+	} {
+		if _, err := connectorRoutes("portfolio.localhost", "/srv/portfolio", "", extra); err == nil {
+			t.Errorf("%s: connectorRoutes accepted %v", name, extra)
+		}
+	}
+
+	var many []string
+	for i := 0; i < maxConnectorRoutes; i++ { // primary + this many exceeds the cap
+		many = append(many, fmt.Sprintf("h%d.localhost=root:/srv/h%d", i, i))
+	}
+	if _, err := connectorRoutes("portfolio.localhost", "/srv/portfolio", "", many); err == nil {
+		t.Error("the number of routes a connector serves must be bounded")
 	}
 }

@@ -51,6 +51,7 @@ to copy into a command. Run `go run ./cmd/switchboard tunnel edge -h` or
 | `-server-name` | Required expected edge DNS identity, checked against the server certificate. |
 | `-root` | Absolute directory for a static site. |
 | `-upstream` | Fixed HTTP origin on a literal loopback IP with a port. Choose exactly one of `-root` and `-upstream`. |
+| `-route` | Optional, repeatable: one more fixed route, `HOST=root:DIR` or `HOST=upstream:URL`, with the same rules as `-root`/`-upstream`. Duplicate hosts are refused and a connector serves at most 8 routes. One enrolled identity then serves several hosts, so there is still one certificate to renew. Hosts not listed at startup are never served. |
 
 Both edge listeners use ephemeral ports by default. This avoids collisions with
 the registered normal Switchboard service. No new persistent host port or

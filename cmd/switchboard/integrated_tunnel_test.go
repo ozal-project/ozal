@@ -231,3 +231,129 @@ func TestIntegratedTunnelRequiresState(t *testing.T) {
 		t.Fatal("tunnel started without migrated registry")
 	}
 }
+
+// One connector identity can serve several hosts: the edge maps each host to
+// the same enrolled connector, and the connector answers each from its own
+// fixed route. Hosts the connector was not started with are never served.
+func TestOneConnectorServesSeveralHosts(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	directory := t.TempDir()
+	pki := filepath.Join(directory, "pki")
+	if err := tunnel.InitLab(pki); err != nil {
+		t.Fatal(err)
+	}
+	dbPath := filepath.Join(directory, "state.db")
+	if err := runMigrate(ctx, []string{"-db", dbPath}, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	db, err := openMigratedDB(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	fp, err := fingerprintFromPEM(filepath.Join(pki, "connector.crt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tunnel.NewRegistry(db).Enroll(ctx, "portfolio", fp); err != nil {
+		t.Fatal(err)
+	}
+
+	site := filepath.Join(directory, "site")
+	if err := os.MkdirAll(site, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(site, "index.html"), []byte("static site"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "api answer")
+	}))
+	defer api.Close()
+
+	tunnelConfig := &config.Tunnel{Listen: "127.0.0.1:0", CertFile: filepath.Join(pki, "edge.crt"), KeyFile: filepath.Join(pki, "edge.key"), CAFile: filepath.Join(pki, "ca.crt")}
+	sink := events.Multi{&events.Recorder{}}
+	integrated, err := startIntegratedTunnel(ctx, tunnelConfig, db, sink)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer integrated.Close()
+	cfg := config.Config{Listen: "127.0.0.1:0", Tunnel: tunnelConfig, TrustedProxies: []string{"127.0.0.1/32"}, Routes: []config.Route{
+		{Host: "site.localhost", Connector: "portfolio"},
+		{Host: "api.localhost", Connector: "portfolio"},
+		{Host: "unserved.localhost", Connector: "portfolio"},
+	}}
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(directory, "routing.json")
+	if err := os.WriteFile(configPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := routemanager.New(ctx, configPath, time.Hour, routemanager.WithConnectorRoutes(integrated), routemanager.WithEventSink(sink))
+	if err != nil {
+		t.Fatal(err)
+	}
+	public := httptest.NewServer(manager)
+	defer public.Close()
+
+	routes, err := connectorRoutes("site.localhost", site, "", []string{"api.localhost=upstream:" + api.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler, err := proxy.New(routes, nil, nil, proxy.WithAuthenticatedTunnelTrust())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cert, roots, err := tunnel.LoadIdentity(filepath.Join(pki, "connector.crt"), filepath.Join(pki, "connector.key"), filepath.Join(pki, "ca.crt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	clientTLS, err := tunnel.ClientTLS(cert, roots, "edge.localhost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	connectCtx, disconnect := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	go func() { done <- tunnel.Connect(connectCtx, integrated.address, clientTLS, handler) }()
+	defer func() {
+		disconnect()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Error("connector did not stop")
+		}
+	}()
+	for deadline := time.Now().Add(5 * time.Second); !integrated.ConnectorConnected("portfolio"); time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("connector did not attach")
+		}
+	}
+
+	fetch := func(host string) (int, string) {
+		t.Helper()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, public.URL+"/", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Host = host
+		resp, err := public.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(body)
+	}
+	if code, body := fetch("site.localhost"); code != http.StatusOK || body != "static site" {
+		t.Errorf("site host: %d %q", code, body)
+	}
+	if code, body := fetch("api.localhost"); code != http.StatusOK || body != "api answer" {
+		t.Errorf("api host: %d %q", code, body)
+	}
+	if code, _ := fetch("unserved.localhost"); code == http.StatusOK {
+		t.Errorf("a host the connector was not started with was served (%d)", code)
+	}
+}
