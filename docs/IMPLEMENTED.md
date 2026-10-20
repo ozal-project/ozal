@@ -6,6 +6,75 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## SITE-001 — public project page — 2026-10-20 (committed with this change)
+
+Owner decision: an English project page, open-source framing (MIT; the GitHub repository
+is still private, so its links 404 until the owner publishes it). Astro 7 static output
+in `site/` (`npm run build` runs `astro check` first), Tailwind 4 and the console's
+identity: hero patch panel drawn in SVG, "shipped today" limited to tested and deployed
+features, the request pipeline with planned/in-progress stages labelled, a console
+screenshot, the v0.1–v0.4 roadmap framed as direction rather than claim (`REL-008`), and
+a quickstart. The build emits no `<script>`. Checked in headless Chromium at 1440 and
+390 px: no console errors, no failed requests, no horizontal overflow. Not deployed:
+`switchboard.octaviosantacruz.com` needs its route, proxied A record and Pages root,
+which are operator steps (Server Ops runbook).
+
+## UI-002 (part) — console app and policy simulator — 2026-10-20 (committed with this change)
+
+Owner decision: replace the hand-written console pages with a styled app. The console
+is now a Svelte 5 single-page app (Vite 8, Tailwind CSS 4, shadcn-svelte/bits-ui,
+`@lucide/svelte`) in `web/console`, built by `scripts/build-console.sh` into
+`internal/admin/console` and embedded in the binary. Pages: **Activity** (SSE feed,
+filters, pause, route access), **Routes** (health, policy summary, certificate) and the
+**Policy simulator**. The admin handler serves real files, `index.html` for the four
+client routes, 404 for anything else, and never lets `/_/` paths fall through; hashed
+assets are immutable. CSP stays strict (`script-src 'self'`, no `unsafe-inline`); the
+built bundle has no inline script, no `eval` and sets dynamic styles through CSSOM.
+`/_/activity` and `/_/simulator` redirect to the app; `/_/status` remains the
+no-JavaScript route-debug view.
+
+API: `GET /_/api/status` is the JSON form of the route-debug projection (shared
+`buildStatusView`, no secrets or allowlists). `POST /_/api/policy/explain` returns
+`auth.Report`, the same JSON as `switchboard policy explain -json` (`auth.NewReport`), and
+requires the admin bearer token: the answer reveals allowlists and, probed repeatedly,
+is an oracle for who is allowed. The simulator keeps the token in component memory only.
+A duplicate `/_/api/routes` was dropped in favour of the existing `/_/overview`.
+
+Visual identity (owner request: the first version looked like a stock template): the
+console borrows from a manual telephone switchboard — a jack-field background, signal
+lamps (green connected, red refused, amber awaiting login), engraved mono plates with
+panel indexes, a patch-cord logo, IBM Plex Mono for hosts and codes beside Manrope.
+Checked in headless Chromium (system libraries extracted locally, no sudo) at 1440 and
+390 px: no console or CSP errors, simulator denied/allowed flows rendered.
+
+Evidence: `TestExplainRequiresBearer`, `TestExplainAPI`, `TestAPIStatusMatchesDebugViewWithoutSecrets`,
+`TestConsoleHomeAndAssets` (client routes, strict CSP, no inline script, immutable
+assets, no `localStorage`, 404s, traversal, debug view, no-broker fallback),
+`TestActivityPageIsLoopbackOnlyAndStrictCSP`, `TestSimulatorPageMovedToConsole`;
+`svelte-check` 0 errors; `scripts/verify.sh` passed including the reproducible console
+rebuild. Live demo on throwaway loopback ports (18888/19090, fake OIDC discovery on
+18990): every page 200, 401 without token, `missing_required_group` and `gate_only` with
+it, 421 for a foreign Host.
+
+## ARCH-008 — `switchboard policy explain` — 2026-10-20 (committed with this change)
+
+`switchboard policy explain -config FILE -host HOST [-email E -verified -groups
+G1,G2 | -no-session] [-json] [-expect allowed|denied]` explains an access
+decision without binding listeners or starting OIDC. It calls the new pure
+`auth.Explain(route, *Principal)`, which uses the same `auth.Authorize` and the
+same policy as the proxy: `config.Route.Policy()` now holds the
+`Access`-or-empty rule and the proxy uses it too, so the two cannot diverge.
+`-no-session` stops at the Gate (`authentication_required`, `gate_only` scope)
+and never calls `Authorize`. Text and JSON both carry the scope line; the JSON
+field names and scope strings (`authorization_only`, `gate_only`,
+`public_route`) are a stable contract. The auth section of the config is never
+printed. Evidence: `TestExplain`, `TestExplainMatchesAuthorize`,
+`TestRoutePolicy`, and command tests for allowlists, exact domains, AND groups,
+group case, unverified email, legacy `auth_required`, empty policy, gate, host
+normalization (port stays part of the routing key, as in the proxy), bad input,
+`-expect`, JSON fields and no auth-section leak. `scripts/verify.sh` passed;
+manual run of the built binary matched the design examples.
+
 ## REL-003 (part) — hosted CI observed — 2026-10-19
 
 Eight consecutive runs on `master` (2026-10-18 to 2026-10-19) failed only on
@@ -18,7 +87,7 @@ code, mode assertions are conditional (`9542359`). Run `39189670980` is green on
 Linux (1m05s), macOS (36s) and Windows (5m37s). Not closed: `REL-003` asks for a
 green pull request, and the pinning commit `5bb3cfe` has not run yet.
 
-## TUN-002 (part) — one connector, several hosts — 2026-10-19 (working tree, no commit)
+## TUN-002 (part) — one connector, several hosts — 2026-10-19 (committed `d60ba24`)
 
 `switchboard tunnel connect` takes repeatable `-route HOST=root:DIR|upstream:URL` in
 addition to `-host` and `-root`/`-upstream`. `connectorRoutes` (pure) validates every

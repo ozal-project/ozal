@@ -348,6 +348,23 @@ go run ./cmd/switchboard validate -config config.preview.json
 # config OK: routes=1 protected=0 tunnel=0 tls=true dns01=true trusted_proxies=22 admin=127.0.0.1:9091
 ```
 
+The admin console (loopback, default `127.0.0.1:9090`) is a Svelte app embedded in
+the binary: Activity, Routes and a Policy simulator. Its source is `web/console`;
+rebuild it after changing the source:
+
+```bash
+scripts/build-console.sh   # needs Node; output in internal/admin/console (commit it)
+```
+
+Explain why a route would allow or deny an example identity (authorization only;
+no listener, no OIDC flow, no secrets printed):
+
+```bash
+go run ./cmd/switchboard policy explain -config config.json \
+  -host app.example.com -email ana@example.com -verified -groups engineering
+go run ./cmd/switchboard policy explain -config config.json -host app.example.com -no-session -json
+```
+
 ### Local development (plain HTTP)
 
 `config.json`:

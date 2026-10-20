@@ -70,7 +70,6 @@ Cross-project coordination stays in the workspace `TO_IMPLEMENT.md`
 |---|---|---|---|
 | `ARCH-004` | Embedded SQLite store with migration runner (sessions, later tunnels/passkeys). Store and runner are committed (`7d0c56e`, `cmd/switchboard migrate`); the local session wiring is included below and deployment acceptance remains pending. Local operator scripts now expose `scripts/migrate.sh up\|status -db PATH` and `scripts/new-migration.sh name`; verification is recorded in the learning log. **Wired 2026-10-18 (commit `a4d58c1`):** `auth.SessionBackend` port (consumer-declared) with the in-memory store and `sqlite.Sessions` (migration 001 reuse, SHA-256 IDs at rest, purge+capacity in one immediate transaction); `switchboard -db PATH` selects persistence after `openMigratedDB` refuses a stale schema. Tests cover restart-by-close/reopen survival, expiry rejection/eviction, capacity, cancellation and the TTL-driven factory. Review correction: existing rows are bounded by the earlier of issued expiry and creation plus the current TTL; expired rows are purged under that policy on lookup/sweep/create, without mutating storage while building a reload candidate. | In progress | Sessions survive restart (proven at the database boundary); migrations numbered and immutable. Residual: deployment acceptance with `-db` on the real unit and backup coverage of the state file. |
 | `ARCH-005` | Remove duplicated clone helpers in `routemanager` (`cloneRoute`, `cloneConfig` wrapper). | Ready | Single `config.Clone`; tests pass. |
-| `ARCH-008` | `switchboard policy explain`: explain an authorization decision for an example Principal using the existing pure `auth.Authorize`; no second policy engine. [Design](architecture/policy-explain.md). | Ready (design proposed) | Flags, output and scope limit as designed; `-json` and `-expect`; tests for allowlist/domain/group/`auth_required`/anonymous; no listeners bound; no secrets printed; `scripts/verify.sh` green. |
 | `ARCH-009` | Identity integration with apps that already authenticate: choose transport-only, coexistence, signed assertion or shared IdP; avoid double login and define what each proves. [Decision record](architecture/identity-integration.md). | Ready (decision pending) | One option accepted with threat model and acceptance test; disposable app plan; direct-bypass and header-spoofing tests defined; no app integration claimed as SSO before its acceptance. |
 
 ### Audit (proposed contract)
@@ -133,6 +132,13 @@ immutable and swapped atomically, and later a push builds and deploys.
 Pure Go first, Svelte only where a feature needs it (see
 [`stack.md`](architecture/stack.md)).
 
+**Owner decision 2026-10-20:** finish the console and pull `UI-002` (policy
+simulator) forward from v0.2; `ARCH-008` (`policy explain`, its CLI-first step)
+is done. The console was rebuilt as a Svelte 5 + Tailwind + shadcn-svelte app (owner decision, see `stack.md`) with Activity, Routes and the Policy simulator over the bearer-protected `/_/api/policy/explain`; working tree, see `IMPLEMENTED.md`. Residual: an end-to-end auth-decision event (`UI-001`). The public project page (`SITE-001`, `site/`) is built but not deployed: publish the repository, then add the `switchboard` route, its proxied A record and the Pages root through the Server Ops runbook. The console stays loopback-only. `switchboard.octaviosantacruz.com` is
+reserved for a future public project page (covered by the `EDGE-002` wildcard;
+it still needs its own proxied A record and route, which are operator steps in
+the Server Ops runbook); nothing is published there yet.
+
 | ID | Task | State | Done when |
 |---|---|---|---|
 | `UI-001` | Live event stream on the admin dashboard over Server-Sent Events, in pure Go: `events.Broker` (history + non-blocking fan-out), `GET /_/events`, `/_/activity` page. Delivery committed in `e432abf`; `scripts/verify.sh` green (2026-10-17); SSE checked live via SIGHUP. Product UI = access decisions; host/service health stays in Server Ops (`CROSS-010`). | In progress: local redesign adds category/search filters, pause/resume, safe route-access overview, shared navigation and expandable route diagnostics. Visual follow-up adds a dark/amber access-console style, local licensed Manrope font, sidebar navigation and a distinct Routes & hostnames view that does not imply published DNS. Root opens Access activity; static sites say Not probed. Browser checks passed for filters, paused snapshots, error/retry, text-only event rendering and 320px layout. Integrated tunnel events/status now reach the normal console and were observed through SSE/browser. Residual — auth-decision events need an OIDC route to exercise end to end; standalone CLI process events remain separate. | Events appear live; a slow or disconnected client never blocks the sink; the stream goroutine ends when the request context is cancelled; tests. |
@@ -180,7 +186,7 @@ lab; do not add them to a release.
 
 | Release | IDs | Scope |
 |---|---|---|
-| v0.2 PKI (Jan–Mar 2027) | `PKI-*`, `SHD-003`, `UI-002` | ACME server, internal CA, mTLS agent/origin, developer certs, SSH CA, workload identity; rules language + compiler, PoW challenge (`SHD-003`); `UI-002`: JSON admin API + first Svelte island, a policy simulator over the pure `auth.Authorize` (blocked on `UI-001`; `ARCH-008` is the CLI-first step) |
+| v0.2 PKI (Jan–Mar 2027) | `PKI-*`, `SHD-003`, `UI-002` | ACME server, internal CA, mTLS agent/origin, developer certs, SSH CA, workload identity; rules language + compiler, PoW challenge (`SHD-003`); `UI-002`: JSON admin API + first Svelte island, a policy simulator over the pure `auth.Authorize` (pulled forward 2026-10-20; builds on `auth.Explain` from `ARCH-008`) |
 | v0.3 Access (Apr–Jun 2027) | `ACC-*`, `NTF-*`, `SHD-0xx` | SSH/DB over tunnels, JIT with Telegram approvals, session recording, credential injection, CAEP/SSF, SCIM; Coraza + CRS, API schema validation, leaked credentials, CSP reporting |
 | v0.4 Trust (Jul–Sep 2027) | `TLOG-*`, `AI-*`, `AGT-*`, `SHD-0xx` | Transparency log, witnesses, risk signals and explanations, AI-agent/MCP gateway; Web Bot Auth, Firewall for AI, DLP |
 

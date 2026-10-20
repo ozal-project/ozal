@@ -541,3 +541,34 @@ connector already built its proxy from a list of routes and the CLI only passed 
 Allowing several fixed routes was a 60-line, test-first change; the renewal code stayed
 untouched. Before generalising a risky mechanism, look for the narrow place where the
 need can be met without it.
+
+## 2026-10-20 — explain the engine, never copy it
+
+`policy explain` looked like it only needed `auth.Authorize`, but the proxy also
+held a small rule of its own: a route with `auth_required` and no `access` gets
+the empty policy. Copying that rule into the CLI would have made a second engine
+that could drift. Moving it to `config.Route.Policy()` and calling it from both
+sides keeps one source of truth; `TestExplainMatchesAuthorize` pins the
+equivalence. The Gate/Authorize split matters too: a request without a session
+never reaches `Authorize`, so the simulator must not fake one with an empty
+Principal.
+
+## 2026-10-20 — a framework that respects the CSP
+
+The owner wanted a styled console. SvelteKit was the obvious pick, but its static
+build boots with an inline script, and the console's CSP forbids inline scripts. Plain
+Svelte + Vite emits only external files, so the policy stays strict. A useful check
+after any front-end build: grep the bundle for inline scripts, `eval` and
+`setAttribute("style")` before trusting the CSP. The admin API also showed that "read
+only" is not the same as "harmless": an explain endpoint without auth would be an
+oracle for the allowlist.
+
+## 2026-10-20 — identity is a metaphor you keep
+
+A stock component library gave a clean but anonymous console. The name already held
+the identity: a telephone switchboard connects or refuses calls, which is what every
+request decision is. Lamps, jacks, patch cords and engraved plates turned that into a
+small visual vocabulary reused by the console and the project page. Two technical
+notes: Tailwind 4 utilities beat `@layer components`, so a component class cannot
+restyle a library component that already sets the same utility; and a grid item needs
+`min-w-0` before an overflowing `<pre>` will scroll instead of widening the page.
