@@ -15,9 +15,11 @@ identity: hero patch panel drawn in SVG, "shipped today" limited to tested and d
 features, the request pipeline with planned/in-progress stages labelled, a console
 screenshot, the v0.1–v0.4 roadmap framed as direction rather than claim (`REL-008`), and
 a quickstart. The build emits no `<script>`. Checked in headless Chromium at 1440 and
-390 px: no console errors, no failed requests, no horizontal overflow. Not deployed:
-`switchboard.octaviosantacruz.com` needs its route, proxied A record and Pages root,
-which are operator steps (Server Ops runbook).
+390 px: no console errors, no failed requests, no horizontal overflow. **Deployed 2026-10-20** at `switchboard.octaviosantacruz.com`: static root on the VPS
+edge under the wildcard certificate, proxied by Cloudflare with per-hostname origin
+pull; published and accepted with server-ops `deploy/hetzner-public/publish-site.py`
+(asset hashes equal to the build, control paths `404`). The GitHub links still `404`
+while the repository is private.
 
 ## UI-002 (part) — console app and policy simulator — 2026-10-20 (committed with this change)
 
