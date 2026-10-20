@@ -1,6 +1,7 @@
 # Policy explain (design proposal)
 
-**Status:** proposed 2026-10-19. Design only; no implementation. Tracker:
+**Status:** implemented 2026-10-20 (`cmd/switchboard/policy.go`,
+`auth.Explain`); see `IMPLEMENTED.md`. Proposed 2026-10-19. Tracker:
 `ARCH-008` in [TO_IMPLEMENT.md](../TO_IMPLEMENT.md). This is not a release
 promise.
 

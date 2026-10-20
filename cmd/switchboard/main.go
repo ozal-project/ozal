@@ -44,6 +44,7 @@ func subcommands() map[string]func(context.Context, []string, io.Writer) error {
 		"connector":    runConnector,
 		"migrate":      runMigrate,
 		"notify":       runNotify,
+		"policy":       runPolicy,
 		"validate":     runValidate,
 	}
 }

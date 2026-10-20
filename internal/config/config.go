@@ -52,6 +52,18 @@ func (r Route) RequiresAuth() bool {
 	return r.AuthRequired || r.Access != nil
 }
 
+// Policy returns the access policy enforced on a protected route: the
+// configured one, or the empty policy (any authenticated user) for the legacy
+// AuthRequired shorthand. It is meaningless for a public route; check
+// RequiresAuth first. The proxy and `policy explain` both use it so they cannot
+// diverge.
+func (r Route) Policy() AccessPolicy {
+	if r.Access != nil {
+		return *r.Access
+	}
+	return AccessPolicy{}
+}
+
 type TLS struct {
 	Enabled  bool     `json:"enabled"`
 	Domains  []string `json:"domains,omitempty"`

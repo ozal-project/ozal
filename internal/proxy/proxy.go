@@ -179,15 +179,11 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 		if err != nil {
 			return nil, err
 		}
-		policy := config.AccessPolicy{}
-		if r.Access != nil {
-			policy = *r.Access
-		}
 		byHost[host] = route{
 			target:       r.Destination(),
 			handler:      handler,
 			authRequired: r.RequiresAuth(),
-			access:       policy,
+			access:       r.Policy(),
 		}
 	}
 
