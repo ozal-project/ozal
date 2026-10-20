@@ -24,7 +24,8 @@ project.
 | Tunnels | **`github.com/hashicorp/yamux v0.1.2`** over mTLS (`TUN-001` local spike); `quic-go` evaluated later | Reuse reviewed stream multiplexing rather than invent framing/flow control. TLS authenticates both peers; one configured connector and upstream in the local spike. QUIC is a later learning step. |
 | Passkeys | **`go-webauthn/webauthn`** | WebAuthn verification is subtle; learn it through a reviewed library |
 | SSH (Q2–Q3) | `golang.org/x/crypto/ssh` | Certificates, server and client in one package |
-| Dashboard | Q1: `html/template` + `embed.FS` + HTMX. Q2: Svelte 5 islands (custom elements built with Vite) for features that need rich client state. Q3+: SvelteKit `adapter-static` only if the dashboard becomes an app | Learn the Go side first (handlers, SSE, sessions, CSRF/CSP); Node is a build-time tool only, output embedded, so it stays one binary. Same-origin cookie auth, no tokens in `localStorage` |
+| Dashboard | **Decided 2026-10-20 (owner):** the console is a Svelte 5 single-page app built with Vite 8, styled with Tailwind CSS 4 and shadcn-svelte components (bits-ui), icons from `@lucide/svelte`. Source in `web/console`, built by `scripts/build-console.sh` into `internal/admin/console`, committed and embedded with `embed.FS`. Plain Vite, not SvelteKit: SvelteKit's static output boots with an inline script, which the console CSP (`script-src 'self'`, no `unsafe-inline`) forbids. `/_/status` stays a server-rendered `html/template` route-debug view that works without JavaScript. | Node is a build-time tool only, so the binary stays self-contained and `go build` needs no Node. The owner preferred a styled component system over hand-written HTML/JS. Versions are pinned exactly in `package-lock.json` and were each at least two weeks old when chosen (TypeScript 6.0.3, not 7, because `svelte-check` needs the TypeScript API). `verify.sh` rebuilds the console when its toolchain is installed and fails if the embedded copy is stale. Same-origin only; the admin token is held in memory for the simulator, never in `localStorage` or a cookie |
+| Project site | **Decided 2026-10-20:** Astro 7 static output in `site/`, Tailwind CSS 4, same fonts and tokens as the console. Served as files by Switchboard Pages (dogfooding) at `switchboard.octaviosantacruz.com` once deployed | Content page: static HTML, no client JavaScript, SEO-friendly. Next.js was considered (owner preference) but its value is a React runtime this page does not need; Astro matches the Portfolio stack |
 | CLI | stdlib `flag` with a small subcommand dispatcher | Few subcommands; avoids a framework |
 | Telegram | Bot API called directly with `net/http` | Small API surface; good HTTP-client practice |
 | Tests | stdlib `testing`, `httptest`, native fuzzing, `-race` | No assertion library; matches existing tests |
@@ -50,7 +51,7 @@ project.
 | Local AI | Ollama HTTP API | Q4 |
 | CI | GitHub Actions (Linux/macOS/Windows) | Q1 |
 | Postgres adapter | Only if Switchboard runs on two or more edges (shared state, HA) | When multi-edge is planned |
-| Go → TypeScript types for the admin API | `tygo` or hand-written | Q2 (with `UI-002`) |
+| Go → TypeScript types for the admin API | Hand-written in `web/console/src/lib/api.ts` for now; `tygo` if the API grows | Q2 (with `UI-002`) |
 | Releases | GoReleaser, checksums, SBOM, cosign | Q1 |
 
 ## Public origin certificate contract

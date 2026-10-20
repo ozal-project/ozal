@@ -43,27 +43,26 @@ func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 		sink = events.Discard
 	}
 	h := &Handler{manager: manager, sink: sink, mux: http.NewServeMux()}
-	h.mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		target := "/_/status"
-		if h.broker != nil {
-			target = "/_/activity"
-		}
-		http.Redirect(w, r, target, http.StatusSeeOther)
-	})
 	h.mux.HandleFunc("GET /_/console.css", h.consoleCSS)
 	h.mux.HandleFunc("GET /_/fonts/manrope.ttf", h.consoleFont)
 	h.mux.HandleFunc("GET /_/status", h.status)
+	h.mux.HandleFunc("GET /_/api/status", h.apiStatus)
 	h.mux.HandleFunc("POST /_/reload", h.requireBearer(h.reload))
 	h.mux.HandleFunc("POST /routes", h.requireBearer(h.addRoute))
 	h.mux.HandleFunc("DELETE /routes/{host}", h.requireBearer(h.deleteRoute))
+	h.mux.HandleFunc("POST /_/api/policy/explain", h.requireBearer(h.explainPolicy))
 	for _, opt := range opts {
 		opt(h)
 	}
 	if h.broker != nil {
 		h.mux.HandleFunc("GET /_/overview", h.overview)
-		h.mux.HandleFunc("GET /_/activity", h.activityPage)
-		h.mux.HandleFunc("GET /_/activity.js", h.activityScript)
 		h.mux.HandleFunc("GET /_/events", h.stream)
+		// The old server-rendered pages moved into the console app.
+		h.mux.Handle("GET /_/activity", http.RedirectHandler("/activity", http.StatusMovedPermanently))
+		h.mux.Handle("GET /_/simulator", http.RedirectHandler("/simulator", http.StatusMovedPermanently))
+		h.mux.HandleFunc("GET /", h.console)
+	} else {
+		h.mux.Handle("GET /{$}", http.RedirectHandler("/_/status", http.StatusSeeOther))
 	}
 	return h
 }
@@ -119,15 +118,15 @@ func loopbackHost(host string) bool {
 // certificate manager into this shape, so admin needs no dependency on the
 // certificate package.
 type CertificateStatus struct {
-	Host        string
-	Mode        string
-	Valid       bool
-	NotAfter    string
-	LastOutcome string
-	LastError   string
-	LastAttempt string
-	NextAttempt string
-	Pending     int
+	Host        string `json:"host"`
+	Mode        string `json:"mode"`
+	Valid       bool   `json:"valid"`
+	NotAfter    string `json:"not_after"`
+	LastOutcome string `json:"last_outcome"`
+	LastError   string `json:"last_error"`
+	LastAttempt string `json:"last_attempt"`
+	NextAttempt string `json:"next_attempt"`
+	Pending     int    `json:"pending"`
 }
 
 type statusView struct {
@@ -142,23 +141,25 @@ type statusView struct {
 }
 
 type routeView struct {
-	Access         string
-	Policy         string
-	Kind           string
-	IsStatic       bool
-	IsTunnel       bool
-	Host           string
-	Target         string
-	HealthPath     string
-	State          string
-	StateClass     string
-	Latency        string
-	LastCheck      string
-	LastTransition string
-	LastError      string
+	Access         string `json:"access"`
+	Policy         string `json:"policy"`
+	Kind           string `json:"kind"`
+	IsStatic       bool   `json:"is_static"`
+	IsTunnel       bool   `json:"is_tunnel"`
+	Host           string `json:"host"`
+	Target         string `json:"target"`
+	HealthPath     string `json:"health_path"`
+	State          string `json:"state"`
+	StateClass     string `json:"state_class"`
+	Latency        string `json:"latency"`
+	LastCheck      string `json:"last_check"`
+	LastTransition string `json:"last_transition"`
+	LastError      string `json:"last_error"`
 }
 
-func (h *Handler) status(w http.ResponseWriter, _ *http.Request) {
+// buildStatusView projects route health and the certificate state; both the
+// HTML debug view and the JSON API render it, so they always agree.
+func (h *Handler) buildStatusView() statusView {
 	statuses := h.manager.RouteStatuses()
 	view := statusView{
 		Active:      "routes",
@@ -227,7 +228,11 @@ func (h *Handler) status(w http.ResponseWriter, _ *http.Request) {
 			LastError:      status.Health.LastError,
 		}
 	}
+	return view
+}
 
+func (h *Handler) status(w http.ResponseWriter, _ *http.Request) {
+	view := h.buildStatusView()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'self'; font-src 'self'; base-uri 'none'; frame-ancestors 'none'")

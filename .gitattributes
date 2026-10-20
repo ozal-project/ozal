@@ -1,2 +1,6 @@
 # Line endings are part of the source: gofmt and the verify gate expect LF on every OS.
 * text=auto eol=lf
+# Built admin console (scripts/build-console.sh): generated, embedded by Go.
+internal/admin/console/** linguist-generated=true -diff
+web/console/package-lock.json linguist-generated=true
+*.ttf binary

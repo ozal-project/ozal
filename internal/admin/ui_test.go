@@ -2,6 +2,7 @@ package admin
 
 import (
 	"encoding/json"
+	"io/fs"
 	"net/http"
 	"strings"
 	"testing"
@@ -43,7 +44,7 @@ func TestOverviewProjectsAccessRulesWithoutConfigSecrets(t *testing.T) {
 			t.Fatalf("overview exposed %q", private)
 		}
 	}
-	for _, path := range []string{"/_/overview", "/_/console.css", "/_/activity.js", "/"} {
+	for _, path := range []string{"/_/overview", "/_/console.css", "/_/api/status", "/activity", "/"} {
 		if got := requestWithHost(handler, "evil.example", http.MethodGet, path, "", "").Code; got != http.StatusMisdirectedRequest {
 			t.Errorf("%s accepted non-loopback host: %d", path, got)
 		}
@@ -52,37 +53,81 @@ func TestOverviewProjectsAccessRulesWithoutConfigSecrets(t *testing.T) {
 
 func TestConsoleHomeAndAssets(t *testing.T) {
 	broker := events.NewBroker()
-	for _, tc := range []struct {
-		name        string
-		h           *Handler
-		destination string
-	}{
-		{"with events", New(&fakeManager{}, broker, WithEvents(broker)), "/_/activity"},
-		{"without events", New(&fakeManager{}, nil), "/_/status"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			rec := request(tc.h, http.MethodGet, "/", "", "")
-			if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != tc.destination {
-				t.Fatalf("home: %d %v", rec.Code, rec.Header())
-			}
-		})
-	}
 	handler := New(&fakeManager{}, broker, WithEvents(broker))
-	for path, mime := range map[string]string{"/_/console.css": "text/css", "/_/activity.js": "text/javascript"} {
+
+	// Every client route gets the app shell with the strict CSP.
+	for _, path := range []string{"/", "/activity", "/routes", "/simulator"} {
 		rec := request(handler, http.MethodGet, path, "", "")
-		if rec.Code != 200 || !strings.HasPrefix(rec.Header().Get("Content-Type"), mime) || rec.Header().Get("X-Content-Type-Options") != "nosniff" {
-			t.Fatalf("asset %s: %d %v", path, rec.Code, rec.Header())
+		csp := rec.Header().Get("Content-Security-Policy")
+		if rec.Code != 200 || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/html") ||
+			!strings.Contains(csp, "script-src 'self'") || strings.Contains(csp, "unsafe") {
+			t.Fatalf("console %s: %d %v", path, rec.Code, rec.Header())
+		}
+		if strings.Contains(rec.Body.String(), "<script>") {
+			t.Fatalf("console %s has an inline script", path)
 		}
 	}
-	for _, path := range []string{"/_/activity", "/_/status"} {
-		rec := request(handler, http.MethodGet, path, "", "")
-		if !strings.Contains(rec.Body.String(), "/_/console.css") || !strings.Contains(rec.Header().Get("Content-Security-Policy"), "style-src 'self'") {
-			t.Fatalf("page asset/CSP: %s", path)
+
+	// Built assets are served with their type; hashed names are immutable.
+	assets, err := fs.Glob(consoleApp, "console/assets/*.js")
+	if err != nil || len(assets) == 0 {
+		t.Fatalf("no built console script embedded: %v", err)
+	}
+	asset := "/" + strings.TrimPrefix(assets[0], "console/")
+	rec := request(handler, http.MethodGet, asset, "", "")
+	if rec.Code != 200 || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/javascript") ||
+		!strings.Contains(rec.Header().Get("Cache-Control"), "immutable") || rec.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("asset %s: %d %v", asset, rec.Code, rec.Header())
+	}
+	if strings.Contains(rec.Body.String(), "localStorage") {
+		t.Fatal("the console must not persist anything in localStorage (the admin token included)")
+	}
+
+	// Unknown paths are 404, and control-plane paths never fall through to the app.
+	for _, path := range []string{"/nope", "/assets/missing.js", "/_/unknown", "/console.go", "/console/index.html"} {
+		if got := request(handler, http.MethodGet, path, "", "").Code; got != http.StatusNotFound {
+			t.Errorf("%s: got %d, want 404", path, got)
 		}
 	}
-	script := request(handler, http.MethodGet, "/_/activity.js", "", "").Body.String()
-	if strings.Contains(script, "innerHTML") {
-		t.Fatal("event content must not be parsed as HTML")
+
+	// Traversal is cleaned by the mux before the console sees it; never 200.
+	if got := request(handler, http.MethodGet, "/../console.go", "", "").Code; got == http.StatusOK {
+		t.Error("path traversal served a file")
+	}
+
+	// The route debug page still works without JavaScript.
+	status := request(handler, http.MethodGet, "/_/status", "", "")
+	if !strings.Contains(status.Body.String(), "/_/console.css") || !strings.Contains(status.Header().Get("Content-Security-Policy"), "style-src 'self'") {
+		t.Fatal("route debug page lost its stylesheet or CSP")
+	}
+
+	// Without an event broker there is no app; home falls back to the debug view.
+	rec = request(New(&fakeManager{}, nil), http.MethodGet, "/", "", "")
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/_/status" {
+		t.Fatalf("home without events: %d %v", rec.Code, rec.Header())
+	}
+}
+
+func TestAPIStatusMatchesDebugViewWithoutSecrets(t *testing.T) {
+	manager := &fakeManager{
+		cfg: config.Config{Admin: config.Admin{Token: "hidden-admin-token"}},
+		statuses: []routemanager.RouteStatus{{Route: config.Route{Host: "app.localhost", Target: "http://localhost:9000",
+			Access: &config.AccessPolicy{AllowedEmails: []string{"private@example.test"}, RequiredGroups: []string{"private-group"}}}}},
+	}
+	rec := request(New(manager, nil), http.MethodGet, "/_/api/status", "", "")
+	if rec.Code != 200 || !strings.HasPrefix(rec.Header().Get("Content-Type"), "application/json") {
+		t.Fatalf("api status: %d %v", rec.Code, rec.Header())
+	}
+	body := rec.Body.String()
+	for _, private := range []string{"hidden-admin-token", "private@example.test", "private-group"} {
+		if strings.Contains(body, private) {
+			t.Fatalf("api status exposed %q", private)
+		}
+	}
+	for _, want := range []string{`"host":"app.localhost"`, `"access":"Protected"`, `"state":"Unchecked"`, `"policy":"1 emails / 0 domains / 1 required groups"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("api status missing %s: %s", want, body)
+		}
 	}
 }
 

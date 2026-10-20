@@ -91,18 +91,21 @@ func TestActivityPageIsLoopbackOnlyAndStrictCSP(t *testing.T) {
 	h := New(&fakeManager{}, broker, WithEvents(broker))
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "http://127.0.0.1:9090/_/activity", nil)
-	h.ServeHTTP(rec, req)
-	if rec.Code != 200 || !strings.Contains(rec.Header().Get("Content-Security-Policy"), "script-src 'self'") {
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "http://127.0.0.1:9090/activity", nil))
+	csp := rec.Header().Get("Content-Security-Policy")
+	if rec.Code != 200 || !strings.Contains(csp, "script-src 'self'") || strings.Contains(csp, "unsafe") {
 		t.Fatalf("activity page: %d %v", rec.Code, rec.Header())
 	}
-	if strings.Contains(rec.Body.String(), "innerHTML") {
-		t.Fatal("page must not use innerHTML")
+
+	// The old server-rendered URL keeps working as a redirect.
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "http://127.0.0.1:9090/_/activity", nil))
+	if rec.Code != http.StatusMovedPermanently || rec.Header().Get("Location") != "/activity" {
+		t.Fatalf("old activity URL: %d %v", rec.Code, rec.Header())
 	}
 
 	rec = httptest.NewRecorder()
-	req = httptest.NewRequest("GET", "http://evil.example/_/events", nil)
-	h.ServeHTTP(rec, req)
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "http://evil.example/_/events", nil))
 	if rec.Code != http.StatusMisdirectedRequest {
 		t.Fatalf("non-loopback host: got %d", rec.Code)
 	}

@@ -42,6 +42,21 @@ else
   echo "  govulncheck not installed (go install golang.org/x/vuln/cmd/govulncheck@latest)"
 fi
 
+# The console is committed as built output. When its toolchain is installed,
+# rebuild it and fail if the embedded copy was stale.
+if [[ -d web/console/node_modules ]]; then
+  echo "[6b] console: type check and rebuild"
+  before="$(find internal/admin/console -type f -exec sha256sum {} + | sort | sha256sum)"
+  scripts/build-console.sh >/dev/null
+  after="$(find internal/admin/console -type f -exec sha256sum {} + | sort | sha256sum)"
+  if [[ "$before" != "$after" ]]; then
+    echo "internal/admin/console was stale: rebuilt it, review and commit the result" >&2
+    exit 1
+  fi
+else
+  echo "  console toolchain not installed (scripts/build-console.sh); embedded build used as is"
+fi
+
 echo "[7/7] git diff --check"
 git diff --check
 

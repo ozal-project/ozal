@@ -12,7 +12,6 @@ import (
 var consoleAssets embed.FS
 
 var dashboardTemplate = template.Must(template.ParseFS(consoleAssets, "ui/status.html", "ui/nav.html"))
-var activityTemplate = template.Must(template.ParseFS(consoleAssets, "ui/activity.html", "ui/nav.html"))
 
 func (h *Handler) consoleCSS(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/css; charset=utf-8")

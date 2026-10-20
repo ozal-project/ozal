@@ -1,0 +1,12 @@
+<script lang="ts">
+  // Two jacks joined by a patch cord: the brand mark.
+  let { size = 32, class: className = "" }: { size?: number; class?: string } = $props();
+</script>
+
+<svg width={size} height={size} viewBox="0 0 32 32" class={className} aria-hidden="true">
+  <rect x="0.5" y="0.5" width="31" height="31" rx="8" fill="oklch(0.22 0.012 75)" stroke="oklch(0.34 0.02 75)" />
+  <path d="M9 22 C 9 8, 23 24, 23 10" class="cord" stroke-width="2.4" />
+  <circle cx="9" cy="23" r="3.6" fill="oklch(0.15 0.006 75)" stroke="var(--primary)" stroke-width="1.6" />
+  <circle cx="23" cy="9" r="3.6" fill="oklch(0.15 0.006 75)" stroke="var(--primary)" stroke-width="1.6" />
+  <circle cx="23" cy="9" r="1.3" fill="var(--success)" />
+</svg>

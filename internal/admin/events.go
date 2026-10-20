@@ -3,7 +3,6 @@ package admin
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
@@ -112,24 +111,4 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		}
 	}
-}
-
-func (h *Handler) activityPage(w http.ResponseWriter, _ *http.Request) {
-	hdr := w.Header()
-	hdr.Set("Content-Type", "text/html; charset=utf-8")
-	hdr.Set("Cache-Control", "no-store")
-	hdr.Set("Content-Security-Policy", "default-src 'none'; style-src 'self'; font-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'")
-	hdr.Set("X-Content-Type-Options", "nosniff")
-	if err := activityTemplate.ExecuteTemplate(w, "activity.html", statusView{Active: "activity", HasActivity: true}); err != nil {
-		log.Printf("render activity: %v", err)
-	}
-}
-
-func (h *Handler) activityScript(w http.ResponseWriter, _ *http.Request) {
-	hdr := w.Header()
-	hdr.Set("Content-Type", "text/javascript; charset=utf-8")
-	hdr.Set("Cache-Control", "no-store")
-	hdr.Set("X-Content-Type-Options", "nosniff")
-	asset, _ := consoleAssets.ReadFile("ui/activity.js")
-	_, _ = w.Write(asset)
 }
