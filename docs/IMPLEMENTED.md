@@ -6,6 +6,17 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## Go toolchain 1.27.3 (GO-2026-6809) — 2026-10-21 (committed with this change)
+
+`govulncheck` in CI turned red on a docs-only commit: `GO-2026-6809`
+(`crypto/x509` did not distrust compromised intermediates) is fixed in
+go1.27.3 and reachable here through `originauth.Decide`, which verifies the
+proxy's client certificate. `toolchain go1.27.3` in `go.mod`; `go 1.26.0`
+unchanged. `scripts/verify.sh` green locally; `govulncheck` now reports
+0 affecting vulnerabilities (one unreachable, unfixed `x/crypto` advisory,
+`GO-2026-5932`, is listed but not called). The VPS binary was built with
+go1.27.2 and needs a rebuild to carry the fix.
+
 ## PAGES-006 — deployments in production — 2026-10-21 (committed with this change)
 
 The VPS edge serves `sigea-web` and `switchboard-site` as Pages deployments
