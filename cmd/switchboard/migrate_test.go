@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -45,5 +46,25 @@ func TestRunMigrateStatusOnFreshDatabaseIsPending(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "001_create_sessions\tpending") {
 		t.Fatalf("status output = %q, want 001_create_sessions pending", out.String())
+	}
+}
+
+// The flag parser stops at the first positional argument, so before this
+// check `migrate up -db X` silently migrated the default database.
+func TestMigrateHonoursDBAfterTheActionWord(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "state.db")
+	var out bytes.Buffer
+	if err := runMigrate(context.Background(), []string{"up", "-db", dbPath}, &out); err != nil {
+		t.Fatalf("migrate up: %v", err)
+	}
+	if _, err := os.Stat(dbPath); err != nil {
+		t.Fatalf("-db after the action was ignored: %v", err)
+	}
+	if err := runMigrate(context.Background(), []string{"status", "-db", dbPath}, &out); err != nil {
+		t.Fatalf("migrate status: %v", err)
+	}
+	if err := runMigrate(context.Background(), []string{"sideways", "-db", dbPath}, &out); err == nil {
+		t.Fatal("unknown action accepted")
 	}
 }

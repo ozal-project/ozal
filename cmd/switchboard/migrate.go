@@ -21,8 +21,23 @@ func runMigrate(ctx context.Context, args []string, out io.Writer) error {
 	fs.SetOutput(out)
 	dbPath := fs.String("db", defaultDBPath, "path to the SQLite state database")
 	statusOnly := fs.Bool("status", false, "report applied and pending migrations without applying them")
+	// The action words of scripts/migrate.sh are accepted here too. Any
+	// other positional argument is an error: the flag parser stops at the
+	// first one, so `migrate up -db X` used to ignore -db and migrate the
+	// default database instead of X.
+	if len(args) > 0 {
+		switch args[0] {
+		case "up":
+			args = args[1:]
+		case "status":
+			args = append([]string{"-status"}, args[1:]...)
+		}
+	}
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if fs.NArg() != 0 {
+		return fmt.Errorf("unexpected argument %q (usage: switchboard migrate [up|status] [-db PATH])", fs.Arg(0))
 	}
 
 	migrations, err := sqlite.LoadMigrations(sqlite.Migrations())
