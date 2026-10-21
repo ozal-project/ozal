@@ -3,6 +3,9 @@ import Base from "../layouts/Base.astro";
 import Logo from "../components/Logo.astro";
 
 const repo = "https://github.com/octaviosantacruz/switchboard";
+// The repository is private until the first alpha tag; flip this when it opens
+// so no public link ends in a GitHub 404.
+const sourcePublic = false;
 
 // Hero patch panel: a grid of jacks, a few patched cords and their lamps.
 const cols = 7, rows = 4, gx = 64, gy = 74, ox = 40, oy = 46;
@@ -59,7 +62,7 @@ const roadmap = [
           <a href="#roadmap" class="hover:text-ink">Roadmap</a>
           <a href="#start" class="hover:text-ink">Get started</a>
         </nav>
-        <a href={repo} class="btn btn-ghost !px-3 !py-1.5">GitHub</a>
+        {sourcePublic && <a href={repo} class="btn btn-ghost !px-3 !py-1.5">GitHub</a>}
       </div>
     </header>
 
@@ -80,9 +83,9 @@ const roadmap = [
           </p>
           <div class="mt-8 flex flex-wrap gap-3">
             <a href="#start" class="btn btn-primary">Get started</a>
-            <a href={repo} class="btn btn-ghost">View the source</a>
+            {sourcePublic ? <a href={repo} class="btn btn-ghost">View the source</a> : <a href="#roadmap" class="btn btn-ghost">See the roadmap</a>}
           </div>
-          <p class="text-muted mt-6 font-mono text-xs">MIT licensed · one binary · one JSON config · no external database</p>
+          <p class="text-muted mt-6 font-mono text-xs">{!sourcePublic && "source opens with the first alpha · "}MIT licensed · one binary · one JSON config · no external database</p>
         </div>
 
         <div class="panel min-w-0 p-5" aria-hidden="true">
@@ -225,6 +228,7 @@ scope:     authorization only; OIDC, session and transport are not evaluated</pr
     &#123; "host": "docs.localhost:8888", "target": "http://localhost:4321" &#125;
   ]
 &#125;</pre>
+            {!sourcePublic && <p class="text-muted text-sm">The repository opens with the first alpha tag; until then these steps show what running it looks like.</p>}
             <pre class="code"><span class="text-muted">$</span> git clone {repo}
 <span class="text-muted">$</span> cd switchboard && go run ./cmd/switchboard -config config.json
 <span class="text-muted"># open http://app.localhost:8888 · console on http://127.0.0.1:9090</span></pre>
@@ -236,8 +240,8 @@ scope:     authorization only; OIDC, session and transport are not evaluated</pr
     <footer class="border-line/70 border-t">
       <div class="text-muted mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-8 text-sm">
         <span class="flex items-center gap-2.5"><Logo size={22} /> <span class="font-mono text-xs">switchboard · MIT</span></span>
-        <span>Built in the open by <a href="https://octaviosantacruz.com" class="text-ink hover:text-amber">Octavio Santacruz</a> — a year-long learning project, Oct 2026 – Sep 2027.</span>
-        <a href={repo} class="hover:text-ink font-mono text-xs">github.com/octaviosantacruz/switchboard</a>
+        <span>Built in public by <a href="https://octaviosantacruz.com" class="text-ink hover:text-amber">Octavio Santacruz</a> — a year-long learning project, Oct 2026 – Sep 2027.</span>
+        {sourcePublic ? <a href={repo} class="hover:text-ink font-mono text-xs">github.com/octaviosantacruz/switchboard</a> : <span class="font-mono text-xs">source: opens with the first alpha</span>}
       </div>
     </footer>
   </div>
