@@ -85,4 +85,8 @@ func TestMaxAuthAgeValidation(t *testing.T) {
 	if _, err := Validate(oidc); err == nil || !strings.Contains(err.Error(), "requires auth.passkeys") {
 		t.Fatalf("OIDC + max_auth_age: %v", err)
 	}
+	oidc.Routes[0].Access = &AccessPolicy{RequireDeviceBound: true}
+	if _, err := Validate(oidc); err == nil || !strings.Contains(err.Error(), "require_device_bound requires auth.passkeys") {
+		t.Fatalf("OIDC + require_device_bound: %v", err)
+	}
 }

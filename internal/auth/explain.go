@@ -2,6 +2,7 @@ package auth
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/octaviosantacruz/switchboard/internal/config"
 )
@@ -40,8 +41,13 @@ func Explain(r config.Route, p *Principal) Explanation {
 	decision := Authorize(*p, r.Policy())
 	// The simulation has no clock or session, so step-up is stated rather
 	// than evaluated: an allowed visitor may still be asked to log in again.
-	if policy := r.Policy(); decision.Allowed && policy.MaxAuthAgeMinutes > 0 {
-		decision.Reason = fmt.Sprintf("allowed; asks for a fresh login when the last one is older than %d min (max_auth_age_minutes)", policy.MaxAuthAgeMinutes)
+	if policy := r.Policy(); decision.Allowed {
+		if policy.RequireDeviceBound && !p.DeviceBound {
+			return Explanation{Protected: true, Decision: Fresh(*p, policy, time.Time{})}
+		}
+		if policy.MaxAuthAgeMinutes > 0 {
+			decision.Reason = fmt.Sprintf("allowed; asks for a fresh login when the last one is older than %d min (max_auth_age_minutes)", policy.MaxAuthAgeMinutes)
+		}
 	}
 	return Explanation{Protected: true, Decision: decision}
 }

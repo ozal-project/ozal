@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -487,5 +488,34 @@ func TestRedirectToLoginMarksStepUp(t *testing.T) {
 	}
 	if got := redirect(false); strings.Contains(got, "reauth") {
 		t.Fatalf("anonymous redirect = %q", got)
+	}
+}
+
+// The session records whether the passkey behind it can be synced, from the
+// authenticator's backup-eligible flag, and a device-bound step-up names
+// itself in the login redirect.
+func TestSessionRecordsDeviceBoundPasskeys(t *testing.T) {
+	h := newHarness(t)
+	for _, synced := range []bool{false, true} {
+		device := newAuthenticator(t)
+		device.backupEligible = synced
+		b := h.browser()
+		if code := b.enrol(t, device, h.invite(t, fmt.Sprintf("user-%v@example.com", synced), false)); code != http.StatusOK {
+			t.Fatalf("enrol = %d", code)
+		}
+		if p, ok := b.signedIn(); !ok || p.DeviceBound == synced {
+			t.Fatalf("synced %v: after enrolment DeviceBound = %v", synced, p.DeviceBound)
+		}
+		if code, _ := b.login(t, device, "", loginOrigin); code != http.StatusOK {
+			t.Fatalf("login = %d", code)
+		}
+		if p, ok := b.signedIn(); !ok || p.DeviceBound == synced {
+			t.Fatalf("synced %v: after login DeviceBound = %v", synced, p.DeviceBound)
+		}
+	}
+	rec := httptest.NewRecorder()
+	h.gate.RedirectToStepUp(rec, httptest.NewRequest(http.MethodGet, "https://"+appHost+"/admin", nil), auth.CodeDeviceBoundRequired)
+	if loc := rec.Header().Get("Location"); !strings.HasSuffix(loc, "&reauth=device") {
+		t.Fatalf("Location = %q", loc)
 	}
 }

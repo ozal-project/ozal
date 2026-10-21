@@ -286,12 +286,12 @@ func TestSessionsKeepAuthTimeAndMethod(t *testing.T) {
 	store := migratedSessions(t, t.TempDir()+"/state.db", time.Hour)
 	login := time.Unix(1800000000, 0)
 	store.now = func() time.Time { return login }
-	id, err := store.Create(ctx, auth.Principal{Subject: "s", AuthTime: login, Method: auth.MethodPasskey})
+	id, err := store.Create(ctx, auth.Principal{Subject: "s", AuthTime: login, Method: auth.MethodPasskey, DeviceBound: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	session, ok := store.Get(ctx, id)
-	if !ok || !session.Principal.AuthTime.Equal(login) || session.Principal.Method != auth.MethodPasskey {
+	if !ok || !session.Principal.AuthTime.Equal(login) || session.Principal.Method != auth.MethodPasskey || !session.Principal.DeviceBound {
 		t.Fatalf("session = %+v, %v", session.Principal, ok)
 	}
 	id, _ = store.Create(ctx, auth.Principal{Subject: "no-time"})

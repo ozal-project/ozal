@@ -132,9 +132,12 @@ function setupLogin(button) {
   const returnTo = params.get("return_to") || "";
   if (returnTo) rememberReturn(returnTo);
   // A step-up: the visitor is signed in, but the site wants a recent proof.
-  if (params.get("reauth") === "1") {
+  const reauth = params.get("reauth");
+  if (reauth === "1" || reauth === "device") {
     document.getElementById("title").textContent = "Confirm it's you";
-    document.getElementById("intro").textContent = "This site asks for your passkey again because your last sign-in was a while ago.";
+    document.getElementById("intro").textContent = reauth === "device"
+      ? "This site needs a passkey that stays on one device, such as a security key. A passkey synced through iCloud or Google is not enough here."
+      : "This site asks for your passkey again because your last sign-in was a while ago.";
     document.getElementById("first-time").hidden = true;
     document.title = "Confirm it's you · Switchboard";
   }

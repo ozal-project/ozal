@@ -20,6 +20,7 @@ const (
 	CodeDomainNotAllowed       DecisionCode = "domain_not_allowed"
 	CodeMissingRequiredGroup   DecisionCode = "missing_required_group"
 	CodeReauthRequired         DecisionCode = "reauthentication_required"
+	CodeDeviceBoundRequired    DecisionCode = "device_bound_required"
 	CodeAllowed                DecisionCode = "allowed"
 )
 
@@ -100,18 +101,21 @@ func Authorize(p Principal, policy config.AccessPolicy) Decision {
 }
 
 // Fresh is the step-up check, separate from Authorize because it depends on
-// the clock: an allowed principal whose last login is older than the route's
-// max_auth_age must log in again. It is asked only after Authorize allowed,
-// so nobody is asked for a passkey they would be refused with anyway. A
-// principal without an AuthTime has no proof of when it logged in and is
-// never fresh.
+// the clock and on how the session was established: an allowed principal
+// whose login is older than the route's max_auth_age, or whose passkey can
+// be synced on a route that requires a device-bound one, must log in again.
+// It is asked only after Authorize allowed, so nobody is asked for a passkey
+// they would be refused with anyway. A principal without an AuthTime has no
+// proof of when it logged in and is never fresh.
 func Fresh(p Principal, policy config.AccessPolicy, now time.Time) Decision {
-	if policy.MaxAuthAgeMinutes <= 0 {
-		return Decision{Allowed: true, Code: CodeAllowed, Reason: "allowed"}
+	if policy.RequireDeviceBound && !p.DeviceBound {
+		return Decision{Code: CodeDeviceBoundRequired, Reason: "this route needs a passkey that stays on one device, such as a security key"}
 	}
-	maxAge := time.Duration(policy.MaxAuthAgeMinutes) * time.Minute
-	if p.AuthTime.IsZero() || now.Sub(p.AuthTime) > maxAge {
-		return Decision{Code: CodeReauthRequired, Reason: "this route needs a login within the last " + maxAge.String()}
+	if policy.MaxAuthAgeMinutes > 0 {
+		maxAge := time.Duration(policy.MaxAuthAgeMinutes) * time.Minute
+		if p.AuthTime.IsZero() || now.Sub(p.AuthTime) > maxAge {
+			return Decision{Code: CodeReauthRequired, Reason: "this route needs a login within the last " + maxAge.String()}
+		}
 	}
 	return Decision{Allowed: true, Code: CodeAllowed, Reason: "allowed"}
 }

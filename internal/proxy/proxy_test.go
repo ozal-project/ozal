@@ -1149,3 +1149,34 @@ func TestMaxAuthAgeAsksForAFreshLogin(t *testing.T) {
 		})
 	}
 }
+
+type stepUpGate struct {
+	fakeGate
+	code auth.DecisionCode
+}
+
+func (g *stepUpGate) RedirectToStepUp(w http.ResponseWriter, r *http.Request, code auth.DecisionCode) {
+	g.code = code
+	http.Redirect(w, r, "/_/auth/login?reauth=device", http.StatusFound)
+}
+
+// A synced passkey on a device-bound route goes to a login that can say why;
+// a device-bound one passes.
+func TestRequireDeviceBoundUsesTheStepUpRedirect(t *testing.T) {
+	reached := false
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { reached = true }))
+	defer upstream.Close()
+	for _, deviceBound := range []bool{false, true} {
+		reached = false
+		gate := &stepUpGate{fakeGate: fakeGate{authenticated: true, principal: auth.Principal{Subject: "ana", AuthTime: time.Now(), DeviceBound: deviceBound}}}
+		handler, err := New([]config.Route{{Host: "admin.localhost", Target: upstream.URL, Access: &config.AccessPolicy{RequireDeviceBound: true}}}, nil, gate)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://admin.localhost/", nil))
+		if deviceBound != reached || (!deviceBound && (rec.Code != http.StatusFound || gate.code != auth.CodeDeviceBoundRequired)) {
+			t.Fatalf("device bound %v: status %d, code %q, reached %v", deviceBound, rec.Code, gate.code, reached)
+		}
+	}
+}

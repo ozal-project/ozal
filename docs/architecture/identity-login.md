@@ -165,8 +165,12 @@ A route's `access` gains two optional fields:
   proxy asks only after the policy allowed, and only with `auth.passkeys`.
   The admin console is a separate loopback listener with its own token and
   does not use it yet.
-- `require_device_bound`: only a passkey whose authenticator reports it
-  cannot be synced (a YubiKey, a device-bound platform key) satisfies it.
+- `require_device_bound` (built 2026-10-21): only a session whose passkey's
+  authenticator did not set the backup-eligible flag (a YubiKey, a
+  device-bound platform key) satisfies it; the flag is read at enrolment and
+  at every login and stored with the session (migration 007). A synced
+  passkey is sent to the login page with `reauth=device`, which says which
+  passkey is needed.
 - A refusal says *why* (`policy explain` already exists) without revealing
   who else is allowed.
 

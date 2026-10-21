@@ -163,6 +163,22 @@ func (g *Gate) RedirectToLogin(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, target, http.StatusFound)
 }
 
+// RedirectToStepUp is RedirectToLogin for a visitor the route wants to see
+// log in again; a device-bound requirement is named so the page can ask for
+// the right passkey.
+func (g *Gate) RedirectToStepUp(w http.ResponseWriter, r *http.Request, code auth.DecisionCode) {
+	if code != auth.CodeDeviceBoundRequired {
+		g.RedirectToLogin(w, r)
+		return
+	}
+	scheme := "http"
+	if r.TLS != nil || g.secure {
+		scheme = "https"
+	}
+	returnTo := scheme + "://" + r.Host + r.URL.RequestURI()
+	http.Redirect(w, r, g.origin+"/_/auth/login?return_to="+url.QueryEscape(returnTo)+"&reauth=device", http.StatusFound)
+}
+
 // ServeAuthEndpoint handles the passkey pages and API under /_/auth/. It
 // reports false for any other path, which then belongs to the route.
 func (g *Gate) ServeAuthEndpoint(w http.ResponseWriter, r *http.Request) bool {
@@ -334,7 +350,7 @@ func (g *Gate) loginFinish(w http.ResponseWriter, r *http.Request) (any, *apiErr
 		g.emit(r, events.Event{Type: events.LoginFailed, Actor: subject, Code: "passkey_record_failed", Error: err.Error()})
 		return nil, &errLoginFailed
 	}
-	if apiErr := g.startSession(w, r, found.user); apiErr != nil {
+	if apiErr := g.startSession(w, r, found.user, !credential.Flags.BackupEligible); apiErr != nil {
 		return nil, apiErr
 	}
 	g.emit(r, events.Event{Type: events.LoginSucceeded, Actor: subject, Code: "passkey"})
@@ -412,7 +428,7 @@ func (g *Gate) enrolFinish(w http.ResponseWriter, r *http.Request) (any, *apiErr
 	// Alerted when notifications are configured: a passkey nobody expected
 	// is the sign that a link or a session was stolen.
 	g.emit(r, events.Event{Type: events.PasskeyRegistered, Actor: user.Subject(), Code: kind})
-	if apiErr := g.startSession(w, r, user); apiErr != nil {
+	if apiErr := g.startSession(w, r, user, !credential.Flags.BackupEligible); apiErr != nil {
 		return nil, apiErr
 	}
 	return g.finished(pending.returnTo), nil
@@ -422,7 +438,7 @@ func (g *Gate) enrolFinish(w http.ResponseWriter, r *http.Request) (any, *apiErr
 
 // startSession issues a new session ID (never reusing one that existed
 // before the login) and ends the session the browser had, if any.
-func (g *Gate) startSession(w http.ResponseWriter, r *http.Request, user User) *apiError {
+func (g *Gate) startSession(w http.ResponseWriter, r *http.Request, user User, deviceBound bool) *apiError {
 	if previous, err := r.Cookie(auth.SessionCookieName); err == nil {
 		g.sessions.Delete(r.Context(), previous.Value)
 	}
@@ -434,6 +450,7 @@ func (g *Gate) startSession(w http.ResponseWriter, r *http.Request, user User) *
 		Groups:        user.Groups,
 		AuthTime:      g.now(),
 		Method:        auth.MethodPasskey,
+		DeviceBound:   deviceBound,
 	})
 	if errors.Is(err, auth.ErrStoreFull) {
 		g.emit(r, events.Event{Type: events.LoginFailed, Actor: user.Subject(), Code: "session_store_full"})

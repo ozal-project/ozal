@@ -13,8 +13,8 @@ import (
 	"github.com/octaviosantacruz/switchboard/internal/auth"
 )
 
-// Sessions is the persistent auth.SessionBackend over migrations 001, 005
-// and 006. The
+// Sessions is the persistent auth.SessionBackend over migrations 001 and
+// 005–007. The
 // cookie carries the raw ID; only its SHA-256 is stored, so a leaked
 // database file cannot be replayed as session cookies. Times are stored as
 // Unix seconds, the same shape the migration defines.
@@ -84,10 +84,10 @@ func (s *Sessions) Create(ctx context.Context, principal auth.Principal) (string
 		return "", auth.ErrStoreFull
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO sessions (id_hash, subject, email, email_verified, groups_json, created_at, expires_at, last_seen_at, auth_time, amr)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO sessions (id_hash, subject, email, email_verified, groups_json, created_at, expires_at, last_seen_at, auth_time, amr, device_bound)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		hash[:], principal.Subject, principal.Email, principal.EmailVerified, groups,
-		now.Unix(), now.Add(s.lifetime.Absolute).Unix(), now.Unix(), storedAuthTime(principal.AuthTime), principal.Method,
+		now.Unix(), now.Add(s.lifetime.Absolute).Unix(), now.Unix(), storedAuthTime(principal.AuthTime), principal.Method, principal.DeviceBound,
 	); err != nil {
 		return "", fmt.Errorf("insert session: %w", err)
 	}
@@ -113,11 +113,12 @@ func (s *Sessions) Get(ctx context.Context, id string) (auth.Session, bool) {
 		seenUnix    int64
 		authUnix    int64
 		method      string
+		deviceBound int64
 	)
 	err := s.db.QueryRowContext(ctx,
-		`SELECT subject, email, email_verified, groups_json, expires_at, created_at, last_seen_at, auth_time, amr FROM sessions WHERE id_hash = ?`,
+		`SELECT subject, email, email_verified, groups_json, expires_at, created_at, last_seen_at, auth_time, amr, device_bound FROM sessions WHERE id_hash = ?`,
 		hash[:],
-	).Scan(&subject, &email, &verified, &groupsJSON, &expiresUnix, &createdUnix, &seenUnix, &authUnix, &method)
+	).Scan(&subject, &email, &verified, &groupsJSON, &expiresUnix, &createdUnix, &seenUnix, &authUnix, &method, &deviceBound)
 	if errors.Is(err, sql.ErrNoRows) {
 		return auth.Session{}, false
 	}
@@ -157,6 +158,7 @@ func (s *Sessions) Get(ctx context.Context, id string) (auth.Session, bool) {
 			Groups:        groups,
 			AuthTime:      timeOrZero(authUnix),
 			Method:        method,
+			DeviceBound:   deviceBound == 1,
 		},
 		ExpiresAt: s.expiresAt(created, lastSeen, issued),
 	}, true

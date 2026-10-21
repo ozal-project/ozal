@@ -153,6 +153,12 @@ type AuthGate interface {
 	RedirectToLogin(w http.ResponseWriter, r *http.Request)
 }
 
+// StepUpGate is implemented by a gate whose login page can say why an
+// already signed-in visitor must log in again (code is auth.Fresh's).
+type StepUpGate interface {
+	RedirectToStepUp(w http.ResponseWriter, r *http.Request, code auth.DecisionCode)
+}
+
 // New builds a host-routed reverse proxy handler from the given routes.
 // It fails fast on invalid or duplicate hosts and targets. checker and gate may be nil.
 func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Option) (http.Handler, error) {
@@ -243,8 +249,9 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 				http.Error(w, "access denied", http.StatusForbidden)
 				return
 			}
-			// Step-up: allowed, but the login is too old for this route.
-			// The new login replaces the session, which rotates its ID.
+			// Step-up: allowed, but the login is too old or used a synced
+			// passkey on a route that needs a device-bound one. The new login
+			// replaces the session, which rotates its ID.
 			if fresh := auth.Fresh(principal, rt.access, time.Now()); !fresh.Allowed {
 				cfg.sink.Emit(events.Event{
 					Time:       time.Now(),
@@ -255,7 +262,11 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 					Reason:     fresh.Reason,
 					RemoteAddr: req.RemoteAddr,
 				})
-				gate.RedirectToLogin(w, req)
+				if stepUp, ok := gate.(StepUpGate); ok {
+					stepUp.RedirectToStepUp(w, req, fresh.Code)
+				} else {
+					gate.RedirectToLogin(w, req)
+				}
 				return
 			}
 			// The identity dimension of the ratelimit stage: it runs here

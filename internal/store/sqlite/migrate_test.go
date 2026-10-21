@@ -355,9 +355,9 @@ func TestSessionMigrationsBackfillExistingRows(t *testing.T) {
 	if _, err := Migrate(ctx, db, all); err != nil {
 		t.Fatalf("Migrate 005: %v", err)
 	}
-	var seen, authTime int64
+	var seen, authTime, deviceBound int64
 	var amr string
-	if err := db.QueryRowContext(ctx, `SELECT last_seen_at, auth_time, amr FROM sessions WHERE id_hash = x'01'`).Scan(&seen, &authTime, &amr); err != nil || seen != 1800000000 || authTime != 1800000000 || amr != "" {
-		t.Fatalf("last_seen_at, auth_time, amr = %d, %d, %q, %v; want the creation time and no method", seen, authTime, amr, err)
+	if err := db.QueryRowContext(ctx, `SELECT last_seen_at, auth_time, amr, device_bound FROM sessions WHERE id_hash = x'01'`).Scan(&seen, &authTime, &amr, &deviceBound); err != nil || seen != 1800000000 || authTime != 1800000000 || amr != "" || deviceBound != 0 {
+		t.Fatalf("last_seen_at, auth_time, amr, device_bound = %d, %d, %q, %d, %v; want the creation time, no method, not device bound", seen, authTime, amr, deviceBound, err)
 	}
 }

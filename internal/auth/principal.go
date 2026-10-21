@@ -16,6 +16,9 @@ type Principal struct {
 	// never sent upstream.
 	AuthTime time.Time
 	Method   string
+	// DeviceBound reports that the login used a passkey that cannot be
+	// synced to other devices.
+	DeviceBound bool
 }
 
 // Login methods recorded in a session (its amr).

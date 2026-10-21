@@ -206,3 +206,18 @@ func TestFreshStepUp(t *testing.T) {
 		})
 	}
 }
+
+func TestFreshDeviceBound(t *testing.T) {
+	now := time.Now()
+	policy := config.AccessPolicy{RequireDeviceBound: true}
+	if d := Fresh(Principal{AuthTime: now}, policy, now); d.Allowed || d.Code != CodeDeviceBoundRequired {
+		t.Fatalf("synced passkey = %+v", d)
+	}
+	if d := Fresh(Principal{AuthTime: now, DeviceBound: true}, policy, now); !d.Allowed {
+		t.Fatalf("device-bound passkey = %+v", d)
+	}
+	both := config.AccessPolicy{RequireDeviceBound: true, MaxAuthAgeMinutes: 15}
+	if d := Fresh(Principal{AuthTime: now.Add(-time.Hour), DeviceBound: true}, both, now); d.Code != CodeReauthRequired {
+		t.Fatalf("device-bound but stale = %+v", d)
+	}
+}
