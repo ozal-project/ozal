@@ -19,6 +19,7 @@ import (
 	"github.com/octaviosantacruz/switchboard/internal/config"
 	"github.com/octaviosantacruz/switchboard/internal/events"
 	"github.com/octaviosantacruz/switchboard/internal/healthcheck"
+	"github.com/octaviosantacruz/switchboard/internal/passkey"
 	"github.com/octaviosantacruz/switchboard/internal/pipeline"
 	"github.com/octaviosantacruz/switchboard/internal/proxy"
 	"github.com/octaviosantacruz/switchboard/internal/ratelimit"
@@ -65,6 +66,12 @@ func WithConnectorRoutes(routes ConnectorRoutes) Option {
 	return func(m *Manager) { m.connectorRoutes = routes }
 }
 
+// WithPasskeyDirectory supplies the user and passkey store that
+// auth.passkeys needs (ID-003). Without it a config with passkeys fails.
+func WithPasskeyDirectory(dir passkey.Directory) Option {
+	return func(m *Manager) { m.passkeys = dir }
+}
+
 // WithSites serves "site" routes from the deployment store (PAGES-002).
 func WithSites(sites proxy.SiteDirs) Option {
 	return func(m *Manager) { m.sites = sites }
@@ -85,7 +92,7 @@ type Snapshot struct {
 	handler       http.Handler
 	checker       *healthcheck.Checker
 	healthCancel  context.CancelFunc
-	gate          *auth.Gate
+	gate          loginGate
 	gateCancel    context.CancelFunc
 	sessions      auth.SessionBackend
 	sessionCancel context.CancelFunc
@@ -108,7 +115,7 @@ type Manager struct {
 	healthCheckInterval time.Duration
 	reloadMu            sync.Mutex
 	current             atomic.Pointer[Snapshot]
-	gate                *auth.Gate
+	gate                loginGate
 	gateCancel          context.CancelFunc
 	gateAuth            config.Auth
 	gateHosts           []string
@@ -122,6 +129,15 @@ type Manager struct {
 	sink                events.Sink
 	connectorRoutes     ConnectorRoutes
 	sites               proxy.SiteDirs
+	passkeys            passkey.Directory
+}
+
+// loginGate is what a protected snapshot needs from a login method: the
+// proxy's AuthGate plus the /_/auth/ endpoints. The OIDC gate and the
+// passkey gate both provide it.
+type loginGate interface {
+	proxy.AuthGate
+	ServeAuthEndpoint(w http.ResponseWriter, r *http.Request) bool
 }
 
 // New builds and installs the initial snapshot from configPath.
@@ -364,7 +380,7 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 	}()
 
 	var gate proxy.AuthGate
-	var oidcGate *auth.Gate
+	var builtGate loginGate
 	var sessions auth.SessionBackend
 	protectedHosts := protectedRouteHosts(cfg.Routes)
 	if len(protectedHosts) > 0 {
@@ -378,8 +394,17 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 			go auth.SweepLoop(storeCtx, sessions, auth.SessionCleanupInterval)
 			sessionCancel = cancelStore
 		}
-		if m.gate != nil && m.gateAuth == cfg.Auth && slices.Equal(m.gateHosts, protectedHosts) {
-			oidcGate = m.gate
+		if m.gate != nil && sameAuth(m.gateAuth, cfg.Auth) && slices.Equal(m.gateHosts, protectedHosts) {
+			builtGate = m.gate
+		} else if cfg.Auth.Passkeys != nil {
+			if m.passkeys == nil {
+				return nil, fmt.Errorf("auth.passkeys requires the state database: start Switchboard with -db")
+			}
+			passkeyGate, err := passkey.NewGate(cfg.Auth, protectedHosts, m.passkeys, sessions, m.sink)
+			if err != nil {
+				return nil, fmt.Errorf("build passkey gate: %w", err)
+			}
+			builtGate = passkeyGate
 		} else {
 			// Resolve the secret only for the consumer; cfg keeps the raw
 			// reference so control-plane writes persist it unchanged.
@@ -389,14 +414,15 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 				return nil, fmt.Errorf("resolve auth.client_secret: %w", err)
 			}
 			gateCtx, cancelGate := context.WithCancel(m.ctx)
-			oidcGate, err = auth.NewGate(gateCtx, authConfig, protectedHosts, sessions, m.sink)
+			oidcGate, err := auth.NewGate(gateCtx, authConfig, protectedHosts, sessions, m.sink)
 			if err != nil {
 				cancelGate()
 				return nil, fmt.Errorf("build auth gate: %w", err)
 			}
 			gateCancel = cancelGate
+			builtGate = oidcGate
 		}
-		gate = oidcGate
+		gate = builtGate
 	}
 
 	checker := healthcheck.New()
@@ -446,7 +472,7 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 	if err != nil {
 		return nil, fmt.Errorf("build proxy: %w", err)
 	}
-	handler := withAuthEndpoints(proxyHandler, oidcGate, authEndpointHosts(*cfg, protectedHosts))
+	handler := withAuthEndpoints(proxyHandler, builtGate, authEndpointHosts(*cfg, protectedHosts))
 	if limiters != nil {
 		// Outside withAuthEndpoints so /_/auth/* is limited too. Trust runs
 		// first for the client IP; the copy inside the proxy is a no-op.
@@ -465,7 +491,7 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 		handler:       handler,
 		checker:       checker,
 		healthCancel:  healthCancel,
-		gate:          oidcGate,
+		gate:          builtGate,
 		gateCancel:    gateCancel,
 		sessions:      sessions,
 		sessionCancel: sessionCancel,
@@ -549,39 +575,36 @@ func authEndpointHosts(cfg config.Config, protectedHosts []string) map[string]bo
 	for _, host := range protectedHosts {
 		hosts[host] = true
 	}
-	if redirect, err := url.Parse(cfg.Auth.RedirectURL); err == nil && redirect.Host != "" {
-		if host, err := config.NormalizeHost(redirect.Host); err == nil {
+	loginURL := cfg.Auth.RedirectURL
+	if cfg.Auth.Passkeys != nil {
+		loginURL = cfg.Auth.Passkeys.LoginURL
+	}
+	if login, err := url.Parse(loginURL); err == nil && login.Host != "" {
+		if host, err := config.NormalizeHost(login.Host); err == nil {
 			hosts[host] = true
 		}
 	}
 	return hosts
 }
 
-func withAuthEndpoints(next http.Handler, gate *auth.Gate, hosts map[string]bool) http.Handler {
+// sameAuth compares auth settings by value: Passkeys is a pointer, and a
+// reload always produces a new one.
+func sameAuth(a, b config.Auth) bool {
+	pa, pb := a.Passkeys, b.Passkeys
+	a.Passkeys, b.Passkeys = nil, nil
+	if a != b || (pa == nil) != (pb == nil) {
+		return false
+	}
+	return pa == nil || *pa == *pb
+}
+
+func withAuthEndpoints(next http.Handler, gate loginGate, hosts map[string]bool) http.Handler {
 	if gate == nil {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		host, err := config.NormalizeHost(r.Host)
-		if err != nil || !hosts[host] {
-			next.ServeHTTP(w, r)
-			return
-		}
-		switch r.URL.Path {
-		case "/_/auth/login":
-			gate.HandleLogin(w, r)
-		case "/_/auth/callback":
-			gate.HandleCallback(w, r)
-		case "/_/auth/logout":
-			// Logout is a state change: a GET would let any page log the
-			// user out with an image tag.
-			if r.Method != http.MethodPost {
-				w.Header().Set("Allow", "POST")
-				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-				return
-			}
-			gate.HandleLogout(w, r)
-		default:
+		if err != nil || !hosts[host] || !gate.ServeAuthEndpoint(w, r) {
 			next.ServeHTTP(w, r)
 		}
 	})

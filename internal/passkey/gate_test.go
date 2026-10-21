@@ -1,0 +1,385 @@
+package passkey_test
+
+import (
+	"bytes"
+	"context"
+	"database/sql"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/octaviosantacruz/switchboard/internal/auth"
+	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/octaviosantacruz/switchboard/internal/events"
+	"github.com/octaviosantacruz/switchboard/internal/passkey"
+	"github.com/octaviosantacruz/switchboard/internal/store/sqlite"
+)
+
+const (
+	loginOrigin = "https://auth.example.test"
+	appHost     = "app.example.test"
+)
+
+type recorder struct{ events []events.Event }
+
+func (r *recorder) Emit(e events.Event) { r.events = append(r.events, e) }
+
+func (r *recorder) has(kind events.Type, code string) bool {
+	for _, e := range r.events {
+		if e.Type == kind && e.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
+type harness struct {
+	db       *sql.DB
+	gate     *passkey.Gate
+	identity *sqlite.Identity
+	events   *recorder
+}
+
+func newHarness(t *testing.T) *harness {
+	t.Helper()
+	ctx := context.Background()
+	db, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	migrations, err := sqlite.LoadMigrations(sqlite.Migrations())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlite.Migrate(ctx, db, migrations); err != nil {
+		t.Fatal(err)
+	}
+	identity := sqlite.NewIdentity(db)
+	cfg := config.Auth{
+		CookieDomain: "example.test",
+		Passkeys:     &config.Passkeys{RPID: "example.test", LoginURL: loginOrigin, DisplayName: "Switchboard"},
+	}
+	rec := &recorder{}
+	gate, err := passkey.NewGate(cfg, []string{appHost}, identity, sqlite.NewSessions(db, 8*time.Hour), rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &harness{db: db, gate: gate, identity: identity, events: rec}
+}
+
+func (h *harness) invite(t *testing.T, email string, recover bool) string {
+	t.Helper()
+	inv, err := h.identity.Invite(context.Background(), email, "", []string{"ops"}, recover, 15*time.Minute)
+	if err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+	return inv.Token
+}
+
+// browser keeps cookies by name, as one browser profile would.
+type browser struct {
+	h       *harness
+	cookies map[string]string
+	origin  string // the Origin header its fetches send
+}
+
+func (h *harness) browser() *browser {
+	return &browser{h: h, cookies: map[string]string{}, origin: loginOrigin}
+}
+
+func (b *browser) post(t *testing.T, path string, body any) (*httptest.ResponseRecorder, map[string]any) {
+	t.Helper()
+	encoded, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, loginOrigin+path, bytes.NewReader(encoded))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", b.origin)
+	for name, value := range b.cookies {
+		req.AddCookie(&http.Cookie{Name: name, Value: value})
+	}
+	rec := httptest.NewRecorder()
+	if !b.h.gate.ServeAuthEndpoint(rec, req) {
+		t.Fatalf("%s not handled", path)
+	}
+	for _, c := range rec.Result().Cookies() {
+		if c.MaxAge < 0 {
+			delete(b.cookies, c.Name)
+		} else {
+			b.cookies[c.Name] = c.Value
+		}
+	}
+	var decoded map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &decoded)
+	return rec, decoded
+}
+
+// signedIn reports whether the browser's session cookie authenticates on
+// the protected app host.
+func (b *browser) signedIn() (auth.Principal, bool) {
+	req := httptest.NewRequest(http.MethodGet, "https://"+appHost+"/", nil)
+	if id, ok := b.cookies[auth.SessionCookieName]; ok {
+		req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: id})
+	}
+	return b.h.gate.Authenticate(req)
+}
+
+func (b *browser) enrol(t *testing.T, a *virtualAuthenticator, token string) int {
+	t.Helper()
+	rec, options := b.post(t, "/_/auth/enrol/begin", map[string]string{"token": token})
+	if rec.Code != http.StatusOK {
+		return rec.Code
+	}
+	rec, _ = b.post(t, "/_/auth/enrol/finish", a.create(t, options, loginOrigin))
+	return rec.Code
+}
+
+func (b *browser) login(t *testing.T, a *virtualAuthenticator, returnTo, signedOrigin string) (int, map[string]any) {
+	t.Helper()
+	rec, options := b.post(t, "/_/auth/login/begin", map[string]any{"return_to": returnTo})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("login begin: %d %s", rec.Code, rec.Body)
+	}
+	rec, result := b.post(t, "/_/auth/login/finish", a.get(t, options, signedOrigin))
+	return rec.Code, result
+}
+
+func TestEnrolThenLoginOnAnotherBrowser(t *testing.T) {
+	h := newHarness(t)
+	device := newAuthenticator(t)
+	device.backupEligible = true // a synced passkey
+
+	first := h.browser()
+	if code := first.enrol(t, device, h.invite(t, "Ana@Example.com", false)); code != http.StatusOK {
+		t.Fatalf("enrol = %d", code)
+	}
+	principal, ok := first.signedIn()
+	if !ok || principal.Email != "ana@example.com" || !principal.EmailVerified || !strings.HasPrefix(principal.Subject, passkey.SubjectPrefix) {
+		t.Fatalf("after enrolment: %+v, %v", principal, ok)
+	}
+	if len(principal.Groups) != 1 || principal.Groups[0] != "ops" {
+		t.Fatalf("groups = %v", principal.Groups)
+	}
+	if !h.events.has(events.PasskeyRegistered, "synced") {
+		t.Fatal("no passkey.registered event")
+	}
+
+	second := h.browser()
+	code, result := second.login(t, device, "https://"+appHost+"/reports?q=1", loginOrigin)
+	if code != http.StatusOK {
+		t.Fatalf("login = %d", code)
+	}
+	if result["redirect"] != "https://"+appHost+"/reports?q=1" {
+		t.Fatalf("redirect = %v", result["redirect"])
+	}
+	if again, ok := second.signedIn(); !ok || again.Subject != principal.Subject {
+		t.Fatalf("second browser: %+v, %v", again, ok)
+	}
+	if !h.events.has(events.LoginSucceeded, "passkey") {
+		t.Fatal("no login.succeeded event")
+	}
+}
+
+func TestInvitationIsSingleUseAndExpires(t *testing.T) {
+	h := newHarness(t)
+	token := h.invite(t, "ana@example.com", false)
+	if code := h.browser().enrol(t, newAuthenticator(t), token); code != http.StatusOK {
+		t.Fatalf("enrol = %d", code)
+	}
+	if code := h.browser().enrol(t, newAuthenticator(t), token); code != http.StatusBadRequest {
+		t.Fatalf("reused link = %d, want 400", code)
+	}
+
+	expired, err := h.identity.Invite(context.Background(), "bob@example.com", "", nil, false, -time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code := h.browser().enrol(t, newAuthenticator(t), expired.Token); code != http.StatusBadRequest {
+		t.Fatalf("expired link = %d, want 400", code)
+	}
+	// A second passkey needs an explicit recovery invitation.
+	if _, err := h.identity.Invite(context.Background(), "ana@example.com", "", nil, false, time.Minute); err == nil {
+		t.Fatal("second enrolment invitation issued without -recover")
+	}
+	if code := h.browser().enrol(t, newAuthenticator(t), h.invite(t, "ana@example.com", true)); code != http.StatusOK {
+		t.Fatalf("recovery enrol = %d", code)
+	}
+}
+
+func TestLoginRefusals(t *testing.T) {
+	setup := func(t *testing.T) (*harness, *virtualAuthenticator) {
+		h := newHarness(t)
+		device := newAuthenticator(t)
+		if code := h.browser().enrol(t, device, h.invite(t, "ana@example.com", false)); code != http.StatusOK {
+			t.Fatalf("enrol = %d", code)
+		}
+		return h, device
+	}
+
+	t.Run("look-alike origin (phishing)", func(t *testing.T) {
+		h, device := setup(t)
+		b := h.browser()
+		if code, _ := b.login(t, device, "", "https://auth.example.test.evil.example"); code != http.StatusUnauthorized {
+			t.Fatalf("code = %d, want 401", code)
+		}
+		if _, ok := b.signedIn(); ok {
+			t.Fatal("signed in from another origin")
+		}
+	})
+
+	t.Run("request from another site", func(t *testing.T) {
+		h, _ := setup(t)
+		b := h.browser()
+		b.origin = "https://evil.example"
+		if rec, _ := b.post(t, "/_/auth/login/begin", map[string]any{}); rec.Code != http.StatusForbidden {
+			t.Fatalf("code = %d, want 403", rec.Code)
+		}
+	})
+
+	t.Run("replayed response", func(t *testing.T) {
+		h, device := setup(t)
+		b := h.browser()
+		rec, options := b.post(t, "/_/auth/login/begin", map[string]any{})
+		if rec.Code != http.StatusOK {
+			t.Fatal(rec.Code)
+		}
+		ceremony := b.cookies["sb_passkey"]
+		response := device.get(t, options, loginOrigin)
+		if rec, _ := b.post(t, "/_/auth/login/finish", response); rec.Code != http.StatusOK {
+			t.Fatalf("first finish = %d", rec.Code)
+		}
+		attacker := h.browser()
+		attacker.cookies["sb_passkey"] = ceremony
+		if rec, _ := attacker.post(t, "/_/auth/login/finish", response); rec.Code != http.StatusBadRequest {
+			t.Fatalf("replay = %d, want 400", rec.Code)
+		}
+		if _, ok := attacker.signedIn(); ok {
+			t.Fatal("replay signed in")
+		}
+	})
+
+	t.Run("no user verification", func(t *testing.T) {
+		h, device := setup(t)
+		device.userVerified = false
+		if code, _ := h.browser().login(t, device, "", loginOrigin); code != http.StatusUnauthorized {
+			t.Fatalf("code = %d, want 401", code)
+		}
+	})
+
+	t.Run("cloned authenticator", func(t *testing.T) {
+		h, device := setup(t)
+		device.counter = 10
+		if code, _ := h.browser().login(t, device, "", loginOrigin); code != http.StatusOK {
+			t.Fatalf("first login = %d", code)
+		}
+		device.counter = 3 // a copy whose counter is behind
+		if code, _ := h.browser().login(t, device, "", loginOrigin); code != http.StatusUnauthorized {
+			t.Fatalf("clone = %d, want 401", code)
+		}
+		if !h.events.has(events.LoginFailed, "passkey_clone_warning") {
+			t.Fatal("no clone warning event")
+		}
+	})
+
+	t.Run("open redirect", func(t *testing.T) {
+		h, device := setup(t)
+		code, result := h.browser().login(t, device, "https://evil.example/", loginOrigin)
+		if code != http.StatusOK || result["redirect"] != "/" {
+			t.Fatalf("code = %d, redirect = %v; want 200 and /", code, result["redirect"])
+		}
+	})
+}
+
+func TestRevocationAndDisablingEndSessions(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	device := newAuthenticator(t)
+	b := h.browser()
+	if code := b.enrol(t, device, h.invite(t, "ana@example.com", false)); code != http.StatusOK {
+		t.Fatalf("enrol = %d", code)
+	}
+
+	if err := h.identity.SetDisabled(ctx, "ana@example.com", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := b.signedIn(); ok {
+		t.Fatal("disabled user still signed in")
+	}
+	if code, _ := h.browser().login(t, device, "", loginOrigin); code != http.StatusUnauthorized {
+		t.Fatalf("disabled login = %d, want 401", code)
+	}
+	if err := h.identity.SetDisabled(ctx, "ana@example.com", false); err != nil {
+		t.Fatal(err)
+	}
+
+	b2 := h.browser()
+	if code, _ := b2.login(t, device, "", loginOrigin); code != http.StatusOK {
+		t.Fatalf("re-enabled login = %d", code)
+	}
+	keys, err := h.identity.Passkeys(ctx, "ana@example.com")
+	if err != nil || len(keys) != 1 {
+		t.Fatalf("passkeys: %v %v", keys, err)
+	}
+	if err := h.identity.RevokePasskey(ctx, "ana@example.com", hexPrefix(keys[0].Credential.ID)); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := b2.signedIn(); ok {
+		t.Fatal("session survived passkey revocation")
+	}
+	if code, _ := h.browser().login(t, device, "", loginOrigin); code != http.StatusUnauthorized {
+		t.Fatalf("revoked login = %d, want 401", code)
+	}
+}
+
+// The per-request check stands on its own: a user disabled by any path,
+// even one that left the session rows in place, is no longer signed in.
+func TestDisabledUserIsRefusedEvenWithALiveSession(t *testing.T) {
+	h := newHarness(t)
+	b := h.browser()
+	if code := b.enrol(t, newAuthenticator(t), h.invite(t, "ana@example.com", false)); code != http.StatusOK {
+		t.Fatalf("enrol = %d", code)
+	}
+	if _, err := h.db.Exec(`UPDATE users SET disabled_at = 1`); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := b.signedIn(); ok {
+		t.Fatal("session of a disabled user still authenticates")
+	}
+}
+
+func TestPagesAreLockedDown(t *testing.T) {
+	h := newHarness(t)
+	rec := httptest.NewRecorder()
+	h.gate.ServeAuthEndpoint(rec, httptest.NewRequest(http.MethodGet, loginOrigin+"/_/auth/login", nil))
+	csp := rec.Header().Get("Content-Security-Policy")
+	if rec.Code != http.StatusOK || !strings.Contains(csp, "script-src 'self'") || !strings.Contains(csp, "frame-ancestors 'none'") {
+		t.Fatalf("login page: %d, CSP %q", rec.Code, csp)
+	}
+	if rec.Header().Get("Referrer-Policy") != "no-referrer" {
+		t.Fatal("login page leaks referrers")
+	}
+
+	rec = httptest.NewRecorder()
+	h.gate.ServeAuthEndpoint(rec, httptest.NewRequest(http.MethodGet, "https://"+appHost+"/_/auth/enrol", nil))
+	if rec.Code != http.StatusFound || rec.Header().Get("Location") != loginOrigin+"/_/auth/enrol" {
+		t.Fatalf("page on app host: %d → %q", rec.Code, rec.Header().Get("Location"))
+	}
+
+	rec = httptest.NewRecorder()
+	h.gate.RedirectToLogin(rec, httptest.NewRequest(http.MethodGet, "https://"+appHost+"/x?y=1", nil))
+	if want := loginOrigin + "/_/auth/login?return_to=https%3A%2F%2Fapp.example.test%2Fx%3Fy%3D1"; rec.Header().Get("Location") != want {
+		t.Fatalf("redirect to %q, want %q", rec.Header().Get("Location"), want)
+	}
+}
+
+func hexPrefix(id []byte) string {
+	const digits = "0123456789abcdef"
+	out := make([]byte, 0, 8)
+	for _, b := range id[:4] {
+		out = append(out, digits[b>>4], digits[b&0x0f])
+	}
+	return string(out)
+}

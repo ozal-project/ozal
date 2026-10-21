@@ -98,7 +98,8 @@ func alertText(e events.Event) (string, bool) {
 		events.LoginFailed,
 		events.RouteCreated,
 		events.RouteDeleted,
-		events.ConfigReloaded:
+		events.ConfigReloaded,
+		events.PasskeyRegistered:
 	default:
 		return "", false
 	}

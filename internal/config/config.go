@@ -110,6 +110,24 @@ type Auth struct {
 	// happens on redirect_url's host) won't be sent back on the other
 	// hosts' requests, and they'll redirect to login in a loop.
 	CookieDomain string `json:"cookie_domain,omitempty"`
+
+	// Passkeys makes Switchboard authenticate visitors itself (ID-003)
+	// instead of delegating to an OIDC provider. Phase 1 supports one
+	// method at a time, so the OIDC fields must be empty when it is set.
+	Passkeys *Passkeys `json:"passkeys,omitempty"`
+}
+
+// Passkeys configures native WebAuthn login. Users and their passkeys live
+// in the state database (-db); only the operator can invite them.
+type Passkeys struct {
+	// RPID is the domain the passkeys belong to: the login host or a parent
+	// of it ("example.com" covers auth.example.com and app.example.com).
+	RPID string `json:"rp_id"`
+	// LoginURL is the origin where the login and enrolment pages run, e.g.
+	// "https://auth.example.com". Browsers sign for this origin only.
+	LoginURL string `json:"login_url"`
+	// DisplayName is what the authenticator shows; "Switchboard" if empty.
+	DisplayName string `json:"display_name,omitempty"`
 }
 
 type Admin struct {
@@ -418,7 +436,15 @@ func Validate(cfg Config) (*Config, error) {
 			break
 		}
 	}
-	if anyProtectedRoute {
+	if anyProtectedRoute && cfg.Auth.Passkeys != nil {
+		loginHost, err := validatePasskeys(&cfg.Auth)
+		if err != nil {
+			return nil, err
+		}
+		if err := checkSessionHosts(&cfg, loginHost, "auth.passkeys.login_url"); err != nil {
+			return nil, err
+		}
+	} else if anyProtectedRoute {
 		missing := []string{}
 		if cfg.Auth.Issuer == "" {
 			missing = append(missing, "issuer")
@@ -443,39 +469,87 @@ func Validate(cfg Config) (*Config, error) {
 		if err != nil {
 			return nil, fmt.Errorf("config: auth.redirect_url is not a valid URL: %w", err)
 		}
-		if cfg.Auth.CookieDomain != "" {
-			cookieDomain, err := normalizeCookieDomain(cfg.Auth.CookieDomain)
-			if err != nil {
-				return nil, fmt.Errorf("config: %w", err)
-			}
-			if !cookieDomainCovers(redirectHost, cookieDomain) {
-				return nil, fmt.Errorf(
-					"config: auth.cookie_domain %q does not cover auth.redirect_url host %q",
-					cfg.Auth.CookieDomain, redirectHost,
-				)
-			}
-			cfg.Auth.CookieDomain = cookieDomain
-			for _, r := range cfg.Routes {
-				if r.RequiresAuth() && !cookieDomainCovers(r.Host, cookieDomain) {
-					return nil, fmt.Errorf(
-						"config: auth.cookie_domain %q does not cover protected route host %q",
-						cfg.Auth.CookieDomain, r.Host,
-					)
-				}
-			}
-		} else {
-			for _, r := range cfg.Routes {
-				if r.RequiresAuth() && hostnameOnly(r.Host) != redirectHost {
-					return nil, fmt.Errorf(
-						"config: route %q needs auth but is on a different host than auth.redirect_url (%s); set auth.cookie_domain to share the session across hosts",
-						r.Host, redirectHost,
-					)
-				}
-			}
+		if err := checkSessionHosts(&cfg, redirectHost, "auth.redirect_url"); err != nil {
+			return nil, err
 		}
 	}
 
 	return &cfg, nil
+}
+
+// checkSessionHosts makes sure the session cookie set on loginHost (where
+// the login finishes) is sent back on every protected route, and normalizes
+// cookie_domain. field names the setting that chose loginHost.
+func checkSessionHosts(cfg *Config, loginHost, field string) error {
+	if cfg.Auth.CookieDomain != "" {
+		cookieDomain, err := normalizeCookieDomain(cfg.Auth.CookieDomain)
+		if err != nil {
+			return fmt.Errorf("config: %w", err)
+		}
+		if !cookieDomainCovers(loginHost, cookieDomain) {
+			return fmt.Errorf(
+				"config: auth.cookie_domain %q does not cover %s host %q",
+				cfg.Auth.CookieDomain, field, loginHost,
+			)
+		}
+		cfg.Auth.CookieDomain = cookieDomain
+		for _, r := range cfg.Routes {
+			if r.RequiresAuth() && !cookieDomainCovers(r.Host, cookieDomain) {
+				return fmt.Errorf(
+					"config: auth.cookie_domain %q does not cover protected route host %q",
+					cfg.Auth.CookieDomain, r.Host,
+				)
+			}
+		}
+		return nil
+	}
+	for _, r := range cfg.Routes {
+		if r.RequiresAuth() && hostnameOnly(r.Host) != loginHost {
+			return fmt.Errorf(
+				"config: route %q needs auth but is on a different host than %s (%s); set auth.cookie_domain to share the session across hosts",
+				r.Host, field, loginHost,
+			)
+		}
+	}
+	return nil
+}
+
+// validatePasskeys checks auth.passkeys and returns the login hostname. The
+// login URL must be a bare origin, HTTPS except on loopback (browsers only
+// allow WebAuthn in a secure context), on rp_id or a subdomain of it.
+func validatePasskeys(auth *Auth) (string, error) {
+	if auth.Issuer != "" || auth.ClientID != "" || auth.ClientSecret != "" || auth.RedirectURL != "" {
+		return "", fmt.Errorf("config: auth.passkeys cannot be combined with OIDC settings yet; remove issuer, client_id, client_secret and redirect_url")
+	}
+	// Normalize a copy: the pointer is shared with the caller's Config.
+	copied := *auth.Passkeys
+	pk := &copied
+	auth.Passkeys = pk
+	rpID, err := normalizeHostname(pk.RPID)
+	if err != nil || net.ParseIP(rpID) != nil {
+		return "", fmt.Errorf("config: auth.passkeys.rp_id %q must be a DNS name", pk.RPID)
+	}
+	login, err := url.Parse(pk.LoginURL)
+	if err != nil || login.Host == "" || login.User != nil || (login.Path != "" && login.Path != "/") || login.RawQuery != "" || login.Fragment != "" {
+		return "", fmt.Errorf("config: auth.passkeys.login_url %q must be an origin such as https://auth.example.com", pk.LoginURL)
+	}
+	loginHost, err := normalizeHostname(login.Hostname())
+	if err != nil {
+		return "", fmt.Errorf("config: auth.passkeys.login_url %q: %w", pk.LoginURL, err)
+	}
+	loopback := loginHost == "localhost" || strings.HasSuffix(loginHost, ".localhost")
+	if login.Scheme != "https" && !(login.Scheme == "http" && loopback) {
+		return "", fmt.Errorf("config: auth.passkeys.login_url must be https (http only on localhost)")
+	}
+	if loginHost != rpID && !strings.HasSuffix(loginHost, "."+rpID) {
+		return "", fmt.Errorf("config: auth.passkeys.login_url host %q is not rp_id %q or a subdomain of it", loginHost, rpID)
+	}
+	pk.RPID = rpID
+	pk.LoginURL = login.Scheme + "://" + login.Host
+	if pk.DisplayName == "" {
+		pk.DisplayName = "Switchboard"
+	}
+	return loginHost, nil
 }
 
 // normalizeDNS01 validates the own-manager TLS configuration and normalizes
@@ -558,6 +632,10 @@ func Clone(source Config) Config {
 	if source.Pages != nil {
 		pages := *source.Pages
 		clone.Pages = &pages
+	}
+	if source.Auth.Passkeys != nil {
+		passkeys := *source.Auth.Passkeys
+		clone.Auth.Passkeys = &passkeys
 	}
 	if source.TLS.DNS01 != nil {
 		dns01 := *source.TLS.DNS01

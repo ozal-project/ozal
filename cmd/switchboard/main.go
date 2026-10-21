@@ -47,6 +47,7 @@ func subcommands() map[string]func(context.Context, []string, io.Writer) error {
 		"notify":       runNotify,
 		"policy":       runPolicy,
 		"site":         runSite,
+		"user":         runUser,
 		"validate":     runValidate,
 	}
 }
@@ -115,6 +116,9 @@ func main() {
 			return sqlite.NewSessions(db, ttl)
 		}))
 		log.Printf("sessions: persistent store at %s", *dbPath)
+		// ID-003: users and passkeys share the state database, so revoking
+		// a passkey and ending its sessions is one transaction.
+		managerOpts = append(managerOpts, routemanager.WithPasskeyDirectory(sqlite.NewIdentity(db)))
 		if loaded.Pages != nil {
 			// PAGES-002: deployments live under pages.dir and their history
 			// in the state database; site routes read the live pointer.

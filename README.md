@@ -655,6 +655,46 @@ ID token; if a route requires groups and that claim is absent, access is
 denied. The older `auth_required: true` remains supported as shorthand for
 an empty access policy.
 
+### Native login with passkeys (`auth.passkeys`, ID-003)
+
+Instead of an external provider, Switchboard can authenticate visitors
+itself with passkeys: Face ID, Touch ID, Windows Hello, an Android phone or a
+security key. No passwords exist; the state database keeps public keys only.
+Users are invited by the operator; there is no self sign-up. Design and
+threat model: [identity-login.md](docs/architecture/identity-login.md).
+
+```json
+{
+  "auth": {
+    "cookie_domain": "example.com",
+    "passkeys": { "rp_id": "example.com", "login_url": "https://auth.example.com" }
+  },
+  "routes": [
+    { "host": "app.example.com", "target": "http://127.0.0.1:9000",
+      "access": { "required_groups": ["ops"] } }
+  ]
+}
+```
+
+`login_url` is where the sign-in pages run (HTTPS, or `http://localhost` for
+development); `rp_id` is that host or a parent domain. Passkeys need the
+state database:
+
+```bash
+switchboard migrate up -db state.db
+switchboard -config config.json -db state.db
+switchboard user invite -db state.db -config config.json -email ana@example.com -group ops
+#   prints https://auth.example.com/_/auth/enrol#… : single use, 15 minutes
+switchboard user passkeys -db state.db -email ana@example.com
+switchboard user revoke   -db state.db -email ana@example.com -passkey 3f9a
+switchboard user disable  -db state.db -email ana@example.com
+```
+
+A lost device is recovered from the host only (`invite -recover`). Revoking a
+passkey or disabling a user ends their sessions immediately. Applications
+receive the same identity headers as with OIDC, with a subject of the form
+`sb:<id>`. Phase 1 uses one login method at a time (passkeys or OIDC).
+
 ### Secret references
 
 `auth.client_secret` and `admin.token` accept a reference instead of an inline

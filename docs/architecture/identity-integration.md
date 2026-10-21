@@ -99,7 +99,11 @@ IdP. If that distinction is lost, option E has arrived by accident.
 
 ## Non-goals
 
-- Building a full OIDC provider or user directory (option E).
+- Building a full OIDC provider or user directory (option E). Narrowed
+  2026-10-21 by the owner: Switchboard keeps a minimal directory of invited
+  users and their passkeys for its own login
+  ([identity-login.md](identity-login.md)); a general directory or IdP stays
+  out of scope.
 - Sharing a session cookie across unrelated apps.
 - Replacing application authorization.
 - Mixing Custodia/SIGEA data or identities without a contract.

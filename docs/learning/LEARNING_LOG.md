@@ -641,3 +641,17 @@ check the edge itself needs a signature it can verify. Validating the
 assertion byte by byte (not rune by rune) is enough, because what must never
 pass are ASCII control characters such as a newline that would start a
 forged header.
+
+
+## 2026-10-21 — a passkey proves the origin, the server proves the rest (ID-003)
+
+The browser binds every WebAuthn signature to the page's origin, so a
+look-alike site gets nothing usable: that is the phishing resistance, and it
+comes for free. Everything around the signature is still the server's job:
+a challenge must be used once and expire, the request must come from the
+login origin, user verification must be required rather than preferred, a
+counter that goes backwards means a cloned key, and the return address must
+not become an open redirect. A virtual authenticator in the tests (an ECDSA
+key that builds authenticator data and signs like a device) is what made
+each of those checks testable, and breaking each one on purpose showed
+which tests actually guard it.

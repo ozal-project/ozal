@@ -6,6 +6,49 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## ID-003 — native login with passkeys, phase 1 — 2026-10-21 (committed with this change)
+
+Switchboard can now authenticate visitors itself, without an external
+identity provider ([design](architecture/identity-login.md), accepted by the
+owner the same day). `auth.passkeys` (`rp_id`, `login_url`) replaces the
+OIDC settings; it requires `-db`.
+
+- **Operator:** `switchboard user invite -email … [-group …] [-recover]`
+  prints a one-time link (`/_/auth/enrol#token`, 15 minutes); `list`,
+  `passkeys`, `revoke` (ends the user's sessions in the same transaction),
+  `disable`/`enable`.
+- **Visitor:** enrolment and login pages on the login host, with passkey
+  autofill and a button. Discoverable credentials, user verification
+  required, no attestation. Sessions reuse `sb_session` and the existing
+  backend; identity reaches applications as before
+  (`X-Auth-Request-User` = `sb:<id>`, `X-Auth-Request-Email`).
+- **Storage (migration 004):** users, passkeys (public key and counters as
+  the library's credential record) and invitation hashes; nothing in the
+  database logs anyone in.
+- **Defenses and their tests:** API requests must be POST + JSON + the login
+  `Origin`; challenges are single use and expire in 5 minutes; a response
+  signed for another origin, without user verification, replayed, or from an
+  authenticator whose counter went backwards is refused; `return_to` is
+  limited to configured hosts; disabled users fail on every request. A Go
+  virtual authenticator (`authenticator_test.go`) drives the real ceremonies
+  against SQLite; dropping the Origin check, the clone check, the
+  `return_to` check, the per-request user check or required UV each fails a
+  test. Pages ship a strict CSP (no inline script), `frame-ancestors 'none'`
+  and `Referrer-Policy: no-referrer`; the enrolment token stays in the URL
+  fragment and is removed from the address bar.
+- **Real browser:** headless Chromium with a CDP virtual authenticator
+  against the binary: enrolment, the reused link refused, login by autofill
+  and by button returning to the original URL, the app receiving the
+  identity headers and no cookie, logout.
+- **Also fixed:** `switchboard migrate up -db X` ignored `-db` (the flag
+  parser stops at the first positional word) and migrated the default
+  database; `up`/`status` are now accepted and anything else is refused,
+  with a regression test.
+- **Dependency:** `go-webauthn/webauthn` v0.18.2 and 8 indirect modules
+  (`stack.md`); `govulncheck` clean. `scripts/verify.sh` green.
+- **Not yet:** deployment, phase 2 (`ID-005`: step-up, device-bound policy,
+  idle timeout, DBSC), OIDC and passkeys side by side.
+
 ## TUN-002 — visitor identity through the tunnel — 2026-10-21 (committed with this change)
 
 A connector route may now carry an access policy. The edge runs login,

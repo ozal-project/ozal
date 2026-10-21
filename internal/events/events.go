@@ -27,6 +27,8 @@ const (
 	PagesDeployed   Type = "pages.deployed"
 	PagesRolledBack Type = "pages.rolled_back"
 	PagesRefused    Type = "pages.refused"
+	// A user enrolled a passkey (ID-003). Code is "synced" or "device_bound".
+	PasskeyRegistered Type = "passkey.registered"
 )
 
 // Event is one decision or change with the context needed to explain it.

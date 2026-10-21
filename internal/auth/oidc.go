@@ -295,6 +295,14 @@ func (g *Gate) HandleCallback(w http.ResponseWriter, r *http.Request) {
 // configured to protect — otherwise it's an open-redirect vector, since
 // returnTo comes from a query parameter an attacker fully controls.
 func (g *Gate) safeReturnTo(returnTo string) string {
+	return SafeReturnTo(g.allowedHosts, returnTo)
+}
+
+// SafeReturnTo returns returnTo when it is an http(s) URL without userinfo
+// on one of the allowed (normalized) hosts, and "/" otherwise. Every login
+// flow uses it: a return address comes from a query parameter an attacker
+// controls.
+func SafeReturnTo(allowedHosts map[string]bool, returnTo string) string {
 	u, err := url.Parse(returnTo)
 	if err != nil || u.User != nil {
 		return "/"
@@ -304,7 +312,7 @@ func (g *Gate) safeReturnTo(returnTo string) string {
 		return "/"
 	}
 	host, err := config.NormalizeHost(u.Host)
-	if err != nil || !g.allowedHosts[host] {
+	if err != nil || !allowedHosts[host] {
 		return "/"
 	}
 	return returnTo
@@ -412,4 +420,27 @@ func randomString(n int) (string, error) {
 func s256Challenge(verifier string) string {
 	sum := sha256.Sum256([]byte(verifier))
 	return base64.RawURLEncoding.EncodeToString(sum[:])
+}
+
+// ServeAuthEndpoint handles the OIDC login endpoints under /_/auth/ and
+// reports false for any other path, which then belongs to the route.
+func (g *Gate) ServeAuthEndpoint(w http.ResponseWriter, r *http.Request) bool {
+	switch r.URL.Path {
+	case "/_/auth/login":
+		g.HandleLogin(w, r)
+	case "/_/auth/callback":
+		g.HandleCallback(w, r)
+	case "/_/auth/logout":
+		// Logout is a state change: a GET would let any page log the
+		// user out with an image tag.
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return true
+		}
+		g.HandleLogout(w, r)
+	default:
+		return false
+	}
+	return true
 }
