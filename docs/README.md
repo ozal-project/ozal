@@ -13,6 +13,9 @@
 
 - [Vision](../VISION.md) — north star, pillars, Cloudflare feature map,
   integration map, year plan.
+- [Product, code and UX review — 2026-10-21](reviews/2026-10-21-product-code-ux.md)
+  — evidence, design direction and proposed operator journeys; active follow-ups
+  remain in `TO_IMPLEMENT.md`.
 
 ## Architecture
 
