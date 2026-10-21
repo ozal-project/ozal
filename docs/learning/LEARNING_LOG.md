@@ -7,6 +7,13 @@ Format: `YYYY-MM-DD · ID · topic — what clicked (link to code)`
 
 ## v0.1 Edge
 
+- 2026-10-21 · ID-003 · passkeys on a real device — WebAuthn hides on
+  purpose whether a device holds a passkey for a site (closed prompt, timeout
+  and "none here" are all `NotAllowedError`), so the page cannot diagnose; it
+  has to explain the invitation up front. A validated destination must be
+  carried through every step of the journey, or the user lands on "close this
+  page" ([gate.go](../../internal/passkey/gate.go),
+  [passkey.js](../../internal/passkey/assets/passkey.js)).
 - 2026-10-18 · EDGE-007 · real ACME DNS-01 — the simulated tests were the
   contract; the operator run proved it end to end: token as a file reference,
   TXT created and removed by its own API ID, certificate served on :443, and a

@@ -1,10 +1,29 @@
 # Implemented — Switchboard
 
-**Last review:** 2026-10-20
+**Last review:** 2026-10-21
 **Code reviewed up to:** baseline `0ddb606`; feature commits listed below.
 
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
+
+## ID-003 — accepted on the owner's iPhone — 2026-10-21 (UX fixes `509171c`, deployed)
+
+Closes `ID-003`. Deployed on the edge (`auth.`/`private.`) with the UX fixes:
+a "first time" notice on the login page, a `NotAllowedError` message that names
+every cause, and the destination kept through invitation and enrolment
+(`user invite -return-to`, validated by the CLI and the server; otherwise
+explicit links to the protected sites). The owner ran the full journey on a
+real iPhone and reported it working: invitation → passkey saved in the
+device's keychain → back to `private.` → later sign-in.
+
+Observed on the way, and why the fixes exist: the first attempts failed
+because no invitation had been created (empty user table, `login.started`
+without a finish); browsers report "no passkey on this device" as a plain
+`NotAllowedError`, so the page has to say an invitation is needed. Not
+covered here: sessions still end with the browser session (no `Max-Age`;
+lifetimes are `ID-005`), invitations are delivered by hand (`ID-001`/`ID-002`),
+and `TUN-002`'s protected-connector acceptance needs a route through a
+connector, which `private.` is not.
 
 ## ID-003 — native login with passkeys, phase 1 — 2026-10-21 (committed with this change)
 
