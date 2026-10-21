@@ -35,7 +35,7 @@ static sites · `LAB` learning lab (not a release commitment).
 
 Every `SEC-*` and `BUG-*` finding is closed (2026-10-17).
 
-1. `REL-006`: tag `v0.1.0-alpha.1` (`REL-003` CI closed 2026-10-21, `REL-005` GoReleaser closed 2026-10-20).<br>`REL-001`–`REL-002` and `REL-004` closed (secret references, fuzz, quickstart).
+1. Released `v0.1.0-alpha.1` on 2026-10-21 (`REL-003`, `REL-005`, `REL-006`, `REL-008` closed). Next: the items below.<br>`REL-001`–`REL-002` and `REL-004` closed (secret references, fuzz, quickstart).
 2. Follow the [positioning and portability contract](architecture/positioning-and-portability.md)
    and [Cloudflare coexistence decision](architecture/cloudflare-coexistence.md).
    Direction 20/10: the owner intends to move Portfolio out of Pages; migration
@@ -102,9 +102,7 @@ durable audit separate.
 
 | ID | Task | State | Done when |
 |---|---|---|---|
-| `REL-006` | Tag `v0.1.0-alpha.1` after every gate above is green: a release workflow on tags (GoReleaser with syft, pinned like the CI linters) publishing the draft that `.goreleaser.yaml` (`REL-005`) defines, then release notes per the `REL-008` template. | Workflow written 2026-10-21 (`.github/workflows/release.yml`: same gate as CI, syft 1.14.0 checked against its checksums, GoReleaser v2.3.2, `contents: write` only in the job); passes `actionlint`, not run yet. `REL-003` closed 2026-10-21; [release notes](releases/v0.1.0-alpha.1.md) written per `REL-008` | Tag pushed; draft release with archives, `checksums.txt` and SBOMs checked against a local rebuild, then published with notes. |
 | `REL-007` | Dependency advisories: `govulncheck` reports GO-2026-5932 in `golang.org/x/crypto` v0.57.0 with no fixed version; the code does not call the affected symbols (2026-10-18, Go 1.27.2). | Blocked on upstream fix | Re-run `govulncheck` before each release; bump `x/crypto` when a fix exists and keep the gate at 0 reachable. |
-| `REL-008` | Release contract: record promise, evidence, non-goals, rollback/recovery and residual risks for every release; keep VISION broad and release claims narrow. | Ready | Template used for `v0.1.0-alpha.1`; release notes distinguish durable/tamper-evident/transparent claims; no promise lacks a test or deployment evidence; labs are labeled as labs. |
 
 ### Edge, tunnels, identity, Shield, notifications
 

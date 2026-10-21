@@ -257,7 +257,7 @@ In progress (Phase 1 hardening, see [TO_IMPLEMENT.md](docs/TO_IMPLEMENT.md)):
 - [x] CI on Linux, macOS and Windows runs `scripts/verify.sh` (green on `main` and on a pull request, 2026-10-21; Windows is a build/test target and skips seven config tests with POSIX path fixtures)
 - [x] Deployed static sites with history and rollback (`PAGES-002`)
 - [x] Release artifacts with checksums and SBOMs (`REL-005`); release workflow on tags (`REL-006`)
-- [ ] The `v0.1.0-alpha.1` tag and published release ([notes](docs/releases/v0.1.0-alpha.1.md))
+- [x] [`v0.1.0-alpha.1`](https://github.com/octaviosantacruz/switchboard/releases/tag/v0.1.0-alpha.1) published 2026-10-21 ([notes](docs/releases/v0.1.0-alpha.1.md))
 
 ## Next work
 

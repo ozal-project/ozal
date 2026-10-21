@@ -6,6 +6,26 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## REL-006 / REL-008 — v0.1.0-alpha.1 released — 2026-10-21 (committed with this change)
+
+Annotated tag `v0.1.0-alpha.1` on `333437e` (CI run `39532268410` green on
+Linux, macOS and Windows). The release workflow (run `39532884201`) passed
+the gate and uploaded six archives, `checksums.txt` and six SPDX SBOMs to a
+draft; published as a prerelease with the notes in
+[`releases/v0.1.0-alpha.1.md`](releases/v0.1.0-alpha.1.md).
+
+- **Checked against a local rebuild:** all 12 checksums verify; the six
+  binaries rebuilt on the homelab from the tag (Go 1.27.3, `CGO_ENABLED=0`,
+  `-trimpath`, `-ldflags "-s -w"`) are byte-identical to the released ones,
+  so the build reproduces across machines, not only across runs. The
+  linux/amd64 binary reports `vcs.revision=333437e`, `vcs.modified=false`
+  and passes `validate` on `config.example.json`.
+- **REL-008:** the notes are the first use of the release contract:
+  promise with evidence, experimental features labeled as not promised,
+  non-goals, rollback (forward-only migrations: copy `-db` first) and
+  residual risks.
+- **Not yet:** signatures and provenance (`LAB-010`).
+
 ## REL-003 — CI on Linux, macOS and Windows — 2026-10-21 (committed with this change)
 
 `.github/workflows/ci.yml` runs `scripts/verify.sh` on ubuntu-24.04, macOS
