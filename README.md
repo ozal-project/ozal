@@ -343,6 +343,10 @@ app and the status page.
 go run ./cmd/switchboard -config config.json
 ```
 
+A route `host` without a port (`app.localhost`) answers on any listener port
+(`app.localhost:8888` in development, the bare name behind TLS); a route with a
+port (`app.localhost:9000`) answers only there and wins over the portless one.
+
 Check a candidate config without starting anything (deployment runbooks use it
 before installing a file; it never resolves or prints secrets):
 

@@ -215,6 +215,15 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 		}
 		rt, ok := byHost[host]
 		if !ok {
+			// EDGE-003: a route declared without a port answers on any
+			// listener port; an exact host:port route always wins.
+			if bare, found := withoutPort(host); found {
+				if rt, ok = byHost[bare]; ok {
+					host = bare
+				}
+			}
+		}
+		if !ok {
 			if cfg.devErrors {
 				writeDevNotFound(w, req.Host, byHost)
 				return
@@ -481,4 +490,18 @@ func NewUpstreamTransport(responseHeaderTimeout time.Duration) *http.Transport {
 func isTimeout(err error) bool {
 	var netErr net.Error
 	return errors.As(err, &netErr) && netErr.Timeout()
+}
+
+// withoutPort returns a normalized host without its port, and whether it had
+// one. IPv6 literals keep their brackets, as NormalizeHost writes them.
+func withoutPort(host string) (string, bool) {
+	h, _, err := net.SplitHostPort(host)
+	if err != nil {
+		return "", false
+	}
+	if strings.Contains(h, ":") {
+		h = "[" + h + "]"
+	}
+	bare, err := config.NormalizeHost(h)
+	return bare, err == nil
 }

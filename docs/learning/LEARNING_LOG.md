@@ -7,6 +7,10 @@ Format: `YYYY-MM-DD · ID · topic — what clicked (link to code)`
 
 ## v0.1 Edge
 
+- 2026-10-21 · EDGE-003 · host matching — `Host` carries the port only when
+  it is not the scheme's default, so the same site arrives as `app.localhost`
+  or `app.localhost:8888`. Exact first, then without the port keeps an
+  explicit `host:port` route in charge ([proxy.go](../../internal/proxy/proxy.go)).
 - 2026-10-21 · ID-003 · passkeys on a real device — WebAuthn hides on
   purpose whether a device holds a passkey for a site (closed prompt, timeout
   and "none here" are all `NotAllowedError`), so the page cannot diagnose; it

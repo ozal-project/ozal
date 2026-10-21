@@ -6,6 +6,16 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## EDGE-003 — portless route hosts match any listener port — 2026-10-21 (committed with this change)
+
+A route host without a port now answers on any listener port, so
+`app.localhost` works on `:8888` without writing the port; an exact
+`host:port` route still wins. The proxy tries the exact host first and falls
+back to the host without its port (`withoutPort`, IPv6 brackets kept); health
+checks and events then use the matched route's host. Test:
+`TestPortlessRouteMatchesAnyPort` (bare, other ports, case, pinned port wins,
+pinned-only hosts unmatched elsewhere).
+
 ## ID-003 — accepted on the owner's iPhone — 2026-10-21 (UX fixes `509171c`, deployed)
 
 Closes `ID-003`. Deployed on the edge (`auth.`/`private.`) with the UX fixes:
