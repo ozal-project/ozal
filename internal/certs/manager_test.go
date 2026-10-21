@@ -292,3 +292,58 @@ func TestManagerOnlyOneActiveAttempt(t *testing.T) {
 		t.Fatalf("after a successful attempt the certificate must be served: %v", err)
 	}
 }
+
+// countingStore counts loads, to show a certificate is read from disk once.
+type countingStore struct {
+	Store
+	mu    sync.Mutex
+	loads int
+}
+
+func (s *countingStore) Load(ctx context.Context, host string) (StoredGeneration, bool, error) {
+	s.mu.Lock()
+	s.loads++
+	s.mu.Unlock()
+	return s.Store.Load(ctx, host)
+}
+
+// The listener checks Status right after it opens: the stored certificate
+// must already be active then, before the renewal loop has started.
+func TestLoadStoredActivatesBeforeRunAndOnlyOnce(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, time.October, 21, 0, 0, 0, 0, time.UTC)
+	files := testStore(t)
+	gen, _ := testGeneration(t, "preview.example.com", now.Add(-time.Hour), now.Add(90*24*time.Hour))
+	if err := files.Save(ctx, "preview.example.com", gen); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	store := &countingStore{Store: files}
+	recovered := make(chan struct{}, 1)
+	issuer := &stubIssuer{recover: func(context.Context) (int, error) { recovered <- struct{}{}; return 0, nil }}
+	m := testManager(t, store, issuer, now, gen)
+
+	if m.Status().Valid {
+		t.Fatal("nothing is active before LoadStored")
+	}
+	m.LoadStored(ctx)
+	if !m.Status().Valid {
+		t.Fatal("LoadStored must activate the stored certificate synchronously")
+	}
+	select {
+	case <-recovered:
+		t.Fatal("LoadStored must not reach the DNS provider: recovery belongs to Run")
+	default:
+	}
+
+	runCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() { defer close(done); m.Run(runCtx) }()
+	<-recovered
+	cancel()
+	<-done
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if store.loads != 1 {
+		t.Errorf("certificate read %d times, want once", store.loads)
+	}
+}

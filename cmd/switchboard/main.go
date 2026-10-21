@@ -396,6 +396,8 @@ func startCertificateManager(ctx context.Context, cfg *config.Config, sink event
 		closeState()
 		return nil, nil, err
 	}
+	// Before any listener exists, so its first status check is true.
+	manager.LoadStored(ctx)
 	return manager, runCertificateManager(ctx, manager, closeState), nil
 }
 

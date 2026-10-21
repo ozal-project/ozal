@@ -69,6 +69,7 @@ type Manager struct {
 
 	current    atomic.Pointer[activeCertificate]
 	attempting atomic.Bool
+	loadOnce   sync.Once
 
 	mu             sync.Mutex
 	lastOutcome    string
@@ -197,9 +198,22 @@ func (m *Manager) Run(ctx context.Context) {
 }
 
 // startup reloads the last complete generation and reconciles DNS state.
-// A stored certificate that fails validation is reported and ignored, never
-// served.
 func (m *Manager) startup(ctx context.Context) {
+	m.LoadStored(ctx)
+	m.recoverIntents(ctx)
+}
+
+// LoadStored activates the last complete stored generation, once. It reads
+// only local storage, so the composition root calls it before opening the
+// listener: the listener's first status check then sees the certificate
+// already on disk instead of racing the renewal loop. Run calls it too, and
+// a second call does nothing. A stored certificate that fails validation is
+// reported and ignored, never served.
+func (m *Manager) LoadStored(ctx context.Context) {
+	m.loadOnce.Do(func() { m.loadStored(ctx) })
+}
+
+func (m *Manager) loadStored(ctx context.Context) {
 	if gen, ok, err := m.store.Load(ctx, m.cfg.Host); err != nil {
 		m.logger().Warn("certificate state could not be read", "host", m.cfg.Host, "error", err)
 	} else if ok {
@@ -221,6 +235,11 @@ func (m *Manager) startup(ctx context.Context) {
 			)
 		}
 	}
+}
+
+// recoverIntents retries DNS cleanup left by earlier runs. It talks to the
+// DNS provider, so it stays in the renewal loop, off the startup path.
+func (m *Manager) recoverIntents(ctx context.Context) {
 	pending, err := m.issuer.Recover(ctx)
 	m.mu.Lock()
 	m.pendingIntents = pending
