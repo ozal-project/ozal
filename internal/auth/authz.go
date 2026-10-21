@@ -111,8 +111,8 @@ func Authorize(p Principal, policy config.AccessPolicy) Decision {
 // they would be refused with anyway. A principal without an AuthTime has no
 // proof of when it logged in and is never fresh.
 func Fresh(p Principal, policy config.AccessPolicy, now time.Time) Decision {
-	if len(policy.Methods) > 0 && !slices.Contains(policy.Methods, p.Method) {
-		return Decision{Code: CodeMethodNotAllowed, Reason: "this route needs a login with " + strings.Join(policy.Methods, " or ")}
+	if methods := RequiredMethods(policy); len(methods) > 0 && !slices.Contains(methods, p.Method) {
+		return Decision{Code: CodeMethodNotAllowed, Reason: "this route needs a login with " + strings.Join(methods, " or ")}
 	}
 	if policy.RequireDeviceBound && !p.DeviceBound {
 		return Decision{Code: CodeDeviceBoundRequired, Reason: "this route needs a passkey that stays on one device, such as a security key"}
@@ -124,6 +124,21 @@ func Fresh(p Principal, policy config.AccessPolicy, now time.Time) Decision {
 		}
 	}
 	return Decision{Allowed: true, Code: CodeAllowed, Reason: "allowed"}
+}
+
+// RequiredMethods is the login methods a route accepts: its access.methods,
+// or only passkeys when it asks for a recent or device-bound login, because
+// only a passkey login is a fresh proof Switchboard itself verified (an
+// upstream provider's single sign-on can answer without the user). Nil means
+// any method.
+func RequiredMethods(policy config.AccessPolicy) []string {
+	if len(policy.Methods) > 0 {
+		return policy.Methods
+	}
+	if policy.MaxAuthAgeMinutes > 0 || policy.RequireDeviceBound {
+		return []string{MethodPasskey}
+	}
+	return nil
 }
 
 func emailAllowed(email string, allowed []string) bool {

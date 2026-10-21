@@ -1125,9 +1125,9 @@ func TestMaxAuthAgeAsksForAFreshLogin(t *testing.T) {
 		redirect  bool
 		reach     bool
 	}{
-		"stale login":   {auth.Principal{Subject: "ana", Email: "ana@example.com", EmailVerified: true, AuthTime: time.Now().Add(-time.Hour)}, http.StatusFound, true, false},
-		"recent login":  {auth.Principal{Subject: "ana", Email: "ana@example.com", EmailVerified: true, AuthTime: time.Now()}, http.StatusOK, false, true},
-		"refused first": {auth.Principal{Subject: "eve", Email: "eve@other.com", EmailVerified: true, AuthTime: time.Now().Add(-time.Hour)}, http.StatusForbidden, false, false},
+		"stale login":   {auth.Principal{Subject: "ana", Email: "ana@example.com", EmailVerified: true, AuthTime: time.Now().Add(-time.Hour), Method: auth.MethodPasskey}, http.StatusFound, true, false},
+		"recent login":  {auth.Principal{Subject: "ana", Email: "ana@example.com", EmailVerified: true, AuthTime: time.Now(), Method: auth.MethodPasskey}, http.StatusOK, false, true},
+		"refused first": {auth.Principal{Subject: "eve", Email: "eve@other.com", EmailVerified: true, AuthTime: time.Now().Add(-time.Hour), Method: auth.MethodPasskey}, http.StatusForbidden, false, false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			reached = 0
@@ -1169,7 +1169,7 @@ func TestRequireDeviceBoundUsesTheStepUpRedirect(t *testing.T) {
 	defer upstream.Close()
 	for _, deviceBound := range []bool{false, true} {
 		reached = false
-		gate := &stepUpGate{fakeGate: fakeGate{authenticated: true, principal: auth.Principal{Subject: "ana", AuthTime: time.Now(), DeviceBound: deviceBound}}}
+		gate := &stepUpGate{fakeGate: fakeGate{authenticated: true, principal: auth.Principal{Subject: "ana", AuthTime: time.Now(), DeviceBound: deviceBound, Method: auth.MethodPasskey}}}
 		handler, err := New([]config.Route{{Host: "admin.localhost", Target: upstream.URL, Access: &config.AccessPolicy{RequireDeviceBound: true}}}, nil, gate)
 		if err != nil {
 			t.Fatal(err)
@@ -1196,5 +1196,22 @@ func TestMethodsRestrictionNamesTheMethods(t *testing.T) {
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://admin.localhost/", nil))
 	if rec.Code != http.StatusFound || gate.code != auth.CodeMethodNotAllowed || !slices.Equal(gate.methods, []string{"passkey"}) {
 		t.Fatalf("status %d, code %q, methods %v", rec.Code, gate.code, gate.methods)
+	}
+}
+
+// An OIDC session on a step-up route is sent to a login that offers only
+// passkeys, even though the route lists no methods: otherwise the page would
+// offer the provider again and the visitor would loop.
+func TestStepUpTellsTheLoginPasskeyOnly(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer upstream.Close()
+	gate := &stepUpGate{fakeGate: fakeGate{authenticated: true, principal: auth.Principal{Subject: "g-1", AuthTime: time.Now(), Method: auth.MethodOIDC}}}
+	handler, err := New([]config.Route{{Host: "admin.localhost", Target: upstream.URL, Access: &config.AccessPolicy{MaxAuthAgeMinutes: 15}}}, nil, gate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "http://admin.localhost/", nil))
+	if gate.code != auth.CodeMethodNotAllowed || !slices.Equal(gate.methods, []string{auth.MethodPasskey}) {
+		t.Fatalf("code %q, methods %v", gate.code, gate.methods)
 	}
 }

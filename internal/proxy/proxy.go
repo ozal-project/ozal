@@ -273,7 +273,7 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 					RemoteAddr: req.RemoteAddr,
 				})
 				if stepUp, ok := gate.(StepUpGate); ok {
-					stepUp.RedirectToStepUp(w, req, fresh.Code, rt.access.Methods)
+					stepUp.RedirectToStepUp(w, req, fresh.Code, auth.RequiredMethods(rt.access))
 				} else {
 					gate.RedirectToLogin(w, req)
 				}

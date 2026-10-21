@@ -128,6 +128,11 @@ func TestPasskeysWithOIDCAndMethods(t *testing.T) {
 			}
 		})
 	}
+	stepUpWithOIDC := combined()
+	stepUpWithOIDC.Routes[0].Access = &AccessPolicy{MaxAuthAgeMinutes: 15, Methods: []string{"passkey", "oidc"}}
+	if _, err := Validate(stepUpWithOIDC); err == nil || !strings.Contains(err.Error(), "need a passkey login") {
+		t.Fatalf("max_auth_age + methods with oidc: %v", err)
+	}
 	ok := combined()
 	ok.Routes[0].Access.Methods = []string{"passkey"}
 	if _, err := Validate(ok); err != nil {

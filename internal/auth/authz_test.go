@@ -196,7 +196,7 @@ func TestFreshStepUp(t *testing.T) {
 		"no recorded login time": {time.Time{}, policy, false},
 	} {
 		t.Run(name, func(t *testing.T) {
-			d := Fresh(Principal{Subject: "s", AuthTime: tc.authTime}, tc.policy, now)
+			d := Fresh(Principal{Subject: "s", AuthTime: tc.authTime, Method: MethodPasskey}, tc.policy, now)
 			if d.Allowed != tc.allowed {
 				t.Fatalf("Fresh = %+v, want allowed=%v", d, tc.allowed)
 			}
@@ -210,14 +210,14 @@ func TestFreshStepUp(t *testing.T) {
 func TestFreshDeviceBound(t *testing.T) {
 	now := time.Now()
 	policy := config.AccessPolicy{RequireDeviceBound: true}
-	if d := Fresh(Principal{AuthTime: now}, policy, now); d.Allowed || d.Code != CodeDeviceBoundRequired {
+	if d := Fresh(Principal{AuthTime: now, Method: MethodPasskey}, policy, now); d.Allowed || d.Code != CodeDeviceBoundRequired {
 		t.Fatalf("synced passkey = %+v", d)
 	}
-	if d := Fresh(Principal{AuthTime: now, DeviceBound: true}, policy, now); !d.Allowed {
+	if d := Fresh(Principal{AuthTime: now, DeviceBound: true, Method: MethodPasskey}, policy, now); !d.Allowed {
 		t.Fatalf("device-bound passkey = %+v", d)
 	}
 	both := config.AccessPolicy{RequireDeviceBound: true, MaxAuthAgeMinutes: 15}
-	if d := Fresh(Principal{AuthTime: now.Add(-time.Hour), DeviceBound: true}, both, now); d.Code != CodeReauthRequired {
+	if d := Fresh(Principal{AuthTime: now.Add(-time.Hour), DeviceBound: true, Method: MethodPasskey}, both, now); d.Code != CodeReauthRequired {
 		t.Fatalf("device-bound but stale = %+v", d)
 	}
 }
@@ -236,5 +236,23 @@ func TestFreshMethods(t *testing.T) {
 	}
 	if d := Fresh(Principal{AuthTime: now, Method: MethodOIDC}, config.AccessPolicy{}, now); !d.Allowed {
 		t.Fatalf("no methods restriction = %+v", d)
+	}
+}
+
+// In combined mode an OIDC session must not satisfy step-up or device-bound
+// routes, and the step-up page must be told to offer only passkeys.
+func TestStepUpNeedsAPasskeyLogin(t *testing.T) {
+	now := time.Now()
+	oidc := Principal{AuthTime: now, Method: MethodOIDC}
+	for _, policy := range []config.AccessPolicy{{MaxAuthAgeMinutes: 15}, {RequireDeviceBound: true}} {
+		if d := Fresh(oidc, policy, now); d.Code != CodeMethodNotAllowed {
+			t.Fatalf("%+v: OIDC session = %+v", policy, d)
+		}
+		if got := RequiredMethods(policy); len(got) != 1 || got[0] != MethodPasskey {
+			t.Fatalf("%+v: required methods = %v", policy, got)
+		}
+	}
+	if got := RequiredMethods(config.AccessPolicy{}); got != nil {
+		t.Fatalf("no requirement = %v", got)
 	}
 }

@@ -723,8 +723,10 @@ so its ID rotates. `"require_device_bound": true` accepts only a session
 whose passkey cannot be synced to other devices (a security key, a
 device-bound platform key); a synced passkey (iCloud Keychain, Google Password
 Manager) is sent to the login page, which asks for the right one. Both
-require `auth.passkeys`, because an upstream provider's single sign-on would
-answer without a fresh proof.
+require `auth.passkeys` and accept only a passkey login, because an upstream
+provider's single sign-on would answer without a fresh proof: with OIDC
+configured too, such a route sends an OIDC session to sign in with a passkey,
+and `access.methods` cannot list `oidc` next to them.
 
 ### Secret references
 

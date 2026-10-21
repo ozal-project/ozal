@@ -462,6 +462,11 @@ func Validate(cfg Config) (*Config, error) {
 				return nil, fmt.Errorf("config: route %q: access.methods %q is not a configured login method (have %v)", r.Host, m, cfg.Auth.LoginMethods())
 			}
 		}
+		// A recent or device-bound login is a passkey proof; an upstream
+		// provider's session cannot satisfy it.
+		if (r.Access.MaxAuthAgeMinutes > 0 || r.Access.RequireDeviceBound) && slices.Contains(r.Access.Methods, MethodOIDC) {
+			return nil, fmt.Errorf("config: route %q: max_auth_age_minutes and require_device_bound need a passkey login; remove %q from access.methods", r.Host, MethodOIDC)
+		}
 	}
 	if anyProtectedRoute && cfg.Auth.Passkeys != nil {
 		loginHost, err := validatePasskeys(&cfg.Auth)
