@@ -6,6 +6,21 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## BUG-012 — a committed Pages switch never reports an error — 2026-10-21 (committed with this change)
+
+From the [product/code/UX review](reviews/2026-10-21-product-code-ux.md).
+Deploy and rollback read the deployment back after the commit and the live
+swap, under the request context: a client that dropped the connection got
+an error for a build that was already live. The row is now read inside the
+transaction, before the commit; after it only the in-memory swap and a
+pruning detached from the request (`context.WithoutCancel`) remain, neither
+of which can fail the answer.
+
+Test: `TestASwitchThatCommittedNeverReportsAnError` cancels the request
+context right after each commit (test hook `afterCommit`) for two deploys
+and a rollback; with the old post-commit read it fails with "context
+canceled".
+
 ## BUG-010 + BUG-011 — console state that outlived its cause — 2026-10-21 (committed with this change)
 
 From the [product/code/UX review](reviews/2026-10-21-product-code-ux.md).

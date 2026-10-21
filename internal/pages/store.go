@@ -69,6 +69,10 @@ type Store struct {
 
 	mu   sync.Mutex // serialises deploys and rollbacks
 	live atomic.Pointer[map[string]Live]
+
+	// afterCommit, when set by a test, runs right after a deploy or rollback
+	// commits: nothing from there on may fail the request (BUG-012).
+	afterCommit func()
 }
 
 // NewStore opens the store and loads which deployment each site serves.
@@ -183,12 +187,17 @@ func (s *Store) Deploy(ctx context.Context, site string, archive io.Reader) (Dep
 	if err := setLive(ctx, tx, site, id, now); err != nil {
 		return Deployment{}, err
 	}
+	deployment, err := readDeployment(ctx, tx, site, id)
+	if err != nil {
+		return Deployment{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		return Deployment{}, fmt.Errorf("record deployment: %w", err)
 	}
+	s.committed()
 	s.swap(site, Live{Dir: final, Rules: rules})
-	s.prune(ctx, site, id)
-	return s.deployment(ctx, site, id)
+	s.prune(context.WithoutCancel(ctx), site, id)
+	return deployment, nil
 }
 
 // Rollback makes a retained deployment live again.
@@ -222,11 +231,16 @@ func (s *Store) Rollback(ctx context.Context, site, id string) (Deployment, erro
 	if err := setLive(ctx, tx, site, id, s.now()); err != nil {
 		return Deployment{}, err
 	}
+	deployment, err := readDeployment(ctx, tx, site, id)
+	if err != nil {
+		return Deployment{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		return Deployment{}, fmt.Errorf("rollback: %w", err)
 	}
+	s.committed()
 	s.swap(site, Live{Dir: dir, Rules: rules})
-	return s.deployment(ctx, site, id)
+	return deployment, nil
 }
 
 // Sites lists every site with its retained deployments, newest first. Ties
@@ -260,19 +274,27 @@ func (s *Store) Sites(ctx context.Context) ([]Site, error) {
 	return sites, rows.Err()
 }
 
-func (s *Store) deployment(ctx context.Context, site, id string) (Deployment, error) {
-	sites, err := s.Sites(ctx)
+// readDeployment reads the deployment being made live inside the same
+// transaction, so the answer is known before the commit. Once the commit
+// succeeds the build is live: a read after it, under a request context the
+// client may already have dropped, could report an error for a switch that
+// happened (BUG-012).
+func readDeployment(ctx context.Context, tx *sql.Tx, site, id string) (Deployment, error) {
+	d := Deployment{Site: site, ID: id, Live: true}
+	var created int64
+	err := tx.QueryRowContext(ctx, `SELECT created_at, files, bytes FROM deployments WHERE site = ? AND id = ?`, site, id).
+		Scan(&created, &d.Files, &d.Bytes)
 	if err != nil {
-		return Deployment{}, err
+		return Deployment{}, fmt.Errorf("read deployment: %w", err)
 	}
-	for _, st := range sites {
-		for _, d := range st.Deployments {
-			if st.Name == site && d.ID == id {
-				return d, nil
-			}
-		}
+	d.CreatedAt = time.Unix(created, 0).UTC()
+	return d, nil
+}
+
+func (s *Store) committed() {
+	if s.afterCommit != nil {
+		s.afterCommit()
 	}
-	return Deployment{}, ErrNotFound
 }
 
 func setLive(ctx context.Context, tx *sql.Tx, site, id string, now time.Time) error {

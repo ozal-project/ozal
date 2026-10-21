@@ -259,3 +259,40 @@ func isRefusal(err error, code Code) bool {
 	var refusal *RefusedError
 	return errors.As(err, &refusal) && refusal.Code == code
 }
+
+// BUG-012: once a deploy or rollback commits, the build is live, and the
+// answer must say so even if the request context ends right then (a client
+// that drops the connection, a deadline).
+func TestASwitchThatCommittedNeverReportsAnError(t *testing.T) {
+	db, dir := migratedDB(t), t.TempDir()
+	s := newStore(t, db, dir, 5)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s.afterCommit = cancel
+
+	first, err := s.Deploy(ctx, "blog", site(t, "one"))
+	if err != nil {
+		t.Fatalf("deploy committed but reported %v", err)
+	}
+	if !first.Live || first.Files != 1 || first.CreatedAt.IsZero() || liveIndex(t, s, "blog") != "one" {
+		t.Fatalf("deploy answer %+v, live %q", first, liveIndex(t, s, "blog"))
+	}
+
+	ctx, cancel = context.WithCancel(context.Background())
+	defer cancel()
+	s.afterCommit = cancel
+	if _, err := s.Deploy(ctx, "blog", site(t, "two")); err != nil {
+		t.Fatalf("second deploy committed but reported %v", err)
+	}
+
+	ctx, cancel = context.WithCancel(context.Background())
+	defer cancel()
+	s.afterCommit = cancel
+	back, err := s.Rollback(ctx, "blog", first.ID)
+	if err != nil {
+		t.Fatalf("rollback committed but reported %v", err)
+	}
+	if back.ID != first.ID || !back.Live || back.CreatedAt != first.CreatedAt || liveIndex(t, s, "blog") != "one" {
+		t.Fatalf("rollback answer %+v, live %q", back, liveIndex(t, s, "blog"))
+	}
+}
