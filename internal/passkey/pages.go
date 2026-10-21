@@ -2,10 +2,13 @@ package passkey
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"html"
 	"net/http"
 	"path"
+	"sync"
 
 	"github.com/octaviosantacruz/switchboard/internal/config"
 )
@@ -22,6 +25,31 @@ func pageHeaders(h http.Header) {
 	h.Set("Referrer-Policy", "no-referrer")
 	h.Set("X-Frame-Options", "DENY")
 	h.Set("Cache-Control", "no-store")
+}
+
+// assetVersions maps each script and stylesheet to a short hash of its
+// content. Pages link them as name?v=hash, so a browser or Cloudflare can
+// keep a copy for good: a new binary with a changed file links a new URL.
+// Every round trip to the origin costs ~300 ms from far away (2026-10-21).
+var assetVersions = sync.OnceValue(func() map[string]string {
+	versions := map[string]string{}
+	for _, name := range []string{"passkey.js", "passkey.css"} {
+		body, err := assets.ReadFile("assets/" + name)
+		if err != nil {
+			continue
+		}
+		sum := sha256.Sum256(body)
+		versions[name] = hex.EncodeToString(sum[:6])
+	}
+	return versions
+})
+
+// versioned rewrites a page's asset links to their content-hashed URLs.
+func versioned(page []byte) []byte {
+	for name, v := range assetVersions() {
+		page = bytes.ReplaceAll(page, []byte(`"/_/auth/`+name+`"`), []byte(`"/_/auth/`+name+`?v=`+v+`"`))
+	}
+	return page
 }
 
 // servePage serves the login or enrolment page, only on the login host:
@@ -50,6 +78,7 @@ func (g *Gate) servePage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	body = versioned(body)
 	if g.oidc != nil {
 		// The page shows the provider's button only when one is configured;
 		// the name is operator text, escaped like any other.
@@ -78,6 +107,11 @@ func serveAsset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pageHeaders(w.Header())
+	// Only the exact current version is cacheable forever; any other URL is
+	// served fresh, so an old link never pins old code.
+	if v := r.URL.Query().Get("v"); v != "" && v == assetVersions()[name] {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	}
 	// Fixed per extension, never the OS mime table (see the console).
 	w.Header().Set("Content-Type", assetTypes[path.Ext(name)])
 	_, _ = w.Write(body)

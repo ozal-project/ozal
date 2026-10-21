@@ -129,13 +129,31 @@ function finish(result, message) {
   nav.querySelector("a").focus();
 }
 
+// warm opens the connection (DNS, TCP, TLS) to where the visitor goes next
+// while they are still at the passkey prompt: from far away each new
+// connection costs several hundred milliseconds. The server validates the
+// destination later; this only opens a connection to it.
+function warm(url) {
+  try {
+    const origin = new URL(url).origin;
+    if (origin === location.origin || !/^https?:$/.test(new URL(url).protocol)) return;
+    const link = document.createElement("link");
+    link.rel = "preconnect";
+    link.href = origin;
+    document.head.appendChild(link);
+  } catch {}
+}
+
 // setupLoginPage prepares the login page whatever the browser supports:
 // every configured method is offered and the page never picks one for the
 // visitor (no automatic redirect to the provider). On a step-up it says why.
 function setupLoginPage(button) {
   const params = new URLSearchParams(location.search);
   const returnTo = params.get("return_to") || "";
-  if (returnTo) rememberReturn(returnTo);
+  if (returnTo) {
+    rememberReturn(returnTo);
+    warm(returnTo);
+  }
   const provider = document.body.dataset.oidc || "";
   const methods = (params.get("methods") || "").split(",").filter(Boolean);
   const allows = (method) => methods.length === 0 || methods.includes(method);
@@ -203,6 +221,7 @@ function setupEnrol(button) {
   // server or a link preview. Take it out of the address bar and history.
   const token = location.hash.slice(1);
   const returnTo = new URLSearchParams(location.search).get("return_to") || pendingReturn();
+  if (returnTo) warm(returnTo);
   history.replaceState(null, "", location.pathname);
   if (!token) {
     button.disabled = true;

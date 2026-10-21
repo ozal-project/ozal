@@ -17,8 +17,10 @@ function render(search, { oidc = "", webauthn = true, page = "login", fetch = ()
   });
   ["title", "intro", "action", "oidc", "status", "first-time", "username", "sites", "devices"].forEach(el);
   const label = { hidden: false };
+  const head = [];
   let ready;
   const document = {
+    head: { appendChild: (node) => head.push(node) },
     title: "Sign in · Switchboard",
     body: { dataset: { page, oidc } },
     getElementById: (id) => els[id],
@@ -27,7 +29,7 @@ function render(search, { oidc = "", webauthn = true, page = "login", fetch = ()
     addEventListener: (ev, fn) => { if (ev === "DOMContentLoaded") ready = fn; },
   };
   const ctx = {
-    document, URLSearchParams, encodeURIComponent, AbortController, atob, btoa, JSON, Date, String, Uint8Array,
+    document, URL, URLSearchParams, encodeURIComponent, AbortController, atob, btoa, JSON, Date, String, Uint8Array,
     window: webauthn ? { PublicKeyCredential: function () {} } : {},
     location: { search, hash: "", pathname: "/_/auth/" + page, origin: "https://auth.example.com", assign() {} },
     history: { replaceState() {} },
@@ -48,6 +50,7 @@ function render(search, { oidc = "", webauthn = true, page = "login", fetch = ()
     firstTime: !els["first-time"].hidden,
     status: els.status.textContent,
     get devices() { return els.devices.children; },
+    preconnect: head.filter((n) => n.rel === "preconnect").map((n) => n.href),
   };
 }
 
@@ -55,6 +58,7 @@ const rt = "?return_to=" + encodeURIComponent("https://private.example.com/x");
 
 let page = render(rt);
 assert.equal(page.passkey, "shown");
+assert.deepEqual(page.preconnect, ["https://private.example.com"], "the destination's connection is opened during the prompt");
 assert.equal(page.oidc, "", "no provider configured: no provider button");
 assert.equal(page.firstTime, true);
 

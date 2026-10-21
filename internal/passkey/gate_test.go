@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -728,5 +729,32 @@ func TestDevicesPageNeedsAFreshPasskeySession(t *testing.T) {
 	id, _ := sqlite.NewSessions(h.db, auth.Lifetime{Absolute: time.Hour}).Create(context.Background(), stale)
 	if rec := page(id); rec.Code != http.StatusFound || !strings.HasSuffix(rec.Header().Get("Location"), "&reauth=1&methods=passkey") {
 		t.Fatalf("stale session: %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+}
+
+// Scripts and styles are linked by content hash and cacheable forever only
+// at that exact URL; the page itself is never cached.
+func TestAssetsAreVersionedAndCacheable(t *testing.T) {
+	h := newHarness(t)
+	get := func(path string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		h.gate.ServeAuthEndpoint(rec, httptest.NewRequest(http.MethodGet, loginOrigin+path, nil))
+		return rec
+	}
+	page := get("/_/auth/login")
+	if page.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("page Cache-Control = %q", page.Header().Get("Cache-Control"))
+	}
+	m := regexp.MustCompile(`"/_/auth/passkey\.js\?v=([0-9a-f]{12})"`).FindStringSubmatch(page.Body.String())
+	if m == nil {
+		t.Fatal("page does not link a versioned script")
+	}
+	if cc := get("/_/auth/passkey.js?v=" + m[1]).Header().Get("Cache-Control"); !strings.Contains(cc, "immutable") {
+		t.Fatalf("current version Cache-Control = %q", cc)
+	}
+	for _, path := range []string{"/_/auth/passkey.js", "/_/auth/passkey.js?v=000000000000"} {
+		if cc := get(path).Header().Get("Cache-Control"); cc != "no-store" {
+			t.Fatalf("%s Cache-Control = %q", path, cc)
+		}
 	}
 }
