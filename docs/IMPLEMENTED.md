@@ -6,6 +6,25 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## BUG-010 + BUG-011 — console state that outlived its cause — 2026-10-21 (committed with this change)
+
+From the [product/code/UX review](reviews/2026-10-21-product-code-ux.md).
+
+- **BUG-010:** a simulator result keeps the inputs it answered
+  (`web/console/src/lib/simulation.ts`). Once the form changes or a later run
+  fails it shows as the previous answer: grey, "Was allowed/denied", and
+  "Not evaluated for the current inputs" naming the old principal. Never
+  green for inputs it did not evaluate.
+- **BUG-011:** every Sites load decides the whole state
+  (`web/console/src/lib/loadState.ts`), so "not enabled on this edge" clears
+  when a later load succeeds.
+
+Tests: `node --test web/console/src/lib/*.test.ts`, now step 6d of
+`scripts/verify.sh` (edits, failed rerun, normalization; 404 → 200). The
+pages themselves were checked with `svelte-check`, not in a browser. The
+session-requirements display the review also asks for in the simulator
+(methods, device-bound, max auth age) is not part of this change.
+
 ## BUG-013 + site upload deadline — 2026-10-21 (`1d64165`, deployed)
 
 Found in the [product/code/UX review](reviews/2026-10-21-product-code-ux.md)

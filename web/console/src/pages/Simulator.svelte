@@ -12,6 +12,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Separator } from "$lib/components/ui/separator";
   import { explain, fetchOverview, type Report, type RouteOverview } from "$lib/api";
+  import { freshness, inputKey, type Inputs } from "$lib/simulation";
   import KeyIcon from "@lucide/svelte/icons/key-round";
   import InfoIcon from "@lucide/svelte/icons/info";
 
@@ -26,8 +27,14 @@
   let groups = $state("");
   let busy = $state(false);
   let error = $state("");
-  let report = $state<Report | null>(null);
+  // A result keeps the inputs it answered; it stops looking like the verdict
+  // as soon as the form changes or a later run fails (BUG-010).
+  let result = $state<{ report: Report; key: string } | null>(null);
+  let failedSince = $state(false);
   let history = $state<Report[]>([]);
+  const inputs = $derived<Inputs>({ host, mode, email, verified, groups });
+  const fresh = $derived(freshness(result, inputs, failedSince));
+  const report = $derived(result?.report ?? null);
 
   const selected = $derived(routes.find((r) => r.host === host));
   const stage = { authorization_only: "Authorize · policy check after login", gate_only: "Gate · no session, login required first", public_route: "None · public route" };
@@ -48,12 +55,16 @@
       if (!email.trim()) return (error = "Enter an email, or choose “No session”.");
       principal = { email: email.trim(), email_verified: verified, groups: groups.split(",").map((g) => g.trim()).filter(Boolean) };
     }
+    const key = inputKey(inputs);
     busy = true;
     try {
-      report = await explain(token.trim(), host, principal);
-      history = [report, ...history].slice(0, 8);
+      const answer = await explain(token.trim(), host, principal);
+      result = { report: answer, key };
+      failedSince = false;
+      history = [answer, ...history].slice(0, 8);
     } catch (err) {
       error = (err as Error).message;
+      failedSince = true;
     } finally {
       busy = false;
     }
@@ -128,7 +139,7 @@
   </Panel>
 
   <div class="min-w-0 space-y-6">
-    <Panel index="02" label="Decision" title={report ? `Answer for ${report.route}` : "Waiting for a caller"} sub={report ? stage[report.scope] : "Run a simulation to see the verdict."}>
+    <Panel index="02" label="Decision" title={report ? `${fresh === "previous" ? "Previous answer" : "Answer"} for ${report.route}` : "Waiting for a caller"} sub={report ? stage[report.scope] : "Run a simulation to see the verdict."}>
       <div aria-live="polite">
         {#if !report}
           <div class="border-border flex flex-col items-center gap-3 rounded-lg border border-dashed px-6 py-16 text-center">
@@ -138,11 +149,15 @@
           </div>
         {:else}
           {@const ok = report.decision.allowed}
-          <div class={["flex items-center gap-5 rounded-xl border p-6", ok ? "border-success/40 bg-success/[0.06]" : "border-destructive/40 bg-destructive/[0.06]"]}>
-            <span class={["lamp size-12", ok ? "lamp-on" : "lamp-off"]} aria-hidden="true"></span>
+          {@const live = fresh === "current"}
+          {#if !live}
+            <Alert.Root class="mb-4"><Alert.Description>Not evaluated for the current inputs{failedSince ? ": the last run failed" : ""}. This is the previous answer{report.principal ? ` for ${report.principal.email}` : ""}; run the simulation again for a verdict.</Alert.Description></Alert.Root>
+          {/if}
+          <div class={["flex items-center gap-5 rounded-xl border p-6", !live ? "border-border bg-muted/20 opacity-70" : ok ? "border-success/40 bg-success/[0.06]" : "border-destructive/40 bg-destructive/[0.06]"]}>
+            <span class={["lamp size-12", !live ? "" : ok ? "lamp-on" : "lamp-off"]} aria-hidden="true"></span>
             <div class="min-w-0">
-              <p class="plate">{ok ? "Line connected" : "Line refused"}</p>
-              <p class={["mt-1 text-3xl font-semibold tracking-tight", ok ? "text-success" : "text-destructive"]}>{ok ? "Allowed" : "Denied"}</p>
+              <p class="plate">{!live ? "Previous answer" : ok ? "Line connected" : "Line refused"}</p>
+              <p class={["mt-1 text-3xl font-semibold tracking-tight", !live ? "text-muted-foreground" : ok ? "text-success" : "text-destructive"]}>{!live ? (ok ? "Was allowed" : "Was denied") : ok ? "Allowed" : "Denied"}</p>
               <code class="text-muted-foreground font-mono text-sm">{report.decision.code}</code>
             </div>
           </div>

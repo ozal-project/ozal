@@ -19,6 +19,7 @@
   let loading = $state(false);
   // The token is shared by the console pages, in this tab's memory only.
   import { admin } from "$lib/adminToken.svelte";
+  import { afterLoad } from "$lib/loadState";
   let pending = $state("");
   // Feedback belongs next to the button that caused it: a message at the top
   // of the page is out of sight when the click happened further down.
@@ -29,10 +30,9 @@
     loading = true;
     try {
       sites = await fetchSites();
-      error = "";
+      ({ disabled, error } = afterLoad({ ok: true }));
     } catch (e) {
-      disabled = e instanceof PagesDisabledError;
-      error = (e as Error).message;
+      ({ disabled, error } = afterLoad({ ok: false, disabled: e instanceof PagesDisabledError, message: (e as Error).message }));
     } finally {
       loading = false;
     }

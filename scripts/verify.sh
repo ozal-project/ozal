@@ -62,8 +62,10 @@ fi
 if command -v node >/dev/null 2>&1; then
   echo "[6c] passkey login page script"
   node scripts/test-passkey-page.mjs
+  echo "[6d] console state logic"
+  node --test web/console/src/lib/*.test.ts
 else
-  echo "  node not installed: passkey page script not exercised"
+  echo "  node not installed: passkey page script and console logic not exercised"
 fi
 
 echo "[7/7] git diff --check"
