@@ -243,29 +243,58 @@ function setupEnrol(button) {
   });
 }
 
+// ago turns a timestamp into "just now", "3 hours ago", "Oct 21".
+function ago(iso) {
+  const then = new Date(iso);
+  const seconds = (Date.now() - then.getTime()) / 1000;
+  if (seconds < 90) return "just now";
+  if (seconds < 3600) return Math.round(seconds / 60) + " minutes ago";
+  if (seconds < 86400) return Math.round(seconds / 3600) + " hours ago";
+  if (seconds < 7 * 86400) return Math.round(seconds / 86400) + " days ago";
+  return then.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
 // setupDevices lists the visitor's passkeys and lets them add or remove one
 // (ID-008). The server checks every request against a recent passkey proof;
 // when that lapses it answers 403 and the page sends the visitor to confirm.
 function setupDevices(button) {
   const list = document.getElementById("devices");
   const relogin = () => location.assign("/_/auth/login?return_to=" + encodeURIComponent(location.origin + "/_/auth/devices") + "&reauth=1&methods=passkey");
-  const when = (iso) => new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  const el = (tag, className, text) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  };
 
   async function load() {
     const data = await post("/_/auth/devices/list", {});
+    document.getElementById("email").textContent = data.email;
+    document.getElementById("who").hidden = false;
     list.replaceChildren(...data.passkeys.map((key) => {
-      const item = document.createElement("li");
-      const label = document.createElement("span");
-      label.textContent = (key.synced ? "Synced passkey" : "Passkey on one device") + " · added " + when(key.created) +
-        (key.last_used ? " · last used " + when(key.last_used) : "") + " · " + key.id.slice(0, 8);
-      const remove = document.createElement("button");
+      const item = el("li");
+      const title = el("span", "provider", key.provider);
+      title.append(el("span", key.synced ? "badge" : "badge bound", key.synced ? "Synced" : "This device only"));
+      const meta = el("span", "meta", "Added " + ago(key.created) + (key.last_used ? " · last used " + ago(key.last_used) : " · not used yet"));
+      const remove = el("button", "", "Remove");
       remove.type = "button";
-      remove.textContent = "Remove";
       remove.disabled = data.passkeys.length === 1;
-      remove.addEventListener("click", () => revoke(key.id).catch(fail));
-      item.append(label, remove);
+      remove.title = remove.disabled ? "Your only passkey cannot be removed" : "";
+      remove.setAttribute("aria-label", "Remove the " + key.provider + " passkey");
+      remove.addEventListener("click", () => {
+        if (confirm("Remove the " + key.provider + " passkey? You will be signed out everywhere.")) revoke(key.id).catch(fail);
+      });
+      item.append(title, remove, meta);
       return item;
     }));
+    const nav = document.getElementById("sites");
+    const sites = data.sites || [];
+    nav.replaceChildren(...sites.map((url) => {
+      const a = el("a", "", new URL(url).host);
+      a.href = url;
+      return a;
+    }));
+    nav.hidden = sites.length === 0;
   }
 
   async function revoke(id) {
@@ -274,6 +303,7 @@ function setupDevices(button) {
     show("Removed. You are signed out everywhere; sign in again with another passkey.", "ok");
     list.replaceChildren();
     button.disabled = true;
+    document.getElementById("who").hidden = true;
   }
 
   function fail(error) {
@@ -282,14 +312,19 @@ function setupDevices(button) {
     show(explain(error, "enrol"), "error");
   }
 
+  document.getElementById("signout").addEventListener("click", async () => {
+    await fetch("/_/auth/logout", { method: "POST", credentials: "same-origin" }).catch(() => {});
+    location.assign("/_/auth/login");
+  });
+
   button.addEventListener("click", async () => {
     button.disabled = true;
     show("Waiting for your device…");
     try {
       const options = await post("/_/auth/devices/add/begin", {});
       const credential = await navigator.credentials.create({ publicKey: creationOptions(options) });
-      await post("/_/auth/devices/add/finish", credentialJSON(credential));
-      show("Passkey added.", "ok");
+      const added = await post("/_/auth/devices/add/finish", credentialJSON(credential));
+      show(added.provider + " passkey added.", "ok");
       button.disabled = false;
       await load();
     } catch (error) {

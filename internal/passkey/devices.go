@@ -56,6 +56,7 @@ func (g *Gate) serveDevicesPage(w http.ResponseWriter, r *http.Request) {
 
 type deviceView struct {
 	ID       string    `json:"id"`
+	Provider string    `json:"provider"`
 	Created  time.Time `json:"created"`
 	LastUsed time.Time `json:"last_used,omitzero"`
 	Synced   bool      `json:"synced"`
@@ -72,9 +73,15 @@ func (g *Gate) devicesList(w http.ResponseWriter, r *http.Request) (any, *apiErr
 	}
 	views := make([]deviceView, 0, len(keys))
 	for _, k := range keys {
-		views = append(views, deviceView{ID: hex.EncodeToString(k.Credential.ID), Created: k.CreatedAt, LastUsed: k.LastUsedAt, Synced: k.Synced()})
+		views = append(views, deviceView{
+			ID:       hex.EncodeToString(k.Credential.ID),
+			Provider: providerName(k.Credential.Authenticator.AAGUID, k.Synced()),
+			Created:  k.CreatedAt,
+			LastUsed: k.LastUsedAt,
+			Synced:   k.Synced(),
+		})
 	}
-	return map[string]any{"email": user.Email, "passkeys": views}, nil
+	return map[string]any{"email": user.Email, "passkeys": views, "sites": g.protected}, nil
 }
 
 func (g *Gate) devicesAddBegin(w http.ResponseWriter, r *http.Request) (any, *apiError) {
@@ -131,7 +138,7 @@ func (g *Gate) devicesAddFinish(w http.ResponseWriter, r *http.Request) (any, *a
 	// Alerted like an enrolment: a passkey nobody expected is the sign of a
 	// stolen session.
 	g.emit(r, events.Event{Type: events.PasskeyRegistered, Actor: user.Subject(), Code: kind, Reason: "added from a signed-in session"})
-	return map[string]string{"id": hex.EncodeToString(credential.ID)}, nil
+	return map[string]string{"id": hex.EncodeToString(credential.ID), "provider": providerName(credential.Authenticator.AAGUID, credential.Flags.BackupEligible)}, nil
 }
 
 type revokeRequest struct {

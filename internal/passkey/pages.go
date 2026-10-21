@@ -20,7 +20,7 @@ var assets embed.FS
 // script can run, nothing can frame the page (clickjacking a passkey
 // prompt), and the enrolment URL never leaks in a Referer.
 func pageHeaders(h http.Header) {
-	h.Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
+	h.Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("Referrer-Policy", "no-referrer")
 	h.Set("X-Frame-Options", "DENY")
@@ -92,6 +92,7 @@ func (g *Gate) servePage(w http.ResponseWriter, r *http.Request) {
 var assetTypes = map[string]string{
 	".js":  "text/javascript; charset=utf-8",
 	".css": "text/css; charset=utf-8",
+	".ttf": "font/ttf",
 }
 
 func serveAsset(w http.ResponseWriter, r *http.Request) {
@@ -111,6 +112,10 @@ func serveAsset(w http.ResponseWriter, r *http.Request) {
 	// served fresh, so an old link never pins old code.
 	if v := r.URL.Query().Get("v"); v != "" && v == assetVersions()[name] {
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	} else if name == "manrope.ttf" {
+		// The font is linked from the stylesheet without a version; it
+		// changes only with a new font release.
+		w.Header().Set("Cache-Control", "public, max-age=604800")
 	}
 	// Fixed per extension, never the OS mime table (see the console).
 	w.Header().Set("Content-Type", assetTypes[path.Ext(name)])
