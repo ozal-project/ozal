@@ -172,7 +172,6 @@ items do not reopen or imply failure of the historical security closures.
 | `BUG-010` | P1: Simulator retains an authoritative-looking Allowed result after form edits or a failed rerun. | Ready (browser fixture reproduced edit and HTTP 503) | Result is tied to submitted inputs/config revision; changed inputs and failures cannot imply current authorization; scope/session requirements visible; regression passes. |
 | `BUG-011` | P2: Sites never clears its disabled state after a 404 followed by a successful response. | Ready (browser fixture reproduced) | 404 → 200 + Refresh displays the recovered site data and correct capability state; transition regression passes. |
 | `BUG-012` | P1 verification: Pages deploy/rollback performs a context-dependent read after commit/live swap, allowing an error response after activation and omission of the success event. | Verify (source path established; timing not reproduced) | Deterministic post-commit failure test establishes behavior; committed outcome is reconciliable and reported accurately; activation is observable independently of the client response; tests pass. |
-| `BUG-013` | P2 verification: extractor maps all copy errors, including destination write failures, to an invalid-archive refusal/422. | Verify (source path established; no disk-full drill run) | Injected write failure is distinguished from malformed archive input through safe stable error/status/event handling; real host storage is untouched; regression passes. |
 
 ---
 

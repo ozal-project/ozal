@@ -6,6 +6,28 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## BUG-013 + site upload deadline — 2026-10-21 (`1d64165`, deployed)
+
+Found in the [product/code/UX review](reviews/2026-10-21-product-code-ux.md)
+and then observed live: two Portfolio deploys over the homelab tunnel were
+refused as `archive.invalid` ("archive ended inside a file"). The admin
+server cuts every request at 10 s and the upload took 5–8 s plus the rest.
+
+- Authenticated site uploads get their own 10-minute deadline
+  (`http.ResponseController`, after the bearer check); the rest of the admin
+  API keeps 10 s.
+- The extractor tells the archive's faults (gzip/flate/tar format, a stream
+  ending inside an entry: `archive.invalid`, 422) from the transport's, which
+  keep their cause: `upload.timeout` 408, `upload.interrupted` 400, the size
+  cap 413. A failed write is a server error (500), never the archive's.
+
+Tests: deadline, cap and real truncation through `Extract`; `copyEntry`
+blames a failing writer; a real HTTP server with a 200 ms `ReadTimeout`
+accepts a 700 ms authenticated upload; 408 + `pages.refused`
+`upload.timeout`. Both regressions fail with the old behavior restored. No
+disk-full drill on real storage. Deployed: the edge binary hash matches a
+clean build of `1d64165`.
+
 ## UI-003 — People in the admin console — 2026-10-21 (committed with this change)
 
 The operator manages people from the console instead of `switchboard user`
