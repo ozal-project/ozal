@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"log/slog"
 	mrand "math/rand/v2"
+	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -31,9 +33,14 @@ const (
 // ManagerConfig configures the certificate manager. Test callers inject Now
 // and Jitter and shrink the timing fields to keep the loop deterministic.
 type ManagerConfig struct {
-	// Host is the single certificate name this manager serves: a hostname, or
-	// a single-level wildcard such as "*.example.com" (see names.go).
+	// Host is the certificate's identity: its first name, the key it is
+	// stored under and the host its events carry. A hostname, or a
+	// single-level wildcard such as "*.example.com" (see names.go).
 	Host string
+	// AltNames are further names on the same certificate, such as the
+	// "example.com" a "*.example.com" does not cover. They share its key,
+	// its storage and its renewal.
+	AltNames []string
 	// RootCAs overrides system certificate roots, for explicit staging trust.
 	RootCAs *x509.CertPool
 	// AttemptTimeout bounds one issuance attempt, DNS waits included.
@@ -75,12 +82,23 @@ type Manager struct {
 type activeCertificate struct {
 	cert *tls.Certificate
 	leaf *x509.Certificate
+	// partial marks a stored certificate that lacks a name added to the
+	// configuration since it was issued. It keeps serving the names it does
+	// carry while its replacement is issued, instead of leaving every host
+	// without a certificate for the length of an issuance.
+	partial bool
 }
 
 // NewManager validates its dependencies and applies the timing defaults.
 func NewManager(cfg ManagerConfig, store Store, issuer Issuer) (*Manager, error) {
 	if cfg.Host == "" {
 		return nil, errors.New("certs: manager requires a host")
+	}
+	cfg.AltNames = slices.Clone(cfg.AltNames)
+	for i, name := range cfg.AltNames {
+		if name == "" || strings.EqualFold(name, cfg.Host) || slices.ContainsFunc(cfg.AltNames[:i], func(n string) bool { return strings.EqualFold(n, name) }) {
+			return nil, fmt.Errorf("certs: certificate name %q is empty or repeated", name)
+		}
 	}
 	if store == nil {
 		return nil, errors.New("certs: manager requires a store")
@@ -136,11 +154,14 @@ func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 	if hello == nil {
 		return nil, errors.New("certs: no client hello")
 	}
-	if !Covers(m.cfg.Host, hello.ServerName) {
-		return nil, fmt.Errorf("certs: this listener serves %q, not %q", m.cfg.Host, hello.ServerName)
+	if !CoversAny(m.names(), hello.ServerName) {
+		return nil, fmt.Errorf("certs: this listener serves %v, not %q", m.names(), hello.ServerName)
 	}
 	active := m.current.Load()
 	if active == nil {
+		return nil, errNotConfigured
+	}
+	if active.partial && !CoversAny(active.leaf.DNSNames, hello.ServerName) {
 		return nil, errNotConfigured
 	}
 	now := m.now()
@@ -182,8 +203,16 @@ func (m *Manager) startup(ctx context.Context) {
 	if gen, ok, err := m.store.Load(ctx, m.cfg.Host); err != nil {
 		m.logger().Warn("certificate state could not be read", "host", m.cfg.Host, "error", err)
 	} else if ok {
-		if cert, err := ParseGeneration(gen.CertPEM, gen.KeyPEM, m.cfg.Host, m.now(), m.cfg.RootCAs); err != nil {
-			m.logger().Warn("stored certificate is not usable", "host", m.cfg.Host, "error", err)
+		if cert, err := ParseGeneration(gen.CertPEM, gen.KeyPEM, m.names(), m.now(), m.cfg.RootCAs); err != nil {
+			if cert, partialErr := ParseGeneration(gen.CertPEM, gen.KeyPEM, []string{m.cfg.Host}, m.now(), m.cfg.RootCAs); len(m.cfg.AltNames) > 0 && partialErr == nil {
+				// Valid, but issued before a name was added: serve what it
+				// covers and replace it now.
+				m.current.Store(&activeCertificate{cert: &cert, leaf: cert.Leaf, partial: true})
+				m.logger().Warn("stored certificate lacks a configured name; serving it for the names it carries until its replacement is issued",
+					"host", m.cfg.Host, "error", err)
+			} else {
+				m.logger().Warn("stored certificate is not usable", "host", m.cfg.Host, "error", err)
+			}
 		} else {
 			m.current.Store(&activeCertificate{cert: &cert, leaf: cert.Leaf})
 			m.logger().Info("loaded stored certificate",
@@ -214,7 +243,7 @@ func (m *Manager) waitFor(now time.Time) time.Duration {
 		return next.Sub(now)
 	}
 	active := m.current.Load()
-	if active == nil {
+	if active == nil || active.partial {
 		return 0
 	}
 	if RenewalDue(now, active.leaf.NotBefore, active.leaf.NotAfter) {
@@ -243,12 +272,12 @@ func (m *Manager) attempt(ctx context.Context) {
 		m.recordFailure(started, fmt.Errorf("certs: generate certificate key: %w", err))
 		return
 	}
-	gen, err := m.issuer.Obtain(attemptCtx, m.cfg.Host, key)
+	gen, err := m.issuer.Obtain(attemptCtx, m.names(), key)
 	if err != nil {
 		m.recordFailure(started, err)
 		return
 	}
-	cert, err := ParseGeneration(gen.CertPEM, gen.KeyPEM, m.cfg.Host, m.now(), m.cfg.RootCAs)
+	cert, err := ParseGeneration(gen.CertPEM, gen.KeyPEM, m.names(), m.now(), m.cfg.RootCAs)
 	if err != nil {
 		m.recordFailure(started, err)
 		return
@@ -335,6 +364,7 @@ func (m *Manager) backoffDelay(err error, failures int) time.Duration {
 // Status is the manager's observable state for the trust console.
 type Status struct {
 	Host           string
+	Names          []string
 	Valid          bool
 	NotBefore      time.Time
 	NotAfter       time.Time
@@ -347,7 +377,7 @@ type Status struct {
 
 // Status reports the current generation and the last/next attempt.
 func (m *Manager) Status() Status {
-	status := Status{Host: m.cfg.Host}
+	status := Status{Host: m.cfg.Host, Names: m.names()}
 	now := m.now()
 	if active := m.current.Load(); active != nil {
 		status.Valid = !now.Before(active.leaf.NotBefore) && now.Before(active.leaf.NotAfter)
@@ -365,6 +395,9 @@ func (m *Manager) Status() Status {
 }
 
 func (m *Manager) now() time.Time { return m.cfg.Now() }
+
+// names lists every name on the certificate, its identity first.
+func (m *Manager) names() []string { return append([]string{m.cfg.Host}, m.cfg.AltNames...) }
 
 func (m *Manager) logger() *slog.Logger { return m.cfg.Logger }
 

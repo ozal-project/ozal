@@ -16,7 +16,7 @@ import (
 // testGeneration builds an issuer and a leaf/signing pair for host, and
 // returns the pem-encoded pair plus the parsed leaf. Every test that needs
 // a certificate starts here, so no test ever depends on a real CA.
-func testGeneration(t *testing.T, host string, notBefore, notAfter time.Time) (StoredGeneration, *x509.Certificate) {
+func testGeneration(t *testing.T, host string, notBefore, notAfter time.Time, altNames ...string) (StoredGeneration, *x509.Certificate) {
 	t.Helper()
 	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -47,7 +47,7 @@ func testGeneration(t *testing.T, host string, notBefore, notAfter time.Time) (S
 	leafTemplate := &x509.Certificate{
 		SerialNumber: big.NewInt(2),
 		Subject:      pkix.Name{CommonName: host},
-		DNSNames:     []string{host},
+		DNSNames:     append([]string{host}, altNames...),
 		NotBefore:    notBefore,
 		NotAfter:     notAfter,
 		KeyUsage:     x509.KeyUsageDigitalSignature,
@@ -76,7 +76,7 @@ func testGeneration(t *testing.T, host string, notBefore, notAfter time.Time) (S
 func TestParseGenerationAcceptsValidPair(t *testing.T) {
 	start := time.Date(2026, time.October, 18, 0, 0, 0, 0, time.UTC)
 	gen, leaf := testGeneration(t, "preview.example.com", start, start.Add(90*24*time.Hour))
-	cert, err := ParseGeneration(gen.CertPEM, gen.KeyPEM, "preview.example.com", start.Add(time.Hour), testRoots(t, gen))
+	cert, err := ParseGeneration(gen.CertPEM, gen.KeyPEM, []string{"preview.example.com"}, start.Add(time.Hour), testRoots(t, gen))
 	if err != nil {
 		t.Fatalf("ParseGeneration: %v", err)
 	}
@@ -93,32 +93,32 @@ func TestParseGenerationRefusals(t *testing.T) {
 	valid, _ := testGeneration(t, "preview.example.com", start, start.Add(24*time.Hour))
 
 	t.Run("wrong host", func(t *testing.T) {
-		_, err := ParseGeneration(valid.CertPEM, valid.KeyPEM, "other.example.com", start, testRoots(t, valid))
+		_, err := ParseGeneration(valid.CertPEM, valid.KeyPEM, []string{"other.example.com"}, start, testRoots(t, valid))
 		if !errors.Is(err, ErrInvalidGeneration) {
 			t.Fatalf("err = %v, want ErrInvalidGeneration", err)
 		}
 	})
 	t.Run("expired", func(t *testing.T) {
-		_, err := ParseGeneration(valid.CertPEM, valid.KeyPEM, "preview.example.com", start.Add(48*time.Hour), testRoots(t, valid))
+		_, err := ParseGeneration(valid.CertPEM, valid.KeyPEM, []string{"preview.example.com"}, start.Add(48*time.Hour), testRoots(t, valid))
 		if !errors.Is(err, ErrInvalidGeneration) {
 			t.Fatalf("err = %v, want ErrInvalidGeneration", err)
 		}
 	})
 	t.Run("not yet valid", func(t *testing.T) {
-		_, err := ParseGeneration(valid.CertPEM, valid.KeyPEM, "preview.example.com", start.Add(-time.Hour), testRoots(t, valid))
+		_, err := ParseGeneration(valid.CertPEM, valid.KeyPEM, []string{"preview.example.com"}, start.Add(-time.Hour), testRoots(t, valid))
 		if !errors.Is(err, ErrInvalidGeneration) {
 			t.Fatalf("err = %v, want ErrInvalidGeneration", err)
 		}
 	})
 	t.Run("key from another generation", func(t *testing.T) {
 		other, _ := testGeneration(t, "preview.example.com", start, start.Add(24*time.Hour))
-		_, err := ParseGeneration(valid.CertPEM, other.KeyPEM, "preview.example.com", start, testRoots(t, valid))
+		_, err := ParseGeneration(valid.CertPEM, other.KeyPEM, []string{"preview.example.com"}, start, testRoots(t, valid))
 		if !errors.Is(err, ErrInvalidGeneration) {
 			t.Fatalf("err = %v, want ErrInvalidGeneration", err)
 		}
 	})
 	t.Run("garbage", func(t *testing.T) {
-		_, err := ParseGeneration([]byte("not pem"), []byte("not pem"), "preview.example.com", start, nil)
+		_, err := ParseGeneration([]byte("not pem"), []byte("not pem"), []string{"preview.example.com"}, start, nil)
 		if !errors.Is(err, ErrInvalidGeneration) {
 			t.Fatalf("err = %v, want ErrInvalidGeneration", err)
 		}
@@ -149,7 +149,7 @@ func TestParseGenerationRefusals(t *testing.T) {
 		_, err = ParseGeneration(
 			pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}),
 			pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}),
-			"preview.example.com", start.Add(time.Minute), nil,
+			[]string{"preview.example.com"}, start.Add(time.Minute), nil,
 		)
 		if !errors.Is(err, ErrInvalidGeneration) {
 			t.Fatalf("err = %v, want ErrInvalidGeneration", err)
@@ -180,7 +180,7 @@ func TestParseGenerationRefusals(t *testing.T) {
 		_, err = ParseGeneration(
 			pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}),
 			pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}),
-			"preview.example.com", start.Add(time.Minute), nil,
+			[]string{"preview.example.com"}, start.Add(time.Minute), nil,
 		)
 		if !errors.Is(err, ErrInvalidGeneration) {
 			t.Fatalf("err = %v, want ErrInvalidGeneration", err)
@@ -212,13 +212,13 @@ func TestParseGenerationRejectsBrokenChain(t *testing.T) {
 		"unrelated issuer": append(pem.EncodeToMemory(leaf), otherCA...),
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := ParseGeneration(chain, gen.KeyPEM, "preview.example.com", now, testRoots(t, other)); !errors.Is(err, ErrInvalidGeneration) {
+			if _, err := ParseGeneration(chain, gen.KeyPEM, []string{"preview.example.com"}, now, testRoots(t, other)); !errors.Is(err, ErrInvalidGeneration) {
 				t.Fatalf("broken chain accepted: %v", err)
 			}
 		})
 	}
 	t.Run("untrusted embedded root", func(t *testing.T) {
-		if _, err := ParseGeneration(gen.CertPEM, gen.KeyPEM, "preview.example.com", now, x509.NewCertPool()); !errors.Is(err, ErrInvalidGeneration) {
+		if _, err := ParseGeneration(gen.CertPEM, gen.KeyPEM, []string{"preview.example.com"}, now, x509.NewCertPool()); !errors.Is(err, ErrInvalidGeneration) {
 			t.Fatalf("untrusted root accepted: %v", err)
 		}
 	})
@@ -274,16 +274,16 @@ func TestParseGenerationVerifiesIntermediateWithoutSendingRoot(t *testing.T) {
 	roots := x509.NewCertPool()
 	roots.AddCert(root)
 	chain := append(append([]byte(nil), leafPEM...), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: intermediate.Raw})...)
-	if _, err := ParseGeneration(chain, keyPEM, "preview.example.com", now, roots); err != nil {
+	if _, err := ParseGeneration(chain, keyPEM, []string{"preview.example.com"}, now, roots); err != nil {
 		t.Fatalf("valid chain without root rejected: %v", err)
 	}
-	if _, err := ParseGeneration(leafPEM, keyPEM, "preview.example.com", now, roots); !errors.Is(err, ErrInvalidGeneration) {
+	if _, err := ParseGeneration(leafPEM, keyPEM, []string{"preview.example.com"}, now, roots); !errors.Is(err, ErrInvalidGeneration) {
 		t.Fatalf("missing intermediate accepted: %v", err)
 	}
 	broken := append([]byte(nil), intermediate.Raw...)
 	broken[len(broken)-1] ^= 1
 	chain = append(append([]byte(nil), leafPEM...), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: broken})...)
-	if _, err := ParseGeneration(chain, keyPEM, "preview.example.com", now, roots); !errors.Is(err, ErrInvalidGeneration) {
+	if _, err := ParseGeneration(chain, keyPEM, []string{"preview.example.com"}, now, roots); !errors.Is(err, ErrInvalidGeneration) {
 		t.Fatalf("invalid issuer signature accepted: %v", err)
 	}
 }

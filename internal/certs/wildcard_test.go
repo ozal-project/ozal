@@ -14,7 +14,7 @@ const wildcardName = "*.example.com"
 func TestParseGenerationAcceptsAWildcardLeaf(t *testing.T) {
 	now := time.Date(2026, time.October, 19, 0, 0, 0, 0, time.UTC)
 	gen, _ := testGeneration(t, wildcardName, now.Add(-time.Hour), now.Add(90*24*time.Hour))
-	cert, err := ParseGeneration(gen.CertPEM, gen.KeyPEM, wildcardName, now, testRoots(t, gen))
+	cert, err := ParseGeneration(gen.CertPEM, gen.KeyPEM, []string{wildcardName}, now, testRoots(t, gen))
 	if err != nil {
 		t.Fatalf("a wildcard leaf for the configured wildcard must be accepted: %v", err)
 	}
@@ -26,7 +26,7 @@ func TestParseGenerationAcceptsAWildcardLeaf(t *testing.T) {
 func TestParseGenerationRejectsAWildcardOfAnotherDomain(t *testing.T) {
 	now := time.Date(2026, time.October, 19, 0, 0, 0, 0, time.UTC)
 	gen, _ := testGeneration(t, "*.evil.net", now.Add(-time.Hour), now.Add(time.Hour))
-	if _, err := ParseGeneration(gen.CertPEM, gen.KeyPEM, wildcardName, now, testRoots(t, gen)); err == nil {
+	if _, err := ParseGeneration(gen.CertPEM, gen.KeyPEM, []string{wildcardName}, now, testRoots(t, gen)); err == nil {
 		t.Fatal("a wildcard for another domain must never be activated")
 	}
 }
@@ -34,7 +34,7 @@ func TestParseGenerationRejectsAWildcardOfAnotherDomain(t *testing.T) {
 func TestParseGenerationRejectsAPlainLeafForAWildcardName(t *testing.T) {
 	now := time.Date(2026, time.October, 19, 0, 0, 0, 0, time.UTC)
 	gen, _ := testGeneration(t, "preview.example.com", now.Add(-time.Hour), now.Add(time.Hour))
-	if _, err := ParseGeneration(gen.CertPEM, gen.KeyPEM, wildcardName, now, testRoots(t, gen)); err == nil {
+	if _, err := ParseGeneration(gen.CertPEM, gen.KeyPEM, []string{wildcardName}, now, testRoots(t, gen)); err == nil {
 		t.Fatal("a single-host leaf does not satisfy a wildcard configuration")
 	}
 }
@@ -110,7 +110,7 @@ func TestACMEIssuerIssuesAWildcardWithTheBaseChallenge(t *testing.T) {
 	dns := newFakeDNS()
 	issuer, _ := testACMEIssuer(t, server, dns, &fakeResolver{dns: dns}, ACMEConfig{})
 
-	gen, err := issuer.Obtain(context.Background(), wildcardName, testSigningKey(t))
+	gen, err := issuer.Obtain(context.Background(), []string{wildcardName}, testSigningKey(t))
 	if err != nil {
 		t.Fatalf("Obtain: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestACMEIssuerIssuesAWildcardWithTheBaseChallenge(t *testing.T) {
 	}
 	roots := x509.NewCertPool()
 	roots.AddCert(fake.caCert)
-	if _, err := ParseGeneration(gen.CertPEM, gen.KeyPEM, wildcardName, time.Now(), roots); err != nil {
+	if _, err := ParseGeneration(gen.CertPEM, gen.KeyPEM, []string{wildcardName}, time.Now(), roots); err != nil {
 		t.Fatalf("issued wildcard generation is not usable: %v", err)
 	}
 }

@@ -17,6 +17,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -35,6 +36,8 @@ type fakeDNS struct {
 	deleteErr        error
 	created, deleted int
 	createdNames     []string
+	// peak is the most records ever live at one name at the same time.
+	peak int
 }
 
 func newFakeDNS() *fakeDNS {
@@ -60,6 +63,13 @@ func (f *fakeDNS) CreateTXT(ctx context.Context, name, value string) (DNSRecord,
 	f.records[id] = record
 	f.created++
 	f.createdNames = append(f.createdNames, name)
+	live := 0
+	for _, r := range f.records {
+		if r.Name == name {
+			live++
+		}
+	}
+	f.peak = max(f.peak, live)
 	return record, nil
 }
 
@@ -126,15 +136,15 @@ func (r *fakeResolver) lookupCount() int {
 }
 
 // fakeACME is a minimal RFC 8555 server for the DNS-01 flow: directory,
-// account, order, one authorization with a dns-01 challenge, finalize and
-// certificate. Signatures are not verified — the goal is to exercise the
+// account, order, one authorization with a dns-01 challenge per name,
+// finalize and certificate. Signatures are not verified — the goal is to exercise the
 // real x/crypto/acme client's protocol handling, not to reimplement a CA.
 type fakeACME struct {
 	mu       sync.Mutex
 	base     string
-	host     string
+	hosts    []string
 	nonces   int
-	authz    string // pending | valid | invalid
+	authz    []string // per name: pending | valid | invalid
 	reject   bool
 	retry    int // when set, new-order answers 429 with this Retry-After
 	accounts int // new-account calls observed
@@ -145,7 +155,7 @@ type fakeACME struct {
 	certificatePEM []byte // filled in on finalize
 }
 
-func newFakeACME(t *testing.T, host string) (*fakeACME, *httptest.Server) {
+func newFakeACME(t *testing.T, host string, more ...string) (*fakeACME, *httptest.Server) {
 	t.Helper()
 	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -169,7 +179,11 @@ func newFakeACME(t *testing.T, host string) (*fakeACME, *httptest.Server) {
 		t.Fatal(err)
 	}
 
-	f := &fakeACME{host: host, authz: "pending", caKey: caKey, caCert: caCert}
+	hosts := append([]string{host}, more...)
+	f := &fakeACME{hosts: hosts, authz: make([]string, len(hosts)), caKey: caKey, caCert: caCert}
+	for i := range f.authz {
+		f.authz[i] = "pending"
+	}
 	server := httptest.NewServer(http.HandlerFunc(f.handle))
 	t.Cleanup(server.Close)
 	f.base = server.URL
@@ -201,7 +215,9 @@ func (f *fakeACME) handle(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		f.orders++
 		retry := f.retry
-		f.authz = "pending"
+		for i := range f.authz {
+			f.authz[i] = "pending"
+		}
 		f.mu.Unlock()
 		if retry > 0 {
 			w.Header().Set("Retry-After", fmt.Sprint(retry))
@@ -210,41 +226,57 @@ func (f *fakeACME) handle(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte(`{"type":"urn:ietf:params:acme:error:rateLimited","detail":"too many new orders"}`))
 			return
 		}
+		identifiers := make([]map[string]string, 0, len(f.hosts))
+		authorizations := make([]string, 0, len(f.hosts))
+		for i, host := range f.hosts {
+			identifiers = append(identifiers, map[string]string{"type": "dns", "value": host})
+			authorizations = append(authorizations, fmt.Sprintf("%s/authz/%d", f.base, i+1))
+		}
 		w.Header().Set("Location", f.base+"/order/1")
 		writeJSON(w, http.StatusCreated, map[string]any{
 			"status":         "pending",
-			"identifiers":    []map[string]string{{"type": "dns", "value": f.host}},
-			"authorizations": []string{f.base + "/authz/1"},
+			"identifiers":    identifiers,
+			"authorizations": authorizations,
 			"finalize":       f.base + "/finalize/1",
 		})
-	case "/authz/1":
+	case "/authz/1", "/authz/2", "/authz/3":
+		i := f.index(r.URL.Path)
+		if i < 0 {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		f.mu.Lock()
-		status := f.authz
+		status := f.authz[i]
 		f.mu.Unlock()
 		writeJSON(w, http.StatusOK, map[string]any{
 			"status":     status,
-			"identifier": map[string]string{"type": "dns", "value": baseOf(f.host)},
-			"wildcard":   IsWildcard(f.host),
+			"identifier": map[string]string{"type": "dns", "value": baseOf(f.hosts[i])},
+			"wildcard":   IsWildcard(f.hosts[i]),
 			"challenges": []map[string]any{{
 				"type":   "dns-01",
-				"url":    f.base + "/chall/1",
-				"token":  "challenge-token",
+				"url":    fmt.Sprintf("%s/chall/%d", f.base, i+1),
+				"token":  fmt.Sprintf("challenge-token-%d", i+1),
 				"status": status,
 			}},
 		})
-	case "/chall/1":
+	case "/chall/1", "/chall/2", "/chall/3":
+		i := f.index(r.URL.Path)
+		if i < 0 {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		f.mu.Lock()
 		if f.reject {
-			f.authz = "invalid"
+			f.authz[i] = "invalid"
 		} else {
-			f.authz = "valid"
+			f.authz[i] = "valid"
 		}
-		status := f.authz
+		status := f.authz[i]
 		f.mu.Unlock()
 		writeJSON(w, http.StatusOK, map[string]any{
 			"type":   "dns-01",
-			"url":    f.base + "/chall/1",
-			"token":  "challenge-token",
+			"url":    fmt.Sprintf("%s/chall/%d", f.base, i+1),
+			"token":  fmt.Sprintf("challenge-token-%d", i+1),
 			"status": status,
 		})
 	case "/finalize/1":
@@ -297,6 +329,15 @@ func (f *fakeACME) handle(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.WriteHeader(http.StatusNotFound)
 	}
+}
+
+// index maps /authz/N or /chall/N to the name it validates, or -1.
+func (f *fakeACME) index(path string) int {
+	var n int
+	if _, err := fmt.Sscanf(path[strings.LastIndex(path, "/")+1:], "%d", &n); err != nil || n < 1 || n > len(f.hosts) {
+		return -1
+	}
+	return n - 1
 }
 
 // signCSR issues a leaf for the fake CA, the way a real CA would answer a
@@ -403,13 +444,13 @@ func TestACMEIssuerIssuesAndCleansUp(t *testing.T) {
 	resolver := &fakeResolver{dns: dns}
 
 	issuer, store := testACMEIssuer(t, server, dns, resolver, ACMEConfig{})
-	gen, err := issuer.Obtain(context.Background(), host, testSigningKey(t))
+	gen, err := issuer.Obtain(context.Background(), []string{host}, testSigningKey(t))
 	if err != nil {
 		t.Fatalf("Obtain: %v", err)
 	}
 	roots := x509.NewCertPool()
 	roots.AddCert(fake.caCert)
-	if _, err := ParseGeneration(gen.CertPEM, gen.KeyPEM, host, time.Now(), roots); err != nil {
+	if _, err := ParseGeneration(gen.CertPEM, gen.KeyPEM, []string{host}, time.Now(), roots); err != nil {
 		t.Fatalf("issued generation is not usable: %v", err)
 	}
 
@@ -438,10 +479,10 @@ func TestACMEIssuerReusesThePersistedAccount(t *testing.T) {
 	dns := newFakeDNS()
 	issuer, _ := testACMEIssuer(t, server, dns, &fakeResolver{dns: dns}, ACMEConfig{})
 	ctx := context.Background()
-	if _, err := issuer.Obtain(ctx, host, testSigningKey(t)); err != nil {
+	if _, err := issuer.Obtain(ctx, []string{host}, testSigningKey(t)); err != nil {
 		t.Fatalf("first Obtain: %v", err)
 	}
-	if _, err := issuer.Obtain(ctx, host, testSigningKey(t)); err != nil {
+	if _, err := issuer.Obtain(ctx, []string{host}, testSigningKey(t)); err != nil {
 		t.Fatalf("second Obtain: %v", err)
 	}
 	if accounts := fake.accountCount(); accounts != 1 {
@@ -461,7 +502,7 @@ func TestACMEIssuerCleansUpAfterValidationFailure(t *testing.T) {
 	dns.records[unrelated.ID] = unrelated
 
 	issuer, store := testACMEIssuer(t, server, dns, &fakeResolver{dns: dns}, ACMEConfig{})
-	if _, err := issuer.Obtain(context.Background(), host, testSigningKey(t)); err == nil {
+	if _, err := issuer.Obtain(context.Background(), []string{host}, testSigningKey(t)); err == nil {
 		t.Fatal("Obtain must fail when the authorization is rejected")
 	}
 	records := dns.snapshot()
@@ -479,7 +520,7 @@ func TestACMEIssuerWaitsForPropagation(t *testing.T) {
 	dns := newFakeDNS()
 	resolver := &fakeResolver{dns: dns, visibleAfter: 2}
 	issuer, _ := testACMEIssuer(t, server, dns, resolver, ACMEConfig{})
-	if _, err := issuer.Obtain(context.Background(), host, testSigningKey(t)); err != nil {
+	if _, err := issuer.Obtain(context.Background(), []string{host}, testSigningKey(t)); err != nil {
 		t.Fatalf("Obtain: %v", err)
 	}
 	if lookups := resolver.lookupCount(); lookups <= 2 {
@@ -495,7 +536,7 @@ func TestACMEIssuerPropagationTimeoutFailsTheAttempt(t *testing.T) {
 	issuer, store := testACMEIssuer(t, server, dns, resolver, ACMEConfig{
 		PropagationTimeout: 30 * time.Millisecond,
 	})
-	_, err := issuer.Obtain(context.Background(), host, testSigningKey(t))
+	_, err := issuer.Obtain(context.Background(), []string{host}, testSigningKey(t))
 	if !errors.Is(err, ErrDNS) {
 		t.Fatalf("err = %v, want ErrDNS", err)
 	}
@@ -514,7 +555,7 @@ func TestACMEIssuerKeepsAmbiguousCreatesForRecovery(t *testing.T) {
 	dns.insertBeforeErr = true // the record exists, but we never learn its ID
 	issuer, store := testACMEIssuer(t, server, dns, &fakeResolver{dns: dns}, ACMEConfig{})
 
-	_, err := issuer.Obtain(context.Background(), host, testSigningKey(t))
+	_, err := issuer.Obtain(context.Background(), []string{host}, testSigningKey(t))
 	if !errors.Is(err, ErrDNS) {
 		t.Fatalf("err = %v, want ErrDNS", err)
 	}
@@ -572,7 +613,7 @@ func TestACMEIssuerReportsRateLimits(t *testing.T) {
 	fake.retry = 120
 	dns := newFakeDNS()
 	issuer, _ := testACMEIssuer(t, server, dns, &fakeResolver{dns: dns}, ACMEConfig{})
-	_, err := issuer.Obtain(context.Background(), host, testSigningKey(t))
+	_, err := issuer.Obtain(context.Background(), []string{host}, testSigningKey(t))
 	var limited *RateLimitedError
 	if !errors.As(err, &limited) {
 		t.Fatalf("err = %v, want RateLimitedError", err)

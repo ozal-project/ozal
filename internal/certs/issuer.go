@@ -11,9 +11,10 @@ import (
 // serializes attempts, so an implementation may assume one call at a time.
 // Recovery is separate: it retries cleanup left behind by earlier runs.
 type Issuer interface {
-	// Obtain acquires a certificate for host whose private key is key, and
-	// returns the complete pem-encoded generation.
-	Obtain(ctx context.Context, host string, key crypto.Signer) (StoredGeneration, error)
+	// Obtain acquires one certificate carrying every name in names (the
+	// first is its subject) whose private key is key, and returns the
+	// complete pem-encoded generation.
+	Obtain(ctx context.Context, names []string, key crypto.Signer) (StoredGeneration, error)
 	// Recover retries cleanup of DNS records earlier runs left behind and
 	// reports how many still need attention (0 when everything was
 	// reclaimed or nothing was pending).

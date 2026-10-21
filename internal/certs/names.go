@@ -5,10 +5,13 @@ import (
 	"strings"
 )
 
-// The manager serves one certificate name. It is either a plain hostname or a
-// single-level wildcard such as "*.example.com". This file is the pure part of
-// that rule: every decision that depends on the name being a wildcard lives
-// here, so the shells (listener, ACME, storage) never parse a "*" themselves.
+// The manager serves one certificate. Each of its names is either a plain
+// hostname or a single-level wildcard such as "*.example.com"; a wildcard
+// does not cover its own base, so serving "example.com" too takes a second
+// name on the same certificate. The first name is the certificate's identity
+// (storage key, events). This file is the pure part of those rules: every
+// decision that depends on a name being a wildcard lives here, so the shells
+// (listener, ACME, storage) never parse a "*" themselves.
 
 const wildcardPrefix = "*."
 
@@ -62,6 +65,16 @@ func Covers(certName, serverName string) bool {
 	server := strings.ToLower(serverName)
 	label, ok := strings.CutSuffix(server, suffix)
 	return ok && label != "" && !strings.Contains(label, ".")
+}
+
+// CoversAny reports whether any of a certificate's names covers serverName.
+func CoversAny(certNames []string, serverName string) bool {
+	for _, name := range certNames {
+		if Covers(name, serverName) {
+			return true
+		}
+	}
+	return false
 }
 
 // ProbeName returns a concrete hostname the certificate must be valid for.

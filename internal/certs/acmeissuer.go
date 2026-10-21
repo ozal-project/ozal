@@ -53,7 +53,7 @@ type ACMEConfig struct {
 
 // ACMEIssuer speaks RFC 8555 DNS-01 through the existing x/crypto/acme
 // client. It owns the account registration (persisted per directory) and the
-// challenge records (one owned record per attempt, cleaned up by ID on every
+// challenge records (one owned record at a time, cleaned up by ID on every
 // path).
 type ACMEIssuer struct {
 	cfg   ACMEConfig
@@ -98,12 +98,14 @@ func NewACMEIssuer(cfg ACMEConfig, state *FileStore) (*ACMEIssuer, error) {
 	return &ACMEIssuer{cfg: cfg, state: state}, nil
 }
 
-// Obtain runs one issuance: create the order, present one DNS-01 challenge
-// record, wait until the value is visible, let the CA validate, clean up,
-// then finalize and download the certificate.
-func (i *ACMEIssuer) Obtain(ctx context.Context, host string, key crypto.Signer) (StoredGeneration, error) {
-	if host == "" || key == nil {
-		return StoredGeneration{}, errors.New("certs: host and private key are required")
+// Obtain runs one issuance: create the order for every name, then for each
+// authorization present a DNS-01 challenge record, wait until the value is
+// visible, let the CA validate and clean up, then finalize and download the
+// certificate. Authorizations run one after another, so a wildcard and its
+// base, which share one challenge name, never have two records out at once.
+func (i *ACMEIssuer) Obtain(ctx context.Context, names []string, key crypto.Signer) (StoredGeneration, error) {
+	if len(names) == 0 || slices.Contains(names, "") || key == nil {
+		return StoredGeneration{}, errors.New("certs: certificate names and private key are required")
 	}
 	client, err := i.clientFor(ctx)
 	if err != nil {
@@ -111,19 +113,23 @@ func (i *ACMEIssuer) Obtain(ctx context.Context, host string, key crypto.Signer)
 	}
 
 	csr, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{
-		Subject:  pkix.Name{CommonName: host},
-		DNSNames: []string{host},
+		Subject:  pkix.Name{CommonName: names[0]},
+		DNSNames: names,
 	}, key)
 	if err != nil {
 		return StoredGeneration{}, fmt.Errorf("certs: build CSR: %w", err)
 	}
 
-	order, err := client.AuthorizeOrder(ctx, []acme.AuthzID{{Type: "dns", Value: host}})
+	ids := make([]acme.AuthzID, 0, len(names))
+	for _, name := range names {
+		ids = append(ids, acme.AuthzID{Type: "dns", Value: name})
+	}
+	order, err := client.AuthorizeOrder(ctx, ids)
 	if err != nil {
 		return StoredGeneration{}, classifyACME(ctx, "authorize order", err)
 	}
 	for _, authzURL := range order.AuthzURLs {
-		if err := i.authorize(ctx, client, host, authzURL); err != nil {
+		if err := i.authorize(ctx, client, names, authzURL); err != nil {
 			return StoredGeneration{}, err
 		}
 	}
@@ -140,7 +146,7 @@ func (i *ACMEIssuer) Obtain(ctx context.Context, host string, key crypto.Signer)
 }
 
 // authorize presents and validates one authorization.
-func (i *ACMEIssuer) authorize(ctx context.Context, client *acme.Client, host, authzURL string) error {
+func (i *ACMEIssuer) authorize(ctx context.Context, client *acme.Client, names []string, authzURL string) error {
 	authz, err := client.GetAuthorization(ctx, authzURL)
 	if err != nil {
 		return classifyACME(ctx, "read authorization", err)
@@ -159,11 +165,14 @@ func (i *ACMEIssuer) authorize(ctx context.Context, client *acme.Client, host, a
 	}
 
 	// The CA names the identifier it validates: the base domain for a
-	// wildcard. An authorization for anything else is never presented.
-	if got := authz.Identifier.Value; got != "" && !strings.EqualFold(got, baseOf(host)) {
-		return fmt.Errorf("%w: the CA authorized %q, expected %q", ErrDNS, got, baseOf(host))
+	// wildcard. An authorization for a name we did not order is never
+	// presented.
+	got := authz.Identifier.Value
+	index = slices.IndexFunc(names, func(name string) bool { return strings.EqualFold(got, baseOf(name)) })
+	if index < 0 {
+		return fmt.Errorf("%w: the CA authorized %q, which is not one of %v", ErrDNS, got, names)
 	}
-	fqdn := ChallengeFQDN(host)
+	fqdn := ChallengeFQDN(names[index])
 	record, intentID, err := i.present(ctx, fqdn, value)
 	if err != nil {
 		return err

@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"reflect"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -301,7 +302,7 @@ func certificateStatus(manager *certs.Manager) func() admin.CertificateStatus {
 	return func() admin.CertificateStatus {
 		status := manager.Status()
 		return admin.CertificateStatus{
-			Host:        status.Host,
+			Host:        strings.Join(status.Names, ", "),
 			Mode:        "ACME DNS-01",
 			Valid:       status.Valid,
 			NotAfter:    formatTime(status.NotAfter),
@@ -386,9 +387,10 @@ func startCertificateManager(ctx context.Context, cfg *config.Config, sink event
 		}
 	}
 	manager, err := certs.NewManager(certs.ManagerConfig{
-		RootCAs: roots,
-		Host:    cfg.TLS.Domains[0],
-		Sink:    sink,
+		RootCAs:  roots,
+		Host:     cfg.TLS.Domains[0],
+		AltNames: cfg.TLS.Domains[1:],
+		Sink:     sink,
 	}, state, issuer)
 	if err != nil {
 		closeState()
@@ -432,7 +434,7 @@ func startManagedTLS(cfg *config.Config, handler http.Handler, sink events.Sink,
 		IdleTimeout:       idleTimeout,
 	}
 	go func() {
-		log.Printf("switchboard listening on :443 (HTTPS, ACME DNS-01 for %s)", cfg.TLS.Domains[0])
+		log.Printf("switchboard listening on :443 (HTTPS, ACME DNS-01 for %s)", strings.Join(cfg.TLS.Domains, ", "))
 		if err := server.ServeTLS(listener, "", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Printf("public listener :443: %v", err)
 		}

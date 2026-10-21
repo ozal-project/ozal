@@ -662,29 +662,64 @@ const (
 	MethodOIDC    = "oidc"
 )
 
-// normalizeDNS01 validates the own-manager TLS configuration and normalizes
-// the single name it serves (a hostname or one wildcard). The scope is one name and
-// one state directory: staging and production are separated by pointing the
-// directory elsewhere, not by sharing one registration.
-func normalizeDNS01(tls *TLS) error {
-	if len(tls.Domains) != 1 {
-		return fmt.Errorf("config: tls.dns01 supports exactly one domain today, got %d", len(tls.Domains))
-	}
-	// A single-level wildcard ("*.example.com") is a plain hostname with one
-	// leading label that stands for any single subdomain; the rest is
-	// validated like any other host.
-	wildcard := strings.HasPrefix(tls.Domains[0], "*.")
-	host, err := NormalizeHost(strings.TrimPrefix(tls.Domains[0], "*."))
+// normalizeCertificateName lowercases one tls.domains entry and checks it.
+// A single-level wildcard ("*.example.com") is a plain hostname with one
+// leading label that stands for any single subdomain; the rest is validated
+// like any other host. Errors read after "tls.domains[i] ".
+func normalizeCertificateName(domain string) (string, error) {
+	wildcard := strings.HasPrefix(domain, "*.")
+	host, err := NormalizeHost(strings.TrimPrefix(domain, "*."))
 	if err != nil || strings.Contains(host, ":") {
-		return fmt.Errorf("config: tls.domains[0] %q is not a plain hostname", tls.Domains[0])
+		return "", fmt.Errorf("%q is not a plain hostname", domain)
 	}
 	if wildcard {
 		if !strings.Contains(host, ".") {
-			return fmt.Errorf("config: tls.domains[0] %q: a wildcard must sit above a registered domain", tls.Domains[0])
+			return "", fmt.Errorf("%q: a wildcard must sit above a registered domain", domain)
 		}
 		host = "*." + host
 	}
-	tls.Domains[0] = host
+	return host, nil
+}
+
+// maxDNS01Names bounds the names on the one certificate: each costs an
+// authorization on every renewal.
+const maxDNS01Names = 4
+
+// normalizeDNS01 validates the own-manager TLS configuration and normalizes
+// the names on the one certificate it serves: hostnames or single-level
+// wildcards. A wildcard does not cover its own base, so the apex beside
+// "*.example.com" is a second name; a name a wildcard in the list already
+// covers is refused, as the CA would. The first name is the certificate's
+// identity (its storage key): reordering starts a new certificate. The scope
+// is one certificate and one state directory: staging and production are
+// separated by pointing the directory elsewhere, not by sharing one
+// registration.
+func normalizeDNS01(tls *TLS) error {
+	if len(tls.Domains) == 0 || len(tls.Domains) > maxDNS01Names {
+		return fmt.Errorf("config: tls.dns01 takes 1 to %d domains on one certificate, got %d", maxDNS01Names, len(tls.Domains))
+	}
+	for i, domain := range tls.Domains {
+		name, err := normalizeCertificateName(domain)
+		if err != nil {
+			return fmt.Errorf("config: tls.domains[%d] %w", i, err)
+		}
+		tls.Domains[i] = name
+	}
+	for i, name := range tls.Domains {
+		for j, other := range tls.Domains {
+			if i == j {
+				continue
+			}
+			if name == other {
+				return fmt.Errorf("config: tls.domains lists %q twice", name)
+			}
+			if base, ok := strings.CutPrefix(other, "*."); ok && !strings.HasPrefix(name, "*.") {
+				if label, ok := strings.CutSuffix(name, "."+base); ok && label != "" && !strings.Contains(label, ".") {
+					return fmt.Errorf("config: tls.domains: %q is already covered by %q", name, other)
+				}
+			}
+		}
+	}
 
 	dns01 := tls.DNS01
 	if dns01.StateDir == "" {

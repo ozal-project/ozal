@@ -17,13 +17,13 @@ import (
 type stubIssuer struct {
 	mu      sync.Mutex
 	calls   int
-	obtain  func(ctx context.Context, host string, key crypto.Signer) (StoredGeneration, error)
+	obtain  func(ctx context.Context, names []string, key crypto.Signer) (StoredGeneration, error)
 	recover func(ctx context.Context) (int, error)
 	started chan struct{}
 	release chan struct{}
 }
 
-func (s *stubIssuer) Obtain(ctx context.Context, host string, key crypto.Signer) (StoredGeneration, error) {
+func (s *stubIssuer) Obtain(ctx context.Context, names []string, key crypto.Signer) (StoredGeneration, error) {
 	s.mu.Lock()
 	s.calls++
 	started, release, obtain := s.started, s.release, s.obtain
@@ -41,7 +41,7 @@ func (s *stubIssuer) Obtain(ctx context.Context, host string, key crypto.Signer)
 	if obtain == nil {
 		return StoredGeneration{}, errors.New("stub issuer: no outcome configured")
 	}
-	return obtain(ctx, host, key)
+	return obtain(ctx, names, key)
 }
 
 func (s *stubIssuer) Recover(ctx context.Context) (int, error) {
@@ -126,7 +126,7 @@ func TestManagerRenewsWhenDueAndEmitsEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 	fresh, freshLeaf := testGeneration(t, "preview.example.com", now.Add(-time.Minute), now.Add(90*24*time.Hour))
-	issuer := &stubIssuer{obtain: func(context.Context, string, crypto.Signer) (StoredGeneration, error) {
+	issuer := &stubIssuer{obtain: func(context.Context, []string, crypto.Signer) (StoredGeneration, error) {
 		return fresh, nil
 	}}
 	recorder := &events.Recorder{}
@@ -182,7 +182,7 @@ func TestManagerKeepsServingAfterFailedRenewal(t *testing.T) {
 	if err := store.Save(context.Background(), "preview.example.com", old); err != nil {
 		t.Fatal(err)
 	}
-	issuer := &stubIssuer{obtain: func(context.Context, string, crypto.Signer) (StoredGeneration, error) {
+	issuer := &stubIssuer{obtain: func(context.Context, []string, crypto.Signer) (StoredGeneration, error) {
 		return StoredGeneration{}, errors.New("acme: simulated outage")
 	}}
 	recorder := &events.Recorder{}
@@ -237,7 +237,7 @@ func TestManagerKeepsServingAfterFailedRenewal(t *testing.T) {
 
 func TestManagerHonorsRateLimitRetryAfter(t *testing.T) {
 	now := time.Date(2026, time.October, 18, 0, 0, 0, 0, time.UTC)
-	issuer := &stubIssuer{obtain: func(context.Context, string, crypto.Signer) (StoredGeneration, error) {
+	issuer := &stubIssuer{obtain: func(context.Context, []string, crypto.Signer) (StoredGeneration, error) {
 		return StoredGeneration{}, &RateLimitedError{RetryAfter: 45 * time.Minute, Err: errors.New("acme: rate limited")}
 	}}
 	m := testManager(t, testStore(t), issuer, now)
@@ -272,7 +272,7 @@ func TestManagerOnlyOneActiveAttempt(t *testing.T) {
 	issuer := &stubIssuer{
 		started: make(chan struct{}),
 		release: make(chan struct{}),
-		obtain: func(context.Context, string, crypto.Signer) (StoredGeneration, error) {
+		obtain: func(context.Context, []string, crypto.Signer) (StoredGeneration, error) {
 			return fresh, nil
 		},
 	}

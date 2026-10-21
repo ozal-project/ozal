@@ -75,7 +75,13 @@ func TestDNS01ConfigRefusals(t *testing.T) {
 		want   string
 	}{
 		{"disabled tls", func(tls *TLS) { tls.Enabled = false }, "requires tls.enabled"},
-		{"two domains", func(tls *TLS) { tls.Domains = append(tls.Domains, "other.example.com") }, "exactly one domain"},
+		{"no domain", func(tls *TLS) { tls.Domains = nil }, "at least one domain"},
+		{"five domains", func(tls *TLS) {
+			tls.Domains = []string{"a.example.com", "b.example.com", "c.example.com", "d.example.com", "e.example.com"}
+		}, "1 to 4 domains"},
+		{"repeated domain", func(tls *TLS) { tls.Domains = append(tls.Domains, "PREVIEW.example.com") }, "twice"},
+		{"name the wildcard covers", func(tls *TLS) { tls.Domains = []string{"*.example.com", "preview.example.com"} }, "already covered"},
+		{"bad second name", func(tls *TLS) { tls.Domains = append(tls.Domains, "*.com") }, "tls.domains[1]"},
 		{"missing state dir", func(tls *TLS) { tls.DNS01.StateDir = "" }, "requires state_dir"},
 		{"relative state dir", func(tls *TLS) { tls.DNS01.StateDir = "certs" }, "absolute path"},
 		{"relative certificate roots", func(tls *TLS) { tls.DNS01.CertificateRootsFile = "roots.crt" }, "absolute path"},
@@ -140,6 +146,25 @@ func TestDNS01ConfigAcceptsASingleLevelWildcard(t *testing.T) {
 	}`)
 	if got := cfg.TLS.Domains[0]; got != "*.example.com" {
 		t.Fatalf("domain = %q, want the wildcard normalized", got)
+	}
+}
+
+// A wildcard does not cover its base, so the apex rides beside it as a second
+// name on the same certificate; the wildcard stays first, its identity.
+func TestDNS01ConfigAcceptsAWildcardAndItsApex(t *testing.T) {
+	skipOnWindows(t, "POSIX absolute-path fixtures")
+	cfg := dns01Config(t, `{
+		"enabled": true,
+		"domains": ["*.example.com", "Example.com"],
+		"email": "ops@example.com",
+		"dns01": {
+			"state_dir": "/var/lib/switchboard/certs",
+			"directory_url": "https://acme.example/directory",
+			"dns_token": "env:TOKEN"
+		}
+	}`)
+	if got, want := strings.Join(cfg.TLS.Domains, ","), "*.example.com,example.com"; got != want {
+		t.Fatalf("domains = %q, want %q", got, want)
 	}
 }
 
