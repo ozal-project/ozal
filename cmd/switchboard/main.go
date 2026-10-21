@@ -183,6 +183,7 @@ func main() {
 				if err := manager.Reload(); err != nil {
 					event.Error = err.Error()
 				}
+				event.ConfigSHA256 = manager.ConfigDigest()
 				sink.Emit(event)
 			}
 		}

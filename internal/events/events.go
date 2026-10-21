@@ -55,6 +55,9 @@ type Event struct {
 	// Count, when > 0, summarises repeated identical events that were
 	// suppressed inside an aggregation window (see originauth denials).
 	Count int
+	// ConfigSHA256 is set on config.reloaded: the digest of the config file
+	// in effect afterwards (the previous one when the reload failed).
+	ConfigSHA256 string
 }
 
 // Sink receives events. Emit must not block: callers are on the request path
@@ -87,6 +90,7 @@ func (s SlogSink) Emit(e Event) {
 		{"reason", e.Reason},
 		{"error", e.Error},
 		{"remote_addr", e.RemoteAddr},
+		{"config_sha256", e.ConfigSHA256},
 	} {
 		if field.value != "" {
 			attrs = append(attrs, slog.String(field.key, field.value))

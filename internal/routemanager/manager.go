@@ -88,7 +88,9 @@ type RouteStatus struct {
 // Snapshot is immutable after construction except for the checker state. Its
 // fields stay private so a request observes one complete routing generation.
 type Snapshot struct {
-	cfg           config.Config
+	cfg config.Config
+	// digest is config.Digest of the file this generation came from.
+	digest        string
 	handler       http.Handler
 	checker       *healthcheck.Checker
 	healthCancel  context.CancelFunc
@@ -170,7 +172,7 @@ func (m *Manager) Reload() error {
 	if err := m.contextError(); err != nil {
 		return err
 	}
-	cfg, err := config.Load(m.configPath)
+	cfg, digest, err := config.LoadWithDigest(m.configPath)
 	if err != nil {
 		return m.reloadError(err)
 	}
@@ -178,8 +180,18 @@ func (m *Manager) Reload() error {
 	if err != nil {
 		return m.reloadError(err)
 	}
+	candidate.digest = digest
 	m.install(candidate)
 	return nil
+}
+
+// ConfigDigest is config.Digest of the file behind the installed
+// generation: after a failed reload it still names the previous file.
+func (m *Manager) ConfigDigest() string {
+	if snapshot := m.current.Load(); snapshot != nil {
+		return snapshot.digest
+	}
+	return ""
 }
 
 // AddRoute validates, persists, and installs a new route as one serialized
@@ -291,6 +303,13 @@ func (m *Manager) persistAndInstall(cfg config.Config) error {
 		m.discard(candidate)
 		return fmt.Errorf("%w: %v", ErrPersistence, err)
 	}
+	// reloadMu is held, so the file is still the one just written.
+	digest, err := config.FileDigest(m.configPath)
+	if err != nil {
+		m.discard(candidate)
+		return fmt.Errorf("%w: %v", ErrPersistence, err)
+	}
+	candidate.digest = digest
 	m.install(candidate)
 	return nil
 }

@@ -28,6 +28,7 @@ type fakeManager struct {
 }
 
 func (m *fakeManager) Config() config.Config                     { return m.cfg }
+func (m *fakeManager) ConfigDigest() string                      { return "digest-of-" + m.cfg.Listen }
 func (m *fakeManager) RouteStatuses() []routemanager.RouteStatus { return m.statuses }
 func (m *fakeManager) Reload() error {
 	m.mu.Lock()
@@ -292,6 +293,9 @@ func TestRouteMutationsAndReloadAreAudited(t *testing.T) {
 	reloaded, ok := recorder.Find(events.ConfigReloaded)
 	if !ok || reloaded.Actor == "" || reloaded.Error != "" {
 		t.Errorf("config.reloaded event = %+v, %v", reloaded, ok)
+	}
+	if reloaded.ConfigSHA256 != manager.ConfigDigest() || reloaded.ConfigSHA256 == "" {
+		t.Errorf("config.reloaded does not name the config in effect: %+v", reloaded)
 	}
 }
 

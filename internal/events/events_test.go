@@ -13,10 +13,15 @@ func TestSlogSinkEmitsOneJSONRecordPerEvent(t *testing.T) {
 
 	sink.Emit(Event{Type: AccessDenied, Actor: "user-1", Host: "app.localhost", Code: "domain_not_allowed", Reason: "email domain"})
 	sink.Emit(Event{Type: LoginSucceeded, Actor: "user-1", Host: "app.localhost", Count: 3})
+	sink.Emit(Event{Type: ConfigReloaded, Actor: "signal:SIGHUP", ConfigSHA256: "abc123"})
 
 	lines := bytes.Split(bytes.TrimSpace(buf.Bytes()), []byte("\n"))
-	if len(lines) != 2 {
-		t.Fatalf("records = %d, want 2 (%s)", len(lines), buf.String())
+	if len(lines) != 3 {
+		t.Fatalf("records = %d, want 3 (%s)", len(lines), buf.String())
+	}
+	var reload map[string]any
+	if err := json.Unmarshal(lines[2], &reload); err != nil || reload["config_sha256"] != "abc123" {
+		t.Fatalf("config.reloaded record does not carry config_sha256: %s", lines[2])
 	}
 	var first map[string]any
 	if err := json.Unmarshal(lines[0], &first); err != nil {

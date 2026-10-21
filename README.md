@@ -307,6 +307,11 @@ The Phase 2 transactional runtime is complete: a reload candidate is fully
 validated and built before one atomic swap. Invalid candidates leave the
 last-good routing snapshot active. Listener and TLS settings remain static
 and require a process restart; Phase 3 exposes reload through the control plane.
+Every `config.reloaded` event, from SIGHUP or `POST /_/reload`, carries
+`config_sha256`: the SHA-256 of the config file now in effect (the previous one
+when the reload failed); `GET /_/api/status` reports the same. A deploy tool
+compares it with the bytes it wrote, so "some reload happened" is never taken
+for "this file is live".
 
 ## Control plane
 

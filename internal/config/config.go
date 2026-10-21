@@ -3,6 +3,8 @@ package config
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -238,12 +240,39 @@ func (c Config) UpstreamTimeout() time.Duration {
 }
 
 func Load(path string) (*Config, error) {
+	cfg, _, err := LoadWithDigest(path)
+	return cfg, err
+}
+
+// LoadWithDigest is Load that also names the document it parsed: the
+// SHA-256 of its bytes (see Digest).
+func LoadWithDigest(path string) (*Config, string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("read config: %w", err)
+		return nil, "", fmt.Errorf("read config: %w", err)
 	}
+	cfg, err := Parse(data)
+	if err != nil {
+		return nil, "", err
+	}
+	return cfg, Digest(data), nil
+}
 
-	return Parse(data)
+// Digest names a configuration document by the hex SHA-256 of its bytes, so
+// a deploy tool can confirm which file the running process actually loaded,
+// not only that some reload happened.
+func Digest(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
+// FileDigest is Digest of the file at path as it is on disk now.
+func FileDigest(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read config: %w", err)
+	}
+	return Digest(data), nil
 }
 
 // Parse decodes and validates a configuration document. Unknown fields are

@@ -27,6 +27,7 @@ func (tokenOnlyManager) Config() config.Config {
 }
 func (tokenOnlyManager) RouteStatuses() []routemanager.RouteStatus { return nil }
 func (tokenOnlyManager) Reload() error                             { return nil }
+func (tokenOnlyManager) ConfigDigest() string                      { return "" }
 func (tokenOnlyManager) AddRoute(config.Route) error               { return nil }
 func (tokenOnlyManager) DeleteRoute(string) error                  { return nil }
 

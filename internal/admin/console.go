@@ -79,8 +79,9 @@ func (h *Handler) console(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) apiStatus(w http.ResponseWriter, _ *http.Request) {
 	view := h.buildStatusView()
 	writeJSON(w, http.StatusOK, struct {
-		GeneratedAt string             `json:"generated_at"`
-		Certificate *CertificateStatus `json:"certificate,omitempty"`
-		Routes      []routeView        `json:"routes"`
-	}{view.GeneratedAt, view.Certificate, view.Routes})
+		GeneratedAt  string             `json:"generated_at"`
+		ConfigSHA256 string             `json:"config_sha256"`
+		Certificate  *CertificateStatus `json:"certificate,omitempty"`
+		Routes       []routeView        `json:"routes"`
+	}{view.GeneratedAt, h.manager.ConfigDigest(), view.Certificate, view.Routes})
 }

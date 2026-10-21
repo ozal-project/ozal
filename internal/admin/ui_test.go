@@ -124,7 +124,7 @@ func TestAPIStatusMatchesDebugViewWithoutSecrets(t *testing.T) {
 			t.Fatalf("api status exposed %q", private)
 		}
 	}
-	for _, want := range []string{`"host":"app.localhost"`, `"access":"Protected"`, `"state":"Unchecked"`, `"policy":"1 emails / 0 domains / 1 required groups"`} {
+	for _, want := range []string{`"host":"app.localhost"`, `"access":"Protected"`, `"state":"Unchecked"`, `"policy":"1 emails / 0 domains / 1 required groups"`, `"config_sha256":"digest-of-"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("api status missing %s: %s", want, body)
 		}

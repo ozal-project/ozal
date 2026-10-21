@@ -692,3 +692,55 @@ func TestChangedUpstreamTimeoutClosesIdleConnectionsOfPreviousTransport(t *testi
 		t.Fatalf("request after the change = %d, want 200", code)
 	}
 }
+
+// The installed generation names the file it came from: a deploy tool
+// compares this digest with the file it wrote. A rejected file never takes
+// over the name, and a console change names the file it persisted.
+func TestConfigDigestNamesTheFileInEffect(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer upstream.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	configPath := writeConfig(t, routeConfig(upstream.URL))
+	manager, err := New(ctx, configPath, time.Hour)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	onDisk := func() string {
+		t.Helper()
+		digest, err := config.FileDigest(configPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return digest
+	}
+	first := onDisk()
+	if got := manager.ConfigDigest(); got != first || len(got) != 64 {
+		t.Fatalf("after start: %q, want %q", got, first)
+	}
+
+	overwriteConfig(t, configPath, routeConfig("ftp://invalid.example"))
+	if err := manager.Reload(); err == nil {
+		t.Fatal("Reload accepted an invalid config")
+	}
+	if got := manager.ConfigDigest(); got != first {
+		t.Fatalf("a rejected file took over the digest: %q, want the previous %q", got, first)
+	}
+
+	second := routeConfig(upstream.URL)
+	second.Routes[0].Host = "other.localhost"
+	overwriteConfig(t, configPath, second)
+	if err := manager.Reload(); err != nil {
+		t.Fatalf("Reload: %v", err)
+	}
+	if got := manager.ConfigDigest(); got != onDisk() || got == first {
+		t.Fatalf("after reload: %q, want the new file's %q", got, onDisk())
+	}
+
+	if err := manager.AddRoute(config.Route{Host: "added.localhost", Target: upstream.URL}); err != nil {
+		t.Fatalf("AddRoute: %v", err)
+	}
+	if got := manager.ConfigDigest(); got != onDisk() {
+		t.Fatalf("after a console change: %q, want the persisted file's %q", got, onDisk())
+	}
+}

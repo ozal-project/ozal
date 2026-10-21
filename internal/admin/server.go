@@ -25,6 +25,7 @@ type routeManager interface {
 	Config() config.Config
 	RouteStatuses() []routemanager.RouteStatus
 	Reload() error
+	ConfigDigest() string
 	AddRoute(config.Route) error
 	DeleteRoute(string) error
 }
@@ -252,11 +253,11 @@ func (h *Handler) status(w http.ResponseWriter, _ *http.Request) {
 
 func (h *Handler) reload(w http.ResponseWriter, r *http.Request) {
 	if err := h.manager.Reload(); err != nil {
-		h.emit(events.Event{Type: events.ConfigReloaded, Actor: actor(r), Error: err.Error()})
+		h.emit(events.Event{Type: events.ConfigReloaded, Actor: actor(r), Error: err.Error(), ConfigSHA256: h.manager.ConfigDigest()})
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	h.emit(events.Event{Type: events.ConfigReloaded, Actor: actor(r)})
+	h.emit(events.Event{Type: events.ConfigReloaded, Actor: actor(r), ConfigSHA256: h.manager.ConfigDigest()})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "reloaded"})
 }
 
