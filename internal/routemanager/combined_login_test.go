@@ -76,3 +76,30 @@ func TestPasskeysAndOIDCServeTogether(t *testing.T) {
 		t.Fatalf("OIDC start: %d → %q", rec.Code, rec.Header().Get("Location"))
 	}
 }
+
+// The root of a dedicated login host is the sign-in page, not "no route for
+// host"; a login host that is also a route keeps its own root.
+func TestLoginHostRootGoesToTheLoginPage(t *testing.T) {
+	route := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTeapot) // stands for "the route answered"
+	})
+	for name, tc := range map[string]struct {
+		routeHost string
+		root      int
+	}{
+		"dedicated login host":  {"app.localhost:8888", http.StatusFound},
+		"login host is a route": {"localhost:8888", http.StatusTeapot},
+	} {
+		handler := withLoginRoot(route, config.Config{
+			Auth:   config.Auth{Passkeys: &config.Passkeys{RPID: "localhost", LoginURL: "http://localhost:8888"}},
+			Routes: []config.Route{{Host: tc.routeHost, Target: "http://127.0.0.1:9"}},
+		})
+		for path, want := range map[string]int{"/": tc.root, "/other": http.StatusTeapot} {
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://localhost:8888"+path, nil))
+			if rec.Code != want || (want == http.StatusFound && rec.Header().Get("Location") != "/_/auth/login") {
+				t.Errorf("%s %s: %d %q, want %d", name, path, rec.Code, rec.Header().Get("Location"), want)
+			}
+		}
+	}
+}

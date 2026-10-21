@@ -474,6 +474,7 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 		return nil, fmt.Errorf("build proxy: %w", err)
 	}
 	handler := withAuthEndpoints(proxyHandler, builtGate, authEndpointHosts(*cfg, protectedHosts))
+	handler = withLoginRoot(handler, *cfg)
 	if limiters != nil {
 		// Outside withAuthEndpoints so /_/auth/* is limited too. Trust runs
 		// first for the client IP; the copy inside the proxy is a no-op.
@@ -608,6 +609,36 @@ func withAuthEndpoints(next http.Handler, gate loginGate, hosts map[string]bool)
 		if err != nil || !hosts[host] || !gate.ServeAuthEndpoint(w, r) {
 			next.ServeHTTP(w, r)
 		}
+	})
+}
+
+// withLoginRoot sends the root of a dedicated passkey login host to the
+// login page: someone who types auth.example.com gets a sign-in page, not
+// "no route for host". When a route serves the login host (local
+// development), the route keeps its root.
+func withLoginRoot(next http.Handler, cfg config.Config) http.Handler {
+	if cfg.Auth.Passkeys == nil {
+		return next
+	}
+	login, err := url.Parse(cfg.Auth.Passkeys.LoginURL)
+	if err != nil {
+		return next
+	}
+	loginHost, err := config.NormalizeHost(login.Host)
+	if err != nil {
+		return next
+	}
+	for _, r := range cfg.Routes {
+		if host, err := config.NormalizeHost(r.Host); err == nil && (host == loginHost || host == login.Hostname()) {
+			return next
+		}
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if host, err := config.NormalizeHost(r.Host); err == nil && host == loginHost && r.URL.Path == "/" {
+			http.Redirect(w, r, "/_/auth/login", http.StatusFound)
+			return
+		}
+		next.ServeHTTP(w, r)
 	})
 }
 
