@@ -123,7 +123,8 @@ application is enabled only by starting it with `-db PATH` (see sessions below);
 creating its table alone does not enable it.
 
 The module keeps `go 1.26.0` as its language minimum and recommends toolchain
-`go1.27.2`; normal Go toolchain auto-selection uses that patched version.
+`go1.27.3` (fixes `GO-2026-6809` in `crypto/x509`); normal Go toolchain
+auto-selection uses that patched version.
 
 ## Optional notifications (Telegram)
 
@@ -253,9 +254,10 @@ In progress (Phase 1 hardening, see [TO_IMPLEMENT.md](docs/TO_IMPLEMENT.md)):
 - [x] Verified identity headers propagated upstream; client-forged values stripped
 - [x] Secrets via `env:`/`file:` references, not only inline JSON (`REL-001`)
 - [x] `LICENSE` (MIT)
-- [x] CI on Linux, macOS and Windows runs `scripts/verify.sh` (green on `main`, last observed 2026-10-20; Windows skips seven config tests with POSIX path fixtures)
+- [x] CI on Linux, macOS and Windows runs `scripts/verify.sh` (green on `main` and on a pull request, 2026-10-21; Windows is a build/test target and skips seven config tests with POSIX path fixtures)
 - [x] Deployed static sites with history and rollback (`PAGES-002`)
-- [ ] The rest of Phase 6's open-source hygiene: release artifacts and the `v0.1.0-alpha.1` tag (`REL-005`, `REL-006`)
+- [x] Release artifacts with checksums and SBOMs (`REL-005`); release workflow on tags (`REL-006`)
+- [ ] The `v0.1.0-alpha.1` tag and published release ([notes](docs/releases/v0.1.0-alpha.1.md))
 
 ## Next work
 

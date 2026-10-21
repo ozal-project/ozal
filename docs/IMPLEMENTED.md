@@ -6,6 +6,18 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## REL-003 — CI on Linux, macOS and Windows — 2026-10-21 (committed with this change)
+
+`.github/workflows/ci.yml` runs `scripts/verify.sh` on ubuntu-24.04, macOS
+and Windows, with pinned linters. Acceptance: pull request #1 (`d69817a`,
+`c04e342`) green on all three, run `39530073368`, after push runs on `main`
+had been green (`39488263569`). The red `main` run `39528941061` was a new
+stdlib advisory, not a regression (go1.27.3, below).
+
+- **Decision (owner, 2026-10-21):** Windows stays a build and test target for
+  the alpha; the seven config tests with POSIX path fixtures stay skipped
+  there with their reason. Making them portable is not a release gate.
+
 ## Go toolchain 1.27.3 (GO-2026-6809) — 2026-10-21 (committed with this change)
 
 `govulncheck` in CI turned red on a docs-only commit: `GO-2026-6809`
