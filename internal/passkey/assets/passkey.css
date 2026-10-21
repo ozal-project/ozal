@@ -52,6 +52,7 @@ button:disabled { opacity: 0.55; cursor: progress; }
 .hint { margin-top: 14px; }
 .sites { display: grid; gap: 8px; margin-top: 16px; }
 .sites a { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--raised); color: var(--fg); font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+.sites-title { margin: 8px 0 0; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 .sites a::after { content: "→"; color: var(--accent); margin-left: 12px; }
 .who { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: -4px 0 18px; font-size: 0.88rem; color: var(--muted); }
 .who strong { color: var(--fg); font-weight: 600; overflow-wrap: anywhere; }

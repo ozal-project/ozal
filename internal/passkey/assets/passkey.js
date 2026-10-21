@@ -85,6 +85,14 @@ function explain(error, page) {
       : "The passkey was not created: the prompt was closed or it timed out. Try again.";
   }
   if (error.name === "InvalidStateError") return "This device already has a passkey for this account.";
+  // Other browser errors carry technical text meant for developers; say what
+  // the visitor can do instead. Server errors are plain Errors with a message
+  // written for people, and are shown as they are.
+  if (typeof DOMException !== "undefined" && error instanceof DOMException) {
+    return error.name === "SecurityError"
+      ? "This page cannot use passkeys here. Open the sign-in link again from the site you were visiting."
+      : "This browser could not use a passkey here. Try again, or use another browser or device.";
+  }
   return error.message || "Something went wrong.";
 }
 
@@ -211,7 +219,9 @@ function setupLogin(button, returnTo) {
   button.addEventListener("click", () => login(false).catch(fail));
   if (PublicKeyCredential.isConditionalMediationAvailable) {
     PublicKeyCredential.isConditionalMediationAvailable().then((ok) => {
-      if (ok) login(true).catch(fail);
+      // The silent autofill attempt fails quietly: the button is still
+      // there, and its errors are the ones worth showing.
+      if (ok) login(true).catch((error) => { button.disabled = false; if (error.name !== "AbortError") console.debug("passkey autofill:", error.name); });
     });
   }
 }
@@ -247,10 +257,11 @@ function setupEnrol(button) {
 function ago(iso) {
   const then = new Date(iso);
   const seconds = (Date.now() - then.getTime()) / 1000;
+  const n = (value, unit) => value + " " + unit + (value === 1 ? "" : "s") + " ago";
   if (seconds < 90) return "just now";
-  if (seconds < 3600) return Math.round(seconds / 60) + " minutes ago";
-  if (seconds < 86400) return Math.round(seconds / 3600) + " hours ago";
-  if (seconds < 7 * 86400) return Math.round(seconds / 86400) + " days ago";
+  if (seconds < 3600) return n(Math.round(seconds / 60), "minute");
+  if (seconds < 86400) return n(Math.round(seconds / 3600), "hour");
+  if (seconds < 7 * 86400) return n(Math.round(seconds / 86400), "day");
   return then.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
@@ -289,7 +300,7 @@ function setupDevices(button) {
     }));
     const nav = document.getElementById("sites");
     const sites = data.sites || [];
-    nav.replaceChildren(...sites.map((url) => {
+    nav.replaceChildren(nav.querySelector("h2") || el("span"), ...sites.map((url) => {
       const a = el("a", "", new URL(url).host);
       a.href = url;
       return a;

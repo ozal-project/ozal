@@ -119,7 +119,7 @@
   const expires = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 </script>
 
-<PageHeader eyebrow="Identity" title="People & passkeys" intro="Who can sign in through Switchboard and with which passkeys. Invite someone, see their devices, and cut access at once: everything `switchboard user` does, from here.">
+<PageHeader eyebrow="Identity" title="People & passkeys" intro="Who can sign in through Switchboard and with which passkeys. Invite someone, see their devices, and cut access at once: everything the switchboard user command does, from here.">
   <Button variant="outline" size="sm" onclick={load} disabled={loading}><RefreshIcon class={["size-3.5", loading && "animate-spin"]} /> Refresh</Button>
 </PageHeader>
 
