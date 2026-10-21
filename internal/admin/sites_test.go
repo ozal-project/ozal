@@ -3,10 +3,14 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/octaviosantacruz/switchboard/internal/config"
 	"github.com/octaviosantacruz/switchboard/internal/events"
@@ -24,6 +28,9 @@ func (f *fakeDeployments) Deploy(_ context.Context, site string, archive io.Read
 		return pages.Deployment{}, err // MaxBytesReader refusing the body
 	}
 	f.received = append(f.received, site+":"+string(body))
+	if site == "cut" {
+		return pages.Deployment{}, fmt.Errorf("%w: %w", pages.ErrUploadInterrupted, os.ErrDeadlineExceeded)
+	}
 	if site == "hostile" {
 		return pages.Deployment{}, &pages.RefusedError{Code: pages.UnsafePath, Reason: "entry name contains a parent-directory component"}
 	}
@@ -107,5 +114,67 @@ func TestSitesConsoleRouteServesTheApp(t *testing.T) {
 	handler := New(manager, broker, WithEvents(broker), WithPages(&fakeDeployments{}))
 	if rec := request(handler, http.MethodGet, "/sites", "", ""); rec.Code != http.StatusOK || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/html") {
 		t.Fatalf("/sites: %d %v", rec.Code, rec.Header())
+	}
+}
+
+// slowBody hands out one byte per tick, like an archive over a slow link.
+type slowBody struct {
+	data []byte
+	tick time.Duration
+}
+
+func (b *slowBody) Read(p []byte) (int, error) {
+	if len(b.data) == 0 {
+		return 0, io.EOF
+	}
+	time.Sleep(b.tick)
+	p[0], b.data = b.data[0], b.data[1:]
+	return 1, nil
+}
+
+// The admin server cuts requests at its ReadTimeout; an authenticated site
+// upload gets its own, longer deadline (2026-10-21: deploys over the homelab
+// tunnel were cut at 10 s and reported as broken archives).
+func TestASlowSiteUploadOutlivesTheServerReadTimeout(t *testing.T) {
+	store := &fakeDeployments{}
+	server := httptest.NewUnstartedServer(sitesHandler(store, nil))
+	server.Config.ReadTimeout = 200 * time.Millisecond
+	server.Config.WriteTimeout = 200 * time.Millisecond
+	server.Start()
+	defer server.Close()
+
+	body := &slowBody{data: []byte("archive"), tick: 100 * time.Millisecond} // ~700 ms
+	req, err := http.NewRequest(http.MethodPost, server.URL+"/_/api/sites/blog/deployments", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.ContentLength = int64(len("archive"))
+	req.Header.Set("Authorization", "Bearer secret")
+	resp, err := server.Client().Do(req)
+	if err != nil {
+		t.Fatalf("upload: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status %d, want 201", resp.StatusCode)
+	}
+	if len(store.received) != 1 || store.received[0] != "blog:archive" {
+		t.Fatalf("store received %v", store.received)
+	}
+}
+
+func TestAnInterruptedUploadSaysSo(t *testing.T) {
+	sink := &events.Recorder{}
+	rec := request(sitesHandler(&fakeDeployments{}, sink), http.MethodPost, "/_/api/sites/cut/deployments", "secret", "archive")
+	if rec.Code != http.StatusRequestTimeout {
+		t.Fatalf("status %d, want 408", rec.Code)
+	}
+	var body map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || body["code"] != "upload.timeout" {
+		t.Fatalf("body = %s, want code upload.timeout", rec.Body.String())
+	}
+	got := sink.Events()
+	if len(got) != 1 || got[0].Type != events.PagesRefused || got[0].Code != "upload.timeout" {
+		t.Fatalf("events = %+v, want one pages.refused with code upload.timeout", got)
 	}
 }

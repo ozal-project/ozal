@@ -5,6 +5,8 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
+	"time"
 
 	"github.com/octaviosantacruz/switchboard/internal/events"
 	"github.com/octaviosantacruz/switchboard/internal/pages"
@@ -41,11 +43,24 @@ func (h *Handler) listSites(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"sites": sites})
 }
 
+// siteUploadTimeout bounds one site upload, body and extraction included.
+// The admin server gives every other request 10 s; an archive over a slow
+// link needs more (2026-10-21: 500 KB took 5–8 s through the homelab tunnel,
+// and two deploys were cut). Only a caller that passed the bearer check gets
+// here, so the longer deadline is not open to a slow anonymous client.
+const siteUploadTimeout = 10 * time.Minute
+
 // deploySite takes the tar.gz as the raw request body. The cap is applied
 // before a single byte is decompressed; the per-file and total limits are
 // applied by the extractor on the real bytes.
 func (h *Handler) deploySite(w http.ResponseWriter, r *http.Request) {
 	site := r.PathValue("site")
+	// A writer that cannot move its deadlines (a test recorder) keeps the
+	// server's; the upload still works, only with the shorter limit.
+	deadline := time.Now().Add(siteUploadTimeout)
+	controller := http.NewResponseController(w)
+	_ = controller.SetReadDeadline(deadline)
+	_ = controller.SetWriteDeadline(deadline)
 	body := http.MaxBytesReader(w, r.Body, pages.MaxUploadBytes)
 	deployment, err := h.pages.Deploy(r.Context(), site, body)
 	if err != nil {
@@ -86,6 +101,14 @@ func (h *Handler) siteError(w http.ResponseWriter, r *http.Request, site string,
 	case errors.As(err, &tooBig):
 		h.emit(events.Event{Type: events.PagesRefused, Actor: actor(r), Host: site, Code: "archive.upload_too_large", Reason: "upload exceeds the size cap"})
 		writeError(w, http.StatusRequestEntityTooLarge, "upload exceeds the size cap")
+	case errors.Is(err, pages.ErrUploadInterrupted):
+		// The archive did not finish arriving; nothing about it was judged.
+		code, status := "upload.interrupted", http.StatusBadRequest
+		if errors.Is(err, os.ErrDeadlineExceeded) {
+			code, status = "upload.timeout", http.StatusRequestTimeout
+		}
+		h.emit(events.Event{Type: events.PagesRefused, Actor: actor(r), Host: site, Code: code, Reason: "the upload stopped before the archive was complete"})
+		writeJSON(w, status, map[string]string{"error": "the upload stopped before the archive was complete; send it again", "code": code})
 	case errors.Is(err, pages.ErrBadSiteName):
 		writeError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, pages.ErrNotFound):

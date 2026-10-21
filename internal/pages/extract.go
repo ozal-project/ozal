@@ -2,6 +2,7 @@ package pages
 
 import (
 	"archive/tar"
+	"compress/flate"
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
@@ -36,6 +37,47 @@ const (
 
 func refused(code Code, reason string) error { return &RefusedError{Code: code, Reason: reason} }
 
+// ErrUploadInterrupted marks an upload that stopped arriving: a read deadline,
+// a dropped connection or the size cap, not a malformed archive. The cause
+// stays wrapped, so the handler can answer each as what it is (BUG-013).
+var ErrUploadInterrupted = errors.New("upload interrupted")
+
+// readError tells the archive's fault from the transport's. The format errors
+// of gzip, flate and tar, and a stream that ends inside an entry, are the
+// archive's; anything else came from below it.
+func readError(err error, reason string) error {
+	var corrupt flate.CorruptInputError
+	if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, tar.ErrHeader) ||
+		errors.Is(err, gzip.ErrHeader) || errors.Is(err, gzip.ErrChecksum) || errors.As(err, &corrupt) {
+		return refused(BadArchive, reason)
+	}
+	return fmt.Errorf("%w: %w", ErrUploadInterrupted, err)
+}
+
+// copyEntry copies one entry and reports a failed write apart from a failed
+// read: a full disk is the server's problem, never the archive's.
+func copyEntry(dst io.Writer, src io.Reader) (n int64, readErr, writeErr error) {
+	w := &watchedWriter{w: dst}
+	n, err := io.Copy(w, src)
+	if w.err != nil {
+		return n, nil, w.err
+	}
+	return n, err, nil
+}
+
+type watchedWriter struct {
+	w   io.Writer
+	err error
+}
+
+func (w *watchedWriter) Write(p []byte) (int, error) {
+	n, err := w.w.Write(p)
+	if err != nil && w.err == nil {
+		w.err = err
+	}
+	return n, err
+}
+
 // Extract unpacks a tar.gz stream into dir, which must exist and be empty.
 // Every header goes through CheckEntry, and every write goes through an
 // os.Root opened on dir: even if the path check had a bug, the kernel-level
@@ -49,8 +91,11 @@ func Extract(r io.Reader, dir string, lim Limits) (Manifest, error) {
 	defer root.Close()
 
 	gz, err := gzip.NewReader(r)
-	if err != nil {
+	if errors.Is(err, io.EOF) {
 		return Manifest{}, refused(BadArchive, "upload is not a gzip stream")
+	}
+	if err != nil {
+		return Manifest{}, readError(err, "upload is not a gzip stream")
 	}
 	defer gz.Close()
 	tr := tar.NewReader(gz)
@@ -63,7 +108,7 @@ func Extract(r io.Reader, dir string, lim Limits) (Manifest, error) {
 			break
 		}
 		if err != nil {
-			return Manifest{}, refused(BadArchive, "upload is not a valid tar archive")
+			return Manifest{}, readError(err, "upload is not a valid tar archive")
 		}
 		if hdr.Typeflag == tar.TypeXGlobalHeader {
 			continue // pax global header: metadata only, no file
@@ -106,10 +151,13 @@ func Extract(r io.Reader, dir string, lim Limits) (Manifest, error) {
 		// Read at most one byte past what is still allowed, so an overflow is
 		// detected without ever writing it all.
 		budget := min(lim.MaxFileBytes, lim.MaxTotalBytes-manifest.Bytes)
-		n, err := io.Copy(io.MultiWriter(out, hash), io.LimitReader(tr, budget+1))
+		n, readErr, writeErr := copyEntry(io.MultiWriter(out, hash), io.LimitReader(tr, budget+1))
 		closeErr := out.Close()
-		if err != nil {
-			return Manifest{}, refused(BadArchive, "archive ended inside a file")
+		if writeErr != nil {
+			return Manifest{}, fmt.Errorf("write file: %w", writeErr)
+		}
+		if readErr != nil {
+			return Manifest{}, readError(readErr, "archive ended inside a file")
 		}
 		if closeErr != nil {
 			return Manifest{}, fmt.Errorf("write file: %w", closeErr)
