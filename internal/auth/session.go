@@ -33,6 +33,39 @@ type Session struct {
 	ExpiresAt time.Time
 }
 
+// Lifetime bounds a session two ways: Idle ends a session nobody has used
+// for that long (an abandoned cookie), Absolute ends it that long after the
+// login however busy it is (a stolen cookie in active use). Idle zero means
+// no idle limit.
+type Lifetime struct {
+	Idle     time.Duration
+	Absolute time.Duration
+}
+
+// TouchInterval is how stale a session's last-seen time may get before a
+// lookup records the new one. Recording every request would turn each one
+// into a database write; the cost is that the idle limit can run up to this
+// much early.
+const TouchInterval = time.Minute
+
+// expiry is the moment a session stops being valid: the earlier of its idle
+// deadline and its absolute deadline. It is pure so both backends apply the
+// same rule and the table test pins it.
+func expiry(created, lastSeen time.Time, l Lifetime) time.Time {
+	deadline := created.Add(l.Absolute)
+	if l.Idle > 0 {
+		if idle := lastSeen.Add(l.Idle); idle.Before(deadline) {
+			deadline = idle
+		}
+	}
+	return deadline
+}
+
+// Expiry exports the rule for the persistent backend.
+func (l Lifetime) Expiry(created, lastSeen time.Time) time.Time {
+	return expiry(created, lastSeen, l)
+}
+
 // SessionBackend is the session storage the Gate and the route manager
 // consume: the in-memory store for a single process without a state
 // database, and the SQLite adapter when sessions must survive a restart.
@@ -86,16 +119,23 @@ func SweepLoop(ctx context.Context, backend SessionBackend, interval time.Durati
 // keeps working; pass a persistent backend to make sessions outlive a
 // restart.
 type SessionStore struct {
-	ttl time.Duration
+	lifetime Lifetime
+	now      func() time.Time
 
 	mu       sync.Mutex
-	sessions map[string]Session
+	sessions map[string]storedSession
+}
+
+type storedSession struct {
+	principal Principal
+	created   time.Time
+	lastSeen  time.Time
 }
 
 var _ SessionBackend = (*SessionStore)(nil)
 
-func NewSessionStore(ttl time.Duration) *SessionStore {
-	return &SessionStore{ttl: ttl, sessions: make(map[string]Session)}
+func NewSessionStore(lifetime Lifetime) *SessionStore {
+	return &SessionStore{lifetime: lifetime, now: time.Now, sessions: make(map[string]storedSession)}
 }
 
 // Create stores a new session for principal and returns its opaque ID.
@@ -113,18 +153,19 @@ func (s *SessionStore) Create(ctx context.Context, principal Principal) (string,
 	if len(s.sessions) >= MaxSessions {
 		return "", ErrStoreFull
 	}
-	s.sessions[id] = Session{Principal: principal, ExpiresAt: time.Now().Add(s.ttl)}
+	now := s.now()
+	s.sessions[id] = storedSession{principal: principal, created: now, lastSeen: now}
 
 	return id, nil
 }
 
 // Sweep removes expired sessions.
 func (s *SessionStore) Sweep(ctx context.Context) {
-	now := time.Now()
+	now := s.now()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for id, sess := range s.sessions {
-		if now.After(sess.ExpiresAt) {
+		if !now.Before(expiry(sess.created, sess.lastSeen, s.lifetime)) {
 			delete(s.sessions, id)
 		}
 	}
@@ -143,11 +184,16 @@ func (s *SessionStore) Get(ctx context.Context, id string) (Session, bool) {
 	if !ok {
 		return Session{}, false
 	}
-	if time.Now().After(sess.ExpiresAt) {
+	now := s.now()
+	if !now.Before(expiry(sess.created, sess.lastSeen, s.lifetime)) {
 		delete(s.sessions, id)
 		return Session{}, false
 	}
-	return sess, true
+	if now.Sub(sess.lastSeen) >= TouchInterval {
+		sess.lastSeen = now
+		s.sessions[id] = sess
+	}
+	return Session{Principal: sess.principal, ExpiresAt: expiry(sess.created, sess.lastSeen, s.lifetime)}, true
 }
 
 // Delete removes a session by ID.

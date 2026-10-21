@@ -96,11 +96,15 @@ type DNS01 struct {
 }
 
 type Auth struct {
-	Issuer            string `json:"issuer,omitempty"`
-	ClientID          string `json:"client_id,omitempty"`
-	ClientSecret      string `json:"client_secret,omitempty"`
-	RedirectURL       string `json:"redirect_url,omitempty"`
-	SessionTTLMinutes int    `json:"session_ttl_minutes,omitempty"` // defaults to 480 (8h) if zero
+	Issuer       string `json:"issuer,omitempty"`
+	ClientID     string `json:"client_id,omitempty"`
+	ClientSecret string `json:"client_secret,omitempty"`
+	RedirectURL  string `json:"redirect_url,omitempty"`
+	// SessionTTLMinutes is the absolute session lifetime (default 10080, 7
+	// days); SessionIdleMinutes ends a session unused for that long
+	// (default 720, 12 h). Zero means the default.
+	SessionTTLMinutes  int `json:"session_ttl_minutes,omitempty"`
+	SessionIdleMinutes int `json:"session_idle_minutes,omitempty"`
 
 	// CookieDomain, if set, shares the session cookie across every
 	// subdomain of it (e.g. ".example.com" covers magiclink.example.com

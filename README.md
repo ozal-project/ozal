@@ -602,7 +602,8 @@ passkeys) on the same database.
     "client_id": "your-client-id",
     "client_secret": "your-client-secret",
     "redirect_url": "http://localhost:8888/_/auth/callback",
-    "session_ttl_minutes": 480
+    "session_ttl_minutes": 10080,
+    "session_idle_minutes": 720
   },
   "routes": [
     { "host": "localhost:8888", "target": "http://localhost:8090", "access": {} }
@@ -716,7 +717,12 @@ unresolvable `admin.token` reference answers `503` on mutations until fixed.
 `redirect_url` must be registered as an authorized redirect URI in the
 OIDC provider's app configuration, and must exactly match Switchboard's
 `/_/auth/callback` endpoint on whatever host/port it's actually reachable
-at. `session_ttl_minutes` defaults to 480 (8 hours) if omitted. Switchboard
+at. A session ends at the earlier of two limits: `session_ttl_minutes`
+after the login (absolute, default 10080 = 7 days) and `session_idle_minutes`
+after its last use (idle, default 720 = 12 hours; use is recorded at most once
+a minute). The cookie carries `Max-Age` for the absolute limit, so it survives
+closing the browser; the server enforces the idle limit and revocation.
+Switchboard
 never sees or stores a password — it only receives the provider's ID token
 after a successful login and trusts that identity for the session. A
 post-login redirect (`return_to`) is only honored when it is an absolute

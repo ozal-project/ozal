@@ -22,7 +22,7 @@ func newTestGate() *Gate {
 			RedirectURL: "http://app.localhost/_/auth/callback",
 			Endpoint:    oauth2.Endpoint{AuthURL: "https://idp.example.com/authorize"},
 		},
-		sessions:     NewSessionStore(time.Hour),
+		sessions:     NewSessionStore(Lifetime{Absolute: time.Hour}),
 		loginKey:     loginCookieKey("test-secret"),
 		allowedHosts: map[string]bool{"app.example.com": true},
 	}

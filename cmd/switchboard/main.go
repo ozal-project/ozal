@@ -112,8 +112,8 @@ func main() {
 			log.Fatalf("state database: %v", err)
 		}
 		defer db.Close()
-		managerOpts = append(managerOpts, routemanager.WithSessionBackend(func(ttl time.Duration) auth.SessionBackend {
-			return sqlite.NewSessions(db, ttl)
+		managerOpts = append(managerOpts, routemanager.WithSessionBackend(func(lifetime auth.Lifetime) auth.SessionBackend {
+			return sqlite.NewSessions(db, lifetime)
 		}))
 		log.Printf("sessions: persistent store at %s", *dbPath)
 		// ID-003: users and passkeys share the state database, so revoking

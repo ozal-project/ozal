@@ -65,7 +65,7 @@ func newHarness(t *testing.T) *harness {
 		Passkeys:     &config.Passkeys{RPID: "example.test", LoginURL: loginOrigin, DisplayName: "Switchboard"},
 	}
 	rec := &recorder{}
-	gate, err := passkey.NewGate(cfg, []string{appHost}, identity, sqlite.NewSessions(db, 8*time.Hour), rec)
+	gate, err := passkey.NewGate(cfg, []string{appHost}, identity, sqlite.NewSessions(db, auth.SessionLifetime(cfg)), rec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,8 @@ func (h *harness) invite(t *testing.T, email string, recover bool) string {
 type browser struct {
 	h       *harness
 	cookies map[string]string
-	origin  string // the Origin header its fetches send
+	origin  string       // the Origin header its fetches send
+	session *http.Cookie // the last session cookie set, with its attributes
 }
 
 func (h *harness) browser() *browser {
@@ -106,6 +107,9 @@ func (b *browser) post(t *testing.T, path string, body any) (*httptest.ResponseR
 		t.Fatalf("%s not handled", path)
 	}
 	for _, c := range rec.Result().Cookies() {
+		if c.Name == auth.SessionCookieName && c.MaxAge >= 0 {
+			b.session = c
+		}
 		if c.MaxAge < 0 {
 			delete(b.cookies, c.Name)
 		} else {
@@ -161,6 +165,11 @@ func TestEnrolThenLoginOnAnotherBrowser(t *testing.T) {
 	first := h.browser()
 	if code := first.enrol(t, device, h.invite(t, "Ana@Example.com", false)); code != http.StatusOK {
 		t.Fatalf("enrol = %d", code)
+	}
+	// The session outlives the browser session (ID-005): Max-Age is the
+	// absolute lifetime; the server enforces the idle limit.
+	if c := first.session; c == nil || c.MaxAge != int((7*24*time.Hour)/time.Second) || !c.HttpOnly || !c.Secure {
+		t.Fatalf("session cookie = %+v", c)
 	}
 	principal, ok := first.signedIn()
 	if !ok || principal.Email != "ana@example.com" || !principal.EmailVerified || !strings.HasPrefix(principal.Subject, passkey.SubjectPrefix) {

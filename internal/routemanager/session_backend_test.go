@@ -50,11 +50,11 @@ func TestSessionBackendFactoryHonorsTTLChanges(t *testing.T) {
 
 	var mu sync.Mutex
 	var ttls []time.Duration
-	factory := func(ttl time.Duration) auth.SessionBackend {
+	factory := func(lifetime auth.Lifetime) auth.SessionBackend {
 		mu.Lock()
-		ttls = append(ttls, ttl)
+		ttls = append(ttls, lifetime.Absolute)
 		mu.Unlock()
-		return auth.NewSessionStore(ttl)
+		return auth.NewSessionStore(lifetime)
 	}
 	recordedTTLs := func() []time.Duration {
 		mu.Lock()

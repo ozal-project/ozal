@@ -128,7 +128,7 @@ func TestFullLoginCallbackFlow(t *testing.T) {
 		ClientID:     "test-client",
 		ClientSecret: "test-secret",
 		RedirectURL:  "http://app.localhost/_/auth/callback",
-	}, []string{"app.localhost"}, NewSessionStore(time.Hour), recorder)
+	}, []string{"app.localhost"}, NewSessionStore(Lifetime{Absolute: time.Hour}), recorder)
 	if err != nil {
 		t.Fatalf("NewGate: %v", err)
 	}
@@ -235,7 +235,7 @@ func TestCallbackRejectsForgedLoginCookie(t *testing.T) {
 		ClientID:     "test-client",
 		ClientSecret: "test-secret",
 		RedirectURL:  "http://app.localhost/_/auth/callback",
-	}, []string{"app.localhost"}, NewSessionStore(time.Hour), events.Discard)
+	}, []string{"app.localhost"}, NewSessionStore(Lifetime{Absolute: time.Hour}), events.Discard)
 	if err != nil {
 		t.Fatalf("NewGate: %v", err)
 	}

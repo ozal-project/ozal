@@ -29,17 +29,39 @@ const (
 	// LoginCookieName carries a signed, short-lived login attempt (state,
 	// PKCE verifier, return_to). The server keeps no pending-login store:
 	// the cookie is the state, signed and bound to the browser.
-	LoginCookieName   = "sb_login"
-	defaultSessionTTL = 8 * time.Hour
-	loginCookieTTL    = 5 * time.Minute
+	LoginCookieName    = "sb_login"
+	defaultSessionTTL  = 7 * 24 * time.Hour
+	defaultSessionIdle = 12 * time.Hour
+	loginCookieTTL     = 5 * time.Minute
 )
 
-// SessionTTL is the configured session lifetime.
-func SessionTTL(cfg config.Auth) time.Duration {
+// SessionLifetime is the configured session lifetime: session_ttl_minutes
+// is the absolute limit, session_idle_minutes the idle one.
+func SessionLifetime(cfg config.Auth) Lifetime {
+	l := Lifetime{Idle: defaultSessionIdle, Absolute: defaultSessionTTL}
 	if cfg.SessionTTLMinutes > 0 {
-		return time.Duration(cfg.SessionTTLMinutes) * time.Minute
+		l.Absolute = time.Duration(cfg.SessionTTLMinutes) * time.Minute
 	}
-	return defaultSessionTTL
+	if cfg.SessionIdleMinutes > 0 {
+		l.Idle = time.Duration(cfg.SessionIdleMinutes) * time.Minute
+	}
+	return l
+}
+
+// SessionCookie is the session cookie both login gates set. MaxAge makes it
+// outlive the browser session; the server still ends it earlier when the
+// idle limit passes or the session is revoked.
+func SessionCookie(id, domain string, secure bool, l Lifetime) *http.Cookie {
+	return &http.Cookie{
+		Name:     SessionCookieName,
+		Value:    id,
+		Domain:   domain,
+		Path:     "/",
+		MaxAge:   int(l.Absolute / time.Second),
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+	}
 }
 
 // Gate protects routes behind a login against an external OIDC provider.
@@ -53,6 +75,7 @@ type Gate struct {
 	allowedHosts map[string]bool
 
 	sessions SessionBackend
+	lifetime Lifetime
 	loginKey []byte
 	sink     events.Sink
 }
@@ -107,6 +130,7 @@ func NewGate(ctx context.Context, cfg config.Auth, allowedHosts []string, sessio
 		cookieDomain: cfg.CookieDomain,
 		allowedHosts: hosts,
 		sessions:     sessions,
+		lifetime:     SessionLifetime(cfg),
 		loginKey:     loginCookieKey(cfg.ClientSecret),
 		sink:         sink,
 	}, nil
@@ -279,15 +303,7 @@ func (g *Gate) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	g.emit(events.Event{Type: events.LoginSucceeded, Actor: principal.Subject, Host: r.Host, RemoteAddr: r.RemoteAddr})
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     SessionCookieName,
-		Value:    sessionID,
-		Domain:   g.cookieDomain,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   r.TLS != nil,
-		SameSite: http.SameSiteLaxMode,
-	})
+	http.SetCookie(w, SessionCookie(sessionID, g.cookieDomain, r.TLS != nil, g.lifetime))
 	http.Redirect(w, r, g.safeReturnTo(pl.ReturnTo), http.StatusFound)
 }
 

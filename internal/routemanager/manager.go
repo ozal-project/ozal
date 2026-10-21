@@ -40,8 +40,8 @@ func WithEventSink(sink events.Sink) Option {
 // WithSessionBackend supplies the session storage factory. The default is
 // the in-memory store; the composition root passes the SQLite adapter to
 // make sessions survive a restart. The factory is called again when the
-// session TTL changes, because a lifetime change is a policy change.
-func WithSessionBackend(newBackend func(ttl time.Duration) auth.SessionBackend) Option {
+// session lifetime changes, because a lifetime change is a policy change.
+func WithSessionBackend(newBackend func(lifetime auth.Lifetime) auth.SessionBackend) Option {
 	return func(m *Manager) {
 		if newBackend != nil {
 			m.newSessions = newBackend
@@ -120,9 +120,9 @@ type Manager struct {
 	gateAuth            config.Auth
 	gateHosts           []string
 	sessions            auth.SessionBackend
-	sessionTTL          time.Duration
+	sessionLifetime     auth.Lifetime
 	sessionCancel       context.CancelFunc
-	newSessions         func(ttl time.Duration) auth.SessionBackend
+	newSessions         func(lifetime auth.Lifetime) auth.SessionBackend
 	transport           *http.Transport
 	transportTimeout    time.Duration
 	rateLimiters        *rateLimiters
@@ -149,7 +149,7 @@ func New(ctx context.Context, configPath string, healthCheckInterval time.Durati
 		ctx:                 ctx,
 		configPath:          configPath,
 		healthCheckInterval: healthCheckInterval,
-		newSessions:         func(ttl time.Duration) auth.SessionBackend { return auth.NewSessionStore(ttl) },
+		newSessions:         func(lifetime auth.Lifetime) auth.SessionBackend { return auth.NewSessionStore(lifetime) },
 		sink:                events.Discard,
 	}
 	for _, opt := range opts {
@@ -385,12 +385,12 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 	protectedHosts := protectedRouteHosts(cfg.Routes)
 	if len(protectedHosts) > 0 {
 		// The session store outlives gate rebuilds: adding a protected route
-		// must not log everyone out. A changed session TTL is a policy change,
+		// must not log everyone out. A changed session lifetime is a policy change,
 		// so it gets a fresh store; the candidate is promoted only on install.
 		sessions = m.sessions
-		if sessions == nil || m.sessionTTL != auth.SessionTTL(cfg.Auth) {
+		if sessions == nil || m.sessionLifetime != auth.SessionLifetime(cfg.Auth) {
 			storeCtx, cancelStore := context.WithCancel(m.ctx)
-			sessions = m.newSessions(auth.SessionTTL(cfg.Auth))
+			sessions = m.newSessions(auth.SessionLifetime(cfg.Auth))
 			go auth.SweepLoop(storeCtx, sessions, auth.SessionCleanupInterval)
 			sessionCancel = cancelStore
 		}
@@ -530,7 +530,7 @@ func (m *Manager) install(candidate *Snapshot) {
 	if candidate.sessions != m.sessions {
 		oldSessionCancel := m.sessionCancel
 		m.sessions = candidate.sessions
-		m.sessionTTL = auth.SessionTTL(candidate.cfg.Auth)
+		m.sessionLifetime = auth.SessionLifetime(candidate.cfg.Auth)
 		m.sessionCancel = candidate.sessionCancel
 		candidate.sessionCancel = nil
 		if oldSessionCancel != nil {

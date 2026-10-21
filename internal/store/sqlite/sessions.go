@@ -13,13 +13,14 @@ import (
 	"github.com/octaviosantacruz/switchboard/internal/auth"
 )
 
-// Sessions is the persistent auth.SessionBackend over migration 001. The
+// Sessions is the persistent auth.SessionBackend over migrations 001 and
+// 005. The
 // cookie carries the raw ID; only its SHA-256 is stored, so a leaked
 // database file cannot be replayed as session cookies. Times are stored as
 // Unix seconds, the same shape the migration defines.
 type Sessions struct {
 	db          *sql.DB
-	ttl         time.Duration
+	lifetime    auth.Lifetime
 	maxSessions int
 	now         func() time.Time
 }
@@ -30,12 +31,26 @@ var _ auth.SessionBackend = (*Sessions)(nil)
 // runs migrations itself: applying schema changes is an explicit operator
 // step (`switchboard migrate`), so a startup with a stale schema fails
 // loudly instead of guessing.
-func NewSessions(db *sql.DB, ttl time.Duration) *Sessions {
-	return &Sessions{db: db, ttl: ttl, maxSessions: auth.MaxSessions, now: time.Now}
+func NewSessions(db *sql.DB, lifetime auth.Lifetime) *Sessions {
+	return &Sessions{db: db, lifetime: lifetime, maxSessions: auth.MaxSessions, now: time.Now}
+}
+
+// purgeExpired is the WHERE clause for rows past either limit, under the
+// current lifetime: the issued expiry, the absolute lifetime from creation,
+// or (when set) the idle limit from the last recorded use.
+func (s *Sessions) purgeExpired() (string, []any) {
+	now := s.now()
+	where := `expires_at <= ? OR created_at <= ?`
+	args := []any{now.Unix(), now.Add(-s.lifetime.Absolute).Unix()}
+	if s.lifetime.Idle > 0 {
+		where += ` OR last_seen_at <= ?`
+		args = append(args, now.Add(-s.lifetime.Idle).Unix())
+	}
+	return where, args
 }
 
 // Create stores a session in one transaction: it first deletes expired rows,
-// under the current TTL, then enforces capacity against live sessions only. The
+// under the current lifetime, then enforces capacity against live sessions only. The
 // connection pool runs with _txlock=immediate, so the transaction takes the
 // write lock at BEGIN and two concurrent logins serialize instead of both
 // seeing the same free slot.
@@ -57,7 +72,8 @@ func (s *Sessions) Create(ctx context.Context, principal auth.Principal) (string
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE expires_at <= ? OR created_at <= ?`, now.Unix(), now.Add(-s.ttl).Unix()); err != nil {
+	where, args := s.purgeExpired()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE `+where, args...); err != nil {
 		return "", fmt.Errorf("purge expired sessions: %w", err)
 	}
 	var count int
@@ -68,10 +84,10 @@ func (s *Sessions) Create(ctx context.Context, principal auth.Principal) (string
 		return "", auth.ErrStoreFull
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO sessions (id_hash, subject, email, email_verified, groups_json, created_at, expires_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO sessions (id_hash, subject, email, email_verified, groups_json, created_at, expires_at, last_seen_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		hash[:], principal.Subject, principal.Email, principal.EmailVerified, groups,
-		now.Unix(), now.Add(s.ttl).Unix(),
+		now.Unix(), now.Add(s.lifetime.Absolute).Unix(), now.Unix(),
 	); err != nil {
 		return "", fmt.Errorf("insert session: %w", err)
 	}
@@ -94,11 +110,12 @@ func (s *Sessions) Get(ctx context.Context, id string) (auth.Session, bool) {
 		groupsJSON  string
 		expiresUnix int64
 		createdUnix int64
+		seenUnix    int64
 	)
 	err := s.db.QueryRowContext(ctx,
-		`SELECT subject, email, email_verified, groups_json, expires_at, created_at FROM sessions WHERE id_hash = ?`,
+		`SELECT subject, email, email_verified, groups_json, expires_at, created_at, last_seen_at FROM sessions WHERE id_hash = ?`,
 		hash[:],
-	).Scan(&subject, &email, &verified, &groupsJSON, &expiresUnix, &createdUnix)
+	).Scan(&subject, &email, &verified, &groupsJSON, &expiresUnix, &createdUnix, &seenUnix)
 	if errors.Is(err, sql.ErrNoRows) {
 		return auth.Session{}, false
 	}
@@ -106,15 +123,24 @@ func (s *Sessions) Get(ctx context.Context, id string) (auth.Session, bool) {
 		slog.Default().Debug("session lookup failed", "error", err)
 		return auth.Session{}, false
 	}
-	expiresAt := time.Unix(expiresUnix, 0)
+	created, issued := time.Unix(createdUnix, 0), time.Unix(expiresUnix, 0)
+	lastSeen := time.Unix(seenUnix, 0)
+	now := s.now()
 	// Apply the current snapshot policy without changing rows while a reload
-	// candidate is being built. A TTL increase never extends the issued expiry.
-	if policyExpiry := time.Unix(createdUnix, 0).Add(s.ttl); policyExpiry.Before(expiresAt) {
-		expiresAt = policyExpiry
-	}
-	if !s.now().Before(expiresAt) {
+	// candidate is being built. A longer lifetime never extends the issued
+	// expiry.
+	if !now.Before(s.expiresAt(created, lastSeen, issued)) {
 		_, _ = s.db.ExecContext(ctx, `DELETE FROM sessions WHERE id_hash = ?`, hash[:])
 		return auth.Session{}, false
+	}
+	// Record the use at most once per TouchInterval. A failed write only
+	// means the idle limit counts from the previous use: earlier, never later.
+	if now.Sub(lastSeen) >= auth.TouchInterval {
+		if _, err := s.db.ExecContext(ctx, `UPDATE sessions SET last_seen_at = ? WHERE id_hash = ?`, now.Unix(), hash[:]); err != nil {
+			slog.Default().Debug("session touch failed", "error", err)
+		} else {
+			lastSeen = now
+		}
 	}
 	var groups []string
 	if err := json.Unmarshal([]byte(groupsJSON), &groups); err != nil {
@@ -128,8 +154,17 @@ func (s *Sessions) Get(ctx context.Context, id string) (auth.Session, bool) {
 			EmailVerified: verified == 1,
 			Groups:        groups,
 		},
-		ExpiresAt: expiresAt,
+		ExpiresAt: s.expiresAt(created, lastSeen, issued),
 	}, true
+}
+
+// expiresAt is the earlier of the expiry issued at login and the current
+// lifetime's rule.
+func (s *Sessions) expiresAt(created, lastSeen, issued time.Time) time.Time {
+	if policy := s.lifetime.Expiry(created, lastSeen); policy.Before(issued) {
+		return policy
+	}
+	return issued
 }
 
 // Delete removes a session by ID; deleting a missing session is fine.
@@ -140,9 +175,10 @@ func (s *Sessions) Delete(ctx context.Context, id string) {
 	}
 }
 
-// Sweep deletes sessions past either their issued expiry or the current TTL.
+// Sweep deletes sessions past their issued expiry or the current lifetime.
 func (s *Sessions) Sweep(ctx context.Context) {
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE expires_at <= ? OR created_at <= ?`, s.now().Unix(), s.now().Add(-s.ttl).Unix()); err != nil {
+	where, args := s.purgeExpired()
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE `+where, args...); err != nil {
 		slog.Default().Debug("session sweep failed", "error", err)
 	}
 }

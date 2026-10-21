@@ -334,3 +334,28 @@ func TestOpenConfiguresConnection(t *testing.T) {
 		t.Errorf("journal_mode = %q, want wal", journalMode)
 	}
 }
+
+// Migration 005 adds last_seen_at to a live sessions table: existing rows
+// count as last seen at their login, so the idle limit applies to them from
+// the upgrade on instead of ending them all.
+func TestSessionLastSeenMigrationBackfillsExistingRows(t *testing.T) {
+	ctx := context.Background()
+	db, _ := openTestDB(t)
+	all, err := LoadMigrations(Migrations())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Migrate(ctx, db, all[:4]); err != nil {
+		t.Fatalf("Migrate 001–004: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO sessions (id_hash, subject, created_at, expires_at) VALUES (x'01', 'sub', 1800000000, 1800028800)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Migrate(ctx, db, all); err != nil {
+		t.Fatalf("Migrate 005: %v", err)
+	}
+	var seen int64
+	if err := db.QueryRowContext(ctx, `SELECT last_seen_at FROM sessions WHERE id_hash = x'01'`).Scan(&seen); err != nil || seen != 1800000000 {
+		t.Fatalf("last_seen_at = %d, %v; want the creation time", seen, err)
+	}
+}

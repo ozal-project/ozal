@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"testing"
 	"time"
@@ -26,7 +27,7 @@ func migratedSessions(t *testing.T, path string, ttl time.Duration) *Sessions {
 	if _, err := Migrate(ctx, db, migrations); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	return NewSessions(db, ttl)
+	return NewSessions(db, auth.Lifetime{Absolute: ttl})
 }
 
 func TestSessionsRoundTrip(t *testing.T) {
@@ -196,7 +197,7 @@ func TestSessionsApplyCurrentTTLWithoutExtendingOriginalExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	shortened := NewSessions(original.db, 30*time.Minute)
+	shortened := NewSessions(original.db, auth.Lifetime{Absolute: 30 * time.Minute})
 	shortened.now = func() time.Time { return created.Add(10 * time.Minute) }
 	session, ok := shortened.Get(ctx, id)
 	if !ok || !session.ExpiresAt.Equal(created.Add(30*time.Minute)) {
@@ -214,9 +215,66 @@ func TestSessionsApplyCurrentTTLWithoutExtendingOriginalExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	extended := NewSessions(original.db, 24*time.Hour)
+	extended := NewSessions(original.db, auth.Lifetime{Absolute: 24 * time.Hour})
 	extended.now = func() time.Time { return created.Add(8 * time.Hour) }
 	if _, ok := extended.Get(ctx, id); ok {
 		t.Fatal("a longer TTL extended the original session expiry")
+	}
+}
+
+// Idle limit over the database: use moves last_seen_at (at most once per
+// TouchInterval), no use ends the session, and the absolute limit still
+// wins over a busy session. Sweep removes idle rows nobody presents again.
+func TestSessionsIdleLimitAndTouch(t *testing.T) {
+	ctx := context.Background()
+	store := migratedSessions(t, t.TempDir()+"/state.db", 3*time.Hour)
+	store.lifetime.Idle = time.Hour
+	start := time.Unix(1800000000, 0)
+	now := start
+	store.now = func() time.Time { return now }
+	lastSeen := func(id string) int64 {
+		t.Helper()
+		hash := sha256.Sum256([]byte(id))
+		var seen int64
+		if err := store.db.QueryRowContext(ctx, `SELECT last_seen_at FROM sessions WHERE id_hash = ?`, hash[:]).Scan(&seen); err != nil {
+			t.Fatal(err)
+		}
+		return seen
+	}
+
+	busy, _ := store.Create(ctx, auth.Principal{Subject: "busy"})
+	idle, _ := store.Create(ctx, auth.Principal{Subject: "idle"})
+	abandoned, _ := store.Create(ctx, auth.Principal{Subject: "abandoned"})
+
+	now = start.Add(30 * time.Second)
+	if _, ok := store.Get(ctx, busy); !ok || lastSeen(busy) != start.Unix() {
+		t.Fatal("a use within TouchInterval wrote last_seen_at")
+	}
+	for now = start.Add(50 * time.Minute); now.Before(start.Add(3 * time.Hour)); now = now.Add(50 * time.Minute) {
+		session, ok := store.Get(ctx, busy)
+		if !ok {
+			t.Fatalf("session in use ended at %v", now.Sub(start))
+		}
+		if lastSeen(busy) != now.Unix() {
+			t.Fatal("use did not record last_seen_at")
+		}
+		if want := now.Add(time.Hour); want.Before(start.Add(3*time.Hour)) && !session.ExpiresAt.Equal(want) {
+			t.Fatalf("ExpiresAt = %v, want %v", session.ExpiresAt, want)
+		}
+	}
+	if _, ok := store.Get(ctx, idle); ok {
+		t.Fatal("session unused for more than the idle limit is still valid")
+	}
+	// Sweep inside the absolute limit, so only the idle rule can remove it.
+	now = start.Add(2 * time.Hour)
+	store.Sweep(ctx)
+	hash := sha256.Sum256([]byte(abandoned))
+	var count int
+	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sessions WHERE id_hash = ?`, hash[:]).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("sweep kept an idle session: %d, %v", count, err)
+	}
+	now = start.Add(3 * time.Hour)
+	if _, ok := store.Get(ctx, busy); ok {
+		t.Fatal("session in use outlived the absolute limit")
 	}
 }

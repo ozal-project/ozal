@@ -42,6 +42,7 @@ type Gate struct {
 	loginHost    string // normalized host of origin
 	secure       bool
 	cookieDomain string
+	lifetime     auth.Lifetime
 	allowedHosts map[string]bool
 	// protected are the hosts behind the login, offered as explicit links
 	// when a sign-in or enrolment has no destination to return to.
@@ -114,6 +115,7 @@ func NewGate(cfg config.Auth, protectedHosts []string, dir Directory, sessions a
 		loginHost:    loginHost,
 		secure:       login.Scheme == "https",
 		cookieDomain: cfg.CookieDomain,
+		lifetime:     auth.SessionLifetime(cfg),
 		allowedHosts: hosts,
 		protected:    protected,
 		ceremonies:   newCeremonies(time.Now),
@@ -433,15 +435,7 @@ func (g *Gate) startSession(w http.ResponseWriter, r *http.Request, user User) *
 		g.emit(r, events.Event{Type: events.LoginFailed, Actor: user.Subject(), Code: "session_create_failed", Error: err.Error()})
 		return &errInternal
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     auth.SessionCookieName,
-		Value:    id,
-		Domain:   g.cookieDomain,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   g.secure,
-		SameSite: http.SameSiteLaxMode,
-	})
+	http.SetCookie(w, auth.SessionCookie(id, g.cookieDomain, g.secure, g.lifetime))
 	return nil
 }
 

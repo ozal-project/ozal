@@ -231,8 +231,9 @@ config `auth.passkeys`. Where it differs from the text above:
   checked against the configured hosts (`auth.SafeReturnTo`, shared with the
   OIDC gate), instead of a server-side record. Same protection against open
   redirects, less state.
-- **Session lifetime.** Phase 1 uses the existing absolute lifetime
-  (`session_ttl_minutes`, 8 h by default). The 12 h idle / 7 day absolute
+- **Session lifetime.** Phase 1 used the existing absolute lifetime
+  (`session_ttl_minutes`, 8 h by default); `ID-005` replaced it on
+  2026-10-21 (see the journey below). The 12 h idle / 7 day absolute
   split, step-up and the session columns (`auth_time`, `amr`,
   `device_bound`) move to phase 2 (`ID-005`), where the policies that read
   them are built.
@@ -257,3 +258,65 @@ config `auth.passkeys`. Where it differs from the text above:
   headers of the passkey user (`TUN-002` acceptance), with no external IdP.
 - Every step appears in the activity feed; no token, challenge or cookie is
   logged.
+
+## The whole journey, today and planned (2026-10-21)
+
+After the owner's iPhone acceptance. Phase 1 is live on the edge; the rest is
+planned and keeps the same shape.
+
+**Today (`ID-003`):**
+
+1. The operator runs `user invite -email … -group … -return-to <protected URL>`
+   on the host: it creates the user and a one-time token (only its hash is
+   stored) and prints `…/_/auth/enrol?return_to=…#TOKEN`.
+2. The operator sends the link by hand.
+3. The visitor opens it. The token is in the fragment, so no server or link
+   preview sees it, and nothing is consumed until the button is pressed.
+4. *Create passkey* → the device makes a key pair behind Face ID/PIN; the edge
+   checks the token (unused, within 15 minutes), stores only the public key,
+   burns the token and starts a session.
+5. The page returns to `return_to` if it is a protected host, otherwise it
+   lists the protected sites as explicit links.
+6. Later: no session → the login page; the visitor picks the passkey; the
+   edge verifies the signature (this origin, user verified, no replay) and
+   the app receives `X-Auth-Request-User`/`-Email`.
+
+Weak points left on purpose for later phases: step 2 is manual, and in phase 1
+the cookie had no expiry, so it ended with the browser session. `ID-005`
+(first part, 2026-10-21) gives it `Max-Age` and ends sessions at the earlier
+of 12 h without use and 7 days after login.
+
+**Planned:**
+
+- `ID-005` — sessions of 12 h idle / 7 days absolute (built), step-up (a
+  fresh passkey proof) only for routes that ask for it (next).
+- `ID-002` + `ID-001` — the invitation is emailed; the email carries a code
+  (primary, finishes in the tab the visitor started in) and a link
+  (fallback). Email bootstraps a passkey once; it never signs in on its own
+  afterwards and never recovers an account.
+- `ID-007` — the login page offers every configured method (passkey, an
+  upstream OIDC provider such as Google or Okta) and never picks one on the
+  visitor's behalf; a route can require a passkey.
+- `ID-008` — from a session with a recent passkey proof, add or revoke one's
+  own devices; every addition alerts.
+- Recovery after losing every device stays `user invite -recover` on the host.
+
+## What `ID-004` (provider) is, and what it is not
+
+Being an OIDC provider means applications that speak OIDC (Grafana, Gitea, a
+mobile app, the `sb` CLI) can offer "Sign in with Switchboard" instead of
+trusting the proxy's headers. The protocol part is well specified and
+bounded: discovery, JWKS with key rotation, authorization code + PKCE, token
+and userinfo endpoints, `acr`/`amr` claims, and the device flow for CLIs.
+Behind that endpoint the user still signs in with a passkey, so the tokens
+are as phishing-resistant as the login.
+
+What makes a product like Okta large is not OIDC: it is the catalog of
+pre-built integrations (OIDC, SAML, SCIM provisioning), lifecycle management,
+a risk engine, global availability and certifications, and an authenticator
+app (push, device trust). Switchboard does not need its own phone app for the
+phishing-resistant part: the platform passkey (iCloud Keychain, Google
+Password Manager, a security key) is the authenticator, and approvals for
+sensitive actions can use the existing Telegram notifier (`NTF-001`). TOTP
+apps (Google Authenticator) stay out of the login: their codes can be phished
+through a proxy page, which is the attack passkeys stop.
