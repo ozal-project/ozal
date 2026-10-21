@@ -168,7 +168,6 @@ items do not reopen or imply failure of the historical security closures.
 
 | ID | Task | State | Done when |
 |---|---|---|---|
-| `BUG-009` | P1: SSE reconnect replays duplicate events into the Activity table/counters. | Ready (browser fixture reproduced 4 → 8 retained events) | Stable event identity/epoch and bounded replay/dedup semantics; real distinct same-time events retained; gap/restart state explicit; non-blocking broker preserved; regression passes. Durable audit stays `AUD-001`/`AUD-002`. |
 
 ---
 

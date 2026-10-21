@@ -42,6 +42,7 @@ export type CertificateStatus = {
 export type StatusResponse = { generated_at: string; certificate?: CertificateStatus; routes: RouteStatus[] };
 
 export type AccessEvent = {
+  id?: string; // "<epoch>-<seq>", see $lib/feed
   time: string;
   type: string;
   actor?: string;

@@ -8,6 +8,7 @@
   import { Input } from "$lib/components/ui/input";
   import { Button } from "$lib/components/ui/button";
   import { fetchOverview, type AccessEvent, type RouteOverview } from "$lib/api";
+  import { emptyFeed, receive } from "$lib/feed";
   import PauseIcon from "@lucide/svelte/icons/pause";
   import PlayIcon from "@lucide/svelte/icons/play";
   import SearchIcon from "@lucide/svelte/icons/search";
@@ -31,7 +32,10 @@
   let frozen = $state<AccessEvent[] | null>(null);
   let query = $state("");
   let category = $state("all");
-  let stream = $state<"connecting" | "live" | "replayed" | "lost">("connecting");
+  let stream = $state<"connecting" | "live" | "reconnected" | "lost">("connecting");
+  // Identity and gap bookkeeping, so a reconnect never doubles the table and
+  // missed events are said, not hidden (BUG-009).
+  let feed = $state(emptyFeed());
   let routes = $state<RouteOverview[] | null>(null);
   let routesError = $state(false);
 
@@ -62,19 +66,22 @@
     const refresh = setInterval(loadRoutes, 30_000);
     let reconnecting = false;
     const es = new EventSource("/_/events");
-    es.onopen = () => { stream = reconnecting ? "replayed" : "live"; reconnecting = true; };
+    es.onopen = () => { stream = reconnecting ? "reconnected" : "live"; reconnecting = true; };
     es.onerror = () => { stream = "lost"; };
     es.onmessage = (m) => {
       try {
         const e = JSON.parse(m.data) as AccessEvent;
         if (typeof e.type !== "string" || typeof e.time !== "string") return;
+        const r = receive(feed, e.id ?? m.lastEventId);
+        feed = r.state;
+        if (!r.accept) return;
         events = [e, ...events].slice(0, MAX);
       } catch { /* ignore a malformed event */ }
     };
     return () => { es.close(); clearInterval(refresh); };
   });
 
-  const streamText = { connecting: "Connecting…", live: "Live event stream", replayed: "Live · history replayed", lost: "Connection lost · retrying" };
+  const streamText = { connecting: "Connecting…", live: "Live event stream", reconnected: "Live · reconnected", lost: "Connection lost · retrying" };
 </script>
 
 <PageHeader eyebrow="Access control" title="Access activity" intro="Every line Switchboard connected or refused, who asked, and why.">
@@ -83,6 +90,13 @@
     {streamText[stream]}
   </span>
 </PageHeader>
+
+{#if feed.missed > 0 || feed.restarted}
+  <div class="border-warning/40 bg-warning/[0.06] mb-6 rounded-lg border px-4 py-3 text-sm" role="status">
+    {#if feed.missed > 0}<p><strong>{feed.missed} {feed.missed === 1 ? "event" : "events"} missed</strong> by this view (a slow connection, or history the server no longer holds): the table is incomplete. It is a live view, not an audit log.</p>{/if}
+    {#if feed.restarted}<p>Switchboard restarted while this view was open; earlier rows are from the previous run.</p>{/if}
+  </div>
+{/if}
 
 <div class="mb-6 grid gap-4 sm:grid-cols-3">
   <Stat label="Events retained" value={shown.length} note={`Most recent ${MAX} in this view`} lamp={shown.length ? "on" : "idle"} />

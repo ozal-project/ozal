@@ -75,7 +75,7 @@ func TestEventStreamEndsWhenClientLeaves(t *testing.T) {
 	// per connection would eventually refuse everyone.
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if _, _, c, ok := broker.Subscribe(); ok {
+		if _, _, c, ok := broker.Subscribe(0); ok {
 			c()
 			if runtime.NumGoroutine() <= before+2 {
 				return
@@ -117,5 +117,77 @@ func TestActivityRoutesAbsentWithoutBroker(t *testing.T) {
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "http://127.0.0.1:9090/_/events", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("got %d, want 404", rec.Code)
+	}
+}
+
+// readEvents opens the stream with an optional Last-Event-ID and returns the
+// first n (id, data) pairs.
+func readEvents(t *testing.T, url, lastID string, n int) [][2]string {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "GET", url+"/_/events", nil)
+	if lastID != "" {
+		req.Header.Set("Last-Event-ID", lastID)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	lines := bufio.NewScanner(resp.Body)
+	var out [][2]string
+	id := ""
+	for len(out) < n && lines.Scan() {
+		switch line := lines.Text(); {
+		case strings.HasPrefix(line, "id: "):
+			id = strings.TrimPrefix(line, "id: ")
+		case strings.HasPrefix(line, "data: "):
+			out = append(out, [2]string{id, strings.TrimPrefix(line, "data: ")})
+			id = ""
+		}
+	}
+	return out
+}
+
+// BUG-009: a reconnecting console gets only the events after the last one it
+// saw, not the whole history again, and every event carries its identity.
+func TestEventStreamResumesFromLastEventID(t *testing.T) {
+	broker := events.NewBroker()
+	broker.Emit(events.Event{Type: events.LoginStarted})
+	broker.Emit(events.Event{Type: events.AccessDenied})
+	srv := newStreamServer(t, broker)
+
+	first := readEvents(t, srv.URL, "", 2)
+	if len(first) != 2 || first[0][0] != broker.Epoch()+"-1" || first[1][0] != broker.Epoch()+"-2" {
+		t.Fatalf("first connection = %v", first)
+	}
+	if !strings.Contains(first[0][1], `"id":"`+first[0][0]+`"`) {
+		t.Fatalf("the data does not carry its id: %s", first[0][1])
+	}
+
+	broker.Emit(events.Event{Type: events.AccessAllowed})
+	again := readEvents(t, srv.URL, first[0][0], 2)
+	if len(again) != 2 || again[0][0] != first[1][0] || !strings.Contains(again[1][1], `"type":"access.allowed"`) {
+		t.Fatalf("after reconnecting from %s = %v, want events 2 and 3 only", first[0][0], again)
+	}
+
+	// An ID from another process (a restart) cannot resume: everything again.
+	other := readEvents(t, srv.URL, "0123456789abcdef-2", 3)
+	if len(other) != 3 || other[0][0] != broker.Epoch()+"-1" {
+		t.Fatalf("another epoch's ID = %v, want the whole history", other)
+	}
+}
+
+func TestResumeAfterOnlyTrustsItsOwnEpoch(t *testing.T) {
+	for _, tt := range []struct {
+		id   string
+		want uint64
+	}{
+		{"ep-7", 7}, {"other-7", 0}, {"", 0}, {"ep", 0}, {"ep-x", 0}, {"ep--1", 0},
+	} {
+		if got := resumeAfter(tt.id, "ep"); got != tt.want {
+			t.Errorf("resumeAfter(%q) = %d, want %d", tt.id, got, tt.want)
+		}
 	}
 }

@@ -6,6 +6,26 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## BUG-009 — reconnecting no longer doubles the activity feed — 2026-10-21 (committed with this change)
+
+From the [product/code/UX review](reviews/2026-10-21-product-code-ux.md):
+after a disconnect the console received the whole history again and showed
+every event twice (4 → 8 rows, 1 → 2 refused).
+
+- The broker numbers events within a random per-process epoch; the SSE
+  stream sends `id: <epoch>-<seq>` (also in the JSON). A reconnecting
+  `EventSource` sends `Last-Event-ID` and gets only later events; an ID from
+  another epoch (a restart) gets the whole retained history.
+- The console keeps one row per identity (`web/console/src/lib/feed.ts`),
+  never by time or type, counts a jump in the sequence as missed events and
+  says so ("N events missed … the table is incomplete … not an audit log"),
+  and notes a restart. Delivery stays non-blocking.
+
+Tests: broker resume and per-process epoch; SSE resume from `Last-Event-ID`,
+the ID in the data, another epoch's ID; `resumeAfter` parsing; console feed
+(the review's 4+4 replay, gaps, late-starting history, restart, no ID).
+Not exercised in a browser. Durable retention stays `AUD-001`/`AUD-002`.
+
 ## BUG-012 — a committed Pages switch never reports an error — 2026-10-21 (committed with this change)
 
 From the [product/code/UX review](reviews/2026-10-21-product-code-ux.md).

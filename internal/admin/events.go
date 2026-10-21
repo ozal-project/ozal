@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/octaviosantacruz/switchboard/internal/events"
@@ -30,6 +32,7 @@ func WithCertificateStatus(provider func() CertificateStatus) Option {
 const heartbeat = 15 * time.Second
 
 type eventView struct {
+	ID     string `json:"id"`
 	Time   string `json:"time"`
 	Type   string `json:"type"`
 	Actor  string `json:"actor,omitempty"`
@@ -40,23 +43,44 @@ type eventView struct {
 	Remote string `json:"remote,omitempty"`
 }
 
-func toView(e events.Event) eventView {
+func toView(id string, e events.Event) eventView {
 	return eventView{
-		Time: e.Time.UTC().Format(time.RFC3339), Type: string(e.Type), Actor: e.Actor,
+		ID: id, Time: e.Time.UTC().Format(time.RFC3339), Type: string(e.Type), Actor: e.Actor,
 		Host: e.Host, Code: e.Code, Reason: e.Reason, Error: e.Error, Remote: e.RemoteAddr,
 	}
 }
 
-// stream serves recent events and then live ones as Server-Sent Events. It
-// returns when the client goes away (request context), the broker closes the
-// subscription, or a write fails.
+// eventID is an event's identity on the wire: the broker's epoch and the
+// event's sequence number in it (BUG-009).
+func eventID(epoch string, seq uint64) string { return epoch + "-" + strconv.FormatUint(seq, 10) }
+
+// resumeAfter reads the Last-Event-ID a reconnecting EventSource sends. Only
+// an ID from this broker's epoch resumes; anything else (a restart, garbage,
+// a first connection) gets the whole retained history.
+func resumeAfter(lastID, epoch string) uint64 {
+	prefix, seq, ok := strings.Cut(lastID, "-")
+	if !ok || prefix != epoch {
+		return 0
+	}
+	n, err := strconv.ParseUint(seq, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// stream serves recent events and then live ones as Server-Sent Events, each
+// with an id, so a reconnecting browser sends Last-Event-ID and receives only
+// what came after it. It returns when the client goes away (request
+// context), the broker closes the subscription, or a write fails.
 func (h *Handler) stream(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
 		return
 	}
-	history, live, cancel, ok := h.broker.Subscribe()
+	epoch := h.broker.Epoch()
+	history, live, cancel, ok := h.broker.Subscribe(resumeAfter(r.Header.Get("Last-Event-ID"), epoch))
 	if !ok {
 		http.Error(w, "too many event streams", http.StatusServiceUnavailable)
 		return
@@ -74,12 +98,13 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request) {
 	hdr.Set("Cache-Control", "no-store")
 	hdr.Set("X-Content-Type-Options", "nosniff")
 
-	send := func(e events.Event) error {
-		data, err := json.Marshal(toView(e))
+	send := func(e events.Stamped) error {
+		id := eventID(epoch, e.Seq)
+		data, err := json.Marshal(toView(id, e.Event))
 		if err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
+		if _, err := fmt.Fprintf(w, "id: %s\ndata: %s\n\n", id, data); err != nil {
 			return err
 		}
 		flusher.Flush()
