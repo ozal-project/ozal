@@ -432,3 +432,60 @@ func hexPrefix(id []byte) string {
 	}
 	return string(out)
 }
+
+// Step-up relies on two properties of the login: the session records when
+// and how the identity was proven, and a new login replaces the session
+// (the old cookie stops working), so a fresh proof can never be grafted
+// onto an old session ID.
+func TestLoginRecordsAuthTimeAndRotatesTheSession(t *testing.T) {
+	h := newHarness(t)
+	device := newAuthenticator(t)
+	b := h.browser()
+	if code := b.enrol(t, device, h.invite(t, "ana@example.com", false)); code != http.StatusOK {
+		t.Fatalf("enrol = %d", code)
+	}
+	first, ok := b.signedIn()
+	if !ok || first.Method != auth.MethodPasskey || time.Since(first.AuthTime) > time.Minute {
+		t.Fatalf("after enrolment: method %q, auth time %v", first.Method, first.AuthTime)
+	}
+	oldID := b.cookies[auth.SessionCookieName]
+
+	if code, _ := b.login(t, device, "https://"+appHost+"/admin", loginOrigin); code != http.StatusOK {
+		t.Fatalf("login = %d", code)
+	}
+	if b.cookies[auth.SessionCookieName] == oldID {
+		t.Fatal("a new login kept the old session ID")
+	}
+	if _, ok := b.signedIn(); !ok {
+		t.Fatal("new session does not authenticate")
+	}
+	req := httptest.NewRequest(http.MethodGet, "https://"+appHost+"/", nil)
+	req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: oldID})
+	if _, ok := h.gate.Authenticate(req); ok {
+		t.Fatal("the replaced session still authenticates")
+	}
+}
+
+// The login redirect says "step-up" only to a visitor who is signed in.
+func TestRedirectToLoginMarksStepUp(t *testing.T) {
+	h := newHarness(t)
+	b := h.browser()
+	if code := b.enrol(t, newAuthenticator(t), h.invite(t, "ana@example.com", false)); code != http.StatusOK {
+		t.Fatalf("enrol = %d", code)
+	}
+	redirect := func(withSession bool) string {
+		req := httptest.NewRequest(http.MethodGet, "https://"+appHost+"/admin", nil)
+		if withSession {
+			req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: b.cookies[auth.SessionCookieName]})
+		}
+		rec := httptest.NewRecorder()
+		h.gate.RedirectToLogin(rec, req)
+		return rec.Header().Get("Location")
+	}
+	if got := redirect(true); !strings.HasSuffix(got, "&reauth=1") {
+		t.Fatalf("signed-in redirect = %q", got)
+	}
+	if got := redirect(false); strings.Contains(got, "reauth") {
+		t.Fatalf("anonymous redirect = %q", got)
+	}
+}

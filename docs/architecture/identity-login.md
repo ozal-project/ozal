@@ -151,15 +151,20 @@ A route's `access` gains two optional fields:
 ```json
 "access": {
   "allowed_emails": ["ana@example.com"],
-  "max_auth_age": "15m",
+  "max_auth_age_minutes": 15,
   "require_device_bound": true
 }
 ```
 
-- `max_auth_age`: if the session's last passkey proof is older, the visitor
-  repeats Flow 2 with their own credentials (`allowCredentials` = theirs); the
-  session ID **rotates** and `auth_time` updates. The admin console uses
-  `15m` by default.
+- `max_auth_age_minutes` (built 2026-10-21; named like the other minute
+  settings): if the session's last passkey proof is older, the visitor
+  repeats Flow 2; the new login replaces the session, so its ID **rotates**
+  and `auth_time` is the new proof's. Any enrolled passkey of any user can
+  answer: the result is that user's session, re-authorized from scratch, so
+  restricting `allowCredentials` to the previous user adds nothing. The
+  proxy asks only after the policy allowed, and only with `auth.passkeys`.
+  The admin console is a separate loopback listener with its own token and
+  does not use it yet.
 - `require_device_bound`: only a passkey whose authenticator reports it
   cannot be synced (a YubiKey, a device-bound platform key) satisfies it.
 - A refusal says *why* (`policy explain` already exists) without revealing

@@ -1110,3 +1110,42 @@ func TestAuthenticatedTunnelTrustFeedsTheApplicationTheVisitorAddress(t *testing
 		t.Errorf("the internal assertion header reached the application: %q", gotAssertion)
 	}
 }
+
+// Step-up: an allowed visitor with an old login is sent to log in again and
+// never reaches the upstream; a recent login passes; a visitor the policy
+// refuses gets 403, not a passkey prompt for nothing.
+func TestMaxAuthAgeAsksForAFreshLogin(t *testing.T) {
+	reached := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { reached++ }))
+	defer upstream.Close()
+	policy := &config.AccessPolicy{AllowedDomains: []string{"example.com"}, MaxAuthAgeMinutes: 15}
+	for name, tc := range map[string]struct {
+		principal auth.Principal
+		want      int
+		redirect  bool
+		reach     bool
+	}{
+		"stale login":   {auth.Principal{Subject: "ana", Email: "ana@example.com", EmailVerified: true, AuthTime: time.Now().Add(-time.Hour)}, http.StatusFound, true, false},
+		"recent login":  {auth.Principal{Subject: "ana", Email: "ana@example.com", EmailVerified: true, AuthTime: time.Now()}, http.StatusOK, false, true},
+		"refused first": {auth.Principal{Subject: "eve", Email: "eve@other.com", EmailVerified: true, AuthTime: time.Now().Add(-time.Hour)}, http.StatusForbidden, false, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			reached = 0
+			gate := &fakeGate{authenticated: true, principal: tc.principal}
+			recorder := &events.Recorder{}
+			handler, err := New([]config.Route{{Host: "admin.localhost", Target: upstream.URL, Access: policy}}, nil, gate, WithEventSink(recorder))
+			if err != nil {
+				t.Fatal(err)
+			}
+			req := httptest.NewRequest(http.MethodGet, "http://admin.localhost/", nil)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != tc.want || gate.redirected != tc.redirect || (reached > 0) != tc.reach {
+				t.Fatalf("status %d redirected %v reached %d", rec.Code, gate.redirected, reached)
+			}
+			if stepUp, ok := recorder.Find(events.AccessStepUp); ok != tc.redirect || (ok && stepUp.Code != string(auth.CodeReauthRequired)) {
+				t.Fatalf("access.step_up event = %+v, %v", stepUp, ok)
+			}
+		})
+	}
+}

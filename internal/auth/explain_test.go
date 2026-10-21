@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/octaviosantacruz/switchboard/internal/config"
@@ -59,5 +60,13 @@ func TestExplainMatchesAuthorize(t *testing.T) {
 				t.Errorf("policy %+v principal %+v: Explain = %+v, Authorize = %+v", pol, p, got, want)
 			}
 		}
+	}
+}
+
+func TestExplainStatesStepUp(t *testing.T) {
+	route := config.Route{Host: "admin.example.com", Access: &config.AccessPolicy{MaxAuthAgeMinutes: 15}}
+	got := Explain(route, &Principal{Subject: "s"})
+	if !got.Decision.Allowed || !strings.Contains(got.Decision.Reason, "15 min") {
+		t.Fatalf("explanation = %+v", got.Decision)
 	}
 }

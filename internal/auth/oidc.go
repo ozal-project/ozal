@@ -288,6 +288,8 @@ func (g *Gate) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		Email:         claims.Email,
 		EmailVerified: claims.EmailVerified,
 		Groups:        claims.Groups,
+		AuthTime:      time.Now(),
+		Method:        MethodOIDC,
 	}
 
 	sessionID, err := g.sessions.Create(ctx, principal)

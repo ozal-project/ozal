@@ -243,6 +243,21 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 				http.Error(w, "access denied", http.StatusForbidden)
 				return
 			}
+			// Step-up: allowed, but the login is too old for this route.
+			// The new login replaces the session, which rotates its ID.
+			if fresh := auth.Fresh(principal, rt.access, time.Now()); !fresh.Allowed {
+				cfg.sink.Emit(events.Event{
+					Time:       time.Now(),
+					Type:       events.AccessStepUp,
+					Actor:      principal.Subject,
+					Host:       host,
+					Code:       string(fresh.Code),
+					Reason:     fresh.Reason,
+					RemoteAddr: req.RemoteAddr,
+				})
+				gate.RedirectToLogin(w, req)
+				return
+			}
 			// The identity dimension of the ratelimit stage: it runs here
 			// because only now is the identity known to be authentic. A
 			// refused request never counts as allowed.

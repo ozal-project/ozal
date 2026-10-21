@@ -335,10 +335,11 @@ func TestOpenConfiguresConnection(t *testing.T) {
 	}
 }
 
-// Migration 005 adds last_seen_at to a live sessions table: existing rows
-// count as last seen at their login, so the idle limit applies to them from
-// the upgrade on instead of ending them all.
-func TestSessionLastSeenMigrationBackfillsExistingRows(t *testing.T) {
+// Migrations 005 and 006 add last_seen_at and auth_time to a live sessions
+// table: existing rows count as last seen and authenticated at their login,
+// so the new limits apply to them from the upgrade on instead of ending them
+// all at once.
+func TestSessionMigrationsBackfillExistingRows(t *testing.T) {
 	ctx := context.Background()
 	db, _ := openTestDB(t)
 	all, err := LoadMigrations(Migrations())
@@ -354,8 +355,9 @@ func TestSessionLastSeenMigrationBackfillsExistingRows(t *testing.T) {
 	if _, err := Migrate(ctx, db, all); err != nil {
 		t.Fatalf("Migrate 005: %v", err)
 	}
-	var seen int64
-	if err := db.QueryRowContext(ctx, `SELECT last_seen_at FROM sessions WHERE id_hash = x'01'`).Scan(&seen); err != nil || seen != 1800000000 {
-		t.Fatalf("last_seen_at = %d, %v; want the creation time", seen, err)
+	var seen, authTime int64
+	var amr string
+	if err := db.QueryRowContext(ctx, `SELECT last_seen_at, auth_time, amr FROM sessions WHERE id_hash = x'01'`).Scan(&seen, &authTime, &amr); err != nil || seen != 1800000000 || authTime != 1800000000 || amr != "" {
+		t.Fatalf("last_seen_at, auth_time, amr = %d, %d, %q, %v; want the creation time and no method", seen, authTime, amr, err)
 	}
 }

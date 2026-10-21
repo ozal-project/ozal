@@ -128,8 +128,16 @@ function finish(result, message) {
 }
 
 function setupLogin(button) {
-  const returnTo = new URLSearchParams(location.search).get("return_to") || "";
+  const params = new URLSearchParams(location.search);
+  const returnTo = params.get("return_to") || "";
   if (returnTo) rememberReturn(returnTo);
+  // A step-up: the visitor is signed in, but the site wants a recent proof.
+  if (params.get("reauth") === "1") {
+    document.getElementById("title").textContent = "Confirm it's you";
+    document.getElementById("intro").textContent = "This site asks for your passkey again because your last sign-in was a while ago.";
+    document.getElementById("first-time").hidden = true;
+    document.title = "Confirm it's you · Switchboard";
+  }
   let pending = null;
 
   async function login(conditional) {

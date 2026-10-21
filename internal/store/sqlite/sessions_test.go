@@ -278,3 +278,24 @@ func TestSessionsIdleLimitAndTouch(t *testing.T) {
 		t.Fatal("session in use outlived the absolute limit")
 	}
 }
+
+// The login's time and method survive the round trip; a principal without
+// a login time stays without one (never fresh), instead of becoming 1970.
+func TestSessionsKeepAuthTimeAndMethod(t *testing.T) {
+	ctx := context.Background()
+	store := migratedSessions(t, t.TempDir()+"/state.db", time.Hour)
+	login := time.Unix(1800000000, 0)
+	store.now = func() time.Time { return login }
+	id, err := store.Create(ctx, auth.Principal{Subject: "s", AuthTime: login, Method: auth.MethodPasskey})
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, ok := store.Get(ctx, id)
+	if !ok || !session.Principal.AuthTime.Equal(login) || session.Principal.Method != auth.MethodPasskey {
+		t.Fatalf("session = %+v, %v", session.Principal, ok)
+	}
+	id, _ = store.Create(ctx, auth.Principal{Subject: "no-time"})
+	if session, ok := store.Get(ctx, id); !ok || !session.Principal.AuthTime.IsZero() {
+		t.Fatalf("missing auth time = %v, %v", session.Principal.AuthTime, ok)
+	}
+}

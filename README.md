@@ -698,6 +698,13 @@ passkey or disabling a user ends their sessions immediately. Applications
 receive the same identity headers as with OIDC, with a subject of the form
 `sb:<id>`. Phase 1 uses one login method at a time (passkeys or OIDC).
 
+**Step-up.** A route can ask for a recent login with
+`"access": { "max_auth_age_minutes": 15 }`: a visitor the policy allows, but
+whose last passkey login is older, is sent back to the login page ("Confirm
+it's you") and returns to the same URL. The new login replaces the session,
+so its ID rotates. It requires `auth.passkeys`, because an upstream
+provider's single sign-on would answer without a fresh proof.
+
 ### Secret references
 
 `auth.client_secret` and `admin.token` accept a reference instead of an inline

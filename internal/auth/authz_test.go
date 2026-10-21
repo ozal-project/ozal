@@ -2,6 +2,7 @@ package auth
 
 import (
 	"testing"
+	"time"
 
 	"github.com/octaviosantacruz/switchboard/internal/config"
 )
@@ -178,4 +179,30 @@ func TestAuthorize(t *testing.T) {
 
 func TestPolicyAuthorizerImplementsAuthorizer(t *testing.T) {
 	var _ Authorizer = PolicyAuthorizer{}
+}
+
+func TestFreshStepUp(t *testing.T) {
+	now := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
+	policy := config.AccessPolicy{MaxAuthAgeMinutes: 15}
+	for name, tc := range map[string]struct {
+		authTime time.Time
+		policy   config.AccessPolicy
+		allowed  bool
+	}{
+		"no limit, old login":    {now.Add(-48 * time.Hour), config.AccessPolicy{}, true},
+		"recent login":           {now.Add(-5 * time.Minute), policy, true},
+		"exactly at the limit":   {now.Add(-15 * time.Minute), policy, true},
+		"just past the limit":    {now.Add(-15*time.Minute - time.Second), policy, false},
+		"no recorded login time": {time.Time{}, policy, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			d := Fresh(Principal{Subject: "s", AuthTime: tc.authTime}, tc.policy, now)
+			if d.Allowed != tc.allowed {
+				t.Fatalf("Fresh = %+v, want allowed=%v", d, tc.allowed)
+			}
+			if !d.Allowed && d.Code != CodeReauthRequired {
+				t.Fatalf("code = %q", d.Code)
+			}
+		})
+	}
 }

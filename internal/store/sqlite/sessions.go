@@ -13,8 +13,8 @@ import (
 	"github.com/octaviosantacruz/switchboard/internal/auth"
 )
 
-// Sessions is the persistent auth.SessionBackend over migrations 001 and
-// 005. The
+// Sessions is the persistent auth.SessionBackend over migrations 001, 005
+// and 006. The
 // cookie carries the raw ID; only its SHA-256 is stored, so a leaked
 // database file cannot be replayed as session cookies. Times are stored as
 // Unix seconds, the same shape the migration defines.
@@ -84,10 +84,10 @@ func (s *Sessions) Create(ctx context.Context, principal auth.Principal) (string
 		return "", auth.ErrStoreFull
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO sessions (id_hash, subject, email, email_verified, groups_json, created_at, expires_at, last_seen_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO sessions (id_hash, subject, email, email_verified, groups_json, created_at, expires_at, last_seen_at, auth_time, amr)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		hash[:], principal.Subject, principal.Email, principal.EmailVerified, groups,
-		now.Unix(), now.Add(s.lifetime.Absolute).Unix(), now.Unix(),
+		now.Unix(), now.Add(s.lifetime.Absolute).Unix(), now.Unix(), storedAuthTime(principal.AuthTime), principal.Method,
 	); err != nil {
 		return "", fmt.Errorf("insert session: %w", err)
 	}
@@ -111,11 +111,13 @@ func (s *Sessions) Get(ctx context.Context, id string) (auth.Session, bool) {
 		expiresUnix int64
 		createdUnix int64
 		seenUnix    int64
+		authUnix    int64
+		method      string
 	)
 	err := s.db.QueryRowContext(ctx,
-		`SELECT subject, email, email_verified, groups_json, expires_at, created_at, last_seen_at FROM sessions WHERE id_hash = ?`,
+		`SELECT subject, email, email_verified, groups_json, expires_at, created_at, last_seen_at, auth_time, amr FROM sessions WHERE id_hash = ?`,
 		hash[:],
-	).Scan(&subject, &email, &verified, &groupsJSON, &expiresUnix, &createdUnix, &seenUnix)
+	).Scan(&subject, &email, &verified, &groupsJSON, &expiresUnix, &createdUnix, &seenUnix, &authUnix, &method)
 	if errors.Is(err, sql.ErrNoRows) {
 		return auth.Session{}, false
 	}
@@ -153,6 +155,8 @@ func (s *Sessions) Get(ctx context.Context, id string) (auth.Session, bool) {
 			Email:         email,
 			EmailVerified: verified == 1,
 			Groups:        groups,
+			AuthTime:      timeOrZero(authUnix),
+			Method:        method,
 		},
 		ExpiresAt: s.expiresAt(created, lastSeen, issued),
 	}, true
@@ -181,6 +185,22 @@ func (s *Sessions) Sweep(ctx context.Context) {
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE `+where, args...); err != nil {
 		slog.Default().Debug("session sweep failed", "error", err)
 	}
+}
+
+// storedAuthTime and timeOrZero keep "no auth time" as 0 in the database and the
+// zero time.Time in Go, which auth.Fresh treats as never fresh.
+func storedAuthTime(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.Unix()
+}
+
+func timeOrZero(unix int64) time.Time {
+	if unix == 0 {
+		return time.Time{}
+	}
+	return time.Unix(unix, 0)
 }
 
 func encodeGroups(groups []string) (string, error) {

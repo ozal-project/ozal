@@ -9,13 +9,13 @@
 </head>
 <body data-page="login">
 <main>
-  <h1>Sign in</h1>
-  <p>Use the passkey on this device, your phone or a security key.</p>
+  <h1 id="title">Sign in</h1>
+  <p id="intro">Use the passkey on this device, your phone or a security key.</p>
   <label for="username">Account</label>
   <input id="username" name="username" autocomplete="username webauthn" placeholder="Choose a passkey">
   <button id="action" type="button">Sign in with a passkey</button>
   <p id="status" role="status" aria-live="polite"></p>
-  <div class="first-time">
+  <div class="first-time" id="first-time">
     <strong>First time here?</strong>
     <p>You need a passkey for this site before you can sign in, and you create it with an invitation link from the operator. Ask them for one: it works once and expires after a short time. Open it on the device that will keep the passkey.</p>
   </div>

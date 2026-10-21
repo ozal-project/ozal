@@ -17,12 +17,15 @@ const (
 	AccessAllowed     Type = "access.allowed"
 	AccessDenied      Type = "access.denied"
 	AccessRateLimited Type = "access.rate_limited"
-	LoginStarted      Type = "login.started"
-	LoginFailed       Type = "login.failed"
-	LoginSucceeded    Type = "login.succeeded"
-	RouteCreated      Type = "route.created"
-	RouteDeleted      Type = "route.deleted"
-	ConfigReloaded    Type = "config.reloaded"
+	// An allowed visitor was sent to log in again because the route's
+	// max_auth_age had passed (ID-005 step-up).
+	AccessStepUp   Type = "access.step_up"
+	LoginStarted   Type = "login.started"
+	LoginFailed    Type = "login.failed"
+	LoginSucceeded Type = "login.succeeded"
+	RouteCreated   Type = "route.created"
+	RouteDeleted   Type = "route.deleted"
+	ConfigReloaded Type = "config.reloaded"
 	// Deployments of static sites (PAGES-002). Host carries the site name.
 	PagesDeployed   Type = "pages.deployed"
 	PagesRolledBack Type = "pages.rolled_back"

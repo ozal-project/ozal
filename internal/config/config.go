@@ -440,6 +440,17 @@ func Validate(cfg Config) (*Config, error) {
 			break
 		}
 	}
+	for _, r := range cfg.Routes {
+		if r.Access == nil || r.Access.MaxAuthAgeMinutes == 0 {
+			continue
+		}
+		if r.Access.MaxAuthAgeMinutes < 0 {
+			return nil, fmt.Errorf("config: route %q: access.max_auth_age_minutes must not be negative", r.Host)
+		}
+		if cfg.Auth.Passkeys == nil {
+			return nil, fmt.Errorf("config: route %q: access.max_auth_age_minutes requires auth.passkeys", r.Host)
+		}
+	}
 	if anyProtectedRoute && cfg.Auth.Passkeys != nil {
 		loginHost, err := validatePasskeys(&cfg.Auth)
 		if err != nil {

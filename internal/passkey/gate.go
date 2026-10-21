@@ -147,14 +147,20 @@ func (g *Gate) Authenticate(r *http.Request) (auth.Principal, bool) {
 }
 
 // RedirectToLogin sends the browser to the login page on the login host,
-// remembering where it was going.
+// remembering where it was going. A visitor who still has a valid session is
+// there for a step-up, and the page says so instead of explaining
+// invitations; the flag only changes wording, never what the login checks.
 func (g *Gate) RedirectToLogin(w http.ResponseWriter, r *http.Request) {
 	scheme := "http"
 	if r.TLS != nil || g.secure {
 		scheme = "https"
 	}
 	returnTo := scheme + "://" + r.Host + r.URL.RequestURI()
-	http.Redirect(w, r, g.origin+"/_/auth/login?return_to="+url.QueryEscape(returnTo), http.StatusFound)
+	target := g.origin + "/_/auth/login?return_to=" + url.QueryEscape(returnTo)
+	if _, ok := g.Authenticate(r); ok {
+		target += "&reauth=1"
+	}
+	http.Redirect(w, r, target, http.StatusFound)
 }
 
 // ServeAuthEndpoint handles the passkey pages and API under /_/auth/. It
@@ -426,6 +432,8 @@ func (g *Gate) startSession(w http.ResponseWriter, r *http.Request, user User) *
 		// The operator asserted this address when inviting the user.
 		EmailVerified: true,
 		Groups:        user.Groups,
+		AuthTime:      g.now(),
+		Method:        auth.MethodPasskey,
 	})
 	if errors.Is(err, auth.ErrStoreFull) {
 		g.emit(r, events.Event{Type: events.LoginFailed, Actor: user.Subject(), Code: "session_store_full"})

@@ -1,6 +1,10 @@
 package auth
 
-import "github.com/octaviosantacruz/switchboard/internal/config"
+import (
+	"fmt"
+
+	"github.com/octaviosantacruz/switchboard/internal/config"
+)
 
 // Explanation is the outcome of simulating one request against one route
 // without HTTP, OIDC or sessions (ARCH-008). It only covers the decision: it
@@ -33,7 +37,13 @@ func Explain(r config.Route, p *Principal) Explanation {
 			Reason: "authentication required before Authorize is called",
 		}}
 	}
-	return Explanation{Protected: true, Decision: Authorize(*p, r.Policy())}
+	decision := Authorize(*p, r.Policy())
+	// The simulation has no clock or session, so step-up is stated rather
+	// than evaluated: an allowed visitor may still be asked to log in again.
+	if policy := r.Policy(); decision.Allowed && policy.MaxAuthAgeMinutes > 0 {
+		decision.Reason = fmt.Sprintf("allowed; asks for a fresh login when the last one is older than %d min (max_auth_age_minutes)", policy.MaxAuthAgeMinutes)
+	}
+	return Explanation{Protected: true, Decision: decision}
 }
 
 // Scope values are part of the Report contract; keep them stable.

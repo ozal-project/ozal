@@ -63,3 +63,26 @@ func TestPasskeysRefuseUnsafeSettings(t *testing.T) {
 		})
 	}
 }
+
+// Step-up needs a login Switchboard itself performs: an upstream provider's
+// single sign-on would answer without a fresh proof.
+func TestMaxAuthAgeValidation(t *testing.T) {
+	ok := passkeyConfig()
+	ok.Routes[0].Access.MaxAuthAgeMinutes = 15
+	if _, err := Validate(ok); err != nil {
+		t.Fatalf("passkeys + max_auth_age refused: %v", err)
+	}
+	negative := passkeyConfig()
+	negative.Routes[0].Access.MaxAuthAgeMinutes = -1
+	if _, err := Validate(negative); err == nil || !strings.Contains(err.Error(), "negative") {
+		t.Fatalf("negative max_auth_age: %v", err)
+	}
+	oidc := Config{
+		Listen: "127.0.0.1:0",
+		Auth:   Auth{Issuer: "https://accounts.google.com", ClientID: "id", ClientSecret: "secret", RedirectURL: "http://app.localhost/_/auth/callback"},
+		Routes: []Route{{Host: "app.localhost", Target: "http://127.0.0.1:9000", Access: &AccessPolicy{MaxAuthAgeMinutes: 15}}},
+	}
+	if _, err := Validate(oidc); err == nil || !strings.Contains(err.Error(), "requires auth.passkeys") {
+		t.Fatalf("OIDC + max_auth_age: %v", err)
+	}
+}
