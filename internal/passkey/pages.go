@@ -1,7 +1,9 @@
 package passkey
 
 import (
+	"bytes"
 	"embed"
+	"html"
 	"net/http"
 	"path"
 
@@ -44,6 +46,11 @@ func (g *Gate) servePage(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
+	}
+	if g.oidc != nil {
+		// The page shows the provider's button only when one is configured;
+		// the name is operator text, escaped like any other.
+		body = bytes.Replace(body, []byte(`data-oidc=""`), []byte(`data-oidc="`+html.EscapeString(g.oidcName)+`"`), 1)
 	}
 	pageHeaders(w.Header())
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

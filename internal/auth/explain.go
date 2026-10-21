@@ -2,7 +2,7 @@ package auth
 
 import (
 	"fmt"
-	"time"
+	"strings"
 
 	"github.com/octaviosantacruz/switchboard/internal/config"
 )
@@ -39,14 +39,22 @@ func Explain(r config.Route, p *Principal) Explanation {
 		}}
 	}
 	decision := Authorize(*p, r.Policy())
-	// The simulation has no clock or session, so step-up is stated rather
-	// than evaluated: an allowed visitor may still be asked to log in again.
+	// The simulation has no clock or session, so the login requirements are
+	// stated rather than evaluated: an allowed visitor may still be asked to
+	// log in again.
 	if policy := r.Policy(); decision.Allowed {
-		if policy.RequireDeviceBound && !p.DeviceBound {
-			return Explanation{Protected: true, Decision: Fresh(*p, policy, time.Time{})}
+		var needs []string
+		if len(policy.Methods) > 0 {
+			needs = append(needs, "a login with "+strings.Join(policy.Methods, " or ")+" (methods)")
+		}
+		if policy.RequireDeviceBound {
+			needs = append(needs, "a passkey that cannot be synced (require_device_bound)")
 		}
 		if policy.MaxAuthAgeMinutes > 0 {
-			decision.Reason = fmt.Sprintf("allowed; asks for a fresh login when the last one is older than %d min (max_auth_age_minutes)", policy.MaxAuthAgeMinutes)
+			needs = append(needs, fmt.Sprintf("a login within the last %d min (max_auth_age_minutes)", policy.MaxAuthAgeMinutes))
+		}
+		if len(needs) > 0 {
+			decision.Reason = "allowed; the session must also have " + strings.Join(needs, ", ")
 		}
 	}
 	return Explanation{Protected: true, Decision: decision}

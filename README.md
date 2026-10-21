@@ -696,7 +696,15 @@ switchboard user disable  -db state.db -email ana@example.com
 A lost device is recovered from the host only (`invite -recover`). Revoking a
 passkey or disabling a user ends their sessions immediately. Applications
 receive the same identity headers as with OIDC, with a subject of the form
-`sb:<id>`. Phase 1 uses one login method at a time (passkeys or OIDC).
+`sb:<id>`.
+
+**Passkeys and an OIDC provider together (ID-007).** Set the OIDC fields next
+to `auth.passkeys`, with `redirect_url` = `login_url` + `/_/auth/callback` and
+an optional `provider_name` for the button ("Google", "Okta"). The login page
+then offers both and never picks one for the visitor; sessions record the
+method. A route can accept only some methods:
+`"access": { "methods": ["passkey"] }` sends an OIDC session to the login page
+asking for a passkey. Only configured methods are accepted in `methods`.
 
 **Step-up.** A route can ask for a recent login with
 `"access": { "max_auth_age_minutes": 15 }`: a visitor the policy allows, but

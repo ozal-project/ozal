@@ -221,3 +221,20 @@ func TestFreshDeviceBound(t *testing.T) {
 		t.Fatalf("device-bound but stale = %+v", d)
 	}
 }
+
+func TestFreshMethods(t *testing.T) {
+	now := time.Now()
+	policy := config.AccessPolicy{Methods: []string{MethodPasskey}}
+	if d := Fresh(Principal{AuthTime: now, Method: MethodOIDC}, policy, now); d.Allowed || d.Code != CodeMethodNotAllowed {
+		t.Fatalf("OIDC session on a passkey route = %+v", d)
+	}
+	if d := Fresh(Principal{AuthTime: now, Method: ""}, policy, now); d.Allowed {
+		t.Fatalf("session without a method = %+v", d)
+	}
+	if d := Fresh(Principal{AuthTime: now, Method: MethodPasskey}, policy, now); !d.Allowed {
+		t.Fatalf("passkey session = %+v", d)
+	}
+	if d := Fresh(Principal{AuthTime: now, Method: MethodOIDC}, config.AccessPolicy{}, now); !d.Allowed {
+		t.Fatalf("no methods restriction = %+v", d)
+	}
+}

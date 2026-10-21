@@ -50,6 +50,9 @@ type Gate struct {
 	ceremonies *ceremonies
 	sink       events.Sink
 	now        func() time.Time
+	// oidc is the upstream login offered beside passkeys, if any.
+	oidc     OIDCLogin
+	oidcName string
 }
 
 // NewGate builds the gate from a validated auth config. protectedHosts are
@@ -138,6 +141,12 @@ func (g *Gate) Authenticate(r *http.Request) (auth.Principal, bool) {
 	}
 	id, ok := strings.CutPrefix(session.Principal.Subject, SubjectPrefix)
 	if !ok {
+		// Not a passkey user: valid only as a session of the upstream
+		// provider this gate offers. A session from an earlier OIDC-only
+		// configuration has no method and logs in again.
+		if g.oidc != nil && session.Principal.Method == auth.MethodOIDC {
+			return session.Principal, true
+		}
 		return auth.Principal{}, false
 	}
 	if _, err := g.dir.ActiveUser(r.Context(), id); err != nil {
@@ -164,10 +173,17 @@ func (g *Gate) RedirectToLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 // RedirectToStepUp is RedirectToLogin for a visitor the route wants to see
-// log in again; a device-bound requirement is named so the page can ask for
-// the right passkey.
-func (g *Gate) RedirectToStepUp(w http.ResponseWriter, r *http.Request, code auth.DecisionCode) {
-	if code != auth.CodeDeviceBoundRequired {
+// log in again. A device-bound or method requirement is named so the page
+// can offer the right way in; the names only change wording and which
+// buttons show, never what the login checks.
+func (g *Gate) RedirectToStepUp(w http.ResponseWriter, r *http.Request, code auth.DecisionCode, methods []string) {
+	var reason string
+	switch code {
+	case auth.CodeDeviceBoundRequired:
+		reason = "&reauth=device"
+	case auth.CodeMethodNotAllowed:
+		reason = "&reauth=method&methods=" + url.QueryEscape(strings.Join(methods, ","))
+	default:
 		g.RedirectToLogin(w, r)
 		return
 	}
@@ -176,13 +192,43 @@ func (g *Gate) RedirectToStepUp(w http.ResponseWriter, r *http.Request, code aut
 		scheme = "https"
 	}
 	returnTo := scheme + "://" + r.Host + r.URL.RequestURI()
-	http.Redirect(w, r, g.origin+"/_/auth/login?return_to="+url.QueryEscape(returnTo)+"&reauth=device", http.StatusFound)
+	http.Redirect(w, r, g.origin+"/_/auth/login?return_to="+url.QueryEscape(returnTo)+reason, http.StatusFound)
+}
+
+// OIDCLogin is the upstream provider's login, offered next to passkeys
+// (ID-007). auth.Gate satisfies it; the interface keeps this package from
+// depending on how that login works.
+type OIDCLogin interface {
+	HandleLogin(w http.ResponseWriter, r *http.Request)
+	HandleCallback(w http.ResponseWriter, r *http.Request)
+}
+
+// WithOIDC offers an upstream provider on the login page, labelled name.
+// Its sessions share the store and the cookie; they carry Method "oidc".
+func (g *Gate) WithOIDC(login OIDCLogin, name string) *Gate {
+	g.oidc = login
+	g.oidcName = name
+	return g
 }
 
 // ServeAuthEndpoint handles the passkey pages and API under /_/auth/. It
 // reports false for any other path, which then belongs to the route.
 func (g *Gate) ServeAuthEndpoint(w http.ResponseWriter, r *http.Request) bool {
 	switch r.URL.Path {
+	case "/_/auth/oidc/start", "/_/auth/callback":
+		if g.oidc == nil {
+			return false
+		}
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", "GET")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return true
+		}
+		if r.URL.Path == "/_/auth/callback" {
+			g.oidc.HandleCallback(w, r)
+		} else {
+			g.oidc.HandleLogin(w, r)
+		}
 	case "/_/auth/login", "/_/auth/enrol":
 		g.servePage(w, r)
 	case "/_/auth/passkey.js", "/_/auth/passkey.css":

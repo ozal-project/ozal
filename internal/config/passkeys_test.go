@@ -1,6 +1,7 @@
 package config
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -49,7 +50,7 @@ func TestPasskeysRefuseUnsafeSettings(t *testing.T) {
 		"path in login_url":    {func(c *Config) { c.Auth.Passkeys.LoginURL = "https://auth.example.com/login" }, "origin"},
 		"query in login_url":   {func(c *Config) { c.Auth.Passkeys.LoginURL = "https://auth.example.com/?x=1" }, "origin"},
 		"IP as rp_id":          {func(c *Config) { c.Auth.Passkeys.RPID = "192.0.2.1" }, "DNS name"},
-		"mixed with OIDC":      {func(c *Config) { c.Auth.Issuer = "https://accounts.google.com" }, "cannot be combined"},
+		"partial OIDC beside":  {func(c *Config) { c.Auth.Issuer = "https://accounts.google.com" }, "needs issuer"},
 		"cookie misses route":  {func(c *Config) { c.Routes[0].Host = "app.example.org" }, "does not cover"},
 		"no cookie, two hosts": {func(c *Config) { c.Auth.CookieDomain = "" }, "different host"},
 	} {
@@ -88,5 +89,48 @@ func TestMaxAuthAgeValidation(t *testing.T) {
 	oidc.Routes[0].Access = &AccessPolicy{RequireDeviceBound: true}
 	if _, err := Validate(oidc); err == nil || !strings.Contains(err.Error(), "require_device_bound requires auth.passkeys") {
 		t.Fatalf("OIDC + require_device_bound: %v", err)
+	}
+}
+
+// ID-007: an upstream provider next to passkeys is all or nothing, calls back
+// on the login host, and access.methods names only configured methods.
+func TestPasskeysWithOIDCAndMethods(t *testing.T) {
+	combined := func() Config {
+		c := passkeyConfig()
+		c.Auth.Issuer = "https://accounts.google.com"
+		c.Auth.ClientID = "id"
+		c.Auth.ClientSecret = "secret"
+		c.Auth.RedirectURL = "https://auth.example.com/_/auth/callback"
+		return c
+	}
+	cfg, err := Validate(combined())
+	if err != nil {
+		t.Fatalf("passkeys + OIDC refused: %v", err)
+	}
+	if cfg.Auth.ProviderName != "single sign-on" || !slices.Equal(cfg.Auth.LoginMethods(), []string{MethodPasskey, MethodOIDC}) {
+		t.Fatalf("provider %q, methods %v", cfg.Auth.ProviderName, cfg.Auth.LoginMethods())
+	}
+	for name, tc := range map[string]struct {
+		mutate func(*Config)
+		want   string
+	}{
+		"callback elsewhere":      {func(c *Config) { c.Auth.RedirectURL = "https://app.example.com/_/auth/callback" }, "must be"},
+		"provider name, no OIDC":  {func(c *Config) { *c = passkeyConfig(); c.Auth.ProviderName = "Google" }, "none is configured"},
+		"method not configured":   {func(c *Config) { *c = passkeyConfig(); c.Routes[0].Access.Methods = []string{"oidc"} }, "not a configured login method"},
+		"unknown method":          {func(c *Config) { c.Routes[0].Access.Methods = []string{"sms"} }, "not a configured login method"},
+		"secret as literal value": {func(c *Config) { c.Auth.ClientSecret = "" }, "needs issuer"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			c := combined()
+			tc.mutate(&c)
+			if _, err := Validate(c); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("err = %v, want %q", err, tc.want)
+			}
+		})
+	}
+	ok := combined()
+	ok.Routes[0].Access.Methods = []string{"passkey"}
+	if _, err := Validate(ok); err != nil {
+		t.Fatalf("methods [passkey] refused: %v", err)
 	}
 }

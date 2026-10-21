@@ -154,9 +154,10 @@ type AuthGate interface {
 }
 
 // StepUpGate is implemented by a gate whose login page can say why an
-// already signed-in visitor must log in again (code is auth.Fresh's).
+// already signed-in visitor must log in again (code is auth.Fresh's; methods
+// are the route's accepted login methods, possibly none).
 type StepUpGate interface {
-	RedirectToStepUp(w http.ResponseWriter, r *http.Request, code auth.DecisionCode)
+	RedirectToStepUp(w http.ResponseWriter, r *http.Request, code auth.DecisionCode, methods []string)
 }
 
 // New builds a host-routed reverse proxy handler from the given routes.
@@ -263,7 +264,7 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 					RemoteAddr: req.RemoteAddr,
 				})
 				if stepUp, ok := gate.(StepUpGate); ok {
-					stepUp.RedirectToStepUp(w, req, fresh.Code)
+					stepUp.RedirectToStepUp(w, req, fresh.Code, rt.access.Methods)
 				} else {
 					gate.RedirectToLogin(w, req)
 				}

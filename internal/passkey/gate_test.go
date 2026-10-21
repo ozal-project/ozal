@@ -514,8 +514,83 @@ func TestSessionRecordsDeviceBoundPasskeys(t *testing.T) {
 		}
 	}
 	rec := httptest.NewRecorder()
-	h.gate.RedirectToStepUp(rec, httptest.NewRequest(http.MethodGet, "https://"+appHost+"/admin", nil), auth.CodeDeviceBoundRequired)
+	h.gate.RedirectToStepUp(rec, httptest.NewRequest(http.MethodGet, "https://"+appHost+"/admin", nil), auth.CodeDeviceBoundRequired, nil)
 	if loc := rec.Header().Get("Location"); !strings.HasSuffix(loc, "&reauth=device") {
+		t.Fatalf("Location = %q", loc)
+	}
+}
+
+// stubOIDC stands in for the upstream provider: its callback creates an OIDC
+// session in the shared store, as auth.Gate does.
+type stubOIDC struct {
+	sessions auth.SessionBackend
+	started  int
+}
+
+func (s *stubOIDC) HandleLogin(w http.ResponseWriter, r *http.Request) {
+	s.started++
+	http.Redirect(w, r, "https://idp.example/authorize", http.StatusFound)
+}
+
+func (s *stubOIDC) HandleCallback(w http.ResponseWriter, r *http.Request) {
+	id, _ := s.sessions.Create(r.Context(), auth.Principal{Subject: "google-123", Email: "ana@example.com", EmailVerified: true, AuthTime: time.Now(), Method: auth.MethodOIDC})
+	http.SetCookie(w, &http.Cookie{Name: auth.SessionCookieName, Value: id})
+}
+
+// ID-007: with an upstream provider the gate routes its endpoints, accepts
+// its sessions, shows its button, and never accepts a non-passkey session
+// without one.
+func TestPasskeyGateWithOIDC(t *testing.T) {
+	h := newHarness(t)
+	sessions := sqlite.NewSessions(h.db, auth.Lifetime{Absolute: time.Hour})
+	oidcSession, _ := sessions.Create(context.Background(), auth.Principal{Subject: "google-123", AuthTime: time.Now(), Method: auth.MethodOIDC})
+	request := func(method, path string) (*httptest.ResponseRecorder, bool) {
+		req := httptest.NewRequest(method, loginOrigin+path, nil)
+		rec := httptest.NewRecorder()
+		return rec, h.gate.ServeAuthEndpoint(rec, req)
+	}
+	authenticated := func() bool {
+		req := httptest.NewRequest(http.MethodGet, "https://"+appHost+"/", nil)
+		req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: oidcSession})
+		_, ok := h.gate.Authenticate(req)
+		return ok
+	}
+
+	if _, handled := request(http.MethodGet, "/_/auth/oidc/start"); handled {
+		t.Fatal("OIDC start handled without a provider")
+	}
+	if authenticated() {
+		t.Fatal("an OIDC session authenticated without a provider configured")
+	}
+	if rec, _ := request(http.MethodGet, "/_/auth/login"); strings.Contains(rec.Body.String(), `data-oidc="G`) {
+		t.Fatal("login page shows a provider that is not configured")
+	}
+
+	stub := &stubOIDC{sessions: sessions}
+	h.gate.WithOIDC(stub, `Google <b>"`)
+	if rec, handled := request(http.MethodGet, "/_/auth/oidc/start"); !handled || rec.Code != http.StatusFound || stub.started != 1 {
+		t.Fatalf("OIDC start: handled %v, code %d", handled, rec.Code)
+	}
+	if rec, handled := request(http.MethodPost, "/_/auth/oidc/start"); !handled || rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST to OIDC start: %d", rec.Code)
+	}
+	if !authenticated() {
+		t.Fatal("an OIDC session was refused with the provider configured")
+	}
+	legacy, _ := sessions.Create(context.Background(), auth.Principal{Subject: "google-123", AuthTime: time.Now()})
+	req := httptest.NewRequest(http.MethodGet, "https://"+appHost+"/", nil)
+	req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: legacy})
+	if _, ok := h.gate.Authenticate(req); ok {
+		t.Fatal("a session without a login method was accepted as OIDC")
+	}
+	rec, _ := request(http.MethodGet, "/_/auth/login")
+	if !strings.Contains(rec.Body.String(), `data-oidc="Google &lt;b&gt;&#34;"`) {
+		t.Fatalf("provider name not escaped into the page: %s", rec.Body.String()[:400])
+	}
+
+	stepUp := httptest.NewRecorder()
+	h.gate.RedirectToStepUp(stepUp, httptest.NewRequest(http.MethodGet, "https://"+appHost+"/admin", nil), auth.CodeMethodNotAllowed, []string{"passkey"})
+	if loc := stepUp.Header().Get("Location"); !strings.HasSuffix(loc, "&reauth=method&methods=passkey") {
 		t.Fatalf("Location = %q", loc)
 	}
 }

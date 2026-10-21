@@ -404,20 +404,21 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 			if err != nil {
 				return nil, fmt.Errorf("build passkey gate: %w", err)
 			}
+			if cfg.Auth.Issuer != "" {
+				// ID-007: the upstream provider is offered on the passkey
+				// login page; both share the session store and cookie.
+				oidcGate, cancelGate, err := m.buildOIDCGate(cfg.Auth, protectedHosts, sessions)
+				if err != nil {
+					return nil, err
+				}
+				gateCancel = cancelGate
+				passkeyGate.WithOIDC(oidcGate, cfg.Auth.ProviderName)
+			}
 			builtGate = passkeyGate
 		} else {
-			// Resolve the secret only for the consumer; cfg keeps the raw
-			// reference so control-plane writes persist it unchanged.
-			authConfig := cfg.Auth
-			authConfig.ClientSecret, err = config.ResolveSecret(cfg.Auth.ClientSecret)
+			oidcGate, cancelGate, err := m.buildOIDCGate(cfg.Auth, protectedHosts, sessions)
 			if err != nil {
-				return nil, fmt.Errorf("resolve auth.client_secret: %w", err)
-			}
-			gateCtx, cancelGate := context.WithCancel(m.ctx)
-			oidcGate, err := auth.NewGate(gateCtx, authConfig, protectedHosts, sessions, m.sink)
-			if err != nil {
-				cancelGate()
-				return nil, fmt.Errorf("build auth gate: %w", err)
+				return nil, err
 			}
 			gateCancel = cancelGate
 			builtGate = oidcGate
@@ -633,4 +634,22 @@ func sameServerConfig(a, b config.Config) bool {
 		reflect.DeepEqual(a.Tunnel, b.Tunnel) &&
 		reflect.DeepEqual(a.Pages, b.Pages) &&
 		slices.Equal(a.TLS.Domains, b.TLS.Domains)
+}
+
+// buildOIDCGate builds the upstream provider's login. The secret is resolved
+// only for the consumer; the config keeps the raw reference so control-plane
+// writes persist it unchanged.
+func (m *Manager) buildOIDCGate(cfg config.Auth, protectedHosts []string, sessions auth.SessionBackend) (*auth.Gate, context.CancelFunc, error) {
+	resolved, err := config.ResolveSecret(cfg.ClientSecret)
+	if err != nil {
+		return nil, nil, fmt.Errorf("resolve auth.client_secret: %w", err)
+	}
+	cfg.ClientSecret = resolved
+	gateCtx, cancel := context.WithCancel(m.ctx)
+	gate, err := auth.NewGate(gateCtx, cfg, protectedHosts, sessions, m.sink)
+	if err != nil {
+		cancel()
+		return nil, nil, fmt.Errorf("build auth gate: %w", err)
+	}
+	return gate, cancel, nil
 }

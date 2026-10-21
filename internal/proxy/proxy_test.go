@@ -1152,11 +1152,12 @@ func TestMaxAuthAgeAsksForAFreshLogin(t *testing.T) {
 
 type stepUpGate struct {
 	fakeGate
-	code auth.DecisionCode
+	code    auth.DecisionCode
+	methods []string
 }
 
-func (g *stepUpGate) RedirectToStepUp(w http.ResponseWriter, r *http.Request, code auth.DecisionCode) {
-	g.code = code
+func (g *stepUpGate) RedirectToStepUp(w http.ResponseWriter, r *http.Request, code auth.DecisionCode, methods []string) {
+	g.code, g.methods = code, methods
 	http.Redirect(w, r, "/_/auth/login?reauth=device", http.StatusFound)
 }
 
@@ -1178,5 +1179,22 @@ func TestRequireDeviceBoundUsesTheStepUpRedirect(t *testing.T) {
 		if deviceBound != reached || (!deviceBound && (rec.Code != http.StatusFound || gate.code != auth.CodeDeviceBoundRequired)) {
 			t.Fatalf("device bound %v: status %d, code %q, reached %v", deviceBound, rec.Code, gate.code, reached)
 		}
+	}
+}
+
+// ID-007: a session from a method the route does not accept goes to a login
+// that is told which methods the route takes.
+func TestMethodsRestrictionNamesTheMethods(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer upstream.Close()
+	gate := &stepUpGate{fakeGate: fakeGate{authenticated: true, principal: auth.Principal{Subject: "g-1", AuthTime: time.Now(), Method: auth.MethodOIDC}}}
+	handler, err := New([]config.Route{{Host: "admin.localhost", Target: upstream.URL, Access: &config.AccessPolicy{Methods: []string{"passkey"}}}}, nil, gate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://admin.localhost/", nil))
+	if rec.Code != http.StatusFound || gate.code != auth.CodeMethodNotAllowed || !slices.Equal(gate.methods, []string{"passkey"}) {
+		t.Fatalf("status %d, code %q, methods %v", rec.Code, gate.code, gate.methods)
 	}
 }

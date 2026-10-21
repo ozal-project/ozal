@@ -7,13 +7,14 @@
 <link rel="stylesheet" href="/_/auth/passkey.css">
 <script src="/_/auth/passkey.js" defer></script>
 </head>
-<body data-page="login">
+<body data-page="login" data-oidc="">
 <main>
   <h1 id="title">Sign in</h1>
   <p id="intro">Use the passkey on this device, your phone or a security key.</p>
   <label for="username">Account</label>
   <input id="username" name="username" autocomplete="username webauthn" placeholder="Choose a passkey">
   <button id="action" type="button">Sign in with a passkey</button>
+  <a id="oidc" class="secondary" hidden>Sign in with single sign-on</a>
   <p id="status" role="status" aria-live="polite"></p>
   <div class="first-time" id="first-time">
     <strong>First time here?</strong>

@@ -246,8 +246,9 @@ config `auth.passkeys`. Where it differs from the text above:
   split, step-up and the session columns (`auth_time`, `amr`,
   `device_bound`) move to phase 2 (`ID-005`), where the policies that read
   them are built.
-- **One method at a time.** `auth.passkeys` cannot be combined with the OIDC
-  settings yet, and it requires `-db`: users, passkeys and sessions share one
+- **One method at a time** in phase 1; `ID-007` (2026-10-21) allows an OIDC
+  provider beside passkeys, with its callback on the login host and
+  `access.methods` per route. `auth.passkeys` requires `-db`: users, passkeys and sessions share one
   database, so revoking a passkey and ending its sessions is one
   transaction.
 - **Revocation** deletes the user's sessions, and every authenticated

@@ -14,6 +14,9 @@ package config
 //     older is sent to log in again (auth.Fresh); zero means no limit. It
 //     needs auth.passkeys: an upstream provider's single sign-on would
 //     answer without a fresh proof.
+//   - Methods: if set, only a session established with one of these login
+//     methods ("passkey", "oidc") passes; others are sent to log in again.
+//     Each must be configured in auth.
 //   - RequireDeviceBound: only a session whose passkey cannot be synced (a
 //     security key, a device-bound platform key) passes; others are sent to
 //     log in with such a passkey. Also needs auth.passkeys.
@@ -23,4 +26,5 @@ type AccessPolicy struct {
 	RequiredGroups     []string `json:"required_groups,omitempty"`
 	MaxAuthAgeMinutes  int      `json:"max_auth_age_minutes,omitempty"`
 	RequireDeviceBound bool     `json:"require_device_bound,omitempty"`
+	Methods            []string `json:"methods,omitempty"`
 }

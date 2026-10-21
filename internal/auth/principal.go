@@ -1,6 +1,10 @@
 package auth
 
-import "time"
+import (
+	"time"
+
+	"github.com/octaviosantacruz/switchboard/internal/config"
+)
 
 // Principal is the identity Switchboard trusts for a request, regardless of
 // how it was established — a verified OIDC session today, potentially a
@@ -21,8 +25,9 @@ type Principal struct {
 	DeviceBound bool
 }
 
-// Login methods recorded in a session (its amr).
+// Login methods recorded in a session (its amr); the same names as
+// access.methods.
 const (
-	MethodPasskey = "passkey"
-	MethodOIDC    = "oidc"
+	MethodPasskey = config.MethodPasskey
+	MethodOIDC    = config.MethodOIDC
 )

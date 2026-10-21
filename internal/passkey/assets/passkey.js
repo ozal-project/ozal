@@ -132,14 +132,34 @@ function setupLogin(button) {
   const returnTo = params.get("return_to") || "";
   if (returnTo) rememberReturn(returnTo);
   // A step-up: the visitor is signed in, but the site wants a recent proof.
+  // Every configured method is offered; the page never picks one for the
+  // visitor (no automatic redirect to the provider).
+  const provider = document.body.dataset.oidc || "";
+  const methods = (params.get("methods") || "").split(",").filter(Boolean);
+  const allows = (method) => methods.length === 0 || methods.includes(method);
+  const oidc = document.getElementById("oidc");
+  if (provider && allows("oidc")) {
+    oidc.textContent = "Sign in with " + provider;
+    oidc.href = "/_/auth/oidc/start" + (returnTo ? "?return_to=" + encodeURIComponent(returnTo) : "");
+    oidc.hidden = false;
+  }
   const reauth = params.get("reauth");
-  if (reauth === "1" || reauth === "device") {
+  if (reauth === "1" || reauth === "device" || reauth === "method") {
     document.getElementById("title").textContent = "Confirm it's you";
-    document.getElementById("intro").textContent = reauth === "device"
-      ? "This site needs a passkey that stays on one device, such as a security key. A passkey synced through iCloud or Google is not enough here."
-      : "This site asks for your passkey again because your last sign-in was a while ago.";
+    document.getElementById("intro").textContent = {
+      "1": "This site asks for your passkey again because your last sign-in was a while ago.",
+      device: "This site needs a passkey that stays on one device, such as a security key. A passkey synced through iCloud or Google is not enough here.",
+      method: allows("passkey")
+        ? "This site needs you to sign in with a passkey."
+        : "This site needs you to sign in with " + (provider || "single sign-on") + ".",
+    }[reauth];
     document.getElementById("first-time").hidden = true;
     document.title = "Confirm it's you · Switchboard";
+  }
+  if (!allows("passkey")) {
+    button.hidden = true;
+    document.getElementById("username").hidden = true;
+    document.querySelector("label[for=username]").hidden = true;
   }
   let pending = null;
 

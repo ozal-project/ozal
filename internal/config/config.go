@@ -115,9 +115,13 @@ type Auth struct {
 	// hosts' requests, and they'll redirect to login in a loop.
 	CookieDomain string `json:"cookie_domain,omitempty"`
 
-	// Passkeys makes Switchboard authenticate visitors itself (ID-003)
-	// instead of delegating to an OIDC provider. Phase 1 supports one
-	// method at a time, so the OIDC fields must be empty when it is set.
+	// ProviderName labels the OIDC button on the passkey login page when both
+	// are configured ("Google", "Okta"); defaults to "single sign-on".
+	ProviderName string `json:"provider_name,omitempty"`
+
+	// Passkeys makes Switchboard authenticate visitors itself (ID-003). The
+	// OIDC fields may be set as well (ID-007): the login page then offers
+	// both, and redirect_url must be login_url + "/_/auth/callback".
 	Passkeys *Passkeys `json:"passkeys,omitempty"`
 }
 
@@ -453,6 +457,11 @@ func Validate(cfg Config) (*Config, error) {
 		if r.Access.RequireDeviceBound && cfg.Auth.Passkeys == nil {
 			return nil, fmt.Errorf("config: route %q: access.require_device_bound requires auth.passkeys", r.Host)
 		}
+		for _, m := range r.Access.Methods {
+			if !slices.Contains(cfg.Auth.LoginMethods(), m) {
+				return nil, fmt.Errorf("config: route %q: access.methods %q is not a configured login method (have %v)", r.Host, m, cfg.Auth.LoginMethods())
+			}
+		}
 	}
 	if anyProtectedRoute && cfg.Auth.Passkeys != nil {
 		loginHost, err := validatePasskeys(&cfg.Auth)
@@ -536,9 +545,6 @@ func checkSessionHosts(cfg *Config, loginHost, field string) error {
 // login URL must be a bare origin, HTTPS except on loopback (browsers only
 // allow WebAuthn in a secure context), on rp_id or a subdomain of it.
 func validatePasskeys(auth *Auth) (string, error) {
-	if auth.Issuer != "" || auth.ClientID != "" || auth.ClientSecret != "" || auth.RedirectURL != "" {
-		return "", fmt.Errorf("config: auth.passkeys cannot be combined with OIDC settings yet; remove issuer, client_id, client_secret and redirect_url")
-	}
 	// Normalize a copy: the pointer is shared with the caller's Config.
 	copied := *auth.Passkeys
 	pk := &copied
@@ -567,8 +573,60 @@ func validatePasskeys(auth *Auth) (string, error) {
 	if pk.DisplayName == "" {
 		pk.DisplayName = "Switchboard"
 	}
+	if err := validateOIDCBesidePasskeys(auth, pk.LoginURL); err != nil {
+		return "", err
+	}
 	return loginHost, nil
 }
+
+// validateOIDCBesidePasskeys checks an upstream provider offered next to
+// passkeys (ID-007). Either every OIDC field is set or none is, and the
+// callback runs on the login host, where the login page and its cookies live.
+func validateOIDCBesidePasskeys(auth *Auth, loginURL string) error {
+	set := 0
+	for _, v := range []string{auth.Issuer, auth.ClientID, auth.ClientSecret, auth.RedirectURL} {
+		if v != "" {
+			set++
+		}
+	}
+	if set == 0 {
+		if auth.ProviderName != "" {
+			return fmt.Errorf("config: auth.provider_name names an OIDC provider, but none is configured")
+		}
+		return nil
+	}
+	if set != 4 {
+		return fmt.Errorf("config: an OIDC provider next to auth.passkeys needs issuer, client_id, client_secret and redirect_url")
+	}
+	if err := ValidateSecretReference("auth.client_secret", auth.ClientSecret); err != nil {
+		return fmt.Errorf("config: %w", err)
+	}
+	if want := loginURL + "/_/auth/callback"; auth.RedirectURL != want {
+		return fmt.Errorf("config: with auth.passkeys, auth.redirect_url must be %q (the callback runs on the login host)", want)
+	}
+	if auth.ProviderName == "" {
+		auth.ProviderName = "single sign-on"
+	}
+	return nil
+}
+
+// LoginMethods lists the methods a validated auth config offers.
+func (a Auth) LoginMethods() []string {
+	var methods []string
+	if a.Passkeys != nil {
+		methods = append(methods, MethodPasskey)
+	}
+	if a.Issuer != "" {
+		methods = append(methods, MethodOIDC)
+	}
+	return methods
+}
+
+// Login method names, shared by access.methods and the session's amr.
+const (
+	MethodPasskey = "passkey"
+	MethodOIDC    = "oidc"
+)
 
 // normalizeDNS01 validates the own-manager TLS configuration and normalizes
 // the single name it serves (a hostname or one wildcard). The scope is one name and
@@ -691,6 +749,7 @@ func CloneRoute(route Route) Route {
 		access.AllowedEmails = slices.Clone(route.Access.AllowedEmails)
 		access.AllowedDomains = slices.Clone(route.Access.AllowedDomains)
 		access.RequiredGroups = slices.Clone(route.Access.RequiredGroups)
+		access.Methods = slices.Clone(route.Access.Methods)
 		clone.Access = &access
 	}
 	return clone
