@@ -688,6 +688,8 @@ state database:
 ```bash
 switchboard migrate up -db state.db
 switchboard -config config.json -db state.db
+# Every command below is also in the admin console, People page (UI-003):
+# invite (link to copy or share), list people and passkeys, disable, revoke.
 switchboard user invite -db state.db -config config.json -email ana@example.com -group ops \
   -return-to https://app.example.com/
 #   prints https://auth.example.com/_/auth/enrol?return_to=…#… : single use, 15 minutes;

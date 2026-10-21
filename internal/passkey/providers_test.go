@@ -16,7 +16,7 @@ func TestProviderName(t *testing.T) {
 		"unknown device-bound":       {make([]byte, 16), false, "Security key or device passkey"},
 		"no AAGUID (no attestation)": {nil, false, "Security key or device passkey"},
 	} {
-		if got := providerName(tc.aaguid, tc.synced); got != tc.want {
+		if got := ProviderName(tc.aaguid, tc.synced); got != tc.want {
 			t.Errorf("%s: %q, want %q", name, got, tc.want)
 		}
 	}

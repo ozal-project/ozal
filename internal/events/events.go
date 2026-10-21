@@ -32,8 +32,14 @@ const (
 	PagesRefused    Type = "pages.refused"
 	// A user enrolled a passkey (ID-003). Code is "synced" or "device_bound".
 	PasskeyRegistered Type = "passkey.registered"
-	// A user revoked one of their own passkeys from a session (ID-008).
+	// A passkey was revoked, by its user from a session (ID-008) or by the
+	// operator; Reason says which.
 	PasskeyRevoked Type = "passkey.revoked"
+	// Operator changes to people from the console. Host carries the user's
+	// email; an invitation's token is never part of an event.
+	UserInvited  Type = "user.invited"
+	UserDisabled Type = "user.disabled"
+	UserEnabled  Type = "user.enabled"
 )
 
 // Event is one decision or change with the context needed to explain it.

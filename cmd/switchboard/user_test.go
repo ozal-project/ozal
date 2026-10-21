@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/octaviosantacruz/switchboard/internal/passkey"
 )
 
 func TestInviteReturnToMustBeAProtectedHost(t *testing.T) {
@@ -15,16 +16,26 @@ func TestInviteReturnToMustBeAProtectedHost(t *testing.T) {
 			{Host: "public.example.com"},
 		},
 	}
-	query, err := inviteReturnTo(cfg, "https://private.example.com/notes?x=1")
+	query, err := inviteQuery(cfg, "https://private.example.com/notes?x=1")
 	if err != nil || query != "?return_to=https%3A%2F%2Fprivate.example.com%2Fnotes%3Fx%3D1" {
 		t.Fatalf("protected host: %q, %v", query, err)
 	}
-	if query, err := inviteReturnTo(cfg, ""); err != nil || query != "" {
+	if query, err := inviteQuery(cfg, ""); err != nil || query != "" {
 		t.Fatalf("no destination: %q, %v", query, err)
 	}
 	for _, bad := range []string{"https://public.example.com/", "https://evil.example/", "//evil.example/", "javascript:alert(1)", "https://private.example.com@evil.example/"} {
-		if _, err := inviteReturnTo(cfg, bad); err == nil || !strings.Contains(err.Error(), "protected host") {
+		if _, err := inviteQuery(cfg, bad); err == nil || !strings.Contains(err.Error(), "protected host") {
 			t.Fatalf("%q accepted: %v", bad, err)
 		}
 	}
+}
+
+// inviteQuery is what the link adds before the fragment.
+func inviteQuery(cfg config.Config, returnTo string) (string, error) {
+	link, err := passkey.InviteLink(cfg, "TOKEN", returnTo)
+	if err != nil {
+		return "", err
+	}
+	q := strings.TrimSuffix(strings.TrimPrefix(link, cfg.Auth.Passkeys.LoginURL+"/_/auth/enrol"), "#TOKEN")
+	return q, nil
 }

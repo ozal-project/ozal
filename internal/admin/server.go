@@ -36,6 +36,7 @@ type Handler struct {
 	broker      *events.Broker
 	certificate func() CertificateStatus
 	pages       deployments
+	people      people
 	mux         *http.ServeMux
 }
 
@@ -57,6 +58,9 @@ func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 	}
 	if h.pages != nil {
 		h.registerSites()
+	}
+	if h.people != nil {
+		h.registerPeople()
 	}
 	if h.broker != nil {
 		h.mux.HandleFunc("GET /_/overview", h.overview)

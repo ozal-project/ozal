@@ -75,7 +75,7 @@ func (g *Gate) devicesList(w http.ResponseWriter, r *http.Request) (any, *apiErr
 	for _, k := range keys {
 		views = append(views, deviceView{
 			ID:       hex.EncodeToString(k.Credential.ID),
-			Provider: providerName(k.Credential.Authenticator.AAGUID, k.Synced()),
+			Provider: ProviderName(k.Credential.Authenticator.AAGUID, k.Synced()),
 			Created:  k.CreatedAt,
 			LastUsed: k.LastUsedAt,
 			Synced:   k.Synced(),
@@ -138,7 +138,7 @@ func (g *Gate) devicesAddFinish(w http.ResponseWriter, r *http.Request) (any, *a
 	// Alerted like an enrolment: a passkey nobody expected is the sign of a
 	// stolen session.
 	g.emit(r, events.Event{Type: events.PasskeyRegistered, Actor: user.Subject(), Code: kind, Reason: "added from a signed-in session"})
-	return map[string]string{"id": hex.EncodeToString(credential.ID), "provider": providerName(credential.Authenticator.AAGUID, credential.Flags.BackupEligible)}, nil
+	return map[string]string{"id": hex.EncodeToString(credential.ID), "provider": ProviderName(credential.Authenticator.AAGUID, credential.Flags.BackupEligible)}, nil
 }
 
 type revokeRequest struct {

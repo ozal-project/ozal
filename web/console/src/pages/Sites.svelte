@@ -17,8 +17,8 @@
   let error = $state("");
   let disabled = $state(false);
   let loading = $state(false);
-  // The token lives only in this component's memory: never storage or cookies.
-  let token = $state("");
+  // The token is shared by the console pages, in this tab's memory only.
+  import { admin } from "$lib/adminToken.svelte";
   let pending = $state("");
   // Feedback belongs next to the button that caused it: a message at the top
   // of the page is out of sight when the click happened further down.
@@ -41,7 +41,7 @@
 
   async function restore(site: string, id: string) {
     notice = null;
-    if (!token.trim()) {
+    if (!admin.token.trim()) {
       notice = { site, text: "Paste the admin token above first; it is needed to change the live build.", ok: false };
       tokenInput?.scrollIntoView({ behavior: "smooth", block: "center" });
       tokenInput?.focus({ preventScroll: true });
@@ -49,7 +49,7 @@
     }
     pending = id;
     try {
-      await rollback(token.trim(), site, id);
+      await rollback(admin.token.trim(), site, id);
       notice = { site, text: `${site} now serves ${id.slice(0, 12)}.`, ok: true };
       await load();
     } catch (e) {
@@ -79,10 +79,10 @@
     <Stat label="Deploy from a terminal" value="CLI" note="switchboard site deploy -site NAME ./dist" lamp="wait" />
   </div>
 
-  <Panel index="00" label="Rollback" title="Admin token" sub="Needed only to change which build is live. Kept in this page's memory, never stored." class="mb-6">
+  <Panel index="00" label="Rollback" title="Admin token" sub="Needed only to change which build is live. Kept in this tab's memory for every page, never stored." class="mb-6">
     <div class="flex max-w-xl flex-col gap-2">
       <Label for="token" class="text-muted-foreground flex items-center gap-1.5 font-mono text-[0.68rem] font-medium tracking-[0.12em] uppercase"><KeyIcon class="size-3.5" /> Admin token</Label>
-      <Input id="token" type="password" bind:ref={tokenInput} bind:value={token} placeholder="Bearer token from admin.token" autocomplete="off" spellcheck={false} class="font-mono" />
+      <Input id="token" type="password" bind:ref={tokenInput} bind:value={admin.token} placeholder="Bearer token from admin.token" autocomplete="off" spellcheck={false} class="font-mono" />
     </div>
   </Panel>
 

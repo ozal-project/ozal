@@ -117,3 +117,37 @@ export async function rollback(token: string, site: string, id: string): Promise
   if (!res.ok) throw new Error(body.error ?? `Request failed (HTTP ${res.status}).`);
   return body as Deployment;
 }
+
+// People and passkeys (operator side of ID-003/ID-008).
+export type PersonPasskey = { id: string; provider: string; synced: boolean; created: string; last_used?: string; revoked?: string };
+export type Person = { email: string; name?: string; groups: string[]; created: string; disabled?: string; passkeys: PersonPasskey[] };
+export type People = { enabled: boolean; users: Person[]; protected_hosts: string[] };
+export type Invitation = { email: string; link: string; expires_at: string };
+
+export async function fetchPeople(): Promise<People> {
+  const res = await fetch("/_/api/people", { cache: "no-store" });
+  if (res.status === 404) return { enabled: false, users: [], protected_hosts: [] };
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const body = (await res.json()) as People;
+  return { enabled: body.enabled, users: body.users ?? [], protected_hosts: body.protected_hosts ?? [] };
+}
+
+async function adminPost<T>(token: string, url: string, payload?: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method: "POST",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: payload === undefined ? undefined : JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 401) throw new Error("The admin token was rejected.");
+  if (!res.ok) throw new Error(body.error ?? `Request failed (HTTP ${res.status}).`);
+  return body as T;
+}
+
+export const invitePerson = (token: string, invite: { email: string; name: string; groups: string[]; return_to: string; recover: boolean }) =>
+  adminPost<Invitation>(token, "/_/api/people/invite", invite);
+export const setDisabled = (token: string, email: string, disabled: boolean) =>
+  adminPost(token, `/_/api/people/${encodeURIComponent(email)}/${disabled ? "disable" : "enable"}`);
+export const revokePasskey = (token: string, email: string, id: string) =>
+  adminPost(token, `/_/api/people/${encodeURIComponent(email)}/passkeys/${encodeURIComponent(id)}/revoke`);

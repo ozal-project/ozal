@@ -7,11 +7,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"net/url"
 	"strings"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/auth"
 	"github.com/octaviosantacruz/switchboard/internal/config"
 	"github.com/octaviosantacruz/switchboard/internal/passkey"
 	"github.com/octaviosantacruz/switchboard/internal/store/sqlite"
@@ -80,16 +78,19 @@ func runUser(ctx context.Context, args []string, out io.Writer) error {
 		if cfg.Auth.Passkeys == nil {
 			return fmt.Errorf("%s has no auth.passkeys section", *configPath)
 		}
-		query, err := inviteReturnTo(*cfg, *returnTo)
-		if err != nil {
-			return err
+		if _, err := passkey.InviteLink(*cfg, "", *returnTo); err != nil {
+			return fmt.Errorf("-%w", err)
 		}
 		invitation, err := identity.Invite(ctx, *email, *name, groups, *recoverAccess, *ttl)
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "Enrolment link for %s (single use, expires %s):\n\n  %s/_/auth/enrol%s#%s\n\n",
-			invitation.User.Email, invitation.ExpiresAt.UTC().Format(time.RFC3339), cfg.Auth.Passkeys.LoginURL, query, invitation.Token)
+		link, err := passkey.InviteLink(*cfg, invitation.Token, *returnTo)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "Enrolment link for %s (single use, expires %s):\n\n  %s\n\n",
+			invitation.User.Email, invitation.ExpiresAt.UTC().Format(time.RFC3339), link)
 		fmt.Fprintln(out, "Send it over a channel you trust: whoever opens it first gets the passkey.")
 	case "list":
 		users, err := identity.Users(ctx)
@@ -130,30 +131,6 @@ func runUser(ctx context.Context, args []string, out io.Writer) error {
 		return fmt.Errorf("unknown user command %q", sub)
 	}
 	return nil
-}
-
-// inviteReturnTo checks -return-to against the hosts the login may return
-// to (the same rule the server applies) and returns the link's query. A
-// refused destination is an error here, not a silent drop at enrolment.
-func inviteReturnTo(cfg config.Config, returnTo string) (string, error) {
-	if returnTo == "" {
-		return "", nil
-	}
-	allowed := map[string]bool{}
-	for _, r := range cfg.Routes {
-		if r.RequiresAuth() {
-			allowed[r.Host] = true
-		}
-	}
-	if login, err := url.Parse(cfg.Auth.Passkeys.LoginURL); err == nil {
-		if host, err := config.NormalizeHost(login.Host); err == nil {
-			allowed[host] = true
-		}
-	}
-	if auth.SafeReturnTo(allowed, returnTo) != returnTo {
-		return "", fmt.Errorf("-return-to %q is not an http(s) URL on a protected host of this config", returnTo)
-	}
-	return "?return_to=" + url.QueryEscape(returnTo), nil
 }
 
 func userError(err error, email string) error {

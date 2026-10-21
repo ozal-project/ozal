@@ -6,6 +6,25 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## UI-003 — People in the admin console — 2026-10-21 (committed with this change)
+
+The operator manages people from the console instead of `switchboard user`
+(owner feedback after the iPhone acceptance: "it has to be managed from the
+UI, not from a terminal"). People page: invite (email, name, groups,
+destination from the protected hosts, recovery), with the one-time link shown
+once to copy or share; people with their passkeys named by provider, synced or
+device-only, dates, revoked state; disable/enable and revoke with
+confirmation. API: `GET /_/api/people` (loopback read like the rest of the
+console) and bearer-protected `POST /_/api/people/invite`,
+`…/{email}/disable|enable`, `…/{email}/passkeys/{id}/revoke`, emitting
+`user.invited`, `user.disabled`, `user.enabled` and `passkey.revoked`; the
+invitation token never reaches an event or the listing. The link rule moved
+to `passkey.InviteLink`, shared with the CLI. The admin token is now pasted
+once per tab for every console page (memory only). Tests:
+`TestPeopleInviteListDisable` (token required, destination refused before a
+user is created, token absent from events and listing, unknown user 404);
+smoke on a disposable instance.
+
 ## EDGE-003 — portless route hosts match any listener port — 2026-10-21 (committed with this change)
 
 A route host without a port now answers on any listener port, so

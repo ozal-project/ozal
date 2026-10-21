@@ -25,9 +25,9 @@ var providerNames = map[string]string{
 	"fdb141b2-5d84-443e-8a35-4698c205a502": "KeePassXC",
 }
 
-// providerName names a passkey for its owner: the provider when its AAGUID
+// ProviderName names a passkey for its owner: the provider when its AAGUID
 // is known, otherwise what the backup flag says about it.
-func providerName(aaguid []byte, synced bool) string {
+func ProviderName(aaguid []byte, synced bool) string {
 	if len(aaguid) == 16 {
 		id := fmt.Sprintf("%x-%x-%x-%x-%x", aaguid[0:4], aaguid[4:6], aaguid[6:8], aaguid[8:10], aaguid[10:16])
 		if name, ok := providerNames[id]; ok {
