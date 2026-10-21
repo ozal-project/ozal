@@ -14,13 +14,14 @@
 @theme {
   --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
-  --color-ink: oklch(0.94 0.01 85);
-  --color-muted: oklch(0.72 0.012 80);
-  --color-paper: oklch(0.145 0.006 75);
-  --color-panel: oklch(0.19 0.007 75);
-  --color-line: oklch(0.29 0.01 75);
-  --color-amber: oklch(0.83 0.11 75);
-  --color-amber-deep: oklch(0.29 0.03 70);
+  /* Cool graphite and a neutral primary; amber is only the lamp (brand mark,
+     lit words, jacks, the milestone under way), shared with the console. */
+  --color-ink: oklch(0.95 0.005 260);
+  --color-muted: oklch(0.72 0.012 260);
+  --color-paper: oklch(0.15 0.006 260);
+  --color-panel: oklch(0.195 0.007 260);
+  --color-line: oklch(0.3 0.01 260);
+  --color-amber: oklch(0.83 0.13 75);
   --color-green: oklch(0.82 0.07 155);
   --color-red: oklch(0.78 0.11 25);
 }
@@ -28,13 +29,13 @@
 @layer base {
   html { color-scheme: dark; scroll-behavior: smooth; }
   body { @apply bg-paper text-ink font-sans antialiased; }
-  ::selection { background: var(--color-amber); color: var(--color-paper); }
-  a:focus-visible, button:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 3px; border-radius: 4px; }
+  ::selection { background: var(--color-ink); color: var(--color-paper); }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--color-ink); outline-offset: 3px; border-radius: 4px; }
 }
 
 @layer components {
   .jack-field {
-    background-image: radial-gradient(oklch(0.32 0.012 75 / 0.55) 1px, transparent 1.2px);
+    background-image: radial-gradient(oklch(0.33 0.01 260 / 0.55) 1px, transparent 1.2px);
     background-size: 22px 22px;
   }
   .plate { @apply text-muted font-mono text-[0.7rem] font-medium tracking-[0.18em] uppercase; }
@@ -47,15 +48,15 @@
   .lamp-on { --lamp: var(--color-green); }
   .lamp-off { --lamp: var(--color-red); }
   .lamp-wait { --lamp: var(--color-amber); }
-  .lamp-idle { --lamp: oklch(0.45 0.01 75); box-shadow: 0 0 0 1px oklch(0 0 0 / 0.4); }
+  .lamp-idle { --lamp: oklch(0.45 0.01 260); box-shadow: 0 0 0 1px oklch(0 0 0 / 0.4); }
   .panel {
     @apply bg-panel border-line relative rounded-xl border;
     box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.05), 0 1px 2px oklch(0 0 0 / 0.35), 0 18px 40px -22px oklch(0 0 0 / 0.8);
   }
-  .cord { stroke: var(--color-amber); fill: none; stroke-linecap: round; }
+  .cord { stroke: oklch(0.62 0.02 260); fill: none; stroke-linecap: round; }
   .btn { @apply inline-flex items-center gap-2 rounded-lg px-4 py-2.5 font-mono text-[0.8rem] font-medium tracking-wide uppercase transition-colors; }
-  .btn-primary { @apply bg-amber text-paper hover:bg-amber/85; }
-  .btn-ghost { @apply border-line hover:border-amber/60 hover:text-amber border; }
+  .btn-primary { @apply bg-ink text-paper hover:bg-ink/85; }
+  .btn-ghost { @apply border-line hover:border-ink/60 border; }
   .code { @apply bg-paper/80 border-line overflow-x-auto rounded-lg border p-4 font-mono text-[0.8rem] leading-relaxed; }
 }
 

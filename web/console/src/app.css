@@ -14,34 +14,37 @@
   font-display: swap;
 }
 
-/* Switchboard identity: graphite surfaces with an amber signal accent. */
+/* Switchboard identity: cool graphite surfaces and a neutral primary; amber
+   is only the signal lamp (brand mark and "pending"), so it keeps one meaning. */
 :root {
   --radius: 0.65rem;
-  --background: oklch(0.155 0.006 75);
-  --foreground: oklch(0.94 0.01 85);
-  --card: oklch(0.19 0.007 75);
-  --card-foreground: oklch(0.94 0.01 85);
-  --popover: oklch(0.2 0.008 75);
-  --popover-foreground: oklch(0.95 0.004 170);
-  --primary: oklch(0.83 0.11 75);
-  --primary-foreground: oklch(0.2 0.02 70);
-  --secondary: oklch(0.24 0.008 75);
-  --secondary-foreground: oklch(0.95 0.004 170);
-  --muted: oklch(0.235 0.008 75);
-  --muted-foreground: oklch(0.72 0.012 80);
-  --accent: oklch(0.29 0.03 70);
-  --accent-foreground: oklch(0.88 0.09 75);
+  --background: oklch(0.16 0.006 260);
+  --foreground: oklch(0.95 0.005 260);
+  --card: oklch(0.195 0.007 260);
+  --card-foreground: oklch(0.95 0.005 260);
+  --popover: oklch(0.205 0.008 260);
+  --popover-foreground: oklch(0.95 0.005 260);
+  --primary: oklch(0.95 0.005 260);
+  --primary-foreground: oklch(0.18 0.01 260);
+  --secondary: oklch(0.245 0.008 260);
+  --secondary-foreground: oklch(0.95 0.005 260);
+  --muted: oklch(0.235 0.008 260);
+  --muted-foreground: oklch(0.72 0.012 260);
+  --accent: oklch(0.27 0.012 260);
+  --accent-foreground: oklch(0.97 0.004 260);
   --destructive: oklch(0.78 0.11 25);
-  --border: oklch(0.29 0.01 75);
-  --input: oklch(0.31 0.01 75);
-  --ring: oklch(0.83 0.11 75);
+  --border: oklch(0.3 0.01 260);
+  --input: oklch(0.32 0.01 260);
+  --ring: oklch(0.8 0.01 260);
   --success: oklch(0.82 0.07 155);
-  --warning: oklch(0.84 0.09 75);
-  --sidebar: oklch(0.135 0.006 75);
-  --sidebar-foreground: oklch(0.95 0.004 170);
-  --sidebar-border: oklch(0.26 0.01 75);
-  --sidebar-accent: oklch(0.25 0.02 70);
-  --sidebar-accent-foreground: oklch(0.88 0.09 75);
+  --warning: oklch(0.83 0.13 75);
+  /* The switchboard lamp: the brand mark and "pending", never a button. */
+  --signal: oklch(0.83 0.13 75);
+  --sidebar: oklch(0.14 0.006 260);
+  --sidebar-foreground: oklch(0.95 0.005 260);
+  --sidebar-border: oklch(0.27 0.01 260);
+  --sidebar-accent: oklch(0.24 0.012 260);
+  --sidebar-accent-foreground: oklch(0.97 0.004 260);
 }
 
 @theme inline {
@@ -71,6 +74,7 @@
   --color-ring: var(--ring);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-signal: var(--signal);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-border: var(--sidebar-border);
@@ -97,7 +101,7 @@
 @layer components {
   /* The jack field behind every page. */
   .jack-field {
-    background-image: radial-gradient(oklch(0.32 0.012 75 / 0.55) 1px, transparent 1.2px);
+    background-image: radial-gradient(oklch(0.33 0.01 260 / 0.55) 1px, transparent 1.2px);
     background-size: 22px 22px;
     background-position: -11px -11px;
   }
@@ -105,7 +109,7 @@
   .plate {
     @apply text-muted-foreground font-mono text-[0.68rem] font-medium tracking-[0.18em] uppercase;
   }
-  .plate b { @apply text-primary font-semibold; }
+  .plate b { @apply text-signal font-semibold; }
   /* Signal lamp: a lit bulb with a soft glow. */
   .lamp {
     @apply inline-block size-2.5 shrink-0 rounded-full;
@@ -115,7 +119,7 @@
   .lamp-on { --lamp: var(--success); }
   .lamp-off { --lamp: var(--destructive); }
   .lamp-wait { --lamp: var(--warning); animation: lamp-pulse 1.6s ease-in-out infinite; }
-  .lamp-idle { --lamp: oklch(0.45 0.01 75); box-shadow: 0 0 0 1px oklch(0 0 0 / 0.4); }
+  .lamp-idle { --lamp: oklch(0.45 0.01 260); box-shadow: 0 0 0 1px oklch(0 0 0 / 0.4); }
   .lamp-lg { @apply size-4; }
   /* Panel: a card with a lit top edge, like brushed metal under a lamp. */
   .panel {
@@ -123,8 +127,8 @@
     box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.05), 0 1px 2px oklch(0 0 0 / 0.35), 0 12px 32px -18px oklch(0 0 0 / 0.7);
   }
   .panel-head { @apply flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3.5; }
-  /* A patch cord: the amber curve used in the brand and as a divider. */
-  .cord { stroke: var(--primary); fill: none; stroke-linecap: round; }
+  /* A patch cord: the grey curve between amber jacks, in the brand and as a divider. */
+  .cord { stroke: oklch(0.62 0.02 260); fill: none; stroke-linecap: round; }
 }
 
 @keyframes lamp-pulse { 50% { opacity: 0.45; } }

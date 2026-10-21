@@ -1,17 +1,20 @@
-/* Switchboard identity, shared with the admin console (web/console):
-   graphite surfaces, an amber signal accent, Manrope bundled locally (OFL,
-   see OFL.txt) so the sign-in pages make no third-party request. */
+/* Switchboard identity, shared with the admin console (web/console) and the
+   site: cool graphite surfaces and a neutral primary. Amber is the lamp of
+   the switchboard (the brand mark, and "pending" in the console), never a
+   button, so it keeps one meaning. Manrope is bundled locally (OFL, see
+   OFL.txt) so the sign-in pages make no third-party request. */
 @font-face { font-family: "Manrope"; src: url("/_/auth/manrope.ttf") format("truetype"); font-weight: 200 800; font-display: swap; }
 :root {
   color-scheme: dark;
-  --bg: oklch(0.155 0.006 75);
-  --card: oklch(0.19 0.007 75);
-  --raised: oklch(0.235 0.008 75);
-  --fg: oklch(0.94 0.01 85);
-  --muted: oklch(0.72 0.012 80);
-  --border: oklch(0.29 0.01 75);
-  --accent: oklch(0.83 0.11 75);
-  --accent-fg: oklch(0.2 0.02 70);
+  --bg: oklch(0.16 0.006 260);
+  --card: oklch(0.195 0.007 260);
+  --raised: oklch(0.235 0.008 260);
+  --fg: oklch(0.95 0.005 260);
+  --muted: oklch(0.72 0.012 260);
+  --border: oklch(0.3 0.01 260);
+  --accent: oklch(0.95 0.005 260);
+  --accent-fg: oklch(0.18 0.01 260);
+  --lamp: oklch(0.83 0.13 75);
   --ok: oklch(0.82 0.07 155);
   --err: oklch(0.78 0.11 25);
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -20,17 +23,17 @@
 [hidden] { display: none !important; }
 body {
   margin: 0; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 20px; padding: 24px 16px; background: radial-gradient(120% 80% at 50% 0%, oklch(0.2 0.02 70) 0%, var(--bg) 60%) fixed, var(--bg);
+  gap: 20px; padding: 24px 16px; background: radial-gradient(120% 80% at 50% 0%, oklch(0.21 0.012 260) 0%, var(--bg) 60%) fixed, var(--bg);
   color: var(--fg); font: 16px/1.55 "Manrope", ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased;
 }
 .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; }
 .brand svg { width: 34px; height: 34px; flex: none; }
-.brand .mark-bg { fill: oklch(0.22 0.012 75); stroke: oklch(0.34 0.02 75); }
-.brand .cord { fill: none; stroke: oklch(0.6 0.05 75); stroke-linecap: round; }
-.brand .jack { fill: oklch(0.15 0.006 75); stroke: var(--accent); }
+.brand .mark-bg { fill: oklch(0.22 0.01 260); stroke: oklch(0.34 0.012 260); }
+.brand .cord { fill: none; stroke: oklch(0.62 0.02 260); stroke-linecap: round; }
+.brand .jack { fill: oklch(0.15 0.006 260); stroke: var(--lamp); }
 .brand .led { fill: var(--ok); }
 .brand .name { display: block; font: 600 0.95rem/1 var(--mono); letter-spacing: -0.01em; }
-.brand .name b { color: var(--accent); font-weight: 600; }
+.brand .name b { color: var(--lamp); font-weight: 600; }
 .brand .sub { display: block; margin-top: 5px; font: 0.62rem/1 var(--mono); letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
 main { width: 100%; max-width: 420px; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 28px 24px; box-shadow: 0 20px 50px -20px rgb(0 0 0 / 0.6); }
 h1 { margin: 0 0 6px; font-size: 1.45rem; font-weight: 700; letter-spacing: -0.02em; }
@@ -46,17 +49,17 @@ button:disabled { opacity: 0.55; cursor: progress; }
 #status:empty { display: none; }
 #status[data-kind="ok"] { color: var(--ok); }
 #status[data-kind="error"] { color: var(--err); }
-.first-time { margin-top: 20px; padding: 12px 14px; border: 1px solid var(--border); border-left: 3px solid var(--accent); background: var(--raised); border-radius: 10px; }
+.first-time { margin-top: 20px; padding: 12px 14px; border: 1px solid var(--border); border-left: 3px solid var(--muted); background: var(--raised); border-radius: 10px; }
 .first-time strong { display: block; margin-bottom: 4px; }
 .first-time p, .hint { margin: 0; font-size: 0.88rem; }
 .hint { margin-top: 14px; }
 .sites { display: grid; gap: 8px; margin-top: 16px; }
 .sites a { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--raised); color: var(--fg); font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
 .sites-title { margin: 8px 0 0; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
-.sites a::after { content: "→"; color: var(--accent); margin-left: 12px; }
+.sites a::after { content: "→"; color: var(--muted); margin-left: 12px; }
 .who { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: -4px 0 18px; font-size: 0.88rem; color: var(--muted); }
 .who strong { color: var(--fg); font-weight: 600; overflow-wrap: anywhere; }
-.link-button { width: auto; padding: 0; background: none; border: 0; color: var(--accent); font-weight: 600; font-size: 0.88rem; }
+.link-button { width: auto; padding: 0; background: none; border: 0; color: var(--fg); font-weight: 600; font-size: 0.88rem; text-decoration: underline; text-decoration-color: var(--muted); text-underline-offset: 3px; }
 .devices { list-style: none; padding: 0; margin: 0 0 16px; display: grid; gap: 10px; }
 .devices li { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 12px; align-items: start; padding: 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--raised); }
 .devices .icon { grid-column: 1; grid-row: 1 / span 2; box-sizing: content-box; width: 20px; height: 20px; padding: 8px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); }

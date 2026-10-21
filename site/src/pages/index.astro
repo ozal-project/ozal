@@ -96,10 +96,10 @@ const roadmap = [
               const l = lamps[`${c},${r}`];
               return (
                 <g>
-                  <circle cx={x} cy={y - 24} r="4.5" fill={l ? lampColor[l] : "oklch(0.32 0.01 75)"} opacity={l ? 1 : 0.9} />
+                  <circle cx={x} cy={y - 24} r="4.5" fill={l ? lampColor[l] : "oklch(0.32 0.01 260)"} opacity={l ? 1 : 0.9} />
                   {l && <circle cx={x} cy={y - 24} r="9" fill={lampColor[l]} opacity="0.18" />}
-                  <circle cx={x} cy={y} r="11" fill="oklch(0.13 0.006 75)" stroke="oklch(0.36 0.015 75)" stroke-width="1.5" />
-                  <circle cx={x} cy={y} r="4" fill="oklch(0.08 0.004 75)" />
+                  <circle cx={x} cy={y} r="11" fill="oklch(0.13 0.006 260)" stroke="oklch(0.36 0.012 260)" stroke-width="1.5" />
+                  <circle cx={x} cy={y} r="4" fill="oklch(0.08 0.004 260)" />
                 </g>
               );
             }))}
@@ -123,7 +123,7 @@ const roadmap = [
           <div class="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {shipped.map((f) => (
               <article class="panel p-5">
-                <div class="flex items-center justify-between"><span class="text-amber font-mono text-xs">{f.k}</span><span class="lamp lamp-on"></span></div>
+                <div class="flex items-center justify-between"><span class="text-ink font-mono text-xs">{f.k}</span><span class="lamp lamp-on"></span></div>
                 <h3 class="mt-4 font-semibold">{f.t}</h3>
                 <p class="text-muted mt-2 text-sm leading-relaxed" set:html={f.d.replace(/`([^`]+)`/g, '<code class="text-ink font-mono text-[0.78rem]">$1</code>')} />
               </article>
@@ -192,12 +192,12 @@ scope:     authorization only; OIDC, session and transport are not evaluated</pr
             {roadmap.map((r) => (
               <article class={`panel p-5 ${r.now ? "ring-amber/50 ring-1" : ""}`}>
                 <div class="flex items-center justify-between">
-                  <span class="font-mono text-sm"><span class="text-amber">{r.v}</span> · {r.n}</span>
+                  <span class="font-mono text-sm"><span class={r.now ? "text-amber" : "text-ink"}>{r.v}</span> · {r.n}</span>
                   <span class={`lamp ${r.now ? "lamp-wait" : "lamp-idle"}`}></span>
                 </div>
                 <p class="plate mt-1">{r.now ? "in progress · " : ""}{r.when}</p>
                 <ul class="text-muted mt-4 space-y-2 text-sm">
-                  {r.items.map((i) => <li class="flex gap-2"><span class="text-amber">›</span>{i}</li>)}
+                  {r.items.map((i) => <li class="flex gap-2"><span class="text-muted">›</span>{i}</li>)}
                 </ul>
               </article>
             ))}
@@ -240,7 +240,7 @@ scope:     authorization only; OIDC, session and transport are not evaluated</pr
     <footer class="border-line/70 border-t">
       <div class="text-muted mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-8 text-sm">
         <span class="flex items-center gap-2.5"><Logo size={22} /> <span class="font-mono text-xs">switchboard · MIT</span></span>
-        <span>Built in public by <a href="https://octaviosantacruz.com" class="text-ink hover:text-amber">Octavio Santacruz</a> — a year-long learning project, Oct 2026 – Sep 2027.</span>
+        <span>Built in public by <a href="https://octaviosantacruz.com" class="text-ink underline decoration-muted underline-offset-4">Octavio Santacruz</a> — a year-long learning project, Oct 2026 – Sep 2027.</span>
         {sourcePublic ? <a href={repo} class="hover:text-ink font-mono text-xs">github.com/octaviosantacruz/switchboard</a> : <span class="font-mono text-xs">source: opens with the first alpha</span>}
       </div>
     </footer>
