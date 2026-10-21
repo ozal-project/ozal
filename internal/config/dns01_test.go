@@ -180,3 +180,14 @@ func TestWildcardRequiresDNS01(t *testing.T) {
 		t.Fatalf("Load error = %v, want it to refuse a wildcard without tls.dns01", err)
 	}
 }
+
+func TestSitesTokenMustDifferFromTheAdminToken(t *testing.T) {
+	path := writeConfig(t, `{
+		"listen": ":8888",
+		"admin": {"token": "env:SB_ADMIN", "sites_token": "env:SB_ADMIN"},
+		"routes": [{"host": "a.localhost", "target": "http://localhost:9000"}]
+	}`)
+	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "sites_token") {
+		t.Fatalf("Load error = %v, want sites_token refused", err)
+	}
+}

@@ -178,3 +178,42 @@ func TestAnInterruptedUploadSaysSo(t *testing.T) {
 		t.Fatalf("events = %+v, want one pages.refused with code upload.timeout", got)
 	}
 }
+
+func scopedHandler(sitesToken string) (http.Handler, *fakeDeployments) {
+	store := &fakeDeployments{}
+	manager := &fakeManager{cfg: config.Config{Admin: config.Admin{Token: "secret", SitesToken: sitesToken}}}
+	return New(manager, nil, WithPages(store)), store
+}
+
+// The sites token publishes and rolls back sites; it opens nothing else.
+func TestSitesTokenDeploysAndNothingElse(t *testing.T) {
+	handler, store := scopedHandler("sites-secret")
+	if rec := request(handler, http.MethodPost, "/_/api/sites/blog/deployments", "sites-secret", "archive"); rec.Code != http.StatusCreated {
+		t.Fatalf("deploy with the sites token = %d %s", rec.Code, rec.Body)
+	}
+	if rec := request(handler, http.MethodPost, "/_/api/sites/blog/rollback", "sites-secret", `{"id":"`+strings.Repeat("a", 64)+`"}`); rec.Code != http.StatusOK {
+		t.Fatalf("rollback with the sites token = %d %s", rec.Code, rec.Body)
+	}
+	if rec := request(handler, http.MethodPost, "/_/api/sites/blog/deployments", "secret", "archive"); rec.Code != http.StatusCreated {
+		t.Fatalf("the admin token must still deploy: %d", rec.Code)
+	}
+	for _, target := range []string{"/_/reload", "/_/api/policy/explain", "/routes"} {
+		if rec := request(handler, http.MethodPost, target, "sites-secret", "{}"); rec.Code != http.StatusUnauthorized {
+			t.Errorf("POST %s with the sites token = %d, want 401", target, rec.Code)
+		}
+	}
+	if len(store.received) != 2 {
+		t.Fatalf("store received %v", store.received)
+	}
+}
+
+// A sites token whose file is missing only takes itself out.
+func TestAnUnreadableSitesTokenLeavesTheAdminTokenWorking(t *testing.T) {
+	handler, _ := scopedHandler("file:/nonexistent/sites.token")
+	if rec := request(handler, http.MethodPost, "/_/api/sites/blog/deployments", "secret", "archive"); rec.Code != http.StatusCreated {
+		t.Fatalf("admin token deploy = %d %s", rec.Code, rec.Body)
+	}
+	if rec := request(handler, http.MethodPost, "/_/api/sites/blog/deployments", "", "archive"); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("no token = %d, want 401", rec.Code)
+	}
+}

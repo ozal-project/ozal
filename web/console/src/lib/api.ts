@@ -146,7 +146,7 @@ async function adminPost<T>(token: string, url: string, payload?: unknown): Prom
   return body as T;
 }
 
-export const invitePerson = (token: string, invite: { email: string; name: string; groups: string[]; return_to: string; recover: boolean }) =>
+export const invitePerson = (token: string, invite: { email: string; name: string; groups: string[]; return_to: string }) =>
   adminPost<Invitation>(token, "/_/api/people/invite", invite);
 export const setDisabled = (token: string, email: string, disabled: boolean) =>
   adminPost(token, `/_/api/people/${encodeURIComponent(email)}/${disabled ? "disable" : "enable"}`);

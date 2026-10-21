@@ -6,7 +6,6 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
-  import { Checkbox } from "$lib/components/ui/checkbox";
   import { Skeleton } from "$lib/components/ui/skeleton";
   import { admin } from "$lib/adminToken.svelte";
   import { fetchPeople, invitePerson, setDisabled, revokePasskey, type People, type Invitation } from "$lib/api";
@@ -26,7 +25,6 @@
   let name = $state("");
   let groups = $state("");
   let destination = $state("");
-  let recover = $state(false);
   let inviting = $state(false);
   let inviteError = $state("");
   let created = $state<Invitation | null>(null);
@@ -69,10 +67,8 @@
         name: name.trim(),
         groups: groups.split(",").map((g) => g.trim()).filter(Boolean),
         return_to: destination ? `https://${destination}/` : "",
-        recover,
       });
       email = name = "";
-      recover = false;
       await load();
     } catch (err) {
       inviteError = (err as Error).message;
@@ -153,7 +149,7 @@
           {#each people?.protected_hosts ?? [] as host (host)}<option value={host}>{host}</option>{/each}
         </select>
       </div>
-      <label class="flex items-center gap-2 text-sm sm:col-span-2"><Checkbox bind:checked={recover} /> They already have a passkey and lost their devices (recovery)</label>
+      <p class="text-muted-foreground text-xs sm:col-span-2">Someone who lost every passkey is recovered on the host, not here: <code class="font-mono">switchboard user invite -recover</code>.</p>
       <div class="flex flex-wrap items-center gap-3 sm:col-span-2">
         <Button type="submit" disabled={inviting}><UserPlusIcon class="size-4" /> {inviting ? "Creating…" : "Create invitation"}</Button>
         {#if inviteError}<p class="text-destructive text-sm" role="alert">{inviteError}</p>{/if}

@@ -113,6 +113,14 @@ func (h *Handler) invitePerson(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// Recovery adds a passkey to an account that already exists: the path an
+	// account takeover would take. It stays with the host's shell, the root of
+	// trust (identity-login.md), and never rides on the admin bearer, which
+	// also travels to the machines that publish sites.
+	if req.Recover {
+		writeError(w, http.StatusForbidden, "account recovery runs on the host only: switchboard user invite -recover")
+		return
+	}
 	cfg := h.manager.Config()
 	// Check the destination before creating anything.
 	if _, err := passkey.InviteLink(cfg, "", strings.TrimSpace(req.ReturnTo)); err != nil {
@@ -129,7 +137,7 @@ func (h *Handler) invitePerson(w http.ResponseWriter, r *http.Request) {
 			groups = append(groups, g)
 		}
 	}
-	invitation, err := h.people.Invite(r.Context(), req.Email, strings.TrimSpace(req.Name), groups, req.Recover, ttl)
+	invitation, err := h.people.Invite(r.Context(), req.Email, strings.TrimSpace(req.Name), groups, false, ttl)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -139,11 +147,7 @@ func (h *Handler) invitePerson(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	code := "invite"
-	if req.Recover {
-		code = "recover"
-	}
-	h.emit(events.Event{Type: events.UserInvited, Actor: actor(r), Host: invitation.User.Email, Code: code})
+	h.emit(events.Event{Type: events.UserInvited, Actor: actor(r), Host: invitation.User.Email, Code: "invite"})
 	writeJSON(w, http.StatusCreated, map[string]any{"email": invitation.User.Email, "link": link, "expires_at": invitation.ExpiresAt.UTC()})
 }
 

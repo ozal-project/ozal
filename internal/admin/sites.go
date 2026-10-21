@@ -27,8 +27,8 @@ func WithPages(store deployments) Option {
 
 func (h *Handler) registerSites() {
 	h.mux.HandleFunc("GET /_/api/sites", h.listSites)
-	h.mux.HandleFunc("POST /_/api/sites/{site}/deployments", h.requireBearer(h.deploySite))
-	h.mux.HandleFunc("POST /_/api/sites/{site}/rollback", h.requireBearer(h.rollbackSite))
+	h.mux.HandleFunc("POST /_/api/sites/{site}/deployments", h.requireSitesBearer(h.deploySite))
+	h.mux.HandleFunc("POST /_/api/sites/{site}/rollback", h.requireSitesBearer(h.rollbackSite))
 }
 
 func (h *Handler) listSites(w http.ResponseWriter, r *http.Request) {

@@ -299,14 +299,39 @@ func (h *Handler) deleteRoute(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
+// requireBearer admits the admin token only.
 func (h *Handler) requireBearer(next http.HandlerFunc) http.HandlerFunc {
+	return h.bearer(next, false)
+}
+
+// requireSitesBearer admits the admin token or admin.sites_token. The sites
+// token lives on the machines that publish sites; it can deploy and roll
+// back a site and nothing else, so losing one of those machines does not
+// hand over people, routes or policy.
+func (h *Handler) requireSitesBearer(next http.HandlerFunc) http.HandlerFunc {
+	return h.bearer(next, true)
+}
+
+func (h *Handler) bearer(next http.HandlerFunc, sites bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		token, err := config.ResolveSecret(h.manager.Config().Admin.Token)
+		cfg := h.manager.Config().Admin
+		token, err := config.ResolveSecret(cfg.Token)
 		if err != nil {
 			writeError(w, http.StatusServiceUnavailable, "admin token reference could not be resolved")
 			return
 		}
-		if token == "" {
+		accepted := []string{}
+		if token != "" {
+			accepted = append(accepted, token)
+		}
+		if sites && cfg.SitesToken != "" {
+			// A sites token that cannot be read only takes itself out: the
+			// admin token keeps working while the file is being set up.
+			if sitesToken, err := config.ResolveSecret(cfg.SitesToken); err == nil && sitesToken != "" {
+				accepted = append(accepted, sitesToken)
+			}
+		}
+		if len(accepted) == 0 {
 			writeError(w, http.StatusServiceUnavailable, "admin mutations are disabled until admin.token is configured")
 			return
 		}
@@ -314,20 +339,25 @@ func (h *Handler) requireBearer(next http.HandlerFunc) http.HandlerFunc {
 		// token is as invalid as no token. "Bearer " with an empty token fails
 		// the hash comparison below.
 		scheme, provided, ok := strings.Cut(r.Header.Get("Authorization"), " ")
-		if !ok || !strings.EqualFold(scheme, "Bearer") {
-			w.Header().Set("WWW-Authenticate", "Bearer")
-			writeError(w, http.StatusUnauthorized, "invalid bearer token")
-			return
-		}
-		wantHash := sha256.Sum256([]byte(token))
-		providedHash := sha256.Sum256([]byte(provided))
-		if subtle.ConstantTimeCompare(providedHash[:], wantHash[:]) != 1 {
+		if !ok || !strings.EqualFold(scheme, "Bearer") || !matchesAny(provided, accepted) {
 			w.Header().Set("WWW-Authenticate", "Bearer")
 			writeError(w, http.StatusUnauthorized, "invalid bearer token")
 			return
 		}
 		next(w, r)
 	}
+}
+
+// matchesAny compares in constant time against every candidate, without
+// stopping at the first match.
+func matchesAny(provided string, candidates []string) bool {
+	providedHash := sha256.Sum256([]byte(provided))
+	match := 0
+	for _, candidate := range candidates {
+		wantHash := sha256.Sum256([]byte(candidate))
+		match |= subtle.ConstantTimeCompare(providedHash[:], wantHash[:])
+	}
+	return match == 1
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, destination any) error {

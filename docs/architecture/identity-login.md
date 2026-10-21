@@ -33,10 +33,13 @@ keeps Switchboard on external providers only.
 3. **The login is not the end:** the session is the next target (cookie
    theft), so it is short, rotated, re-proven for sensitive routes and, where
    the browser supports it, bound to the device (DBSC).
-4. **The operator's shell is the root of trust:** first enrolment and
-   recovery happen through the CLI on the host. Whoever has that shell
-   already owns the deployment; no weaker path (email, support questions)
-   can recover an account.
+4. **The operator's shell is the root of trust:** recovery happens only
+   through the CLI on the host (`switchboard user invite -recover`). Whoever
+   has that shell already owns the deployment; no weaker path (email,
+   support questions, the admin API) can recover an account. Inviting a new
+   person is also possible from the admin console since `UI-003`: it creates
+   an account, it cannot take one over. The admin API refuses `recover`
+   (2026-10-21): its bearer also travels to the machines that publish sites.
 5. **Every decision is explainable and audited:** login, refusal, new
    passkey, step-up and revocation are events, without secrets.
 

@@ -117,3 +117,25 @@ func TestPeopleInviteListDisable(t *testing.T) {
 		t.Fatalf("revoke without token = %d", rec.Code)
 	}
 }
+
+// Recovery adds a passkey to an existing account, the path a takeover would
+// take: it stays on the host's CLI, never on the admin bearer.
+func TestRecoveryIsRefusedOnTheAdminAPI(t *testing.T) {
+	handler, identity, recorder := peopleHandler(t)
+	ctx := context.Background()
+	for _, body := range []string{
+		`{"email":"ana@example.com","recover":true}`,
+		`{"email":"nobody@example.com","name":"X","groups":["owner"],"recover":true}`,
+	} {
+		rec := request(handler, http.MethodPost, "/_/api/people/invite", "secret", body)
+		if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "switchboard user invite -recover") {
+			t.Fatalf("recover over the API = %d %s, want 403 pointing at the host CLI", rec.Code, rec.Body)
+		}
+	}
+	if users, err := identity.Users(ctx); err != nil || len(users) != 0 {
+		t.Fatalf("users = %v, %v: a refused recovery must create nothing", users, err)
+	}
+	if len(recorder.Events()) != 0 {
+		t.Fatalf("events = %+v, want none", recorder.Events())
+	}
+}

@@ -143,6 +143,10 @@ type Passkeys struct {
 type Admin struct {
 	Listen string `json:"listen,omitempty"`
 	Token  string `json:"token,omitempty"`
+	// SitesToken is a narrower bearer that can deploy and roll back sites and
+	// nothing else, for the machines that publish them (2026-10-21). A
+	// secret reference like Token.
+	SitesToken string `json:"sites_token,omitempty"`
 }
 
 // Notify configures outbound notifications (NTF-001). Channels are opt-in:
@@ -435,6 +439,12 @@ func Validate(cfg Config) (*Config, error) {
 
 	if err := ValidateSecretReference("admin.token", cfg.Admin.Token); err != nil {
 		return nil, fmt.Errorf("config: %w", err)
+	}
+	if err := ValidateSecretReference("admin.sites_token", cfg.Admin.SitesToken); err != nil {
+		return nil, fmt.Errorf("config: %w", err)
+	}
+	if cfg.Admin.SitesToken != "" && cfg.Admin.SitesToken == cfg.Admin.Token {
+		return nil, fmt.Errorf("config: admin.sites_token must not be the admin token: it exists to be narrower")
 	}
 	if cfg.Notify != nil {
 		if cfg.Notify.Telegram == nil {

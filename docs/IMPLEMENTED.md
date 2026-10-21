@@ -6,6 +6,29 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## Recovery is host-only; a sites-only admin token — 2026-10-21 (committed with this change)
+
+The [product/code/UX review](reviews/2026-10-21-product-code-ux.md) found the
+admin API (and the console) accepting `recover`, while the identity model
+keeps recovery with the host's shell. The admin bearer also lived on the
+homelab, because `publish-site.py` needs it to deploy sites: whoever held
+the homelab could recover accounts on the edge. Owner decision: recovery
+stays on the host, and publishing gets a narrower token.
+
+- `POST /_/api/people/invite` with `recover` answers 403 pointing at
+  `switchboard user invite -recover`; the console's recovery checkbox is
+  replaced by that hint. Inviting new people from the console (`UI-003`)
+  is unchanged. `identity-login.md` principle 4 updated.
+- `admin.sites_token` (secret reference, must differ from `admin.token`)
+  is accepted on site deploy and rollback only; the admin token still works
+  there. A sites token that cannot be read takes only itself out.
+
+Tests: `TestRecoveryIsRefusedOnTheAdminAPI` (403, nothing created, no
+event); `TestSitesTokenDeploysAndNothingElse` (deploy, rollback; 401 on
+reload, policy explain, routes); `TestAnUnreadableSitesTokenLeavesTheAdminTokenWorking`;
+config refuses a sites token equal to the admin token. Activating the sites
+token on the edge is an operator step (server-ops `hetzner-public` runbook).
+
 ## BUG-009 — reconnecting no longer doubles the activity feed — 2026-10-21 (committed with this change)
 
 From the [product/code/UX review](reviews/2026-10-21-product-code-ux.md):
