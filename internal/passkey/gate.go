@@ -9,6 +9,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"path"
 	"sort"
 	"strings"
 	"time"
@@ -254,7 +255,10 @@ func (g *Gate) ServeAuthEndpoint(w http.ResponseWriter, r *http.Request) bool {
 	case "/_/auth/logout":
 		g.logout(w, r)
 	default:
-		return false
+		if path.Dir(r.URL.Path) != "/_/auth/icons" {
+			return false
+		}
+		serveAsset(w, r)
 	}
 	return true
 }

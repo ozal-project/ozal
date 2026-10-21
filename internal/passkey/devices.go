@@ -60,6 +60,7 @@ type deviceView struct {
 	Created  time.Time `json:"created"`
 	LastUsed time.Time `json:"last_used,omitzero"`
 	Synced   bool      `json:"synced"`
+	Icon     string    `json:"icon"`
 }
 
 func (g *Gate) devicesList(w http.ResponseWriter, r *http.Request) (any, *apiError) {
@@ -73,9 +74,11 @@ func (g *Gate) devicesList(w http.ResponseWriter, r *http.Request) (any, *apiErr
 	}
 	views := make([]deviceView, 0, len(keys))
 	for _, k := range keys {
+		name, icon := Provider(k.Credential.Authenticator.AAGUID, k.Synced())
 		views = append(views, deviceView{
 			ID:       hex.EncodeToString(k.Credential.ID),
-			Provider: ProviderName(k.Credential.Authenticator.AAGUID, k.Synced()),
+			Provider: name,
+			Icon:     icon,
 			Created:  k.CreatedAt,
 			LastUsed: k.LastUsedAt,
 			Synced:   k.Synced(),
@@ -138,7 +141,8 @@ func (g *Gate) devicesAddFinish(w http.ResponseWriter, r *http.Request) (any, *a
 	// Alerted like an enrolment: a passkey nobody expected is the sign of a
 	// stolen session.
 	g.emit(r, events.Event{Type: events.PasskeyRegistered, Actor: user.Subject(), Code: kind, Reason: "added from a signed-in session"})
-	return map[string]string{"id": hex.EncodeToString(credential.ID), "provider": ProviderName(credential.Authenticator.AAGUID, credential.Flags.BackupEligible)}, nil
+	name, icon := Provider(credential.Authenticator.AAGUID, credential.Flags.BackupEligible)
+	return map[string]string{"id": hex.EncodeToString(credential.ID), "provider": name, "icon": icon}, nil
 }
 
 type revokeRequest struct {

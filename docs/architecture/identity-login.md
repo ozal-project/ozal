@@ -325,7 +325,7 @@ What makes a product like Okta large is not OIDC: it is the catalog of
 pre-built integrations (OIDC, SAML, SCIM provisioning), lifecycle management,
 a risk engine, global availability and certifications, and an authenticator
 app (push, device trust). Switchboard does not need its own phone app for the
-phishing-resistant part: the platform passkey (iCloud Keychain, Google
+phishing-resistant part: the platform passkey (Apple Passwords, Google
 Password Manager, a security key) is the authenticator, and approvals for
 sensitive actions can use the existing Telegram notifier (`NTF-001`). TOTP
 apps (Google Authenticator) stay out of the login: their codes can be phished

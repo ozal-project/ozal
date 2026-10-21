@@ -758,3 +758,31 @@ func TestAssetsAreVersionedAndCacheable(t *testing.T) {
 		}
 	}
 }
+
+// Provider icons are served as SVG from their own directory and nothing else
+// leaks out of it: not another asset, not a file that is not an icon.
+func TestProviderIconsAreServed(t *testing.T) {
+	h := newHarness(t)
+	get := func(path string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		if !h.gate.ServeAuthEndpoint(rec, httptest.NewRequest(http.MethodGet, loginOrigin+path, nil)) {
+			rec.Code = 0
+		}
+		return rec
+	}
+	icon := get("/_/auth/icons/apple.svg")
+	if icon.Code != http.StatusOK || icon.Header().Get("Content-Type") != "image/svg+xml" {
+		t.Fatalf("apple.svg: %d %q", icon.Code, icon.Header().Get("Content-Type"))
+	}
+	if !strings.Contains(icon.Body.String(), "<svg") {
+		t.Fatal("apple.svg is not an SVG")
+	}
+	for _, path := range []string{"/_/auth/icons/LICENSE.md", "/_/auth/icons/passkey.js", "/_/auth/icons/nope.svg"} {
+		if rec := get(path); rec.Code != http.StatusNotFound {
+			t.Errorf("%s: %d, want 404", path, rec.Code)
+		}
+	}
+	if rec := get("/_/auth/iconsx/apple.svg"); rec.Code != 0 {
+		t.Errorf("a path outside /_/auth/icons/ was handled: %d", rec.Code)
+	}
+}

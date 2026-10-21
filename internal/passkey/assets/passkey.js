@@ -285,8 +285,17 @@ function setupDevices(button) {
     list.replaceChildren(...data.passkeys.map((key) => {
       const item = el("li");
       const title = el("span", "provider", key.provider);
-      title.append(el("span", key.synced ? "badge" : "badge bound", key.synced ? "Synced" : "This device only"));
-      const meta = el("span", "meta", "Added " + ago(key.created) + (key.last_used ? " · last used " + ago(key.last_used) : " · not used yet"));
+      // The badge opens the second line, so a long provider name never wraps around it.
+      const meta = el("span", "meta");
+      meta.append(
+        el("span", key.synced ? "badge" : "badge bound", key.synced ? "Synced" : "This device only"),
+        el("span", "", "Added " + ago(key.created) + (key.last_used ? " · last used " + ago(key.last_used) : " · not used yet")),
+      );
+      // The provider's logo; its name is already the title, so the image is decoration.
+      const icon = el("img", "icon");
+      icon.src = "/_/auth/icons/" + (key.icon || "key") + ".svg";
+      icon.alt = "";
+      icon.width = icon.height = 22;
       const remove = el("button", "", "Remove");
       remove.type = "button";
       remove.disabled = data.passkeys.length === 1;
@@ -295,7 +304,7 @@ function setupDevices(button) {
       remove.addEventListener("click", () => {
         if (confirm("Remove the " + key.provider + " passkey? You will be signed out everywhere.")) revoke(key.id).catch(fail);
       });
-      item.append(title, remove, meta);
+      item.append(title, remove, meta, icon);
       return item;
     }));
     const nav = document.getElementById("sites");

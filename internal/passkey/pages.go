@@ -93,6 +93,7 @@ var assetTypes = map[string]string{
 	".js":  "text/javascript; charset=utf-8",
 	".css": "text/css; charset=utf-8",
 	".ttf": "font/ttf",
+	".svg": "image/svg+xml",
 }
 
 func serveAsset(w http.ResponseWriter, r *http.Request) {
@@ -102,7 +103,15 @@ func serveAsset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := path.Base(r.URL.Path)
-	body, err := assets.ReadFile("assets/" + name)
+	dir := "assets/"
+	if path.Dir(r.URL.Path) == "/_/auth/icons" {
+		dir = "assets/icons/"
+	}
+	if path.Ext(name) != ".svg" && dir == "assets/icons/" {
+		http.NotFound(w, r)
+		return
+	}
+	body, err := assets.ReadFile(dir + name)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -112,9 +121,9 @@ func serveAsset(w http.ResponseWriter, r *http.Request) {
 	// served fresh, so an old link never pins old code.
 	if v := r.URL.Query().Get("v"); v != "" && v == assetVersions()[name] {
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-	} else if name == "manrope.ttf" {
-		// The font is linked from the stylesheet without a version; it
-		// changes only with a new font release.
+	} else if name == "manrope.ttf" || dir == "assets/icons/" {
+		// The font and the provider icons are linked without a version;
+		// they change only with a new release of their source.
 		w.Header().Set("Cache-Control", "public, max-age=604800")
 	}
 	// Fixed per extension, never the OS mime table (see the console).

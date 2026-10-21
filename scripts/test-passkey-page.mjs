@@ -94,19 +94,21 @@ assert.match(page.status, /does not support passkeys/);
 
 // The devices page lists the passkeys and never offers removing the only one.
 const listing = (keys) => () => Promise.resolve({ ok: true, json: () => Promise.resolve({ email: "ana@example.com", passkeys: keys, sites: ["https://private.example.com/"] }) });
-const key = (id, synced) => ({ id, provider: synced ? "iCloud Keychain" : "Security key or device passkey", created: "2026-10-21T12:00:00Z", synced });
+const key = (id, synced) => ({ id, provider: synced ? "Apple Passwords" : "Security key or device passkey", icon: synced ? "apple" : "key", created: "2026-10-21T12:00:00Z", synced });
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 page = render("", { page: "devices", fetch: listing([key("aa11bb22cc33", false)]) });
 await settle();
 assert.equal(page.devices.length, 1);
 assert.equal(page.devices[0].children[0].textContent, "Security key or device passkey", "named by provider, no hex ID shown");
-assert.equal(page.devices[0].children[0].children[0].textContent, "This device only");
+assert.equal(page.devices[0].children[2].children[0].textContent, "This device only", "the badge opens the second line");
+assert.equal(page.devices[0].children[3].src, "/_/auth/icons/key.svg", "a device passkey shows the key icon");
 assert.equal(page.devices[0].children[1].disabled, true, "the only passkey cannot be removed");
 page = render("", { page: "devices", fetch: listing([key("aa11", false), key("dd44", true)]) });
 await settle();
 assert.equal(page.devices.length, 2);
 assert.equal(page.devices[1].children[1].disabled, false);
-assert.equal(page.devices[1].children[0].textContent, "iCloud Keychain");
-assert.equal(page.devices[1].children[0].children[0].textContent, "Synced");
+assert.equal(page.devices[1].children[0].textContent, "Apple Passwords");
+assert.equal(page.devices[1].children[2].children[0].textContent, "Synced");
+assert.equal(page.devices[1].children[3].src, "/_/auth/icons/apple.svg", "the provider's logo");
 
 console.log("passkey pages: 10 variants OK");

@@ -9,15 +9,30 @@ func TestProviderName(t *testing.T) {
 		aaguid []byte
 		synced bool
 		want   string
+		icon   string
 	}{
-		"iCloud":                     {icloud, true, "iCloud Keychain"},
-		"Google":                     {google, true, "Google Password Manager"},
-		"unknown synced":             {make([]byte, 16), true, "Synced passkey"},
-		"unknown device-bound":       {make([]byte, 16), false, "Security key or device passkey"},
-		"no AAGUID (no attestation)": {nil, false, "Security key or device passkey"},
+		"Apple":                      {icloud, true, "Apple Passwords", "apple"},
+		"Google":                     {google, true, "Google Password Manager", "google"},
+		"unknown synced":             {make([]byte, 16), true, "Synced passkey", "synced"},
+		"unknown device-bound":       {make([]byte, 16), false, "Security key or device passkey", "key"},
+		"no AAGUID (no attestation)": {nil, false, "Security key or device passkey", "key"},
 	} {
-		if got := ProviderName(tc.aaguid, tc.synced); got != tc.want {
-			t.Errorf("%s: %q, want %q", name, got, tc.want)
+		got, icon := Provider(tc.aaguid, tc.synced)
+		if got != tc.want || icon != tc.icon {
+			t.Errorf("%s: %q %q, want %q %q", name, got, icon, tc.want, tc.icon)
+		}
+	}
+}
+
+// Every icon a provider names is bundled, or the page would show a broken image.
+func TestProviderIconsAreBundled(t *testing.T) {
+	icons := map[string]bool{"synced": true, "key": true}
+	for _, p := range providers {
+		icons[p.icon] = true
+	}
+	for icon := range icons {
+		if _, err := assets.ReadFile("assets/icons/" + icon + ".svg"); err != nil {
+			t.Errorf("icon %q: %v", icon, err)
 		}
 	}
 }
