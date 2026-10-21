@@ -59,6 +59,13 @@ else
   echo "  console toolchain not installed (scripts/build-console.sh); embedded build used as is"
 fi
 
+if command -v node >/dev/null 2>&1; then
+  echo "[6c] passkey login page script"
+  node scripts/test-passkey-page.mjs
+else
+  echo "  node not installed: passkey page script not exercised"
+fi
+
 echo "[7/7] git diff --check"
 git diff --check
 

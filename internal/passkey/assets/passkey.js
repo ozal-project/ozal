@@ -127,13 +127,13 @@ function finish(result, message) {
   nav.querySelector("a").focus();
 }
 
-function setupLogin(button) {
+// setupLoginPage prepares the login page whatever the browser supports:
+// every configured method is offered and the page never picks one for the
+// visitor (no automatic redirect to the provider). On a step-up it says why.
+function setupLoginPage(button) {
   const params = new URLSearchParams(location.search);
   const returnTo = params.get("return_to") || "";
   if (returnTo) rememberReturn(returnTo);
-  // A step-up: the visitor is signed in, but the site wants a recent proof.
-  // Every configured method is offered; the page never picks one for the
-  // visitor (no automatic redirect to the provider).
   const provider = document.body.dataset.oidc || "";
   const methods = (params.get("methods") || "").split(",").filter(Boolean);
   const allows = (method) => methods.length === 0 || methods.includes(method);
@@ -156,11 +156,17 @@ function setupLogin(button) {
     document.getElementById("first-time").hidden = true;
     document.title = "Confirm it's you · Switchboard";
   }
-  if (!allows("passkey")) {
+  const passkeys = allows("passkey");
+  if (!passkeys) {
     button.hidden = true;
     document.getElementById("username").hidden = true;
     document.querySelector("label[for=username]").hidden = true;
+    document.getElementById("first-time").hidden = true;
   }
+  return { returnTo, passkeys, provider: provider && allows("oidc") ? provider : "" };
+}
+
+function setupLogin(button, returnTo) {
   let pending = null;
 
   async function login(conditional) {
@@ -218,11 +224,15 @@ function setupEnrol(button) {
 
 document.addEventListener("DOMContentLoaded", () => {
   const button = document.getElementById("action");
+  const login = document.body.dataset.page !== "enrol";
+  const page = login ? setupLoginPage(button) : null;
   if (!window.PublicKeyCredential || !navigator.credentials) {
     button.disabled = true;
-    show("This browser does not support passkeys.", "error");
+    if (!page || page.passkeys) {
+      show("This browser does not support passkeys." + (page && page.provider ? " You can still sign in with " + page.provider + "." : ""), "error");
+    }
     return;
   }
-  if (document.body.dataset.page === "enrol") setupEnrol(button);
-  else setupLogin(button);
+  if (!login) setupEnrol(button);
+  else if (page.passkeys) setupLogin(button, page.returnTo);
 });
