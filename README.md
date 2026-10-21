@@ -693,7 +693,12 @@ switchboard user revoke   -db state.db -email ana@example.com -passkey 3f9a
 switchboard user disable  -db state.db -email ana@example.com
 ```
 
-A lost device is recovered from the host only (`invite -recover`). Revoking a
+A signed-in user manages their own passkeys at `/_/auth/devices` on the
+login host (ID-008): it lists them and adds another (a laptop, a security
+key) or removes one, always after a passkey proof from the last five minutes.
+Every addition sends the `passkey.registered` alert; removing one signs the
+user out everywhere; the only passkey cannot be removed there. A lost device
+is recovered from the host only (`invite -recover`). Revoking a
 passkey or disabling a user ends their sessions immediately. Applications
 receive the same identity headers as with OIDC, with a subject of the form
 `sb:<id>`.

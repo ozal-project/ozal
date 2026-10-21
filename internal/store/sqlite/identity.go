@@ -330,6 +330,92 @@ func (s *Identity) RevokePasskey(ctx context.Context, email, prefix string) erro
 	return tx.Commit()
 }
 
+// ActivePasskeys implements passkey.Directory.
+func (s *Identity) ActivePasskeys(ctx context.Context, userID string) ([]passkey.Passkey, error) {
+	if _, err := s.ActiveUser(ctx, userID); err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT credential_json, created_at, last_used_at FROM passkeys WHERE user_id = ? AND revoked_at IS NULL ORDER BY created_at, credential_id`,
+		userID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list passkeys: %w", err)
+	}
+	defer rows.Close()
+	var keys []passkey.Passkey
+	for rows.Next() {
+		var (
+			encoded  string
+			created  int64
+			lastUsed sql.NullInt64
+		)
+		if err := rows.Scan(&encoded, &created, &lastUsed); err != nil {
+			return nil, err
+		}
+		key := passkey.Passkey{UserID: userID, CreatedAt: time.Unix(created, 0), LastUsedAt: unixOrZero(lastUsed)}
+		if err := json.Unmarshal([]byte(encoded), &key.Credential); err != nil {
+			return nil, fmt.Errorf("decode passkey: %w", err)
+		}
+		keys = append(keys, key)
+	}
+	return keys, rows.Err()
+}
+
+// AddPasskey implements passkey.Directory. The INSERT ... SELECT stores the
+// passkey only if the user is still enabled at that moment.
+func (s *Identity) AddPasskey(ctx context.Context, userID string, credential webauthn.Credential) error {
+	encoded, err := json.Marshal(credential)
+	if err != nil {
+		return fmt.Errorf("encode credential: %w", err)
+	}
+	result, err := s.db.ExecContext(ctx,
+		`INSERT INTO passkeys (credential_id, user_id, credential_json, backup_eligible, created_at)
+		 SELECT ?, id, ?, ?, ? FROM users WHERE id = ? AND disabled_at IS NULL`,
+		credential.ID, string(encoded), credential.Flags.BackupEligible, s.now().Unix(), userID,
+	)
+	if err != nil {
+		return fmt.Errorf("insert passkey: %w", err)
+	}
+	if n, err := result.RowsAffected(); err != nil || n != 1 {
+		return passkey.ErrNotFound
+	}
+	return nil
+}
+
+// RevokeOwnPasskey implements passkey.Directory.
+func (s *Identity) RevokeOwnPasskey(ctx context.Context, userID string, credentialID []byte) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin revoke: %w", err)
+	}
+	defer tx.Rollback()
+	user, err := scanUser(tx.QueryRowContext(ctx, userColumns+` WHERE id = ? AND disabled_at IS NULL`, userID))
+	if err != nil {
+		return err
+	}
+	var active, mine int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT COUNT(*), COALESCE(SUM(credential_id = ?), 0) FROM passkeys WHERE user_id = ? AND revoked_at IS NULL`,
+		credentialID, userID,
+	).Scan(&active, &mine); err != nil {
+		return fmt.Errorf("count passkeys: %w", err)
+	}
+	if mine != 1 {
+		return passkey.ErrNotFound
+	}
+	if active == 1 {
+		return passkey.ErrLastPasskey
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE passkeys SET revoked_at = ? WHERE credential_id = ? AND user_id = ?`, s.now().Unix(), credentialID, userID); err != nil {
+		return fmt.Errorf("revoke passkey: %w", err)
+	}
+	if err := deleteSessions(ctx, tx, user); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // SetDisabled disables (and ends the sessions of) or re-enables a user.
 func (s *Identity) SetDisabled(ctx context.Context, email string, disabled bool) error {
 	tx, err := s.db.BeginTx(ctx, nil)

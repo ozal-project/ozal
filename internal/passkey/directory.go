@@ -23,6 +23,9 @@ var (
 	// ErrInvitationInvalid covers an unknown, used or expired invitation;
 	// callers must not tell the visitor which.
 	ErrInvitationInvalid = errors.New("passkey: invitation invalid, used or expired")
+	// ErrLastPasskey refuses revoking a user's only active passkey from
+	// their own session: without another one, only the host could recover.
+	ErrLastPasskey = errors.New("passkey: the last active passkey cannot be revoked from a session")
 )
 
 // User is someone the operator invited.
@@ -71,4 +74,17 @@ type Directory interface {
 	ActiveUser(ctx context.Context, id string) (User, error)
 	// RecordLogin stores a credential's new sign counter and flags.
 	RecordLogin(ctx context.Context, credential webauthn.Credential) error
+
+	// Self-service (ID-008), always from a session with a recent passkey
+	// proof; the gate checks that before calling.
+
+	// ActivePasskeys lists an enabled user's active passkeys, oldest first.
+	ActivePasskeys(ctx context.Context, userID string) ([]Passkey, error)
+	// AddPasskey stores another passkey for an enabled user.
+	AddPasskey(ctx context.Context, userID string, credential webauthn.Credential) error
+	// RevokeOwnPasskey revokes one of the user's active passkeys and ends
+	// all their sessions in one transaction. It returns ErrNotFound for a
+	// passkey that is not theirs or not active, and ErrLastPasskey for
+	// their only active one.
+	RevokeOwnPasskey(ctx context.Context, userID string, credentialID []byte) error
 }

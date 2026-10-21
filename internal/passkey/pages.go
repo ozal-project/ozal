@@ -39,8 +39,11 @@ func (g *Gate) servePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := "assets/login.html"
-	if r.URL.Path == "/_/auth/enrol" {
+	switch r.URL.Path {
+	case "/_/auth/enrol":
 		name = "assets/enrol.html"
+	case "/_/auth/devices":
+		name = "assets/devices.html"
 	}
 	body, err := assets.ReadFile(name)
 	if err != nil {

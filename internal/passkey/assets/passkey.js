@@ -114,15 +114,17 @@ function finish(result, message) {
     return;
   }
   show(message, "ok");
-  const sites = result.sites || [];
-  if (!sites.length) return;
-  const nav = document.getElementById("sites");
-  nav.replaceChildren(...sites.map((url) => {
+  const link = (href, text) => {
     const a = document.createElement("a");
-    a.href = url;
-    a.textContent = "Continue to " + new URL(url).host;
+    a.href = href;
+    a.textContent = text;
     return a;
-  }));
+  };
+  const nav = document.getElementById("sites");
+  nav.replaceChildren(
+    ...(result.sites || []).map((url) => link(url, "Continue to " + new URL(url).host)),
+    link("/_/auth/devices", "Manage your passkeys"),
+  );
   nav.hidden = false;
   nav.querySelector("a").focus();
 }
@@ -222,10 +224,66 @@ function setupEnrol(button) {
   });
 }
 
+// setupDevices lists the visitor's passkeys and lets them add or remove one
+// (ID-008). The server checks every request against a recent passkey proof;
+// when that lapses it answers 403 and the page sends the visitor to confirm.
+function setupDevices(button) {
+  const list = document.getElementById("devices");
+  const relogin = () => location.assign("/_/auth/login?return_to=" + encodeURIComponent(location.origin + "/_/auth/devices") + "&reauth=1&methods=passkey");
+  const when = (iso) => new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+
+  async function load() {
+    const data = await post("/_/auth/devices/list", {});
+    list.replaceChildren(...data.passkeys.map((key) => {
+      const item = document.createElement("li");
+      const label = document.createElement("span");
+      label.textContent = (key.synced ? "Synced passkey" : "Passkey on one device") + " · added " + when(key.created) +
+        (key.last_used ? " · last used " + when(key.last_used) : "") + " · " + key.id.slice(0, 8);
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.textContent = "Remove";
+      remove.disabled = data.passkeys.length === 1;
+      remove.addEventListener("click", () => revoke(key.id).catch(fail));
+      item.append(label, remove);
+      return item;
+    }));
+  }
+
+  async function revoke(id) {
+    show("Removing…");
+    await post("/_/auth/devices/revoke", { id });
+    show("Removed. You are signed out everywhere; sign in again with another passkey.", "ok");
+    list.replaceChildren();
+    button.disabled = true;
+  }
+
+  function fail(error) {
+    button.disabled = false;
+    if (/Confirm it's you/.test(error.message)) return relogin();
+    show(explain(error, "enrol"), "error");
+  }
+
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    show("Waiting for your device…");
+    try {
+      const options = await post("/_/auth/devices/add/begin", {});
+      const credential = await navigator.credentials.create({ publicKey: creationOptions(options) });
+      await post("/_/auth/devices/add/finish", credentialJSON(credential));
+      show("Passkey added.", "ok");
+      button.disabled = false;
+      await load();
+    } catch (error) {
+      fail(error);
+    }
+  });
+  load().catch(fail);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   const button = document.getElementById("action");
-  const login = document.body.dataset.page !== "enrol";
-  const page = login ? setupLoginPage(button) : null;
+  const kind = document.body.dataset.page;
+  const page = kind === "login" ? setupLoginPage(button) : null;
   if (!window.PublicKeyCredential || !navigator.credentials) {
     button.disabled = true;
     if (!page || page.passkeys) {
@@ -233,6 +291,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     return;
   }
-  if (!login) setupEnrol(button);
+  if (kind === "enrol") setupEnrol(button);
+  else if (kind === "devices") setupDevices(button);
   else if (page.passkeys) setupLogin(button, page.returnTo);
 });

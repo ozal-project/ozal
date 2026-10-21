@@ -231,6 +231,16 @@ func (g *Gate) ServeAuthEndpoint(w http.ResponseWriter, r *http.Request) bool {
 		}
 	case "/_/auth/login", "/_/auth/enrol":
 		g.servePage(w, r)
+	case "/_/auth/devices":
+		g.serveDevicesPage(w, r)
+	case "/_/auth/devices/list":
+		g.api(w, r, g.devicesList)
+	case "/_/auth/devices/add/begin":
+		g.api(w, r, g.devicesAddBegin)
+	case "/_/auth/devices/add/finish":
+		g.api(w, r, g.devicesAddFinish)
+	case "/_/auth/devices/revoke":
+		g.api(w, r, g.devicesRevoke)
 	case "/_/auth/passkey.js", "/_/auth/passkey.css":
 		serveAsset(w, r)
 	case "/_/auth/login/begin":

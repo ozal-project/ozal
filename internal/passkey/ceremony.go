@@ -26,6 +26,7 @@ type ceremonyKind int
 const (
 	kindLogin ceremonyKind = iota + 1
 	kindEnrol
+	kindAddDevice // ID-008: a signed-in user adds another passkey
 )
 
 // ceremony is the server side of one begun registration or login. The

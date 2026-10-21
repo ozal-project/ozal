@@ -22,3 +22,7 @@ button:disabled { opacity: 0.6; cursor: progress; }
 .secondary { display: block; margin-top: 10px; padding: 10px 12px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--fg) 25%, transparent); color: var(--accent); font-weight: 600; text-align: center; text-decoration: none; }
 .secondary:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 [hidden] { display: none !important; }
+.devices { list-style: none; padding: 0; margin: 16px 0; display: grid; gap: 8px; }
+.devices li { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--fg) 25%, transparent); }
+.devices li span { font-size: 0.9rem; overflow-wrap: anywhere; }
+.devices li button { width: auto; padding: 6px 10px; background: transparent; color: var(--err); border: 1px solid currentColor; }

@@ -594,3 +594,139 @@ func TestPasskeyGateWithOIDC(t *testing.T) {
 		t.Fatalf("Location = %q", loc)
 	}
 }
+
+// ID-008: a fresh passkey session lists, adds and removes its own passkeys;
+// an old session, an OIDC session or no session cannot; the only passkey
+// cannot be removed; a removal ends every session of the user.
+func TestSelfServiceDevices(t *testing.T) {
+	h := newHarness(t)
+	phone := newAuthenticator(t)
+	b := h.browser()
+	if code := b.enrol(t, phone, h.invite(t, "ana@example.com", false)); code != http.StatusOK {
+		t.Fatalf("enrol = %d", code)
+	}
+	principal, _ := b.signedIn()
+	sessions := sqlite.NewSessions(h.db, auth.Lifetime{Absolute: time.Hour})
+	cookieFor := func(p auth.Principal) *browser {
+		other := h.browser()
+		id, err := sessions.Create(context.Background(), p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		other.cookies[auth.SessionCookieName] = id
+		return other
+	}
+	devices := func(br *browser) []any {
+		rec, body := br.post(t, "/_/auth/devices/list", map[string]any{})
+		if rec.Code != http.StatusOK {
+			return nil
+		}
+		list, _ := body["passkeys"].([]any)
+		return list
+	}
+
+	if got := devices(b); len(got) != 1 {
+		t.Fatalf("fresh session lists %v", got)
+	}
+	stale := principal
+	stale.AuthTime = time.Now().Add(-10 * time.Minute)
+	oidc := auth.Principal{Subject: "google-1", AuthTime: time.Now(), Method: auth.MethodOIDC}
+	// A session from before migration 006: a passkey user, recent, but no
+	// recorded method, so no proof that a passkey made it.
+	noMethod := principal
+	noMethod.Method = ""
+	for name, br := range map[string]*browser{"stale": cookieFor(stale), "oidc": cookieFor(oidc), "no method": cookieFor(noMethod), "anonymous": h.browser()} {
+		if rec, _ := br.post(t, "/_/auth/devices/list", map[string]any{}); rec.Code != http.StatusForbidden {
+			t.Fatalf("%s session listed passkeys: %d", name, rec.Code)
+		}
+		if rec, _ := br.post(t, "/_/auth/devices/add/begin", map[string]any{}); rec.Code != http.StatusForbidden {
+			t.Fatalf("%s session began adding a passkey: %d", name, rec.Code)
+		}
+	}
+
+	// Only passkey: refused.
+	only := devices(b)[0].(map[string]any)["id"].(string)
+	if rec, _ := b.post(t, "/_/auth/devices/revoke", map[string]string{"id": only}); rec.Code != http.StatusConflict {
+		t.Fatalf("revoking the only passkey = %d", rec.Code)
+	}
+
+	// Add a second device.
+	laptop := newAuthenticator(t)
+	rec, options := b.post(t, "/_/auth/devices/add/begin", map[string]any{})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("add begin = %d %s", rec.Code, rec.Body)
+	}
+	if rec, _ := b.post(t, "/_/auth/devices/add/finish", laptop.create(t, options, loginOrigin)); rec.Code != http.StatusOK {
+		t.Fatalf("add finish = %d %s", rec.Code, rec.Body)
+	}
+	if got := devices(b); len(got) != 2 {
+		t.Fatalf("after adding: %v", got)
+	}
+	added := false
+	for _, e := range h.events.events {
+		added = added || (e.Type == events.PasskeyRegistered && strings.Contains(e.Reason, "signed-in session"))
+	}
+	if !added {
+		t.Fatal("adding a passkey sent no passkey.registered alert")
+	}
+	if code, _ := h.browser().login(t, laptop, "", loginOrigin); code != http.StatusOK {
+		t.Fatalf("login with the added passkey = %d", code)
+	}
+
+	// Someone else's passkey is not found.
+	eve := h.browser()
+	if code := eve.enrol(t, newAuthenticator(t), h.invite(t, "eve@example.com", false)); code != http.StatusOK {
+		t.Fatal("enrol eve")
+	}
+	if rec, _ := eve.post(t, "/_/auth/devices/revoke", map[string]string{"id": only}); rec.Code != http.StatusNotFound {
+		t.Fatalf("revoking another user's passkey = %d", rec.Code)
+	}
+
+	// Removing one ends every session of the user, this one included.
+	other := cookieFor(principal)
+	if rec, body := b.post(t, "/_/auth/devices/revoke", map[string]string{"id": only}); rec.Code != http.StatusOK || body["signed_out"] != true {
+		t.Fatalf("revoke = %d %v", rec.Code, body)
+	}
+	if _, ok := b.signedIn(); ok {
+		t.Fatal("the session that revoked is still signed in")
+	}
+	if _, ok := other.signedIn(); ok {
+		t.Fatal("another session of the user survived the revocation")
+	}
+	if !h.events.has(events.PasskeyRevoked, "") {
+		t.Fatal("no passkey.revoked event")
+	}
+	if code, _ := h.browser().login(t, phone, "", loginOrigin); code == http.StatusOK {
+		t.Fatal("the revoked passkey still signs in")
+	}
+}
+
+func TestDevicesPageNeedsAFreshPasskeySession(t *testing.T) {
+	h := newHarness(t)
+	b := h.browser()
+	if code := b.enrol(t, newAuthenticator(t), h.invite(t, "ana@example.com", false)); code != http.StatusOK {
+		t.Fatalf("enrol = %d", code)
+	}
+	principal, _ := b.signedIn()
+	page := func(cookie string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, loginOrigin+"/_/auth/devices", nil)
+		if cookie != "" {
+			req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: cookie})
+		}
+		rec := httptest.NewRecorder()
+		h.gate.ServeAuthEndpoint(rec, req)
+		return rec
+	}
+	if rec := page(b.cookies[auth.SessionCookieName]); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `data-page="devices"`) {
+		t.Fatalf("fresh session: %d", rec.Code)
+	}
+	if rec := page(""); rec.Code != http.StatusFound || strings.Contains(rec.Header().Get("Location"), "reauth") {
+		t.Fatalf("anonymous: %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+	stale := principal
+	stale.AuthTime = time.Now().Add(-10 * time.Minute)
+	id, _ := sqlite.NewSessions(h.db, auth.Lifetime{Absolute: time.Hour}).Create(context.Background(), stale)
+	if rec := page(id); rec.Code != http.StatusFound || !strings.HasSuffix(rec.Header().Get("Location"), "&reauth=1&methods=passkey") {
+		t.Fatalf("stale session: %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+}

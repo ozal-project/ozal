@@ -9,15 +9,18 @@ import assert from "node:assert/strict";
 
 const src = readFileSync(new URL("../internal/passkey/assets/passkey.js", import.meta.url), "utf8");
 
-function render(search, { oidc = "", webauthn = true } = {}) {
+function render(search, { oidc = "", webauthn = true, page = "login", fetch = () => new Promise(() => {}) } = {}) {
   const els = {};
-  const el = (id) => (els[id] ??= { id, textContent: "", hidden: id === "oidc", href: "", disabled: false, dataset: {}, addEventListener() {}, replaceChildren() {}, focus() {} });
-  ["title", "intro", "action", "oidc", "status", "first-time", "username", "sites"].forEach(el);
+  const el = (id) => (els[id] ??= {
+    id, textContent: "", hidden: id === "oidc", href: "", disabled: false, dataset: {}, children: [],
+    addEventListener() {}, focus() {}, append(...c) { this.children.push(...c); }, replaceChildren(...c) { this.children = c; },
+  });
+  ["title", "intro", "action", "oidc", "status", "first-time", "username", "sites", "devices"].forEach(el);
   const label = { hidden: false };
   let ready;
   const document = {
     title: "Sign in · Switchboard",
-    body: { dataset: { page: "login", oidc } },
+    body: { dataset: { page, oidc } },
     getElementById: (id) => els[id],
     querySelector: (q) => (q === "label[for=username]" ? label : null),
     createElement: () => el("x" + Math.random()),
@@ -26,12 +29,12 @@ function render(search, { oidc = "", webauthn = true } = {}) {
   const ctx = {
     document, URLSearchParams, encodeURIComponent, AbortController, atob, btoa, JSON, Date, String, Uint8Array,
     window: webauthn ? { PublicKeyCredential: function () {} } : {},
-    location: { search, hash: "", pathname: "/_/auth/login", assign() {} },
+    location: { search, hash: "", pathname: "/_/auth/" + page, origin: "https://auth.example.com", assign() {} },
     history: { replaceState() {} },
     localStorage: { setItem() {}, getItem: () => null, removeItem() {} },
     navigator: webauthn ? { credentials: { get: () => new Promise(() => {}) } } : {},
     PublicKeyCredential: webauthn ? {} : undefined,
-    fetch: () => new Promise(() => {}),
+    fetch,
   };
   vm.createContext(ctx);
   vm.runInContext(src, ctx);
@@ -44,6 +47,7 @@ function render(search, { oidc = "", webauthn = true } = {}) {
     href: els.oidc.href,
     firstTime: !els["first-time"].hidden,
     status: els.status.textContent,
+    get devices() { return els.devices.children; },
   };
 }
 
@@ -84,4 +88,19 @@ page = render(rt, { webauthn: false });
 assert.equal(page.passkey, "disabled");
 assert.match(page.status, /does not support passkeys/);
 
-console.log("passkey page: 8 variants OK");
+// The devices page lists the passkeys and never offers removing the only one.
+const listing = (keys) => () => Promise.resolve({ ok: true, json: () => Promise.resolve({ email: "ana@example.com", passkeys: keys }) });
+const key = (id, synced) => ({ id, created: "2026-10-21T12:00:00Z", synced });
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+page = render("", { page: "devices", fetch: listing([key("aa11bb22cc33", false)]) });
+await settle();
+assert.equal(page.devices.length, 1);
+assert.match(page.devices[0].children[0].textContent, /one device.*aa11bb22/);
+assert.equal(page.devices[0].children[1].disabled, true, "the only passkey cannot be removed");
+page = render("", { page: "devices", fetch: listing([key("aa11", false), key("dd44", true)]) });
+await settle();
+assert.equal(page.devices.length, 2);
+assert.equal(page.devices[1].children[1].disabled, false);
+assert.match(page.devices[1].children[0].textContent, /Synced passkey/);
+
+console.log("passkey pages: 10 variants OK");

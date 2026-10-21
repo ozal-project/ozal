@@ -15,7 +15,7 @@
 
   const MAX = 500;
   const labels: Record<string, string> = {
-    "access.allowed": "Access allowed", "access.denied": "Access denied", "access.rate_limited": "Rate limited", "access.step_up": "Login requested again",
+    "access.allowed": "Access allowed", "access.denied": "Access denied", "access.rate_limited": "Rate limited", "access.step_up": "Login requested again", "passkey.registered": "Passkey added", "passkey.revoked": "Passkey revoked",
     "login.started": "Login started", "login.failed": "Login failed", "login.succeeded": "Login succeeded",
     "route.created": "Route added", "route.deleted": "Route removed", "config.reloaded": "Configuration reloaded",
     "tunnel.connected": "Tunnel connected", "tunnel.disconnected": "Tunnel disconnected", "tunnel.rejected": "Tunnel rejected",
