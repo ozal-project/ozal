@@ -70,18 +70,29 @@ with cryptography instead of process.
 Feature-count races are a losing game; the thesis above is what makes the
 project worth existing.
 
-## Deployment direction — 2026-10-18
+## Product and deployment direction — updated 2026-10-20
 
-Keep the public Portfolio on Cloudflare Pages. Validate a separate preview as
-Cloudflare proxy → Switchboard VPS → application/owned homelab tunnel.
-Cloudflare initially handles exterior protection; Switchboard owns gateway
-identity and policy. Reduce dependencies one control at a time using measured
-acceptance, recovery and rollback; do not claim global CDN, volumetric DDoS or
-advanced bot parity from one VPS. Inventory actual Workers uses before
-designing substitutes. Essential app behavior must remain portable.
-The [coexistence decision](docs/architecture/cloudflare-coexistence.md) defines
-boundaries and evidence; active work stays in EDGE-006/EDGE-001. This supersedes
-any assumption that dogfooding requires migrating the Portfolio apex.
+Initial offering: publish private applications on infrastructure the operator
+controls, with identity, access policies and owned tunnels, while allowing a
+choice of DNS and exterior protection providers. The initial user is a small
+team sharing internal tools, panels and previews. Validate setup, revocation,
+explainable decisions and recovery before expanding the feature surface.
+
+Prove direct ingress and exterior-proxy ingress separately. Cloudflare can
+continue to provide exterior protection while Switchboard owns gateway
+identity and policy. DNS and ACME adapters make providers replaceable; a
+worldwide CDN, volumetric DDoS network and distributed functions platform
+remain outside the initial offering. Inventory actual Workers uses before
+building substitutes. Broad feature maps below are learning directions,
+not an implementation inventory or a commitment to provider-wide parity.
+
+The owner now intends to move Portfolio out of Cloudflare Pages. This
+supersedes the 18/10 requirement to retain that hosting; migration and the
+operator's cutover remain pending, with no DNS or deployment action implied.
+The [positioning and portability contract](docs/architecture/positioning-and-portability.md)
+and [coexistence decision](docs/architecture/cloudflare-coexistence.md)
+define boundaries, demonstration and acceptance. Active work stays in
+EDGE-006/EDGE-001, the existing PAGES-* tasks and workspace CROSS-006.
 
 ## What exists today
 

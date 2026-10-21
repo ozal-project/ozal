@@ -36,16 +36,31 @@ static sites · `LAB` learning lab (not a release commitment).
 Every `SEC-*` and `BUG-*` finding is closed (2026-10-17).
 
 1. `REL-003` (Windows went red again from `741e2c6`; fixed 2026-10-20, a green hosted run and a green pull request run remain), `REL-006`: CI → tag `v0.1.0-alpha.1` (`REL-005` GoReleaser closed 2026-10-20).<br>`REL-001`–`REL-002` and `REL-004` closed (secret references, fuzz, quickstart).
-2. Follow the [Cloudflare coexistence decision](architecture/cloudflare-coexistence.md):
-   keep the public Portfolio on Pages; start `EDGE-006` with the actual provider
-   configuration inventory and origin-boundary acceptance contract. A separate
-   preview will combine Cloudflare protection with Switchboard identity/policy.
+2. Follow the [positioning and portability contract](architecture/positioning-and-portability.md)
+   and [Cloudflare coexistence decision](architecture/cloudflare-coexistence.md).
+   Direction 20/10: the owner intends to move Portfolio out of Pages; migration
+   and operator cutover remain pending. `EDGE-006` owns measured direct and
+   exterior-proxy acceptance, including an alternate DNS/provider path before
+   claiming portability; current Cloudflare DNS-01 integration alone is insufficient.
+   Existing PAGES-* tasks cover static delivery; workspace `CROSS-006` owns the
+   migration coordination. No new authoritative DNS or distributed runtime is
+   required for the initial offering.
    `TUN-001` local spike is verified and committed (`fd72b2c`); continue with `TUN-002`
    for durable named connections. A Hetzner CX23 is now available over WireGuard;
    private Switchboard/Portfolio staging is installed there. `SHD-001` remains a gate before
    public exposure; `EDGE-001` still requires exposure gates and operator DNS/TLS cutover;
    Cloudflare Tunnel is an optional transport, not a development prerequisite.
 3. Identity (`ID-*`), then `NTF-001`, `SHD-001`.
+
+### Product scope and portability evidence — 2026-10-20
+
+The [contract](architecture/positioning-and-portability.md) records the initial
+user, offering, capability boundaries and demo. `EDGE-006` remains open for
+the two ingress modes and provider-switch evidence; `EDGE-007`/`EDGE-002`
+retain certificate renewal acceptance, `TUN-002` protected identity,
+`SHD-001` measured protection and `REL-008` release claims. No capability is
+closed by this documentation. Historical Pages-retention statements in dated
+entries below describe the earlier decision, superseded by the 20/10 direction.
 
 ### Release contract and learning labs
 
@@ -120,8 +135,7 @@ immutable and swapped atomically, and later a push builds and deploys.
 
 | ID | Task | State | Done when |
 |---|---|---|---|
-| `PAGES-006` | Production adoption of `PAGES-002`: on the VPS edge apply migration 003, add `pages.dir` and an `admin.token` reference, ship the new binary, switch `switchboard` and `sigea` routes from `root` to `site`, and make server-ops `publish-site.py` call `switchboard site deploy` through an SSH tunnel to the admin listener instead of copying directories. | In progress 2026-10-20: activated on the VPS edge (`181321c`, `-db`, `pages`, admin token file); `sigea-web` and `switchboard-site` published through the API and their routes switched to `site` by SIGHUP; acceptance through Cloudflare and a production rollback of SigeaWeb observed (server-ops `7d38be7`, `CLOUDFLARE-INVENTORY.md`). Remaining: retire the old `sites/*/current` directories. | Both public sites served from deployments; a deploy and a rollback observed through Cloudflare; the old `sites/*/current` directories retired. |
-| `PAGES-004` | Git builds: GitHub webhook verified with HMAC-SHA256, checkout of the pushed commit, build command run unprivileged with timeout and no access to Switchboard secrets, output deployed through `PAGES-002`. | Planned (`PAGES-002` closed 2026-10-20; after `PAGES-006`). Today a push changes nothing in production; the owner runs `publish-site.py --apply`. Open: where builds run (VPS CX23 vs homelab), deploy key for private repos, webhook host exposed through Cloudflare. | Unsigned or replayed webhooks rejected; a failing build leaves the live site untouched; build logs kept per deployment. |
+| `PAGES-004` | Git builds: GitHub webhook verified with HMAC-SHA256, checkout of the pushed commit, build command run unprivileged with timeout and no access to Switchboard secrets, output deployed through `PAGES-002`. | Planned (`PAGES-002` closed 2026-10-20, `PAGES-006` closed 2026-10-21). Today a push changes nothing in production; the owner runs `publish-site.py --apply`. Open: where builds run (VPS CX23 vs homelab), deploy key for private repos, webhook host exposed through Cloudflare. | Unsigned or replayed webhooks rejected; a failing build leaves the live site untouched; build logs kept per deployment. |
 | `PAGES-005` | Preview deployments per branch at `<branch>.<site>.<domain>`, protected by an access policy by default. | Planned (after `PAGES-004`) | Preview URL per push; production unchanged until `main` builds. |
 
 ### Dashboard

@@ -4,10 +4,19 @@
 public deployment. Active work stays in [TO_IMPLEMENT.md](../TO_IMPLEMENT.md):
 EDGE-006, EDGE-001, TUN-002 and SHD-001. Coordination stays in CROSS-006.
 
+**Updated direction 2026-10-20:** the owner intends to move Portfolio out of
+Pages; that migration remains pending. The [positioning and portability
+contract](positioning-and-portability.md) supersedes permanent Pages hosting
+and defines the direct/exterior-proxy modes to prove. Original acceptance
+requirements below still apply to the protected proxy mode; their dated
+status entries are not a fresh deployment verification.
+
 ## Decision
 
-Keep the public Portfolio on Cloudflare Pages. Use a separate preview hostname
-to exercise the combined application path:
+The 18/10 pilot kept Portfolio on Pages while a separate preview exercised
+the combined application path. The 20/10 direction plans Portfolio migration
+with its own acceptance and operator cutover. Until that cutover, preserve
+the existing public service. The combined path is:
 
 ```text
 Visitor -> Cloudflare proxy -> HTTPS Switchboard on VPS -> application
@@ -15,8 +24,10 @@ Visitor -> Cloudflare proxy -> HTTPS Switchboard on VPS -> application
                                                           -> homelab application
 ```
 
-The public Portfolio remains independent of the VPS, home connection and
-tunnel. Its static build remains useful as a Switchboard test fixture.
+Before the planned migration, Pages hosting keeps Portfolio independent of
+the VPS, home connection and tunnel. Moving it changes those availability
+responsibilities; record the chosen hosting and recovery boundary. Its static
+build remains useful as a Switchboard test fixture.
 Cloudflare's HTTP proxy and Cloudflare Tunnel are different dependencies:
 this design keeps the owned connector and does not require cloudflared.
 
@@ -29,7 +40,7 @@ separate, deliberately tested mode.
 
 | Area | Initial owner | Current evidence or limit |
 |---|---|---|
-| Public Portfolio hosting/delivery | Cloudflare Pages | Owner's hosting decision; account configuration not inventoried. Astro output is portable. |
+| Public Portfolio hosting/delivery | Pages until a separately accepted migration | Owner intends to leave Pages (20/10); migration not executed by this decision. Astro output is portable; deployment evidence belongs to Server Ops. |
 | Exterior DDoS mitigation, WAF and bots | Cloudflare according to actual plan/settings | Inventory required; no claim that every available feature is enabled or that one VPS provides equivalent coverage. |
 | Visitor and origin TLS | Cloudflare terminates visitor TLS; validated HTTPS to VPS | Target only. Origin issuance/renewal must be proven; private tunnel certificates do not establish public HTTPS. |
 | Identity, policies and gateway decisions | Switchboard | Existing OIDC/policy core; tunnel visitor identity/IP contract and config/admin integration remain TUN-002 work. Application authorization stays in the app. |
@@ -84,7 +95,7 @@ public cutover.
 ## Operational consequence
 
 Retain the private pilot and prepared HTTPS candidate as test assets. They do
-not require moving the Portfolio apex or opening web ports now. Start EDGE-006
+not authorize moving the Portfolio apex or opening web ports now. Start EDGE-006
 with the configuration inventory and acceptance contract, then implement the
 origin boundary and remaining gates. Publication/control removal is a separate
 explicit deployment action.

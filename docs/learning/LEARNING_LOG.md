@@ -592,6 +592,16 @@ opened on. And sizes in headers are claims: count the bytes actually copied,
 reading one past the budget to detect an overflow without writing it.
 
 
+## 2026-10-20 — portability has a network boundary
+
+ACME and DNS integrations can make a gateway portable, while a saturated
+upstream link cannot be repaired by application filtering. A direct-ingress
+trial and an exterior-proxy trial must record different protection and trust
+assumptions. Replacing the proxy while keeping its DNS API does not prove
+independence from the DNS provider. The initial offering is the access circuit;
+global infrastructure and distributed function execution are separate scope.
+
+
 ## 2026-10-20 — a config file in a site is input from the site's author (PAGES-003)
 
 `_headers` looks harmless until a site on a shared parent domain sets

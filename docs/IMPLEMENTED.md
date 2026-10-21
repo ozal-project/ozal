@@ -6,6 +6,22 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## PAGES-006 — deployments in production — 2026-10-21 (committed with this change)
+
+The VPS edge serves `sigea-web` and `switchboard-site` as Pages deployments
+(`181321c`, `-db`, `pages`, admin token file); `publish-site.py` deploys
+through the admin API over an SSH tunnel, and a production rollback of
+SigeaWeb was observed (server-ops `7d38be7`, `CLOUDFLARE-INVENTORY.md`).
+server-ops `b289e9e` makes the renderer emit both hosts as `site` routes
+only; its output matched the live `routing-preview.json` byte for byte.
+
+- **Retirement (2026-10-21):** the operator moved `sites/` to
+  `sites.retired-20261020` on the VPS; only that directory remains.
+  `switchboard-preview.service` active, and `https://sigea.` and
+  `https://switchboard.octaviosantacruz.com/` answer `200` through
+  Cloudflare afterwards. Reverting is the inverse `mv`, needed only by the
+  `routing-preview.json.pre-*` backups.
+
 ## ARCH-005 — one deep-copy helper for config — 2026-10-20 (committed with this change)
 
 `routemanager` had its own `cloneConfig` (a wrapper) and `cloneRoute` (a
@@ -763,3 +779,16 @@ The workspace branch normalization renamed Switchboard's default branch from
 their existing trigger. This is a REL-003 maintenance slice, not closure of
 its hosted-run and pull-request acceptance criteria. Validation and the
 publication commit are reported with this change.
+
+
+## Product positioning and portability documented — 2026-10-20
+
+The [positioning contract](architecture/positioning-and-portability.md) records
+small-team private application access as the initial offering, DNS/ACME adapter
+boundaries, application versus volumetric protection, and the acceptance demo
+for direct and exterior-proxy ingress. VISION and the coexistence decision now
+reflect the owner's planned Portfolio departure from Pages. EDGE-006 and its
+related acceptance gates remain open; this closes documentation only, with no
+implementation, provider switch or Portfolio migration claimed. Committed
+with PAGES-006's closure. Documentation validation checks local links, IDs and diff
+whitespace; product suites are not run for this documentation-only change.
