@@ -28,12 +28,25 @@ func TrustWithProxies(proxies []netip.Prefix) Stage {
 
 // TrustAuthenticatedTunnel is the connector side of the tunnel: every request
 // arrives through the mutually authenticated tunnel, so the edge on the other
-// end is the only party that can have set VisitorIPHeader. Use it only on a
-// handler that is reachable exclusively through that tunnel.
+// end is the only party that can have set VisitorIPHeader or the visitor
+// identity headers. Use it only on a handler that is reachable exclusively
+// through that tunnel.
 func TrustAuthenticatedTunnel() Stage {
-	return trustStage(func(r *http.Request) netip.Addr {
+	address := trustStage(func(r *http.Request) netip.Addr {
 		return resolveTunnelClientIP(r.RemoteAddr, headerValues(r.Header, VisitorIPHeader))
 	})
+	return func(next http.Handler) http.Handler {
+		inner := address(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Read before the trust stage strips the headers.
+			users := headerValues(r.Header, VisitorUserHeader)
+			emails := headerValues(r.Header, VisitorEmailHeader)
+			if v, ok := parseVisitorIdentity(users, emails); ok {
+				r = r.WithContext(WithVisitor(r.Context(), v))
+			}
+			inner.ServeHTTP(w, r)
+		})
+	}
 }
 
 // trustStage runs resolve once on the original headers, then strips every
@@ -128,7 +141,8 @@ func stripForwardingHeaders(h http.Header) {
 			continue
 		}
 		switch normalized {
-		case "forwarded", "x-real-ip", "true-client-ip", "cf-connecting-ip", "cf-connecting-ipv6", "cf-pseudo-ipv4", "x-switchboard-visitor-ip":
+		case "forwarded", "x-real-ip", "true-client-ip", "cf-connecting-ip", "cf-connecting-ipv6", "cf-pseudo-ipv4",
+			"x-switchboard-visitor-ip", "x-switchboard-visitor-user", "x-switchboard-visitor-email":
 			delete(h, name)
 		}
 	}

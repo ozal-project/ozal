@@ -317,9 +317,6 @@ func Validate(cfg Config) (*Config, error) {
 			if err := ValidateConnectorName(r.Connector); err != nil {
 				return nil, err
 			}
-			if r.RequiresAuth() {
-				return nil, fmt.Errorf("config: protected connector routes require the visitor identity contract (not implemented)")
-			}
 			if r.HealthPath != "" || r.SPA {
 				return nil, fmt.Errorf("config: connector route %q cannot set health_path or spa", host)
 			}

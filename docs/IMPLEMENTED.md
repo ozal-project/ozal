@@ -6,6 +6,30 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## TUN-002 — visitor identity through the tunnel — 2026-10-21 (committed with this change)
+
+A connector route may now carry an access policy. The edge runs login,
+`Authorize` and the identity rate limit before the tunnel, records the allowed
+principal as a `pipeline.Visitor` in the request context, and asserts it to
+the connector as `X-Switchboard-Visitor-User` and `X-Switchboard-Visitor-Email`.
+`TrustAuthenticatedTunnel` believes them only on the connector (reachable
+solely through the mutually authenticated tunnel), validates them with
+`parseVisitorIdentity` (one subject, at most one email, at most 255 bytes, no
+surrounding spaces or control characters) and the application receives the
+usual `X-Auth-Request-User`/`-Email`. Every other stage strips the
+`X-Switchboard-Visitor-*` headers in any spelling.
+
+- **Tests:** `TestParseVisitorIdentity` (15 cases; mutation-checked: dropping
+  the control-character check fails three, including a newline smuggling a
+  header), and edge → connector → application tests in
+  `internal/proxy/connector_test.go`: the authorized identity arrives, forged
+  identity and internal headers never reach the app, the edge session cookie
+  is removed, an unauthenticated visitor is redirected and a denied one gets
+  403 before the tunnel. The config test now accepts a protected connector
+  route. `scripts/verify.sh` green.
+- **Limits:** the assertion is authenticated by the tunnel's mTLS, not
+  signed; the standalone `tunnel edge` command stays anonymous. Not deployed.
+
 ## REL-006 / REL-008 — v0.1.0-alpha.1 released — 2026-10-21 (committed with this change)
 
 Annotated tag `v0.1.0-alpha.1` on `333437e` (CI run `39532268410` green on

@@ -628,3 +628,16 @@ whole struct by reflection and asserting "no pointer or backing array is
 shared" protects the next field too. `reflect.Value.Pointer` gives a slice's
 backing array address, which is what aliasing means for slices; and a test
 is only trusted after breaking the code it guards and watching it fail.
+
+
+## 2026-10-21 — an assertion is only as trusted as the channel it crossed (TUN-002)
+
+The connector believes `X-Switchboard-Visitor-User` for one reason: the only
+way to reach its handler is the mutually authenticated tunnel, so only the
+edge can have written it. The same header on any other listener is just text
+from a client, so every other stage deletes it. That also bounds the claim:
+the application trusts the connector, not the edge; an app that wants to
+check the edge itself needs a signature it can verify. Validating the
+assertion byte by byte (not rune by rune) is enough, because what must never
+pass are ASCII control characters such as a newline that would start a
+forged header.

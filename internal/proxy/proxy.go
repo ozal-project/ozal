@@ -178,8 +178,8 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 		transport, assertVisitor := cfg.transport, cfg.assertVisitor
 		destination := r
 		if r.Connector != "" {
-			if r.Target != "" || r.IsStatic() || r.RequiresAuth() {
-				return nil, fmt.Errorf("route %s: unsupported connector destination or protected route", r.Host)
+			if r.Target != "" || r.IsStatic() {
+				return nil, fmt.Errorf("route %s: unsupported connector destination", r.Host)
 			}
 			transport = cfg.connectorTransports[r.Connector]
 			if transport == nil {
@@ -269,12 +269,13 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 				Host:       host,
 				RemoteAddr: req.RemoteAddr,
 			})
-			if principal.Email != "" {
-				req.Header.Set(pipeline.IdentityEmailHeader, principal.Email)
-			}
-			if principal.Subject != "" {
-				req.Header.Set(pipeline.IdentityUserHeader, principal.Subject)
-			}
+			req = req.WithContext(pipeline.WithVisitor(req.Context(), pipeline.Visitor{Subject: principal.Subject, Email: principal.Email}))
+		}
+		// The identity the application trusts: the one this edge just
+		// authorized, or on a connector the one the edge asserted through
+		// the tunnel. The trust stage already removed client copies.
+		if visitor, ok := pipeline.VisitorFrom(req.Context()); ok {
+			pipeline.SetIdentityHeaders(req.Header, visitor)
 		}
 		// The address the trust stage selected, never a header read here: a
 		// peer outside trusted_proxies cannot choose what is logged.
@@ -384,6 +385,19 @@ func upstreamHandler(r config.Route, devErrors, assertVisitor bool, transport ht
 				pr.Out.Header.Set("X-Forwarded-For", ip.String())
 				if assertVisitor {
 					pr.Out.Header.Set(pipeline.VisitorIPHeader, ip.String())
+				}
+			}
+			// Into the tunnel the identity travels as an assertion the
+			// connector believes; the application-facing headers would be
+			// stripped there as client input anyway.
+			if assertVisitor {
+				pr.Out.Header.Del(pipeline.IdentityEmailHeader)
+				pr.Out.Header.Del(pipeline.IdentityUserHeader)
+				if visitor, ok := pipeline.VisitorFrom(pr.In.Context()); ok {
+					pr.Out.Header.Set(pipeline.VisitorUserHeader, visitor.Subject)
+					if visitor.Email != "" {
+						pr.Out.Header.Set(pipeline.VisitorEmailHeader, visitor.Email)
+					}
 				}
 			}
 			// SetURL clears the outbound Host (the transport would use the

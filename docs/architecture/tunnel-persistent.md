@@ -87,10 +87,11 @@ authentication and registry authorization remain mandatory. Certificates are
 operator-supplied; no identity or migration is generated silently.
 
 A route selects exactly one of `target`, `root`, or `connector`. A connector
-route has no HTTP health probe, `spa`, or visitor access policy in this delivery.
-**Protected connector routes fail configuration validation** until the signed
-visitor-identity contract is implemented; connector identity and visitor
-identity remain distinct. The connector still enforces its fixed host/origin.
+route has no HTTP health probe or `spa`. Since TUN-002's visitor identity
+contract (below) it may carry an access policy: the edge authenticates and
+authorizes, then asserts the visitor through the tunnel. Connector identity
+and visitor identity remain distinct. The connector still enforces its fixed
+host/origin.
 Forwarding, identity headers and the edge session cookie are stripped, while
 the visitor IP assertion is emitted only into the authenticated transport.
 
@@ -120,18 +121,35 @@ It proves trusted visitor IP and spoof stripping, unknown-host rejection,
 offline 502, live mapping reload, rejection preserving the previous mapping,
 console status, edge restart with the same connector PID, reconnect, live
 revocation, and graceful shutdown. It does not publish or change the existing
-VPS pilot, DNS, TLS, or systemd units. Deployment acceptance and protected-app
-identity remain open under TUN-002/EDGE-001.
+VPS pilot, DNS, TLS, or systemd units. Deployment acceptance remains open
+under EDGE-001; protected connector routes are covered by the visitor
+identity contract below, in the integrated process only.
 
 ## Current visitor contract
 
-These commands expose one **anonymous** HTTP/static route. They have no OIDC or
-visitor-assertion flags. Each side runs the existing trust stage; client-supplied
-identity headers, forwarding headers and the edge session cookie are stripped.
-The connector does not interpret HTTP headers as an authenticated visitor
-*identity*. The authenticated certificate identifies the connector to the edge;
-it does not identify the visitor to an application. Protected-app visitor
-identity assertions remain an explicit TUN-002 requirement in the tracker.
+The standalone `tunnel edge` command exposes one **anonymous** route: it has
+no OIDC settings, so it never asserts an identity. Protected routes need the
+integrated process (`route.connector` with `access`). Each side runs the
+existing trust stage; client-supplied identity headers, forwarding headers and
+the edge session cookie are stripped. The authenticated certificate identifies
+the connector to the edge; it does not identify the visitor to an application.
+The visitor is identified only by the edge's assertion described next.
+
+**Visitor identity (2026-10-21).** On a protected connector route the edge
+runs the normal login, `Authorize` and identity rate limit *before* the
+tunnel; a refused visitor never reaches the connector. The allowed principal
+travels as `X-Switchboard-Visitor-User` (subject) and
+`X-Switchboard-Visitor-Email`. The connector's `TrustAuthenticatedTunnel`
+believes them for the same reason it believes the address, validates them
+(exactly one subject, at most one email, bounded, no spaces or control
+characters) and hands the application the usual `X-Auth-Request-User` and
+`X-Auth-Request-Email`. An invalid assertion is dropped, so the application
+sees an anonymous request: it can only deny more. Everywhere else the
+`X-Switchboard-Visitor-*` headers are client input, stripped in every
+spelling; they never reach the application. The assertion is not signed: it
+is authenticated by the tunnel's mutual TLS, not by the application. An
+application that must verify the edge itself needs a signed assertion
+(a JWT with published keys), which belongs with `ID-004`.
 
 **Visitor address (2026-10-18).** The edge puts the address its own trust stage
 selected into `X-Switchboard-Visitor-IP` (`pipeline.VisitorIPHeader`) on every

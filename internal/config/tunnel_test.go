@@ -20,7 +20,6 @@ func TestTunnelRouteValidationFailsClosed(t *testing.T) {
 		"no adapter":                     func(c *Config) { c.Tunnel = nil },
 		"two destinations":               func(c *Config) { c.Routes[0].Target = "http://localhost:8000" },
 		"bad connector":                  func(c *Config) { c.Routes[0].Connector = "../other" },
-		"protected":                      func(c *Config) { c.Routes[0].Access = &AccessPolicy{} },
 		"http probe":                     func(c *Config) { c.Routes[0].HealthPath = "/health" },
 		"SPA":                            func(c *Config) { c.Routes[0].SPA = true },
 		"relative key":                   func(c *Config) { c.Tunnel.KeyFile = "edge.key" },
@@ -43,6 +42,14 @@ func TestTunnelRouteValidationFailsClosed(t *testing.T) {
 	allowed.Tunnel.Listen = "10.8.0.1:9443"
 	if _, err := Validate(allowed); err != nil {
 		t.Fatal(err)
+	}
+	// TUN-002: the edge authorizes and asserts the visitor through the
+	// tunnel, so a connector route may carry an access policy.
+	t.Setenv("SB_TEST_SECRET", "secret")
+	protected := Clone(baseline)
+	protected.Routes[0].Access = &AccessPolicy{AllowedEmails: []string{"ana@example.com"}}
+	if _, err := Validate(protected); err != nil {
+		t.Fatalf("protected connector route refused: %v", err)
 	}
 	clone := Clone(baseline)
 	clone.Tunnel.Listen = "127.0.0.1:1234"
