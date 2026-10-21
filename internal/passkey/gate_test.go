@@ -129,12 +129,18 @@ func (b *browser) signedIn() (auth.Principal, bool) {
 
 func (b *browser) enrol(t *testing.T, a *virtualAuthenticator, token string) int {
 	t.Helper()
-	rec, options := b.post(t, "/_/auth/enrol/begin", map[string]string{"token": token})
+	code, _ := b.enrolTo(t, a, token, "")
+	return code
+}
+
+func (b *browser) enrolTo(t *testing.T, a *virtualAuthenticator, token, returnTo string) (int, map[string]any) {
+	t.Helper()
+	rec, options := b.post(t, "/_/auth/enrol/begin", map[string]string{"token": token, "return_to": returnTo})
 	if rec.Code != http.StatusOK {
-		return rec.Code
+		return rec.Code, nil
 	}
-	rec, _ = b.post(t, "/_/auth/enrol/finish", a.create(t, options, loginOrigin))
-	return rec.Code
+	rec, result := b.post(t, "/_/auth/enrol/finish", a.create(t, options, loginOrigin))
+	return rec.Code, result
 }
 
 func (b *browser) login(t *testing.T, a *virtualAuthenticator, returnTo, signedOrigin string) (int, map[string]any) {
@@ -180,6 +186,37 @@ func TestEnrolThenLoginOnAnotherBrowser(t *testing.T) {
 	}
 	if !h.events.has(events.LoginSucceeded, "passkey") {
 		t.Fatal("no login.succeeded event")
+	}
+}
+
+// The destination survives the invitation and the enrolment, validated
+// like a login's: an allowed host is returned to, anything else is not, and
+// without one the page gets explicit links to the protected sites.
+func TestEnrolmentReturnsToAValidatedDestination(t *testing.T) {
+	for name, tc := range map[string]struct {
+		returnTo, redirect string
+		sites              bool
+	}{
+		"protected host":    {"https://" + appHost + "/reports", "https://" + appHost + "/reports", false},
+		"other site":        {"https://evil.example/", "", true},
+		"scheme trick":      {"javascript:alert(1)", "", true},
+		"no destination":    {"", "", true},
+		"userinfo trick":    {"https://" + appHost + "@evil.example/", "", true},
+		"protocol-relative": {"//evil.example/", "", true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newHarness(t)
+			code, result := h.browser().enrolTo(t, newAuthenticator(t), h.invite(t, "ana@example.com", false), tc.returnTo)
+			if code != http.StatusOK {
+				t.Fatalf("enrol = %d", code)
+			}
+			if result["redirect"] != tc.redirect {
+				t.Fatalf("redirect = %v, want %q", result["redirect"], tc.redirect)
+			}
+			if sites, _ := result["sites"].([]any); (len(sites) == 1) != tc.sites {
+				t.Fatalf("sites = %v, want links=%v", result["sites"], tc.sites)
+			}
+		})
 	}
 }
 
@@ -287,8 +324,11 @@ func TestLoginRefusals(t *testing.T) {
 	t.Run("open redirect", func(t *testing.T) {
 		h, device := setup(t)
 		code, result := h.browser().login(t, device, "https://evil.example/", loginOrigin)
-		if code != http.StatusOK || result["redirect"] != "/" {
-			t.Fatalf("code = %d, redirect = %v; want 200 and /", code, result["redirect"])
+		if code != http.StatusOK || result["redirect"] != "" {
+			t.Fatalf("code = %d, redirect = %v; want 200 and no redirect", code, result["redirect"])
+		}
+		if sites, _ := result["sites"].([]any); len(sites) != 1 || sites[0] != "https://"+appHost+"/" {
+			t.Fatalf("sites = %v, want the protected host as an explicit link", result["sites"])
 		}
 	})
 }

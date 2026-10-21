@@ -683,8 +683,10 @@ state database:
 ```bash
 switchboard migrate up -db state.db
 switchboard -config config.json -db state.db
-switchboard user invite -db state.db -config config.json -email ana@example.com -group ops
-#   prints https://auth.example.com/_/auth/enrol#… : single use, 15 minutes
+switchboard user invite -db state.db -config config.json -email ana@example.com -group ops \
+  -return-to https://app.example.com/
+#   prints https://auth.example.com/_/auth/enrol?return_to=…#… : single use, 15 minutes;
+#   after the passkey is created the browser returns to -return-to (a protected host only)
 switchboard user passkeys -db state.db -email ana@example.com
 switchboard user revoke   -db state.db -email ana@example.com -passkey 3f9a
 switchboard user disable  -db state.db -email ana@example.com

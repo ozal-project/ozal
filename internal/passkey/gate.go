@@ -9,6 +9,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -42,9 +43,12 @@ type Gate struct {
 	secure       bool
 	cookieDomain string
 	allowedHosts map[string]bool
-	ceremonies   *ceremonies
-	sink         events.Sink
-	now          func() time.Time
+	// protected are the hosts behind the login, offered as explicit links
+	// when a sign-in or enrolment has no destination to return to.
+	protected  []string
+	ceremonies *ceremonies
+	sink       events.Sink
+	now        func() time.Time
 }
 
 // NewGate builds the gate from a validated auth config. protectedHosts are
@@ -90,13 +94,18 @@ func NewGate(cfg config.Auth, protectedHosts []string, dir Directory, sessions a
 		return nil, fmt.Errorf("passkey: %w", err)
 	}
 	hosts := map[string]bool{loginHost: true}
+	var protected []string
 	for _, h := range protectedHosts {
 		host, err := config.NormalizeHost(h)
 		if err != nil {
 			return nil, fmt.Errorf("passkey: invalid protected host %q: %w", h, err)
 		}
 		hosts[host] = true
+		if host != loginHost {
+			protected = append(protected, login.Scheme+"://"+host+"/")
+		}
 	}
+	sort.Strings(protected)
 	return &Gate{
 		webauthn:     wa,
 		dir:          dir,
@@ -106,6 +115,7 @@ func NewGate(cfg config.Auth, protectedHosts []string, dir Directory, sessions a
 		secure:       login.Scheme == "https",
 		cookieDomain: cfg.CookieDomain,
 		allowedHosts: hosts,
+		protected:    protected,
 		ceremonies:   newCeremonies(time.Now),
 		sink:         sink,
 		now:          time.Now,
@@ -246,11 +256,7 @@ func (g *Gate) loginBegin(w http.ResponseWriter, r *http.Request) (any, *apiErro
 		g.emit(r, events.Event{Type: events.LoginFailed, Code: "passkey_begin_failed", Error: err.Error()})
 		return nil, &errInternal
 	}
-	returnTo := ""
-	if req.ReturnTo != "" {
-		returnTo = auth.SafeReturnTo(g.allowedHosts, req.ReturnTo)
-	}
-	if apiErr := g.startCeremony(w, ceremony{kind: kindLogin, session: *session, returnTo: returnTo}); apiErr != nil {
+	if apiErr := g.startCeremony(w, ceremony{kind: kindLogin, session: *session, returnTo: g.destination(req.ReturnTo)}); apiErr != nil {
 		return nil, apiErr
 	}
 	g.emit(r, events.Event{Type: events.LoginStarted, Code: "passkey"})
@@ -258,9 +264,30 @@ func (g *Gate) loginBegin(w http.ResponseWriter, r *http.Request) (any, *apiErro
 }
 
 type finishResponse struct {
-	// Redirect is where the page should go next; empty means stay and say
-	// the visitor is signed in.
-	Redirect string `json:"redirect"`
+	// Redirect is where the page should go next; empty means stay, say the
+	// visitor is signed in and offer Sites as explicit links.
+	Redirect string   `json:"redirect"`
+	Sites    []string `json:"sites,omitempty"`
+}
+
+// destination validates a return address against the configured hosts. It
+// returns "" (no automatic redirect) rather than a fallback path: the login
+// host serves no site of its own, so the page offers explicit links instead.
+func (g *Gate) destination(returnTo string) string {
+	if returnTo == "" {
+		return ""
+	}
+	if safe := auth.SafeReturnTo(g.allowedHosts, returnTo); safe != "/" {
+		return safe
+	}
+	return ""
+}
+
+func (g *Gate) finished(returnTo string) finishResponse {
+	if returnTo != "" {
+		return finishResponse{Redirect: returnTo}
+	}
+	return finishResponse{Sites: g.protected}
 }
 
 func (g *Gate) loginFinish(w http.ResponseWriter, r *http.Request) (any, *apiError) {
@@ -303,13 +330,16 @@ func (g *Gate) loginFinish(w http.ResponseWriter, r *http.Request) (any, *apiErr
 		return nil, apiErr
 	}
 	g.emit(r, events.Event{Type: events.LoginSucceeded, Actor: subject, Code: "passkey"})
-	return finishResponse{Redirect: pending.returnTo}, nil
+	return g.finished(pending.returnTo), nil
 }
 
 // --- enrolment ----------------------------------------------------------
 
 type enrolBeginRequest struct {
 	Token string `json:"token"`
+	// ReturnTo comes from the invitation link or from a login page visited
+	// earlier in this browser; it is validated like a login's.
+	ReturnTo string `json:"return_to"`
 }
 
 func (g *Gate) enrolBegin(w http.ResponseWriter, r *http.Request) (any, *apiError) {
@@ -338,7 +368,7 @@ func (g *Gate) enrolBegin(w http.ResponseWriter, r *http.Request) (any, *apiErro
 		g.emit(r, events.Event{Type: events.LoginFailed, Actor: user.Subject(), Code: "enrol_begin_failed", Error: err.Error()})
 		return nil, &errInternal
 	}
-	if apiErr := g.startCeremony(w, ceremony{kind: kindEnrol, session: *session, userID: user.ID, tokenHash: tokenHash[:]}); apiErr != nil {
+	if apiErr := g.startCeremony(w, ceremony{kind: kindEnrol, session: *session, userID: user.ID, tokenHash: tokenHash[:], returnTo: g.destination(req.ReturnTo)}); apiErr != nil {
 		return nil, apiErr
 	}
 	return creation, nil
@@ -377,7 +407,7 @@ func (g *Gate) enrolFinish(w http.ResponseWriter, r *http.Request) (any, *apiErr
 	if apiErr := g.startSession(w, r, user); apiErr != nil {
 		return nil, apiErr
 	}
-	return finishResponse{}, nil
+	return g.finished(pending.returnTo), nil
 }
 
 // --- sessions, cookies and ceremonies ------------------------------------

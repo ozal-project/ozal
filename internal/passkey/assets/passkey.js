@@ -74,14 +74,62 @@ function show(message, kind) {
   statusLine().dataset.kind = kind || "";
 }
 
-function explain(error) {
-  if (error.name === "NotAllowedError") return "The passkey prompt was closed or timed out. Try again.";
+// The browser reports a closed prompt, a timeout and "no passkey for this
+// site on this device" all as NotAllowedError, on purpose (a site must not
+// learn which passkeys a device holds). So the message names every case and
+// never claims which one happened.
+function explain(error, page) {
+  if (error.name === "NotAllowedError") {
+    return page === "login"
+      ? "The sign-in did not finish: the prompt was closed, it timed out, or this device has no passkey for this site. If you have not created one yet, you need the invitation link (see below)."
+      : "The passkey was not created: the prompt was closed or it timed out. Try again.";
+  }
   if (error.name === "InvalidStateError") return "This device already has a passkey for this account.";
   return error.message || "Something went wrong.";
 }
 
+// A destination remembered from the login page, so an invitation opened in
+// the same browser can return there. The server validates it again; this is
+// a convenience, never a trust decision.
+const pendingKey = "switchboard.returnTo";
+const pendingTTL = 30 * 60 * 1000;
+function rememberReturn(url) {
+  try { localStorage.setItem(pendingKey, JSON.stringify({ url, at: Date.now() })); } catch {}
+}
+function pendingReturn() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(pendingKey) || "null");
+    return saved && Date.now() - saved.at < pendingTTL ? String(saved.url) : "";
+  } catch { return ""; }
+}
+function forgetReturn() { try { localStorage.removeItem(pendingKey); } catch {} }
+
+// After a sign-in or enrolment: go back to the validated destination, or
+// say so and offer the protected sites as explicit links.
+function finish(result, message) {
+  forgetReturn();
+  if (result.redirect) {
+    show(message + " Taking you back…", "ok");
+    location.assign(result.redirect);
+    return;
+  }
+  show(message, "ok");
+  const sites = result.sites || [];
+  if (!sites.length) return;
+  const nav = document.getElementById("sites");
+  nav.replaceChildren(...sites.map((url) => {
+    const a = document.createElement("a");
+    a.href = url;
+    a.textContent = "Continue to " + new URL(url).host;
+    return a;
+  }));
+  nav.hidden = false;
+  nav.querySelector("a").focus();
+}
+
 function setupLogin(button) {
   const returnTo = new URLSearchParams(location.search).get("return_to") || "";
+  if (returnTo) rememberReturn(returnTo);
   let pending = null;
 
   async function login(conditional) {
@@ -95,13 +143,12 @@ function setupLogin(button) {
     button.disabled = true;
     show("Checking…");
     const result = await post("/_/auth/login/finish", credentialJSON(credential));
-    if (result.redirect) location.assign(result.redirect);
-    else show("You are signed in.", "ok");
+    finish(result, "You are signed in.");
   }
 
   function fail(error) {
     button.disabled = false;
-    if (error.name !== "AbortError") show(explain(error), "error");
+    if (error.name !== "AbortError") show(explain(error, "login"), "error");
   }
 
   button.addEventListener("click", () => login(false).catch(fail));
@@ -116,6 +163,7 @@ function setupEnrol(button) {
   // The token arrives in the fragment, which browsers never send to a
   // server or a link preview. Take it out of the address bar and history.
   const token = location.hash.slice(1);
+  const returnTo = new URLSearchParams(location.search).get("return_to") || pendingReturn();
   history.replaceState(null, "", location.pathname);
   if (!token) {
     button.disabled = true;
@@ -126,13 +174,13 @@ function setupEnrol(button) {
     button.disabled = true;
     show("Waiting for your device…");
     try {
-      const options = await post("/_/auth/enrol/begin", { token });
+      const options = await post("/_/auth/enrol/begin", { token, return_to: returnTo });
       const credential = await navigator.credentials.create({ publicKey: creationOptions(options) });
-      await post("/_/auth/enrol/finish", credentialJSON(credential));
-      show("Your passkey is saved and you are signed in. You can close this page.", "ok");
+      const result = await post("/_/auth/enrol/finish", credentialJSON(credential));
+      finish(result, "Your passkey is saved and you are signed in.");
     } catch (error) {
       button.disabled = false;
-      show(explain(error), "error");
+      show(explain(error, "enrol"), "error");
     }
   });
 }

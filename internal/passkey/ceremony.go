@@ -35,7 +35,7 @@ type ceremony struct {
 	session   webauthn.SessionData
 	userID    string // enrolment: the invited user
 	tokenHash []byte // enrolment: the invitation being used
-	returnTo  string // login: where to go afterwards (already validated)
+	returnTo  string // where to go afterwards (already validated); may be empty
 	expires   time.Time
 }
 
