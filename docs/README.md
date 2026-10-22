@@ -34,6 +34,11 @@
 - [Edge behind Cloudflare Tunnel](architecture/edge-cloudflared.md) — public
   edge decision, naming, ingress rules and the publish workflow.
 
+## Operations
+
+- [Running under systemd](operations/systemd.md) — the root-owned layout, the
+  example unit, install, and `switchboard upgrade` with its rollback.
+
 ## Learning labs
 
 Engineering labs (performance, failure drills, threat model, test quality,

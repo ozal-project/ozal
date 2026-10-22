@@ -1,0 +1,49 @@
+[Unit]
+Description=Switchboard edge
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+# Example unit (docs/operations/systemd.md): the edge belongs to root and
+# runs as its own account. Code in /usr/local/lib and config in /etc are
+# root's; only the service writes its state. Operators change any of it
+# through sudo.
+User=switchboard
+Group=switchboard
+StateDirectory=switchboard
+StateDirectoryMode=0700
+WorkingDirectory=/var/lib/switchboard
+ExecStart=/usr/local/lib/switchboard/switchboard -config /etc/switchboard/config.json -db /var/lib/switchboard/state.db
+# Route changes reload without a restart; pages, TLS and listeners still need one.
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+UMask=0077
+# CLI-001: /run/switchboard holds admin.socket (mode 0600 under
+# UMask 0077), owned by the service account: the CLI reaches it with
+# `sudo -u switchboard`, recovery included.
+RuntimeDirectory=switchboard
+RuntimeDirectoryMode=0700
+NoNewPrivileges=true
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+ProtectSystem=strict
+# Nothing of the edge lives in a home directory any more.
+ProtectHome=yes
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryHigh=192M
+MemoryMax=256M
+CPUQuota=50%
+TasksMax=128
+
+[Install]
+WantedBy=multi-user.target

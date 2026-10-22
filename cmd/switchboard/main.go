@@ -45,6 +45,7 @@ func subcommands() map[string]func(context.Context, []string, io.Writer) error {
 	return map[string]func(context.Context, []string, io.Writer) error{
 		"tunnel":       runTunnel,
 		"tunnel-spike": runTunnelSpike,
+		"upgrade":      runUpgrade,
 		"connector":    runConnector,
 		"migrate":      runMigrate,
 		"notify":       runNotify,
@@ -62,6 +63,12 @@ func main() {
 			err := run(ctx, os.Args[2:], os.Stdout)
 			stop() // log.Fatalf exits without running deferred calls
 			if err != nil {
+				// upgrade's results are distinct statuses for scripts.
+				var exit *upgradeExit
+				if errors.As(err, &exit) {
+					log.Printf("%s: %v", os.Args[1], err)
+					os.Exit(exit.code)
+				}
 				log.Fatalf("%s: %v", os.Args[1], err)
 			}
 			return

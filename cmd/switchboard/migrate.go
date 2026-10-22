@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"github.com/octaviosantacruz/switchboard/internal/store/sqlite"
@@ -21,6 +22,7 @@ func runMigrate(ctx context.Context, args []string, out io.Writer) error {
 	fs.SetOutput(out)
 	dbPath := fs.String("db", defaultDBPath, "path to the SQLite state database")
 	statusOnly := fs.Bool("status", false, "report applied and pending migrations without applying them")
+	backup := fs.String("backup", "", "up: when migrations are pending, first write a consistent copy of the database here (must not exist)")
 	// The action words of scripts/migrate.sh are accepted here too. Any
 	// other positional argument is an error: the flag parser stops at the
 	// first one, so `migrate up -db X` used to ignore -db and migrate the
@@ -65,6 +67,11 @@ func runMigrate(ctx context.Context, args []string, out io.Writer) error {
 		return nil
 	}
 
+	if *backup != "" {
+		if err := backupBeforeMigrating(ctx, db, migrations, *backup, out); err != nil {
+			return err
+		}
+	}
 	applied, err := sqlite.Migrate(ctx, db, migrations)
 	for _, m := range applied {
 		fmt.Fprintf(out, "applied %03d_%s\n", m.Version, m.Name)
@@ -103,4 +110,37 @@ func openMigratedDB(ctx context.Context, path string) (*sql.DB, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+// backupBeforeMigrating writes a consistent copy of db to path when any
+// migration is pending, so a failed upgrade can put back the schema the
+// previous binary understands. With nothing pending it writes nothing: the
+// caller tells the two cases apart by whether path exists.
+func backupBeforeMigrating(ctx context.Context, db *sql.DB, migrations []sqlite.Migration, path string, out io.Writer) error {
+	statuses, err := sqlite.MigrationStatus(ctx, db, migrations)
+	if err != nil {
+		return err
+	}
+	pending := 0
+	for _, s := range statuses {
+		if !s.Applied {
+			pending++
+		}
+	}
+	if pending == 0 {
+		return nil
+	}
+	if _, err := os.Lstat(path); err == nil {
+		return fmt.Errorf("-backup %s already exists", path)
+	}
+	// VACUUM INTO writes a complete, consistent database (WAL included)
+	// without holding writers off for longer than the copy.
+	if _, err := db.ExecContext(ctx, "VACUUM INTO ?", path); err != nil {
+		return fmt.Errorf("back up before migrating: %w", err)
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "backed up the database to %s before %d pending migrations\n", path, pending)
+	return nil
 }

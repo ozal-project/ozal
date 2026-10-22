@@ -68,3 +68,46 @@ func TestMigrateHonoursDBAfterTheActionWord(t *testing.T) {
 		t.Fatal("unknown action accepted")
 	}
 }
+
+// -backup copies the database only when there is something to migrate, and
+// the copy is the schema before the migrations.
+func TestMigrateBackupOnlyWhenPending(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dbPath, first, second := filepath.Join(dir, "state.db"), filepath.Join(dir, "first.db"), filepath.Join(dir, "second.db")
+
+	var out bytes.Buffer
+	if err := runMigrate(ctx, []string{"up", "-db", dbPath, "-backup", first}, &out); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(first)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("backup before the first migrations: %v %v", info, err)
+	}
+	out.Reset()
+	if err := runMigrate(ctx, []string{"status", "-db", first}, &out); err != nil || strings.Contains(out.String(), "applied") {
+		t.Fatalf("the backup must hold the schema before migrating: %v %q", err, out.String())
+	}
+
+	if err := runMigrate(ctx, []string{"up", "-db", dbPath, "-backup", second}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(second); !os.IsNotExist(err) {
+		t.Fatalf("nothing pending, yet a backup was written: %v", err)
+	}
+}
+
+func TestMigrateBackupRefusesAnExistingFile(t *testing.T) {
+	dir := t.TempDir()
+	existing := filepath.Join(dir, "keep.db")
+	if err := os.WriteFile(existing, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := runMigrate(context.Background(), []string{"up", "-db", filepath.Join(dir, "state.db"), "-backup", existing}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("existing backup overwritten: %v", err)
+	}
+	if body, _ := os.ReadFile(existing); string(body) != "keep" {
+		t.Fatal("existing file changed")
+	}
+}
