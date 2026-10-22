@@ -45,7 +45,7 @@ Flat subdomains, one per project:
 |---|---|---|
 | `octaviosantacruz.com` (apex) | Cloudflare Pages (already live, not through the tunnel) | public; stays on Pages |
 | `preview.octaviosantacruz.com` | `portfolio/dist` (Switchboard Pages) | public smoke target for the tunnel and `PAGES-002`; never replaces the live apex |
-| `custodia.octaviosantacruz.com` | panel `:5174` | behind Switchboard login, after the gates |
+| `custodia.octaviosantacruz.com` | `custodia-site` Pages deployment on the VPS: product site and demo (static, synthetic data) | public; the v1 panel `:5174` is not exposed (decision 2026-10-22) |
 | `sigea.octaviosantacruz.com` | panel `:5173` | behind Switchboard login, after the gates |
 
 The apex `octaviosantacruz.com` serves the portfolio (decision 2026-10-17; no
