@@ -641,6 +641,14 @@ backing array address, which is what aliasing means for slices; and a test
 is only trusted after breaking the code it guards and watching it fail.
 
 
+## 2026-10-21 — filesystem paths and command arguments are separate contracts
+
+`filepath.Join` uses the host OS separator, so a portable test must construct
+its expected local paths for that OS. Compare `[]string` arguments with
+`slices.Equal`, rather than joining them into shell text: that also catches
+a path containing spaces being split into several arguments. A Windows
+cross-build checks compilation, not Windows test execution.
+
 ## 2026-10-21 — an assertion is only as trusted as the channel it crossed (TUN-002)
 
 The connector believes `X-Switchboard-Visitor-User` for one reason: the only

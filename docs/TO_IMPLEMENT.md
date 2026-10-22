@@ -107,6 +107,7 @@ durable audit separate.
 | ID | Task | State | Done when |
 |---|---|---|---|
 | `REL-007` | Dependency advisories: `govulncheck` reports GO-2026-5932 in `golang.org/x/crypto` v0.57.0 with no fixed version; the code does not call the affected symbols (2026-10-18, Go 1.27.2). | Blocked on upstream fix | Re-run `govulncheck` before each release; bump `x/crypto` when a fix exists and keep the gate at 0 reachable. |
+| `REL-009` | Confirm Windows CI after fixing the tunnel renewal argument test. Failed run [39706919346](https://github.com/octaviosantacruz/switchboard/actions/runs/39706919346), commit `aa32c4c`: the test expected Unix separators for a native filesystem path. Local test-only correction uses native paths and exact argv for current/rotate, including spaces; runtime code is unchanged. | Verify — local correction uncommitted; focused tests, full Linux gate and Windows/amd64 cross-compilation passed | After the next explicitly authorized push, observe the hosted Windows gate on the corrected commit. Cross-compiling the test and binary does not establish Windows execution. Keep the exact socket/config assertions; do not skip the test or remove Windows from the matrix. |
 
 ### Edge, tunnels, identity, Shield, notifications
 

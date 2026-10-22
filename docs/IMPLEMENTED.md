@@ -6,6 +6,27 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## Native-path assertions for tunnel renewal — 2026-10-21 (uncommitted)
+
+The Windows job in [CI run 39706919346](https://github.com/octaviosantacruz/switchboard/actions/runs/39706919346)
+failed `TestEdgeConnectorChangesGoThroughTheAdminSocket`: `filepath.Join`
+produced `\edge\config.integrated.json`, but the test expected
+`/edge/config.integrated.json`. Linux and macOS passed on the same `aa32c4c`.
+The helper runs on the edge host and correctly uses native filesystem paths.
+
+The test now builds native fixture paths and compares the exact argument
+slice for both `current` and `rotate`. Paths include spaces, so splitting one
+path into several arguments fails too. Both cases require `-config` and the
+expected connector name; neither accepts a direct `-db` mutation. The change
+does not alter runtime code or skip Windows coverage.
+
+Validation: focused test passed; `scripts/verify.sh` passed on Linux (race
+tests, build, six short fuzz passes, staticcheck, govulncheck with zero
+reachable vulnerabilities, console check/rebuild, passkey script and 11
+console state tests). The test package and CLI cross-compiled to Windows/amd64
+PE executables. Those Windows executables were not run; hosted acceptance is
+tracked separately under `REL-009`. No commit, push, CI rerun or deployment.
+
 ## Recovery is host-only; a sites-only admin token — 2026-10-21 (committed with this change)
 
 The [product/code/UX review](reviews/2026-10-21-product-code-ux.md) found the
