@@ -275,7 +275,11 @@ func startAdmin(cfg *config.Config, manager *routemanager.Manager, sink events.S
 	go func() {
 		log.Printf("switchboard admin listening on %s", listener.Addr())
 		if cfg.Admin.Token == "" {
-			log.Printf("admin mutations disabled: set admin.token in config")
+			if cfg.Admin.Socket != "" {
+				log.Printf("admin mutations over TCP disabled (no admin.token); the admin socket accepts them")
+			} else {
+				log.Printf("admin mutations disabled: set admin.token in config")
+			}
 		}
 		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Printf("admin listener %s: %v", cfg.Admin.Listen, err)
