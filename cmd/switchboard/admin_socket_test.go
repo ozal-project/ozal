@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/octaviosantacruz/switchboard/internal/admin"
@@ -13,8 +14,34 @@ import (
 	"github.com/octaviosantacruz/switchboard/internal/routemanager"
 )
 
+// socketPath returns a short socket path: sun_path is 104 bytes on macOS and
+// t.TempDir() embeds the test name. Windows refuses admin.socket, so the
+// socket tests skip there.
+func socketPath(t *testing.T) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("admin.socket is refused on Windows")
+	}
+	dir, err := os.MkdirTemp("", "sb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	return filepath.Join(dir, "admin.sock")
+}
+
+func TestListenAdminSocketIsRefusedOnWindows(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("windows only")
+	}
+	if listener, err := listenAdminSocket(filepath.Join(t.TempDir(), "a.sock")); err == nil {
+		listener.Close()
+		t.Fatal("admin socket opened on Windows, where its file mode protects nothing")
+	}
+}
+
 func TestListenAdminSocketIsPrivateAndReplacesStaleSocket(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "admin.sock")
+	path := socketPath(t)
 	// A socket file left behind, as after a crash.
 	stale, err := net.Listen("unix", path)
 	if err != nil {
@@ -38,7 +65,7 @@ func TestListenAdminSocketIsPrivateAndReplacesStaleSocket(t *testing.T) {
 }
 
 func TestListenAdminSocketRefusesRegularFile(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "admin.sock")
+	path := socketPath(t)
 	if err := os.WriteFile(path, []byte("keep me"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +81,7 @@ func TestListenAdminSocketRefusesRegularFile(t *testing.T) {
 // The socket marks requests local end to end: a mutation with no token at
 // all is admitted.
 func TestAdminSocketRequestNeedsNoBearer(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "admin.sock")
+	path := socketPath(t)
 	listener, err := listenAdminSocket(path)
 	if err != nil {
 		t.Fatal(err)

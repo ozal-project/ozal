@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -20,7 +21,14 @@ func localRequest(method, target string) *http.Request {
 }
 
 func TestLocalConnMarksOnlyUnixConnections(t *testing.T) {
-	listener, err := net.Listen("unix", filepath.Join(t.TempDir(), "admin.sock"))
+	// A short directory: sun_path is 104 bytes on macOS and t.TempDir()
+	// embeds the test name.
+	dir, err := os.MkdirTemp("", "sb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	listener, err := net.Listen("unix", filepath.Join(dir, "admin.sock"))
 	if err != nil {
 		t.Fatal(err)
 	}

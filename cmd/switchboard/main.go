@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -293,6 +294,11 @@ func startAdmin(cfg *config.Config, manager *routemanager.Manager, sink events.S
 // startup. The parent directory should be 0700 (systemd RuntimeDirectory)
 // so the socket is never reachable between bind and chmod.
 func listenAdminSocket(path string) (net.Listener, error) {
+	// The socket's file mode is its credential; Windows does not enforce it,
+	// so an admin socket there would answer any local user.
+	if runtime.GOOS == "windows" {
+		return nil, errors.New("admin.socket is not supported on Windows: its unix file mode is the credential")
+	}
 	if info, err := os.Lstat(path); err == nil {
 		if info.Mode()&os.ModeSocket == 0 {
 			return nil, fmt.Errorf("admin socket %s exists and is not a socket", path)

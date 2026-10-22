@@ -166,9 +166,10 @@ func validateAdminListen(address string) error {
 	return nil
 }
 
-// maxSocketPath leaves room for the terminating NUL in sockaddr_un.sun_path
-// (108 bytes on Linux).
-const maxSocketPath = 107
+// maxSocketPath fits sockaddr_un.sun_path with its terminating NUL on every
+// unix Switchboard builds for: 104 bytes on macOS and the BSDs (108 on
+// Linux), so a config valid on one host stays valid on another.
+const maxSocketPath = 103
 
 // validateAdminSocket accepts an empty value (no socket) or an absolute,
 // clean path short enough for a unix socket address.

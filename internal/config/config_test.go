@@ -553,9 +553,14 @@ func TestValidateSiteRoutes(t *testing.T) {
 }
 
 func TestValidateAdminSocket(t *testing.T) {
+	// Absolute on every OS (a Windows path needs its drive).
+	absolute, err := filepath.Abs(filepath.Join("run", "switchboard", "admin.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	for path, ok := range map[string]bool{
 		"":                             true,
-		"/run/switchboard/admin.sock":  true,
+		absolute:                       true,
 		"run/admin.sock":               false,
 		"/run/switchboard/../x.sock":   false,
 		"/" + strings.Repeat("a", 107): false,

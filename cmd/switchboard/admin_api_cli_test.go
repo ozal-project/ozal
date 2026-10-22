@@ -53,7 +53,7 @@ func startLiveAdmin(t *testing.T) liveAdmin {
 	}
 	t.Cleanup(func() { db.Close() })
 
-	socket := filepath.Join(dir, "admin.sock")
+	socket := socketPath(t)
 	cfg := config.Config{
 		Listen: "127.0.0.1:8080",
 		Admin:  config.Admin{Socket: socket, Token: "env:SWITCHBOARD_TEST_TOKEN"},
