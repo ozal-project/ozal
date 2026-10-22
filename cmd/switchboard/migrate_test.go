@@ -81,8 +81,14 @@ func TestMigrateBackupOnlyWhenPending(t *testing.T) {
 		t.Fatal(err)
 	}
 	info, err := os.Stat(first)
-	if err != nil || info.Mode().Perm() != 0o600 {
-		t.Fatalf("backup before the first migrations: %v %v", info, err)
+	if err != nil {
+		t.Fatalf("backup before the first migrations: %v", err)
+	}
+	if !info.Mode().IsRegular() || info.Size() == 0 {
+		t.Fatalf("backup must be a nonempty regular file: %v", info)
+	}
+	if hasUnixPermissions() && info.Mode().Perm() != 0o600 {
+		t.Fatalf("backup permissions = %o, want 600", info.Mode().Perm())
 	}
 	out.Reset()
 	if err := runMigrate(ctx, []string{"status", "-db", first}, &out); err != nil || strings.Contains(out.String(), "applied") {

@@ -641,6 +641,14 @@ backing array address, which is what aliasing means for slices; and a test
 is only trusted after breaking the code it guards and watching it fail.
 
 
+## 2026-10-21 — test preconditions must reach the intended validation
+
+A Unix-rooted path is not an absolute Windows path. Native absolute fixtures
+let the upgrade test reach the missing-service-account and retention checks
+instead of failing earlier on path validation. File existence and contents
+are portable assertions; Unix mode bits are not, so only that assertion uses
+the existing platform helper while the backup test still runs everywhere.
+
 ## 2026-10-21 — filesystem paths and command arguments are separate contracts
 
 `filepath.Join` uses the host OS separator, so a portable test must construct

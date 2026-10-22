@@ -6,7 +6,27 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
-## Native-path assertions for tunnel renewal — 2026-10-21 (uncommitted)
+## Platform-aware migration and upgrade test fixtures — 2026-10-21 (committed with this change)
+
+[Run 39711694730](https://github.com/octaviosantacruz/switchboard/actions/runs/39711694730)
+on `9701fa4` exposed two new Windows test assumptions after `REL-009` passed:
+the migration backup test required Unix `0600` mode bits, and upgrade flag
+tests used Unix paths that `filepath.IsAbs` rejects on Windows.
+
+The backup test checks a nonempty regular file and the pre-migration schema
+on every OS; only the mode assertion uses the existing `hasUnixPermissions`
+helper. Existing-file refusal and no-backup-when-current remain exercised.
+Upgrade tests use native absolute paths under `t.TempDir`, cover a relative
+database separately, and require the installation directory to remain empty
+after every invalid plan. Runtime validation and migration code are unchanged.
+
+Focused tests and the full Linux `scripts/verify.sh` passed (race tests,
+build, fuzz, linters, console check/rebuild and script/state tests). The
+command test package and CLI cross-compiled to Windows/amd64 PE executables;
+they were not executed on Windows. Hosted acceptance of these new fixtures
+is tracked as `REL-011`. No push, CI rerun or deployment.
+
+## REL-009 — native-path assertions for tunnel renewal — 2026-10-21 (`7e039c7`)
 
 The Windows job in [CI run 39706919346](https://github.com/octaviosantacruz/switchboard/actions/runs/39706919346)
 failed `TestEdgeConnectorChangesGoThroughTheAdminSocket`: `filepath.Join`
@@ -24,8 +44,11 @@ Validation: focused test passed; `scripts/verify.sh` passed on Linux (race
 tests, build, six short fuzz passes, staticcheck, govulncheck with zero
 reachable vulnerabilities, console check/rebuild, passkey script and 11
 console state tests). The test package and CLI cross-compiled to Windows/amd64
-PE executables. Those Windows executables were not run; hosted acceptance is
-tracked separately under `REL-009`. No commit, push, CI rerun or deployment.
+PE executables. Those Windows executables were not run during that local
+verification. Subsequent hosted acceptance was observed on `7e039c7`: [run
+39709670078](https://github.com/octaviosantacruz/switchboard/actions/runs/39709670078)
+passed on Linux, macOS and Windows. This closes `REL-009`; the later
+upgrade/migration test failures are tracked separately as `REL-011`.
 
 ## Recovery is host-only; a sites-only admin token — 2026-10-21 (committed with this change)
 
