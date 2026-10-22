@@ -3,7 +3,9 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -137,5 +139,36 @@ func TestRecoveryIsRefusedOnTheAdminAPI(t *testing.T) {
 	}
 	if len(recorder.Events()) != 0 {
 		t.Fatalf("events = %+v, want none", recorder.Events())
+	}
+}
+
+// On the admin unix socket the shell is already the credential: recovery
+// is accepted there and its event says so.
+func TestRecoveryIsAcceptedOnTheSocket(t *testing.T) {
+	handler, _, recorder := peopleHandler(t)
+	if rec := request(handler, http.MethodPost, "/_/api/people/invite", "secret", `{"email":"ana@example.com","groups":["owner"]}`); rec.Code != http.StatusCreated {
+		t.Fatalf("first invite = %d %s", rec.Code, rec.Body)
+	}
+	req := localRequest(http.MethodPost, "/_/api/people/invite")
+	req.Body = io.NopCloser(strings.NewReader(`{"email":"ana@example.com","recover":true}`))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), "/_/auth/enrol") {
+		t.Fatalf("recover on the socket = %d %s", rec.Code, rec.Body)
+	}
+	got := recorder.Events()
+	last := got[len(got)-1]
+	if last.Type != events.UserInvited || last.Code != "recover" || last.Actor != "local" {
+		t.Fatalf("event = %+v, want user.invited/recover by local", last)
+	}
+}
+
+func TestInviteTTLIsBounded(t *testing.T) {
+	handler, _, _ := peopleHandler(t)
+	for _, ttl := range []string{"-1", "1441"} {
+		rec := request(handler, http.MethodPost, "/_/api/people/invite", "secret", `{"email":"ana@example.com","ttl_minutes":`+ttl+`}`)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("ttl_minutes %s = %d, want 400", ttl, rec.Code)
+		}
 	}
 }

@@ -17,6 +17,11 @@ They run separately from the normal proxy/admin process.
 3. Enrol the connector's **public leaf certificate** with
    `switchboard connector enroll -db PATH -name portfolio -cert CERT_PATH`.
    `CERT_PATH` is the public connector certificate, never its private key.
+   With the integrated process (`switchboard -db` and `admin.socket`), drop
+   `-db` and pass `-config`: the change goes through the admin socket and
+   emits `connector.enrolled` (`CLI-001`; enrol, rotate and revoke are refused
+   over TCP). The standalone `tunnel edge` has no admin API, so it and the
+   renewal agent keep `-db`.
 4. Run `switchboard tunnel edge` with the flags below. It refuses to start if
    migrations are pending or the configured connector has no active enrolment.
 5. Run `switchboard tunnel connect` with its own identity and fixed local route.

@@ -33,6 +33,7 @@ import (
 	"github.com/octaviosantacruz/switchboard/internal/pages"
 	"github.com/octaviosantacruz/switchboard/internal/routemanager"
 	"github.com/octaviosantacruz/switchboard/internal/store/sqlite"
+	"github.com/octaviosantacruz/switchboard/internal/tunnel"
 )
 
 const healthCheckInterval = 10 * time.Second
@@ -122,6 +123,10 @@ func main() {
 		identity := sqlite.NewIdentity(db)
 		managerOpts = append(managerOpts, routemanager.WithPasskeyDirectory(identity))
 		adminOpts = append(adminOpts, admin.WithPeople(identity))
+		// CLI-001: the connector registry is managed through the admin API
+		// (changes on the unix socket only); the edge revalidates live
+		// attachments against the same table.
+		adminOpts = append(adminOpts, admin.WithConnectors(tunnel.NewRegistry(db)))
 		if loaded.Pages != nil {
 			// PAGES-002: deployments live under pages.dir and their history
 			// in the state database; site routes read the live pointer.
@@ -246,10 +251,26 @@ func startAdmin(cfg *config.Config, manager *routemanager.Manager, sink events.S
 	server := &http.Server{
 		Addr:              cfg.Admin.Listen,
 		Handler:           admin.New(manager, sink, append([]admin.Option{admin.WithEvents(broker), admin.WithCertificateStatus(certificate)}, extra...)...),
+		ConnContext:       admin.LocalConn,
 		ReadHeaderTimeout: readHeaderTimeout,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
 		IdleTimeout:       idleTimeout,
+	}
+	if cfg.Admin.Socket != "" {
+		// CLI-001: the same handler on a unix socket; Shutdown closes both
+		// listeners and the socket file goes with its listener.
+		socket, err := listenAdminSocket(cfg.Admin.Socket)
+		if err != nil {
+			listener.Close()
+			return nil, err
+		}
+		go func() {
+			log.Printf("switchboard admin listening on unix:%s", cfg.Admin.Socket)
+			if err := server.Serve(socket); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Printf("admin socket %s: %v", cfg.Admin.Socket, err)
+			}
+		}()
 	}
 	go func() {
 		log.Printf("switchboard admin listening on %s", listener.Addr())
@@ -261,6 +282,32 @@ func startAdmin(cfg *config.Config, manager *routemanager.Manager, sink events.S
 		}
 	}()
 	return server, nil
+}
+
+// listenAdminSocket binds the admin unix socket with mode 0600. A socket
+// left by a crashed process is replaced; any other file at the path stops
+// startup. The parent directory should be 0700 (systemd RuntimeDirectory)
+// so the socket is never reachable between bind and chmod.
+func listenAdminSocket(path string) (net.Listener, error) {
+	if info, err := os.Lstat(path); err == nil {
+		if info.Mode()&os.ModeSocket == 0 {
+			return nil, fmt.Errorf("admin socket %s exists and is not a socket", path)
+		}
+		if err := os.Remove(path); err != nil {
+			return nil, err
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	listener, err := net.Listen("unix", path)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		listener.Close()
+		return nil, err
+	}
+	return listener, nil
 }
 
 // startPlain binds synchronously so an occupied port fails startup with a

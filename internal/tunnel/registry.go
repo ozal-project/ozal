@@ -26,6 +26,7 @@ var (
 	ErrAlreadyActive    = errors.New("an active connector already uses that name or certificate")
 	ErrNotFound         = errors.New("no active connector with that name")
 	ErrEnrolmentChanged = errors.New("active connector identity changed or was revoked")
+	ErrSameCertificate  = errors.New("replacement must be a different certificate")
 )
 
 // Registry stores enrolled connectors in the SQLite state database
@@ -57,7 +58,7 @@ func (r *Registry) Rotate(ctx context.Context, name string, expected, replacemen
 		return ErrInvalidName
 	}
 	if expected == replacement {
-		return errors.New("replacement must be a different certificate")
+		return ErrSameCertificate
 	}
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {

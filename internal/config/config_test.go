@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -548,5 +549,24 @@ func TestValidateSiteRoutes(t *testing.T) {
 				t.Fatalf("Validate accepted %+v", cfg)
 			}
 		})
+	}
+}
+
+func TestValidateAdminSocket(t *testing.T) {
+	for path, ok := range map[string]bool{
+		"":                             true,
+		"/run/switchboard/admin.sock":  true,
+		"run/admin.sock":               false,
+		"/run/switchboard/../x.sock":   false,
+		"/" + strings.Repeat("a", 107): false,
+	} {
+		cfg := Config{
+			Listen: ":8888",
+			Admin:  Admin{Socket: path},
+			Routes: []Route{{Host: "app.localhost", Target: "http://localhost:9000"}},
+		}
+		if _, err := Validate(cfg); (err == nil) != ok {
+			t.Errorf("admin.socket %q: err = %v, want ok=%v", path, err, ok)
+		}
 	}
 }

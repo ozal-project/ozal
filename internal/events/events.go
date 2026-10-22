@@ -40,6 +40,11 @@ const (
 	UserInvited  Type = "user.invited"
 	UserDisabled Type = "user.disabled"
 	UserEnabled  Type = "user.enabled"
+	// Operator changes to the tunnel connector registry (CLI-001). Host
+	// carries the connector name, Reason the certificate's short SHA-256.
+	ConnectorEnrolled Type = "connector.enrolled"
+	ConnectorRotated  Type = "connector.rotated"
+	ConnectorRevoked  Type = "connector.revoked"
 )
 
 // Event is one decision or change with the context needed to explain it.

@@ -19,7 +19,7 @@
     "access.allowed": "Access allowed", "access.denied": "Access denied", "access.rate_limited": "Rate limited", "access.step_up": "Login requested again", "passkey.registered": "Passkey added", "passkey.revoked": "Passkey revoked", "user.invited": "Person invited", "user.disabled": "Person disabled", "user.enabled": "Person enabled",
     "login.started": "Login started", "login.failed": "Login failed", "login.succeeded": "Login succeeded",
     "route.created": "Route added", "route.deleted": "Route removed", "config.reloaded": "Configuration reloaded",
-    "tunnel.connected": "Tunnel connected", "tunnel.disconnected": "Tunnel disconnected", "tunnel.rejected": "Tunnel rejected",
+    "tunnel.connected": "Tunnel connected", "tunnel.disconnected": "Tunnel disconnected", "tunnel.rejected": "Tunnel rejected", "connector.enrolled": "Connector enrolled", "connector.rotated": "Connector certificate rotated", "connector.revoked": "Connector revoked",
     "origin.denied": "Origin pull rejected",
     "pages.deployed": "Site deployed", "pages.rolled_back": "Site rolled back", "pages.refused": "Deployment refused",
   };
@@ -42,7 +42,7 @@
   const outcome = (e: AccessEvent) =>
     e.error || /\.(denied|failed|rejected|refused)$/.test(e.type) ? "deny" : /\.(allowed|succeeded|deployed|rolled_back)$/.test(e.type) ? "allow" : "info";
   const group = (e: AccessEvent) =>
-    e.type.startsWith("access.") || e.type.startsWith("origin.") ? "access" : e.type.startsWith("login.") ? "login" : e.type.startsWith("tunnel.") ? "tunnel" : e.type.startsWith("pages.") ? "pages" : "changes";
+    e.type.startsWith("access.") || e.type.startsWith("origin.") ? "access" : e.type.startsWith("login.") ? "login" : e.type.startsWith("tunnel.") || e.type.startsWith("connector.") ? "tunnel" : e.type.startsWith("pages.") ? "pages" : "changes";
 
   const shown = $derived(frozen ?? events);
   const filtered = $derived(

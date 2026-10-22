@@ -336,6 +336,31 @@ to the active config file, and only then installed as a complete runtime
 snapshot. Duplicate creates return `409`; deleting the final route is rejected.
 Every accepted or rejected control-plane change is written to the audit log.
 
+**Admin socket and the CLI (CLI-001).** Set `admin.socket` to an absolute path
+(for a systemd unit, under its `RuntimeDirectory=` with mode `0700`) and the
+same admin API also listens on a unix socket with mode `0600`. The file mode
+is the credential: requests on it need no bearer, are logged with actor
+`local`, and are the only way to run host-only operations — account recovery
+(`user invite -recover`) and enrolling, rotating or revoking tunnel connectors.
+Over TCP those answer `403` whatever the token.
+
+`switchboard user` and `switchboard connector` are clients of that API: by
+default they read `admin.socket` from `-config`; `-admin unix:/path` or
+`-admin http://127.0.0.1:9090 -token env:NAME` choose another target. Every
+change goes through the running process, so it is validated once and appears
+in the activity feed and alerts. `-db PATH` is the offline break-glass (a
+process that cannot start, or the standalone `tunnel edge` and its renewal
+agent): it changes the state database directly, says so on stderr and prints
+the event there instead. `migrate`, `validate` and `policy explain` stay
+offline by design.
+
+```json
+"admin": {
+  "listen": "127.0.0.1:9090",
+  "socket": "/run/switchboard/admin.sock"
+}
+```
+
 Sending `SIGHUP` performs the same last-good reload from disk. Changes to the
 public listener, `admin.listen`, or TLS settings require a process restart.
 
@@ -692,16 +717,17 @@ state database:
 
 ```bash
 switchboard migrate up -db state.db
-switchboard -config config.json -db state.db
-# Every command below is also in the admin console, People page (UI-003):
-# invite (link to copy or share), list people and passkeys, disable, revoke.
-switchboard user invite -db state.db -config config.json -email ana@example.com -group ops \
+switchboard -config config.json -db state.db   # config with admin.socket
+# The commands talk to the running process over admin.socket (CLI-001).
+# Every one except -recover is also in the admin console, People page (UI-003).
+switchboard user invite -config config.json -email ana@example.com -group ops \
   -return-to https://app.example.com/
 #   prints https://auth.example.com/_/auth/enrol?return_to=…#… : single use, 15 minutes;
 #   after the passkey is created the browser returns to -return-to (a protected host only)
-switchboard user passkeys -db state.db -email ana@example.com
-switchboard user revoke   -db state.db -email ana@example.com -passkey 3f9a
-switchboard user disable  -db state.db -email ana@example.com
+switchboard user passkeys -config config.json -email ana@example.com
+switchboard user revoke   -config config.json -email ana@example.com -passkey 3f9a
+switchboard user disable  -config config.json -email ana@example.com
+# Break-glass when the process cannot start: the same commands with -db state.db.
 ```
 
 A signed-in user manages their own passkeys at `/_/auth/devices` on the

@@ -48,6 +48,7 @@ type personPasskey struct {
 
 type person struct {
 	Email    string          `json:"email"`
+	Subject  string          `json:"subject"`
 	Name     string          `json:"name,omitempty"`
 	Groups   []string        `json:"groups"`
 	Created  time.Time       `json:"created"`
@@ -71,7 +72,7 @@ func (h *Handler) listPeople(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "passkeys could not be listed")
 			return
 		}
-		p := person{Email: u.Email, Name: u.Name, Groups: u.Groups, Created: u.CreatedAt, Disabled: u.DisabledAt, Passkeys: []personPasskey{}}
+		p := person{Email: u.Email, Subject: u.Subject(), Name: u.Name, Groups: u.Groups, Created: u.CreatedAt, Disabled: u.DisabledAt, Passkeys: []personPasskey{}}
 		if p.Groups == nil {
 			p.Groups = []string{}
 		}
@@ -96,6 +97,9 @@ func (h *Handler) listPeople(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"enabled": cfg.Auth.Passkeys != nil, "users": out, "protected_hosts": sites})
 }
 
+// maxInviteMinutes caps an enrolment link at a day, as the CLI always has.
+const maxInviteMinutes = 24 * 60
+
 type inviteRequest struct {
 	Email      string   `json:"email"`
 	Name       string   `json:"name"`
@@ -115,10 +119,14 @@ func (h *Handler) invitePerson(w http.ResponseWriter, r *http.Request) {
 	}
 	// Recovery adds a passkey to an account that already exists: the path an
 	// account takeover would take. It stays with the host's shell, the root of
-	// trust (identity-login.md), and never rides on the admin bearer, which
-	// also travels to the machines that publish sites.
-	if req.Recover {
+	// trust (identity-login.md): the admin unix socket, never the admin
+	// bearer, which also travels to the machines that publish sites.
+	if req.Recover && !isLocal(r) {
 		writeError(w, http.StatusForbidden, "account recovery runs on the host only: switchboard user invite -recover")
+		return
+	}
+	if req.TTLMinutes < 0 || req.TTLMinutes > maxInviteMinutes {
+		writeError(w, http.StatusBadRequest, "ttl_minutes must be between 1 and 1440 (0 keeps the 15-minute default)")
 		return
 	}
 	cfg := h.manager.Config()
@@ -137,7 +145,7 @@ func (h *Handler) invitePerson(w http.ResponseWriter, r *http.Request) {
 			groups = append(groups, g)
 		}
 	}
-	invitation, err := h.people.Invite(r.Context(), req.Email, strings.TrimSpace(req.Name), groups, false, ttl)
+	invitation, err := h.people.Invite(r.Context(), req.Email, strings.TrimSpace(req.Name), groups, req.Recover, ttl)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -147,7 +155,11 @@ func (h *Handler) invitePerson(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.emit(events.Event{Type: events.UserInvited, Actor: actor(r), Host: invitation.User.Email, Code: "invite"})
+	code := "invite"
+	if req.Recover {
+		code = "recover"
+	}
+	h.emit(events.Event{Type: events.UserInvited, Actor: actor(r), Host: invitation.User.Email, Code: code})
 	writeJSON(w, http.StatusCreated, map[string]any{"email": invitation.User.Email, "link": link, "expires_at": invitation.ExpiresAt.UTC()})
 }
 

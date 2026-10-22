@@ -139,10 +139,11 @@ func call(ctx context.Context, client *http.Client, method, target, token, conte
 	if resp.StatusCode >= 300 {
 		var problem struct{ Error, Code string }
 		_ = json.Unmarshal(payload, &problem)
+		message := fmt.Sprintf("%s: %s", resp.Status, problem.Error)
 		if problem.Code != "" {
-			return fmt.Errorf("%s: %s (%s)", resp.Status, problem.Error, problem.Code)
+			message += " (" + problem.Code + ")"
 		}
-		return fmt.Errorf("%s: %s", resp.Status, problem.Error)
+		return &apiError{Status: resp.StatusCode, Message: message}
 	}
 	return json.Unmarshal(payload, result)
 }

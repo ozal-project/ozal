@@ -36,7 +36,12 @@ keeps Switchboard on external providers only.
 4. **The operator's shell is the root of trust:** recovery happens only
    through the CLI on the host (`switchboard user invite -recover`). Whoever
    has that shell already owns the deployment; no weaker path (email,
-   support questions, the admin API) can recover an account. Inviting a new
+   support questions, the admin bearer) can recover an account. Since
+   `CLI-001` (2026-10-22) "on the host" means the admin unix socket
+   (`admin.socket`, mode `0600`): the CLI sends the request there, so the
+   recovery is applied by the running process and published as
+   `user.invited` with code `recover` and actor `local`. Offline `-db` stays
+   as break-glass and prints the event on stderr. Inviting a new
    person is also possible from the admin console since `UI-003`: it creates
    an account, it cannot take one over. The admin API refuses `recover`
    (2026-10-21): its bearer also travels to the machines that publish sites.
@@ -227,7 +232,7 @@ later require it, accepting that Firefox/Safari users cannot reach that route.
 | 1 | Native user directory (narrow `ARCH-009`'s non-goal) | Yes, minimal: users + passkeys only |
 | 2 | Who can join | Operator invitation only; no self sign-up |
 | 3 | Synced passkeys | Allowed by default; device-bound required per route |
-| 4 | Recovery | Host CLI only |
+| 4 | Recovery | Host CLI only (admin unix socket since `CLI-001`) |
 | 5 | Session lifetimes | 12 h idle, 7 days absolute, 15 min step-up for admin |
 | 6 | RP ID and login host | `octaviosantacruz.com`, `auth.octaviosantacruz.com` |
 | 7 | Alert on new passkey | Yes, Telegram when configured, always an event |

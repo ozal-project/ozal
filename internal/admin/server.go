@@ -38,6 +38,7 @@ type Handler struct {
 	certificate func() CertificateStatus
 	pages       deployments
 	people      people
+	connectors  connectors
 	mux         *http.ServeMux
 }
 
@@ -62,6 +63,9 @@ func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 	}
 	if h.people != nil {
 		h.registerPeople()
+	}
+	if h.connectors != nil {
+		h.registerConnectors()
 	}
 	if h.broker != nil {
 		h.mux.HandleFunc("GET /_/overview", h.overview)
@@ -314,6 +318,11 @@ func (h *Handler) requireSitesBearer(next http.HandlerFunc) http.HandlerFunc {
 
 func (h *Handler) bearer(next http.HandlerFunc, sites bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// The unix socket is already the host operator's credential.
+		if isLocal(r) {
+			next(w, r)
+			return
+		}
 		cfg := h.manager.Config().Admin
 		token, err := config.ResolveSecret(cfg.Token)
 		if err != nil {
@@ -388,6 +397,9 @@ func writeError(w http.ResponseWriter, status int, message string) {
 }
 
 func actor(r *http.Request) string {
+	if isLocal(r) {
+		return "local"
+	}
 	if r.RemoteAddr == "" {
 		return "unknown"
 	}

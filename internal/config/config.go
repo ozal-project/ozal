@@ -147,6 +147,10 @@ type Admin struct {
 	// nothing else, for the machines that publish them (2026-10-21). A
 	// secret reference like Token.
 	SitesToken string `json:"sites_token,omitempty"`
+	// Socket is an optional unix socket for the admin API (CLI-001). The
+	// file mode (0600) is its credential: a request on it acts as the host
+	// operator, needs no bearer and may run host-only operations.
+	Socket string `json:"socket,omitempty"`
 }
 
 // Notify configures outbound notifications (NTF-001). Channels are opt-in:
@@ -328,6 +332,9 @@ func Validate(cfg Config) (*Config, error) {
 		cfg.Admin.Listen = DefaultAdminListen
 	}
 	if err := validateAdminListen(cfg.Admin.Listen); err != nil {
+		return nil, fmt.Errorf("config: %w", err)
+	}
+	if err := validateAdminSocket(cfg.Admin.Socket); err != nil {
 		return nil, fmt.Errorf("config: %w", err)
 	}
 	if len(cfg.Routes) == 0 {

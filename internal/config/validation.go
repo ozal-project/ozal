@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -161,6 +162,25 @@ func validateAdminListen(address string) error {
 	portNumber, err := strconv.Atoi(port)
 	if err != nil || portNumber < 1 || portNumber > 65535 {
 		return fmt.Errorf("admin.listen has invalid port %q", port)
+	}
+	return nil
+}
+
+// maxSocketPath leaves room for the terminating NUL in sockaddr_un.sun_path
+// (108 bytes on Linux).
+const maxSocketPath = 107
+
+// validateAdminSocket accepts an empty value (no socket) or an absolute,
+// clean path short enough for a unix socket address.
+func validateAdminSocket(path string) error {
+	if path == "" {
+		return nil
+	}
+	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
+		return fmt.Errorf("admin.socket must be an absolute, clean path")
+	}
+	if len(path) > maxSocketPath {
+		return fmt.Errorf("admin.socket is longer than %d bytes", maxSocketPath)
 	}
 	return nil
 }
