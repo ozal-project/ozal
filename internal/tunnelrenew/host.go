@@ -38,6 +38,15 @@ func command(ctx context.Context, input []byte, program string, args ...string) 
 	return output, nil
 }
 
+// edgeConnectorArgs asks the running edge, over the admin socket named in
+// its config (CLI-001), for the registry change: the rotation is applied by
+// the process that owns the registry and published as connector.rotated.
+// The edge must be running, which the renewal's probe already requires.
+func edgeConnectorArgs(base, sub string, extra ...string) []string {
+	args := []string{"connector", sub, "-config", filepath.Join(base, "config.integrated.json"), "-name", "portfolio"}
+	return append(args, extra...)
+}
+
 type Agent struct{ Home, Role string }
 
 func (a Agent) base() string { return filepath.Join(a.Home, ".local/share/switchboard-tunnel-"+a.Role) }
@@ -187,7 +196,7 @@ func (a Agent) Handle(ctx context.Context, request Request) (Reply, error) {
 		if a.Role != "edge" {
 			break
 		}
-		output, err := command(ctx, nil, filepath.Join(base, "switchboard"), "connector", "current", "-db", filepath.Join(base, "state.db"), "-name", "portfolio")
+		output, err := command(ctx, nil, filepath.Join(base, "switchboard"), edgeConnectorArgs(base, "current")...)
 		reply.Active = string(bytes.TrimSpace(output))
 		return reply, err
 	case "rotate":
@@ -203,7 +212,7 @@ func (a Agent) Handle(ctx context.Context, request Request) (Reply, error) {
 		if err := writeNew(cert, []byte(request.Certificate)); err != nil {
 			return reply, err
 		}
-		_, err = command(ctx, nil, filepath.Join(base, "switchboard"), "connector", "rotate", "-db", filepath.Join(base, "state.db"), "-name", "portfolio", "-expected", request.Expected, "-cert", cert)
+		_, err = command(ctx, nil, filepath.Join(base, "switchboard"), edgeConnectorArgs(base, "rotate", "-expected", request.Expected, "-cert", cert)...)
 		return reply, err
 	case "probe":
 		if a.Role != "edge" {

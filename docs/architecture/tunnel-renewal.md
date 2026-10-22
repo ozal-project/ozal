@@ -25,7 +25,12 @@ generates its new private key in its own private `identities/<id>` directory.
 4. Replace the connector registry entry using `connector rotate -name portfolio
    -expected SHA256 -cert PUBLIC_CERT`. Retiring the expected old row and
    inserting the new row happen in one SQLite transaction; history is retained.
-   A revocation or another rotation makes the comparison fail.
+   A revocation or another rotation makes the comparison fail. Since
+   `CLI-001` the agent runs it with `-config config.integrated.json`, through
+   the edge's admin socket: the running edge applies it and publishes
+   `connector.rotated`. The edge restarted in step 3 must therefore be up; if
+   it is not, the rotation fails like any other step and the recovery below
+   applies.
 5. Switch the connector's `current` symlink, restart its user unit and verify
    the complete tunnel's HTTP content against the homelab's Portfolio. Both
    roles change before this probe so a pair that expired while offline can
