@@ -45,6 +45,9 @@ const (
 	ConnectorEnrolled Type = "connector.enrolled"
 	ConnectorRotated  Type = "connector.rotated"
 	ConnectorRevoked  Type = "connector.revoked"
+	// A Telegram chat was paired to receive alerts (NTF-001, CLI-001). Code
+	// carries "chat:<id>"; the pairing code itself is never part of an event.
+	NotifyChatPaired Type = "notify.chat_paired"
 )
 
 // Event is one decision or change with the context needed to explain it.

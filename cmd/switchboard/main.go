@@ -96,7 +96,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}
-	alertSink, err := notificationSink(ctx, loaded, logger)
+	alertSink, pairer, err := notifications(ctx, loaded, logger)
 	if err != nil {
 		log.Fatalf("notifications: %v", err)
 	}
@@ -113,6 +113,11 @@ func main() {
 		log.Fatal("pages configuration requires -db pointing at migrated state")
 	}
 	var adminOpts []admin.Option
+	if pairer != nil {
+		// CLI-001: `switchboard notify pair` asks the process over the admin
+		// socket; the process alone reads the bot's updates.
+		adminOpts = append(adminOpts, admin.WithPairing(pairer))
+	}
 	if *dbPath != "" {
 		// Sessions survive a restart through the migrated state database.
 		// Migrations stay an explicit operator step: a stale schema stops
@@ -379,27 +384,29 @@ func certificateStatus(manager *certs.Manager) func() admin.CertificateStatus {
 	}
 }
 
-// notificationSink builds the Telegram alert bridge when notify.telegram is
-// configured. A nil sink means no channel is enabled: events still reach the
-// log, the broker and the console.
-func notificationSink(ctx context.Context, cfg *config.Config, logger *slog.Logger) (events.Sink, error) {
+// notifications builds the Telegram alert bridge and the chat pairing when
+// notify.telegram is configured. Both share one chats file, so a newly
+// paired chat gets the alert that announces it. A nil sink means no channel
+// is enabled: events still reach the log, the broker and the console.
+func notifications(ctx context.Context, cfg *config.Config, logger *slog.Logger) (events.Sink, *notify.Pairer, error) {
 	if cfg.Notify == nil || cfg.Notify.Telegram == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 	token, err := config.ResolveSecret(cfg.Notify.Telegram.Token)
 	if err != nil {
-		return nil, fmt.Errorf("notify.telegram.token: %w", err)
+		return nil, nil, fmt.Errorf("notify.telegram.token: %w", err)
 	}
 	client, err := telegram.New(telegram.Config{Token: token, BaseURL: cfg.Notify.Telegram.APIBase})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	chats, err := notify.OpenFileChats(cfg.Notify.Telegram.ChatsFile)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	log.Printf("notifications: telegram alerts enabled for %d paired chats", len(chats.IDs()))
-	return notify.NewAlertSink(ctx, client, chats, logger), nil
+	pairer := notify.NewPairer(ctx, client.Inbox(10*time.Second), chats, logger)
+	return notify.NewAlertSink(ctx, client, chats, logger), pairer, nil
 }
 
 func formatTime(t time.Time) string {

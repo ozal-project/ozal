@@ -19,7 +19,7 @@
     "access.allowed": "Access allowed", "access.denied": "Access denied", "access.rate_limited": "Rate limited", "access.step_up": "Login requested again", "passkey.registered": "Passkey added", "passkey.revoked": "Passkey revoked", "user.invited": "Person invited", "user.disabled": "Person disabled", "user.enabled": "Person enabled",
     "login.started": "Login started", "login.failed": "Login failed", "login.succeeded": "Login succeeded",
     "route.created": "Route added", "route.deleted": "Route removed", "config.reloaded": "Configuration reloaded",
-    "tunnel.connected": "Tunnel connected", "tunnel.disconnected": "Tunnel disconnected", "tunnel.rejected": "Tunnel rejected", "connector.enrolled": "Connector enrolled", "connector.rotated": "Connector certificate rotated", "connector.revoked": "Connector revoked",
+    "tunnel.connected": "Tunnel connected", "tunnel.disconnected": "Tunnel disconnected", "tunnel.rejected": "Tunnel rejected", "connector.enrolled": "Connector enrolled", "connector.rotated": "Connector certificate rotated", "connector.revoked": "Connector revoked", "notify.chat_paired": "Alert chat paired",
     "origin.denied": "Origin pull rejected",
     "pages.deployed": "Site deployed", "pages.rolled_back": "Site rolled back", "pages.refused": "Deployment refused",
   };

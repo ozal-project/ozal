@@ -99,7 +99,9 @@ func alertText(e events.Event) (string, bool) {
 		events.RouteCreated,
 		events.RouteDeleted,
 		events.ConfigReloaded,
-		events.PasskeyRegistered:
+		events.PasskeyRegistered,
+		// Every chat already paired learns that another one now gets alerts.
+		events.NotifyChatPaired:
 	default:
 		return "", false
 	}

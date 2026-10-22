@@ -20,9 +20,9 @@ func base64URLDecode(value string) ([]byte, error) { return base64.RawURLEncodin
 
 // FileChats persists the paired chat IDs as one small JSON document with
 // owner-only permissions, replaced atomically. IDs re-reads the file when
-// its modification time changed, so a chat paired by `switchboard notify
-// pair` reaches a running process without a restart. A missing file simply
-// means nothing is paired yet.
+// its modification time changed, so a hand edit (removing a chat) reaches
+// a running process without a restart; pairing itself runs in the process
+// (Pairer). A missing file simply means nothing is paired yet.
 type FileChats struct {
 	path string
 

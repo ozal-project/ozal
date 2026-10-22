@@ -39,6 +39,7 @@ type Handler struct {
 	pages       deployments
 	people      people
 	connectors  connectors
+	pairing     pairing
 	mux         *http.ServeMux
 }
 
@@ -66,6 +67,9 @@ func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 	}
 	if h.connectors != nil {
 		h.registerConnectors()
+	}
+	if h.pairing != nil {
+		h.registerPairing()
 	}
 	if h.broker != nil {
 		h.mux.HandleFunc("GET /_/overview", h.overview)

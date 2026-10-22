@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/octaviosantacruz/switchboard/internal/notify"
 )
 
 const (
@@ -146,6 +148,34 @@ func (c *Client) GetUpdates(ctx context.Context, offset int64, poll time.Duratio
 		return nil, err
 	}
 	return updates, nil
+}
+
+// Inbox adapts getUpdates to notify.Inbox, remembering the offset so each
+// update is read once. Not safe for concurrent use: Telegram allows one
+// reader per bot, and notify.Pairer runs one pairing at a time.
+func (c *Client) Inbox(poll time.Duration) notify.Inbox {
+	return &inbox{client: c, poll: poll}
+}
+
+type inbox struct {
+	client *Client
+	poll   time.Duration
+	offset int64
+}
+
+func (in *inbox) Receive(ctx context.Context) ([]notify.Incoming, error) {
+	updates, err := in.client.GetUpdates(ctx, in.offset, in.poll)
+	if err != nil {
+		return nil, err
+	}
+	var out []notify.Incoming
+	for _, update := range updates {
+		in.offset = update.UpdateID + 1
+		if update.Message != nil {
+			out = append(out, notify.Incoming{ChatID: update.Message.Chat.ID, Text: update.Message.Text})
+		}
+	}
+	return out, nil
 }
 
 type apiResponse struct {

@@ -142,20 +142,25 @@ alerts (logins, route changes, config reloads) to every paired chat:
 
 `token` is a secret reference (`env:` or `file:`) like every other
 credential; the bot token never appears in logs or events. `chats_file` keeps
-the paired chat IDs with owner-only permissions and is re-read when it
-changes, so pairing does not need a restart. `api_base` optionally points at a
+the paired chat IDs with owner-only permissions; the running process writes
+it when a chat pairs, and re-reads it when it changes by hand. `api_base` optionally points at a
 self-hosted [local Bot API server](https://github.com/tdlib/telegram-bot-api)
 (https; plain http only on loopback).
 
-Pair a chat — a private one — with a one-time code that only exists while the
-command waits:
+Pair a chat — a private one — with a one-time code. The running process makes
+the code and reads the bot's updates (Telegram allows one reader), so the
+command talks to it over the admin unix socket (`admin.socket`) and is refused
+over TCP with any token:
 
 ```bash
-go run ./cmd/switchboard notify pair -config config.json
+go run ./cmd/switchboard notify pair -config config.json   # -timeout 10m, at most 1h
 ```
 
 Send the printed `/pair CODE` to the bot in the chat you want alerts in. A
-wrong code neither pairs nor ends the command; the code dies with it. Alerts
+wrong code neither pairs nor ends the wait; the code dies at the timeout or
+when the command is interrupted. The pairing is a `notify.chat_paired` event
+(Activity, log) and an alert to every paired chat, the new one included, so
+a chat added behind your back does not go unnoticed. Alerts
 never block the request path: a bounded queue drops and counts notifications
 if the API is slow, and the adapter retries 429/5xx answers a couple of times
 with a capped backoff, honoring the server's `retry_after`. Inline-button
