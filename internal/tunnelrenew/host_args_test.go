@@ -19,7 +19,7 @@ func TestEdgeConnectorChangesGoThroughTheAdminSocket(t *testing.T) {
 		{sub: "rotate", extra: []string{"-expected", "ab", "-cert", cert}},
 	} {
 		t.Run(tc.sub, func(t *testing.T) {
-			got := edgeConnectorArgs(base, tc.sub, tc.extra...)
+			got := edgeConnectorArgs(filepath.Join(base, "config.integrated.json"), tc.sub, tc.extra...)
 			// This command runs on the edge host, so its config path uses
 			// native separators. Compare argv, not a shell command: spaces
 			// must remain inside one argument, and -db must never appear.
@@ -29,5 +29,23 @@ func TestEdgeConnectorChangesGoThroughTheAdminSocket(t *testing.T) {
 				t.Fatalf("args = %q\nwant  %q", got, want)
 			}
 		})
+	}
+}
+
+func TestAgentLayouts(t *testing.T) {
+	user := Agent{Home: filepath.Join("home", "u"), Role: "connector"}
+	if got := user.restartCommand(); !slices.Equal(got, []string{"systemctl", "--user", "restart", "switchboard-tunnel-connector.service"}) {
+		t.Fatalf("user unit restart = %q", got)
+	}
+	if user.config() != filepath.Join("home", "u", ".local/share/switchboard-tunnel-connector", "config.integrated.json") {
+		t.Fatalf("user config = %q", user.config())
+	}
+	system := Agent{Role: "edge", Dir: "/var/lib/e", Config: "/etc/e/config.json", Binary: "/usr/local/lib/e/switchboard", Unit: "switchboard-tunnel-edge"}
+	// The sudoers rule matches this exact argv.
+	if got := system.restartCommand(); !slices.Equal(got, []string{"sudo", "-n", "/usr/bin/systemctl", "restart", "switchboard-tunnel-edge"}) {
+		t.Fatalf("system unit restart = %q", got)
+	}
+	if system.base() != "/var/lib/e" || system.config() != "/etc/e/config.json" || system.binary() != "/usr/local/lib/e/switchboard" {
+		t.Fatalf("system layout = %q %q %q", system.base(), system.config(), system.binary())
 	}
 }

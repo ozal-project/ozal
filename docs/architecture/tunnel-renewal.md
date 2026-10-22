@@ -31,6 +31,12 @@ generates its new private key in its own private `identities/<id>` directory.
    `connector.rotated`. The edge restarted in step 3 must therefore be up; if
    it is not, the rotation fails like any other step and the recovery below
    applies.
+   Since 2026-10-22 (postura 2) the edge is a system unit of its own account:
+   the controller runs `PilotEdgeAgent`, the edge binary's agent as that
+   account through one exact sudo rule (`-dir`, `-config`, `-unit`), and the
+   agent restarts its unit with `sudo -n /usr/bin/systemctl restart UNIT`
+   (a second exact rule). Without those flags the agent keeps the user-unit
+   layout, as the homelab connector does.
 5. Switch the connector's `current` symlink, restart its user unit and verify
    the complete tunnel's HTTP content against the homelab's Portfolio. Both
    roles change before this probe so a pair that expired while offline can

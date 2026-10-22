@@ -42,14 +42,50 @@ func command(ctx context.Context, input []byte, program string, args ...string) 
 // its config (CLI-001), for the registry change: the rotation is applied by
 // the process that owns the registry and published as connector.rotated.
 // The edge must be running, which the renewal's probe already requires.
-func edgeConnectorArgs(base, sub string, extra ...string) []string {
-	args := []string{"connector", sub, "-config", filepath.Join(base, "config.integrated.json"), "-name", "portfolio"}
+func edgeConnectorArgs(config, sub string, extra ...string) []string {
+	args := []string{"connector", sub, "-config", config, "-name", "portfolio"}
 	return append(args, extra...)
 }
 
-type Agent struct{ Home, Role string }
+// Agent serves one role's identity on its host. Without Dir it uses the
+// user-unit layout under Home. With Dir (postura 2: a system unit run by
+// its own account) the identities live in Dir, Config names the edge's
+// config, Binary is the edge binary itself and Unit the system unit, which
+// the agent restarts through one exact sudo rule.
+type Agent struct {
+	Home, Role                string
+	Dir, Config, Binary, Unit string
+}
 
-func (a Agent) base() string { return filepath.Join(a.Home, ".local/share/switchboard-tunnel-"+a.Role) }
+func (a Agent) base() string {
+	if a.Dir != "" {
+		return a.Dir
+	}
+	return filepath.Join(a.Home, ".local/share/switchboard-tunnel-"+a.Role)
+}
+
+func (a Agent) config() string {
+	if a.Config != "" {
+		return a.Config
+	}
+	return filepath.Join(a.base(), "config.integrated.json")
+}
+
+func (a Agent) binary() string {
+	if a.Binary != "" {
+		return a.Binary
+	}
+	return filepath.Join(a.base(), "switchboard")
+}
+
+// restartCommand is what the agent runs to restart its role's service.
+func (a Agent) restartCommand() []string {
+	if a.Unit != "" {
+		// Exactly the sudoers rule's command: no flags of sudo's own beyond -n.
+		return []string{"sudo", "-n", "/usr/bin/systemctl", "restart", a.Unit}
+	}
+	return []string{"systemctl", "--user", "restart", "switchboard-tunnel-" + a.Role + ".service"}
+}
 
 var versionPattern = regexp.MustCompile(`^identities/[0-9a-f]{32}$`)
 var idPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
@@ -190,13 +226,14 @@ func (a Agent) Handle(ctx context.Context, request Request) (Reply, error) {
 		}
 		return reply, syncDirectory(base)
 	case "restart":
-		_, err := command(ctx, nil, "systemctl", "--user", "restart", "switchboard-tunnel-"+a.Role+".service")
+		restart := a.restartCommand()
+		_, err := command(ctx, nil, restart[0], restart[1:]...)
 		return reply, err
 	case "active":
 		if a.Role != "edge" {
 			break
 		}
-		output, err := command(ctx, nil, filepath.Join(base, "switchboard"), edgeConnectorArgs(base, "current")...)
+		output, err := command(ctx, nil, a.binary(), edgeConnectorArgs(a.config(), "current")...)
 		reply.Active = string(bytes.TrimSpace(output))
 		return reply, err
 	case "rotate":
@@ -212,7 +249,7 @@ func (a Agent) Handle(ctx context.Context, request Request) (Reply, error) {
 		if err := writeNew(cert, []byte(request.Certificate)); err != nil {
 			return reply, err
 		}
-		_, err = command(ctx, nil, filepath.Join(base, "switchboard"), edgeConnectorArgs(base, "rotate", "-expected", request.Expected, "-cert", cert)...)
+		_, err = command(ctx, nil, a.binary(), edgeConnectorArgs(a.config(), "rotate", "-expected", request.Expected, "-cert", cert)...)
 		return reply, err
 	case "probe":
 		if a.Role != "edge" {
@@ -246,6 +283,13 @@ func (a Agent) Handle(ctx context.Context, request Request) (Reply, error) {
 
 type Pilot struct{ Home string }
 
+// PilotEdgeAgent is the command the pilot's controller runs on the edge over
+// SSH (postura 2, 2026-10-22): the edge binary as the tunnel's service
+// account, with fixed arguments. The edge's sudoers rule names exactly this
+// command, so octavio's shell can run the agent and nothing else as that
+// account.
+const PilotEdgeAgent = "sudo -n -u switchboard-tunnel /usr/local/lib/switchboard-tunnel-edge/switchboard tunnel renew-agent -role edge -dir /var/lib/switchboard-tunnel-edge -config /etc/switchboard-tunnel-edge/config.integrated.json -unit switchboard-tunnel-edge"
+
 func (p Pilot) Call(ctx context.Context, role string, request Request) (Reply, error) {
 	if role == "connector" {
 		return (Agent{Home: p.Home, Role: role}).Handle(ctx, request)
@@ -257,7 +301,7 @@ func (p Pilot) Call(ctx context.Context, role string, request Request) (Reply, e
 	if err != nil {
 		return Reply{}, err
 	}
-	output, err := command(ctx, data, "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-o", "StrictHostKeyChecking=yes", "-o", "IdentitiesOnly=yes", "-i", filepath.Join(p.Home, ".ssh/id_ed25519_hetzner_homelab"), "octavio@10.8.0.1", "/home/octavio/.local/share/switchboard-tunnel-edge/switchboard tunnel renew-agent -role edge")
+	output, err := command(ctx, data, "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-o", "StrictHostKeyChecking=yes", "-o", "IdentitiesOnly=yes", "-i", filepath.Join(p.Home, ".ssh/id_ed25519_hetzner_homelab"), "octavio@10.8.0.1", PilotEdgeAgent)
 	if err != nil {
 		return Reply{}, err
 	}
