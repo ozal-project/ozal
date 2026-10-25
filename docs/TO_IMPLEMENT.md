@@ -176,10 +176,19 @@ Switchboard publishes static sites the way Cloudflare Pages does: a site is a
 route whose upstream is a directory instead of a URL, deployments are
 immutable and swapped atomically, and later a push builds and deploys.
 
+Plan: [deploy product](architecture/deploy-product.md) (accepted 2026-10-25;
+owner decision: builds run in GitHub Actions, Switchboard receives artifacts
+and never builds). Order: `PAGES-007` → `PAGES-008` → `PAGES-004` →
+`PAGES-005` → `PAGES-009`. Decisions D1–D7 taken 2026-10-25 (owner accepted
+the recommendations); see the plan.
+
 | ID | Task | State | Done when |
 |---|---|---|---|
-| `PAGES-004` | Git builds: GitHub webhook verified with HMAC-SHA256, checkout of the pushed commit, build command run unprivileged with timeout and no access to Switchboard secrets, output deployed through `PAGES-002`. | Planned (`PAGES-002` closed 2026-10-20, `PAGES-006` closed 2026-10-21). Today a push changes nothing in production; the owner runs `publish-site.py --apply`. Open: where builds run (VPS CX23 vs homelab), deploy key for private repos, webhook host exposed through Cloudflare. | Unsigned or replayed webhooks rejected; a failing build leaves the live site untouched; build logs kept per deployment. |
-| `PAGES-005` | Preview deployments per branch at `<branch>.<site>.<domain>`, protected by an access policy by default. | Planned (after `PAGES-004`) | Preview URL per push; production unchanged until `main` builds. |
+| `PAGES-007` | Projects in config: a project names its Pages site, its hostnames and its deployers (GitHub `repository_id`/`repository_owner_id`/`ref`/optional `workflow_ref`, or a hashed per-project token). Read-only admin API and console view. | Ready (direction approved 2026-10-25) | Config validation rejects ambiguous or overlapping trust; deployments record project, commit and run; existing `site` routes keep working unchanged. |
+| `PAGES-008` | Public deploy endpoint on a dedicated hostname: GitHub Actions OIDC verified with the existing `go-oidc` dependency, pure `DecideDeployer`, per-project tokens as fallback, archive limits, per-project rate limit and one deployment in flight. The admin listener stays loopback-only. | Planned (after `PAGES-007`; hostname `deploy.<zone>`, D2) | A token from another repository, ref, audience or an expired/replayed token is refused before the body is read (regression tests); a valid one deploys through the `PAGES-002` pipeline; every attempt emits a redacted event. |
+| `PAGES-004` | Git builds in GitHub Actions (changed 2026-10-25 from builds on Switchboard): a reusable workflow that builds with GitHub variables/secrets, requests an OIDC token, deploys through `PAGES-008`, runs public acceptance and rolls back on failure. The endpoint refuses archives containing `.env*` files or known secret patterns. | Planned (after `PAGES-008`). Today a push changes nothing in production; the owner runs `publish-site.py --apply`. | A push to Portfolio's `main` publishes it with the homelab off; a failing build or acceptance leaves the previous deployment live; a `dist` with a planted secret is refused. |
+| `PAGES-005` | Preview deployments for pull requests and non-`main` branches at `<site>-<branch>.<zone>` (one level, so Cloudflare Universal SSL covers it), protected by an access policy by default. | Planned (after `PAGES-004`) | Preview URL per push; production unchanged until `main` builds; previews are removed with their branch or by retention. |
+| `PAGES-009` | Domains: attach a hostname to a project through the API/console (route + policy, certificate coverage check), with an optional DNS/origin-pull provider adapter using its own minimum-privilege token. | Planned (manual DNS by default, optional adapter, D4) | A new site goes live without editing config by hand; manual DNS mode works without any provider token. |
 
 ### Dashboard
 

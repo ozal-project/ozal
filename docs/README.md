@@ -32,6 +32,9 @@
   privacy-friendly proof-of-work challenge at the edge.
 - [Identity integration](architecture/identity-integration.md) — options and
   acceptance for apps that already have their own authentication.
+- [Deploy product](architecture/deploy-product.md) — accepted plan: projects, CI
+  builds in GitHub Actions and a public OIDC deploy endpoint replacing
+  `publish-site.py`; decisions D1–D7 taken 2026-10-25.
 - [Edge behind Cloudflare Tunnel](architecture/edge-cloudflared.md) — public
   edge decision, naming, ingress rules and the publish workflow.
 
