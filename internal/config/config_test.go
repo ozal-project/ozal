@@ -35,6 +35,75 @@ func TestLoadValidConfig(t *testing.T) {
 	}
 }
 
+func TestParseValidatesDeclaredRouteResource(t *testing.T) {
+	base := `{"listen":":8888","routes":[{"host":"a.localhost","target":"http://localhost:9000","resource":{"owner":"platform","data_class":"account_data","sensitivity":"restricted","risky_actions":["POST","DELETE"]}}]}`
+	cfg, err := Parse([]byte(base))
+	if err != nil {
+		t.Fatalf("Parse valid resource catalog: %v", err)
+	}
+	resource := cfg.Routes[0].Resource
+	if resource == nil || resource.Owner != "platform" || resource.DataClass != "account_data" || resource.Sensitivity != "restricted" || len(resource.RiskyActions) != 2 {
+		t.Fatalf("resource catalog = %+v", resource)
+	}
+
+	for _, tc := range []struct{ name, from, to string }{
+		{"empty owner", `"owner":"platform"`, `"owner":""`},
+		{"untrimmed data class", `"data_class":"account_data"`, `"data_class":" account_data"`},
+		{"unknown sensitivity", `"sensitivity":"restricted"`, `"sensitivity":"secret"`},
+		{"lowercase action", `"POST"`, `"post"`},
+		{"duplicate action", `"POST","DELETE"`, `"POST","POST"`},
+		{"control character", `"owner":"platform"`, `"owner":"platform\u0000"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			invalid := strings.Replace(base, tc.from, tc.to, 1)
+			if _, err := Parse([]byte(invalid)); err == nil {
+				t.Fatal("Parse accepted invalid resource catalog")
+			}
+		})
+	}
+}
+
+func TestAuditConfigAndRouteFailureModes(t *testing.T) {
+	base := `{"listen":":8888","auth":{"issuer":"https://accounts.google.com","client_id":"id","client_secret":"secret","redirect_url":"http://private.localhost/_/auth/callback"},"audit":{"dir":"/var/lib/switchboard/audit","include":["access"]},"routes":[{"host":"public.localhost","target":"http://localhost:9000"},{"host":"private.localhost","target":"http://localhost:9001","access":{}}]}`
+	cfg, err := Parse([]byte(base))
+	if err != nil {
+		t.Fatalf("Parse valid audit config: %v", err)
+	}
+	if !cfg.Routes[1].AuditRequired() || cfg.Routes[0].AuditRequired() {
+		t.Fatalf("default audit modes: protected=%t public=%t", cfg.Routes[1].AuditRequired(), cfg.Routes[0].AuditRequired())
+	}
+
+	for _, tc := range []struct{ name, from, to string }{
+		{"relative directory", `"dir":"/var/lib/switchboard/audit"`, `"dir":"audit"`},
+		{"unsupported family", `"include":["access"]`, `"include":["admin"]`},
+		{"duplicate family", `"include":["access"]`, `"include":["access","access"]`},
+		{"no family", `"include":["access"]`, `"include":[]`},
+		{"negative segment size", `"include":["access"]`, `"include":["access"],"max_segment_bytes":-1`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			invalid := strings.Replace(base, tc.from, tc.to, 1)
+			if _, err := Parse([]byte(invalid)); err == nil {
+				t.Fatal("Parse accepted invalid audit config")
+			}
+		})
+	}
+	for _, tc := range []struct{ name, route string }{
+		{"best effort on protected route", `{"host":"private.localhost","target":"http://localhost:9001","access":{},"audit_mode":"best_effort"}`},
+		{"unknown route mode", `{"host":"unknown.localhost","target":"http://localhost:9002","audit_mode":"maybe"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			invalid := strings.Replace(base, `{"host":"private.localhost","target":"http://localhost:9001","access":{}}`, tc.route, 1)
+			if _, err := Parse([]byte(invalid)); err == nil {
+				t.Fatal("Parse accepted invalid route audit mode")
+			}
+		})
+	}
+	withoutAudit := `{"listen":":8888","routes":[{"host":"public.localhost","target":"http://localhost:9000","audit_mode":"required"}]}`
+	if _, err := Parse([]byte(withoutAudit)); err == nil {
+		t.Fatal("route.audit_mode was accepted without top-level audit settings")
+	}
+}
+
 func TestLoadRejectsMissingListen(t *testing.T) {
 	path := writeConfig(t, `{"routes": [{"host": "a.localhost", "target": "http://localhost:9000"}]}`)
 	if _, err := Load(path); err == nil {
@@ -330,10 +399,15 @@ func TestParseRejectsUnknownAndMultipleValues(t *testing.T) {
 func TestValidateDoesNotMutateInput(t *testing.T) {
 	cfg := Config{
 		Listen: ":8888",
+		Audit:  &AuditConfig{Dir: "/var/lib/switchboard/audit", Include: []string{"access"}},
 		Routes: []Route{{
 			Host:   "APP.Localhost.",
 			Target: "http://localhost:9000",
 			Access: &AccessPolicy{AllowedEmails: []string{"user@example.com"}},
+			Resource: &RouteResource{
+				Owner: "platform", DataClass: "account_data", Sensitivity: "internal",
+				RiskyActions: []string{"DELETE"},
+			},
 		}},
 		Auth: Auth{
 			Issuer:       "https://issuer.example",
@@ -347,7 +421,9 @@ func TestValidateDoesNotMutateInput(t *testing.T) {
 		t.Fatalf("Validate: %v", err)
 	}
 	normalized.Routes[0].Access.AllowedEmails[0] = "changed@example.com"
-	if cfg.Routes[0].Host != "APP.Localhost." || cfg.Routes[0].Access.AllowedEmails[0] != "user@example.com" {
+	normalized.Routes[0].Resource.RiskyActions[0] = "POST"
+	normalized.Audit.Include[0] = "changed"
+	if cfg.Routes[0].Host != "APP.Localhost." || cfg.Routes[0].Access.AllowedEmails[0] != "user@example.com" || cfg.Routes[0].Resource.RiskyActions[0] != "DELETE" || cfg.Audit.Include[0] != "access" {
 		t.Fatalf("Validate mutated input: %+v", cfg.Routes[0])
 	}
 }

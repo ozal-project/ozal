@@ -15,6 +15,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 const DefaultAdminListen = "127.0.0.1:9090"
@@ -22,6 +24,7 @@ const DefaultAdminListen = "127.0.0.1:9090"
 type Route struct {
 	Host         string        `json:"host"`
 	Target       string        `json:"target,omitempty"`
+	Upstreams    []string      `json:"upstreams,omitempty"`
 	Connector    string        `json:"connector,omitempty"`
 	Root         string        `json:"root,omitempty"`          // static site directory; alternative to Target
 	Site         string        `json:"site,omitempty"`          // deployed site (pages.dir); alternative to Root
@@ -29,6 +32,31 @@ type Route struct {
 	HealthPath   string        `json:"health_path,omitempty"`   // defaults to "/" if empty
 	AuthRequired bool          `json:"auth_required,omitempty"` // legacy shorthand for access: {}
 	Access       *AccessPolicy `json:"access,omitempty"`
+	// Resource is an owner-declared catalog entry. It is descriptive evidence;
+	// labels do not change access decisions unless a later policy explicitly uses them.
+	Resource *RouteResource `json:"resource,omitempty"`
+	// AuditMode controls synchronous append behavior for access events when
+	// top-level audit settings are enabled. Empty selects required for protected
+	// routes and best_effort for public routes.
+	AuditMode string `json:"audit_mode,omitempty"`
+}
+
+// RouteResource describes what a route protects. Access remains the route's
+// default authorization requirement; this catalog adds ownership and data
+// labels without guessing them from the hostname or upstream.
+type RouteResource struct {
+	Owner        string   `json:"owner"`
+	DataClass    string   `json:"data_class"`
+	Sensitivity  string   `json:"sensitivity"`
+	RiskyActions []string `json:"risky_actions,omitempty"`
+}
+
+// AuditConfig enables the local durable audit adapter for the explicitly
+// selected event families. The first supported family is access decisions.
+type AuditConfig struct {
+	Dir             string   `json:"dir"`
+	Include         []string `json:"include"`
+	MaxSegmentBytes int64    `json:"max_segment_bytes,omitempty"`
 }
 
 // IsStatic reports whether the route serves files (a fixed Root or a
@@ -43,6 +71,9 @@ func (r Route) Destination() string {
 	if r.Connector != "" {
 		return "connector:" + r.Connector
 	}
+	if len(r.Upstreams) > 0 {
+		return strings.Join(r.Upstreams, ", ")
+	}
 	if r.Site != "" {
 		return "site:" + r.Site
 	}
@@ -52,10 +83,36 @@ func (r Route) Destination() string {
 	return r.Target
 }
 
+// UpstreamTargets returns the HTTP targets for this route. The returned slice
+// is independent of the route so callers can safely retain or modify it.
+func (r Route) UpstreamTargets() []string {
+	if len(r.Upstreams) > 0 {
+		return slices.Clone(r.Upstreams)
+	}
+	if r.Target != "" {
+		return []string{r.Target}
+	}
+	return nil
+}
+
 // RequiresAuth reports whether a route needs an authenticated identity.
 // Access being present implies authentication even when its policy is empty.
 func (r Route) RequiresAuth() bool {
 	return r.AuthRequired || r.Access != nil
+}
+
+// AuditRequired reports whether an access event must be durable before the
+// request receives its response or reaches the upstream. Callers use this
+// only when top-level audit configuration enables the access event family.
+func (r Route) AuditRequired() bool {
+	switch r.AuditMode {
+	case "required":
+		return true
+	case "best_effort":
+		return false
+	default:
+		return r.RequiresAuth()
+	}
 }
 
 // Policy returns the access policy enforced on a protected route: the
@@ -214,11 +271,12 @@ type Config struct {
 	TrustedProxies []string `json:"trusted_proxies,omitempty"`
 	// DevErrors renders local-development error pages (upstream address,
 	// hint, route list on 404). Local-only: it reveals internal addresses.
-	DevErrors bool       `json:"dev_errors,omitempty"`
-	RateLimit *RateLimit `json:"rate_limit,omitempty"`
-	Notify    *Notify    `json:"notify,omitempty"`
-	Tunnel    *Tunnel    `json:"tunnel,omitempty"`
-	Pages     *Pages     `json:"pages,omitempty"`
+	DevErrors bool         `json:"dev_errors,omitempty"`
+	RateLimit *RateLimit   `json:"rate_limit,omitempty"`
+	Notify    *Notify      `json:"notify,omitempty"`
+	Audit     *AuditConfig `json:"audit,omitempty"`
+	Tunnel    *Tunnel      `json:"tunnel,omitempty"`
+	Pages     *Pages       `json:"pages,omitempty"`
 	// UpstreamTimeoutSeconds is how long an upstream may take to start
 	// answering before the visitor gets a 504. Zero means the default (60);
 	// the response body is never limited.
@@ -352,6 +410,28 @@ func Validate(cfg Config) (*Config, error) {
 		}
 		cfg.Pages.Dir = filepath.Clean(cfg.Pages.Dir)
 	}
+	if cfg.Audit != nil {
+		if cfg.Audit.Dir == "" || !filepath.IsAbs(cfg.Audit.Dir) {
+			return nil, fmt.Errorf("config: audit.dir must be an absolute path")
+		}
+		cfg.Audit.Dir = filepath.Clean(cfg.Audit.Dir)
+		if cfg.Audit.MaxSegmentBytes < 0 || cfg.Audit.MaxSegmentBytes > 1<<40 {
+			return nil, fmt.Errorf("config: audit.max_segment_bytes must be between 0 (default) and %d", int64(1<<40))
+		}
+		if len(cfg.Audit.Include) == 0 {
+			return nil, fmt.Errorf("config: audit.include must select at least one event family")
+		}
+		seenAuditFamilies := make(map[string]struct{}, len(cfg.Audit.Include))
+		for _, family := range cfg.Audit.Include {
+			if family != "access" {
+				return nil, fmt.Errorf("config: audit.include contains unsupported event family %q", family)
+			}
+			if _, exists := seenAuditFamilies[family]; exists {
+				return nil, fmt.Errorf("config: audit.include repeats %q", family)
+			}
+			seenAuditFamilies[family] = struct{}{}
+		}
+	}
 	seenHosts := make(map[string]struct{}, len(cfg.Routes))
 	for i := range cfg.Routes {
 		r := &cfg.Routes[i]
@@ -364,8 +444,11 @@ func Validate(cfg Config) (*Config, error) {
 				destinations++
 			}
 		}
+		if r.Upstreams != nil {
+			destinations++
+		}
 		if destinations != 1 {
-			return nil, fmt.Errorf("config: route %q needs exactly one of target, root, site or connector", r.Host)
+			return nil, fmt.Errorf("config: route %q needs exactly one of target, upstreams, root, site or connector", r.Host)
 		}
 		host, err := NormalizeHost(r.Host)
 		if err != nil {
@@ -376,6 +459,20 @@ func Validate(cfg Config) (*Config, error) {
 		}
 		seenHosts[host] = struct{}{}
 		r.Host = host
+		if r.AuditMode != "" {
+			if cfg.Audit == nil {
+				return nil, fmt.Errorf("config: route %q audit_mode requires top-level audit settings", host)
+			}
+			if r.AuditMode != "required" && r.AuditMode != "best_effort" {
+				return nil, fmt.Errorf("config: route %q audit_mode must be required or best_effort", host)
+			}
+			if r.RequiresAuth() && r.AuditMode == "best_effort" {
+				return nil, fmt.Errorf("config: protected route %q cannot set audit_mode to best_effort", host)
+			}
+		}
+		if err := validateRouteResource(host, r.Resource); err != nil {
+			return nil, err
+		}
 		if r.Connector != "" {
 			if cfg.Tunnel == nil {
 				return nil, fmt.Errorf("config: connector route %q requires tunnel settings", host)
@@ -413,8 +510,27 @@ func Validate(cfg Config) (*Config, error) {
 		if r.SPA {
 			return nil, fmt.Errorf("config: route %q sets spa but has no root", r.Host)
 		}
-		if _, err := ParseTarget(r.Target); err != nil {
-			return nil, fmt.Errorf("config: route %q has invalid target %q: %w", r.Host, r.Target, err)
+		if r.Target != "" {
+			if _, err := ParseTarget(r.Target); err != nil {
+				return nil, fmt.Errorf("config: route %q has invalid target %q: %w", r.Host, r.Target, err)
+			}
+		}
+		if r.Upstreams != nil {
+			if len(r.Upstreams) < 2 {
+				return nil, fmt.Errorf("config: route %q upstreams must contain at least two targets", r.Host)
+			}
+			seenTargets := make(map[string]struct{}, len(r.Upstreams))
+			for i, target := range r.Upstreams {
+				parsed, err := ParseTarget(target)
+				if err != nil {
+					return nil, fmt.Errorf("config: route %q has invalid upstream at index %d: %w", r.Host, i, err)
+				}
+				canonical := parsed.String()
+				if _, exists := seenTargets[canonical]; exists {
+					return nil, fmt.Errorf("config: route %q repeats upstream at index %d", r.Host, i)
+				}
+				seenTargets[canonical] = struct{}{}
+			}
 		}
 		if r.HealthPath != "" && !strings.HasPrefix(r.HealthPath, "/") {
 			return nil, fmt.Errorf("config: route %q health_path %q must start with /", r.Host, r.HealthPath)
@@ -513,6 +629,9 @@ func Validate(cfg Config) (*Config, error) {
 		if (r.Access.MaxAuthAgeMinutes > 0 || r.Access.RequireDeviceBound) && slices.Contains(r.Access.Methods, MethodOIDC) {
 			return nil, fmt.Errorf("config: route %q: max_auth_age_minutes and require_device_bound need a passkey login; remove %q from access.methods", r.Host, MethodOIDC)
 		}
+		if err := validateContextRule(r, &cfg.Auth); err != nil {
+			return nil, err
+		}
 	}
 	if anyProtectedRoute && cfg.Auth.Passkeys != nil {
 		loginHost, err := validatePasskeys(&cfg.Auth)
@@ -553,6 +672,113 @@ func Validate(cfg Config) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+func validateContextRule(route Route, authConfig *Auth) error {
+	rule := route.Access.ContextRule
+	if rule == nil {
+		return nil
+	}
+	when := rule.When
+	if when.SessionMethod == "" && when.SessionDeviceBound == nil && when.ResourceSensitivity == "" && when.ActionRisky == nil && when.DeviceFirstSeen == nil {
+		return fmt.Errorf("config: route %q access.context_rule.when must contain at least one supported condition", route.Host)
+	}
+	switch rule.Then {
+	case "deny", "step_up":
+	default:
+		return fmt.Errorf("config: route %q access.context_rule.then must be deny or step_up", route.Host)
+	}
+	if when.SessionMethod != "" {
+		if when.SessionMethod != MethodOIDC && when.SessionMethod != MethodPasskey {
+			return fmt.Errorf("config: route %q access.context_rule.when.session_method must be oidc or passkey", route.Host)
+		}
+		if !slices.Contains(authConfig.LoginMethods(), when.SessionMethod) {
+			return fmt.Errorf("config: route %q access.context_rule.when.session_method %q is not a configured login method", route.Host, when.SessionMethod)
+		}
+	}
+	if when.ResourceSensitivity != "" {
+		if route.Resource == nil {
+			return fmt.Errorf("config: route %q access.context_rule.when.resource_sensitivity requires route.resource", route.Host)
+		}
+		if when.ResourceSensitivity != "public" && when.ResourceSensitivity != "internal" && when.ResourceSensitivity != "confidential" && when.ResourceSensitivity != "restricted" {
+			return fmt.Errorf("config: route %q access.context_rule.when.resource_sensitivity is not a supported label", route.Host)
+		}
+	}
+	if when.ActionRisky != nil && (route.Resource == nil || route.Resource.RiskyActions == nil) {
+		return fmt.Errorf("config: route %q access.context_rule.when.action_risky requires route.resource.risky_actions, including an explicit empty list when no method is risky", route.Host)
+	}
+	if when.DeviceFirstSeen != nil && authConfig.Passkeys == nil {
+		return fmt.Errorf("config: route %q access.context_rule.when.device_first_seen requires auth.passkeys", route.Host)
+	}
+	if when.DeviceFirstSeen != nil && when.SessionMethod == MethodOIDC {
+		return fmt.Errorf("config: route %q access.context_rule.when.device_first_seen cannot use session_method=oidc because OIDC has no passkey history", route.Host)
+	}
+	if when.DeviceFirstSeen != nil && len(route.Access.Methods) > 0 && !slices.Contains(route.Access.Methods, MethodPasskey) {
+		return fmt.Errorf("config: route %q access.context_rule.when.device_first_seen requires access.methods to allow passkey", route.Host)
+	}
+	if rule.Then == "step_up" {
+		// An OIDC session can satisfy a passkey step-up by changing method.
+		// A newly seen passkey can also step up once: its first-seen marker is
+		// consumed by the assertion, so the replacement session no longer
+		// matches the same rule and cannot loop.
+		if when.SessionMethod != MethodOIDC && !(when.DeviceFirstSeen != nil && *when.DeviceFirstSeen) {
+			return fmt.Errorf("config: route %q access.context_rule.then step_up requires when.session_method=oidc or when.device_first_seen=true so a successful passkey login can satisfy the rule", route.Host)
+		}
+		if authConfig.Passkeys == nil || !slices.Contains(authConfig.LoginMethods(), MethodPasskey) {
+			return fmt.Errorf("config: route %q access.context_rule.then step_up requires configured passkey login", route.Host)
+		}
+		if len(route.Access.Methods) > 0 && !slices.Contains(route.Access.Methods, MethodPasskey) {
+			return fmt.Errorf("config: route %q access.context_rule.then step_up requires access.methods to allow passkey", route.Host)
+		}
+	}
+	return nil
+}
+
+func validateRouteResource(host string, resource *RouteResource) error {
+	if resource == nil {
+		return nil
+	}
+	for _, field := range []struct{ name, value string }{
+		{"owner", resource.Owner},
+		{"data_class", resource.DataClass},
+		{"sensitivity", resource.Sensitivity},
+	} {
+		if field.value == "" || strings.TrimSpace(field.value) != field.value || utf8.RuneCountInString(field.value) > 128 {
+			return fmt.Errorf("config: route %q resource.%s must be a non-empty, trimmed label of at most 128 characters", host, field.name)
+		}
+		for _, r := range field.value {
+			if unicode.IsControl(r) {
+				return fmt.Errorf("config: route %q resource.%s must not contain control characters", host, field.name)
+			}
+		}
+	}
+	switch resource.Sensitivity {
+	case "public", "internal", "confidential", "restricted":
+	default:
+		return fmt.Errorf("config: route %q resource.sensitivity must be public, internal, confidential or restricted", host)
+	}
+	seen := make(map[string]struct{}, len(resource.RiskyActions))
+	for _, action := range resource.RiskyActions {
+		if !IsSupportedHTTPMethod(action) {
+			return fmt.Errorf("config: route %q resource.risky_actions contains unsupported HTTP method %q", host, action)
+		}
+		if _, exists := seen[action]; exists {
+			return fmt.Errorf("config: route %q resource.risky_actions repeats %q", host, action)
+		}
+		seen[action] = struct{}{}
+	}
+	return nil
+}
+
+// IsSupportedHTTPMethod reports whether method is one of the HTTP methods
+// accepted by route policy, resource catalogs and the policy simulator.
+func IsSupportedHTTPMethod(method string) bool {
+	switch method {
+	case "GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "CONNECT", "OPTIONS", "TRACE":
+		return true
+	default:
+		return false
+	}
 }
 
 // checkSessionHosts makes sure the session cookie set on loginHost (where
@@ -795,6 +1021,11 @@ func Clone(source Config) Config {
 		pages := *source.Pages
 		clone.Pages = &pages
 	}
+	if source.Audit != nil {
+		audit := *source.Audit
+		audit.Include = slices.Clone(source.Audit.Include)
+		clone.Audit = &audit
+	}
 	if source.Auth.Passkeys != nil {
 		passkeys := *source.Auth.Passkeys
 		clone.Auth.Passkeys = &passkeys
@@ -830,13 +1061,34 @@ func Clone(source Config) Config {
 // CloneRoute returns a deep copy of one route.
 func CloneRoute(route Route) Route {
 	clone := route
+	clone.Upstreams = slices.Clone(route.Upstreams)
 	if route.Access != nil {
 		access := *route.Access
 		access.AllowedEmails = slices.Clone(route.Access.AllowedEmails)
 		access.AllowedDomains = slices.Clone(route.Access.AllowedDomains)
 		access.RequiredGroups = slices.Clone(route.Access.RequiredGroups)
 		access.Methods = slices.Clone(route.Access.Methods)
+		if route.Access.ContextRule != nil {
+			rule := *route.Access.ContextRule
+			rule.When.SessionDeviceBound = cloneBool(route.Access.ContextRule.When.SessionDeviceBound)
+			rule.When.ActionRisky = cloneBool(route.Access.ContextRule.When.ActionRisky)
+			rule.When.DeviceFirstSeen = cloneBool(route.Access.ContextRule.When.DeviceFirstSeen)
+			access.ContextRule = &rule
+		}
 		clone.Access = &access
 	}
+	if route.Resource != nil {
+		resource := *route.Resource
+		resource.RiskyActions = slices.Clone(route.Resource.RiskyActions)
+		clone.Resource = &resource
+	}
 	return clone
+}
+
+func cloneBool(value *bool) *bool {
+	if value == nil {
+		return nil
+	}
+	copy := *value
+	return &copy
 }
