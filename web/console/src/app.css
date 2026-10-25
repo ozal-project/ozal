@@ -1,55 +1,51 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "@fontsource/ibm-plex-mono/400.css";
-@import "@fontsource/ibm-plex-mono/500.css";
-@import "@fontsource/ibm-plex-mono/600.css";
+@import "@fontsource/geist-sans/400.css";
+@import "@fontsource/geist-sans/500.css";
+@import "@fontsource/geist-sans/600.css";
+@import "@fontsource/geist-mono/400.css";
+@import "@fontsource/geist-mono/500.css";
 
 @custom-variant dark (&:is(.dark *));
 
-/* Manrope is bundled locally (OFL, see public/fonts/OFL.txt): no third-party requests. */
-@font-face {
-  font-family: "Manrope";
-  src: url("/fonts/manrope.ttf") format("truetype");
-  font-weight: 200 800;
-  font-display: swap;
-}
-
-/* Switchboard identity: cool graphite surfaces and a neutral primary; amber
-   is only the signal lamp (brand mark and "pending"), so it keeps one meaning. */
+/* Switchboard identity (UI-005): dark graphite with one violet brand colour.
+   Green, red and amber keep one meaning each: allowed, refused, waiting. The
+   marketing site (site/src/styles.css) uses the same tokens. Fonts are bundled
+   (OFL): no third-party requests. */
 :root {
-  --radius: 0.65rem;
-  --background: oklch(0.16 0.006 260);
-  --foreground: oklch(0.95 0.005 260);
-  --card: oklch(0.195 0.007 260);
-  --card-foreground: oklch(0.95 0.005 260);
-  --popover: oklch(0.205 0.008 260);
-  --popover-foreground: oklch(0.95 0.005 260);
-  --primary: oklch(0.95 0.005 260);
-  --primary-foreground: oklch(0.18 0.01 260);
-  --secondary: oklch(0.245 0.008 260);
-  --secondary-foreground: oklch(0.95 0.005 260);
-  --muted: oklch(0.235 0.008 260);
-  --muted-foreground: oklch(0.72 0.012 260);
-  --accent: oklch(0.27 0.012 260);
-  --accent-foreground: oklch(0.97 0.004 260);
-  --destructive: oklch(0.78 0.11 25);
-  --border: oklch(0.3 0.01 260);
-  --input: oklch(0.32 0.01 260);
-  --ring: oklch(0.8 0.01 260);
-  --success: oklch(0.82 0.07 155);
-  --warning: oklch(0.83 0.13 75);
-  /* The switchboard lamp: the brand mark and "pending", never a button. */
-  --signal: oklch(0.83 0.13 75);
-  --sidebar: oklch(0.14 0.006 260);
-  --sidebar-foreground: oklch(0.95 0.005 260);
-  --sidebar-border: oklch(0.27 0.01 260);
-  --sidebar-accent: oklch(0.24 0.012 260);
-  --sidebar-accent-foreground: oklch(0.97 0.004 260);
+  --radius: 0.75rem;
+  --background: #0c0c0e;
+  --foreground: #ededef;
+  --card: #16161a;
+  --card-foreground: #ededef;
+  --popover: #1c1c21;
+  --popover-foreground: #ededef;
+  --primary: #8f7cff;
+  --primary-foreground: #0c0c0e;
+  --secondary: #1c1c21;
+  --secondary-foreground: #ededef;
+  --muted: #1c1c21;
+  --muted-foreground: #8b8b95;
+  --accent: #22222a;
+  --accent-foreground: #ededef;
+  --destructive: #f0685c;
+  --border: #26262d;
+  --input: #34343c;
+  --ring: #b3a6ff;
+  --success: #3fb68b;
+  --warning: #e0a84a;
+  /* The brand colour, for marks and emphasis. */
+  --signal: #b3a6ff;
+  --sidebar: #111114;
+  --sidebar-foreground: #ededef;
+  --sidebar-border: #26262d;
+  --sidebar-accent: #1c1c21;
+  --sidebar-accent-foreground: #ededef;
 }
 
 @theme inline {
-  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  --font-sans: "Geist Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -95,40 +91,35 @@
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 
-/* ── Switchboard identity ─────────────────────────────────────────────
-   A manual telephone switchboard: a field of jacks, patch cords and signal
-   lamps that light when a line is connected or refused. */
+/* Shared pieces. Names are kept from the first console so every page inherits
+   the new look; only their appearance changed. */
 @layer components {
-  /* The jack field behind every page. */
-  .jack-field {
-    background-image: radial-gradient(oklch(0.33 0.01 260 / 0.55) 1px, transparent 1.2px);
-    background-size: 22px 22px;
-    background-position: -11px -11px;
+  body {
+    background-image: radial-gradient(1100px 520px at 78% -14%, color-mix(in srgb, var(--primary) 13%, transparent), transparent 62%);
+    background-repeat: no-repeat;
   }
-  /* Engraved panel plate: index + label in small caps mono. */
+  /* Small label above a block. */
   .plate {
-    @apply text-muted-foreground font-mono text-[0.68rem] font-medium tracking-[0.18em] uppercase;
+    @apply text-muted-foreground font-mono text-[0.72rem] font-medium tracking-wide uppercase;
   }
   .plate b { @apply text-signal font-semibold; }
-  /* Signal lamp: a lit bulb with a soft glow. */
+  /* A state dot: green allowed, red refused, amber waiting, grey idle. */
   .lamp {
-    @apply inline-block size-2.5 shrink-0 rounded-full;
-    background: radial-gradient(circle at 35% 35%, oklch(1 0 0 / 0.75), transparent 45%), var(--lamp, var(--muted-foreground));
-    box-shadow: 0 0 0 1px oklch(0 0 0 / 0.4), 0 0 10px 1px color-mix(in oklch, var(--lamp, transparent) 70%, transparent);
+    @apply inline-block size-2 shrink-0 rounded-full;
+    background: var(--lamp, var(--muted-foreground));
+    box-shadow: 0 0 8px color-mix(in srgb, var(--lamp, transparent) 55%, transparent);
   }
   .lamp-on { --lamp: var(--success); }
   .lamp-off { --lamp: var(--destructive); }
   .lamp-wait { --lamp: var(--warning); animation: lamp-pulse 1.6s ease-in-out infinite; }
-  .lamp-idle { --lamp: oklch(0.45 0.01 260); box-shadow: 0 0 0 1px oklch(0 0 0 / 0.4); }
-  .lamp-lg { @apply size-4; }
-  /* Panel: a card with a lit top edge, like brushed metal under a lamp. */
+  .lamp-idle { --lamp: #34343c; box-shadow: none; }
+  .lamp-lg { @apply size-3; }
   .panel {
-    @apply bg-card relative rounded-xl border;
-    box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.05), 0 1px 2px oklch(0 0 0 / 0.35), 0 12px 32px -18px oklch(0 0 0 / 0.7);
+    @apply bg-card relative rounded-2xl border;
   }
   .panel-head { @apply flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3.5; }
-  /* A patch cord: the grey curve between amber jacks, in the brand and as a divider. */
-  .cord { stroke: oklch(0.62 0.02 260); fill: none; stroke-linecap: round; }
+  /* A connecting line, as a divider next to labels. */
+  .cord { stroke: #6b6b76; fill: none; stroke-linecap: round; }
 }
 
 @keyframes lamp-pulse { 50% { opacity: 0.45; } }

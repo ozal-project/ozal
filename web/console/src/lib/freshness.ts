@@ -1,3 +1,8 @@
+// Milliseconds since a reading. The reading and the ticking clock both come
+// from this tab's Date.now(), so a reading taken just after the last tick would
+// be "in the future": that is lag, not an unknown time.
+export const elapsed = (nowMs: number, observedAt: number): number => Math.max(0, nowMs - observedAt);
+
 export function ageLabel(ageMs: number): string {
   if (!Number.isFinite(ageMs) || ageMs < 0) return "time unknown";
   if (ageMs < 10_000) return "just now";

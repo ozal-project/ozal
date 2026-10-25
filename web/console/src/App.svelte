@@ -2,6 +2,7 @@
   import { tick } from "svelte";
   import { route, navigate, type Page } from "$lib/router.svelte";
   import { admin } from "$lib/adminToken.svelte";
+  import Overview from "./pages/Overview.svelte";
   import Activity from "./pages/Activity.svelte";
   import Routes from "./pages/Routes.svelte";
   import Simulator from "./pages/Simulator.svelte";
@@ -10,13 +11,21 @@
   import Wordmark from "$lib/brand/Wordmark.svelte";
   import BugIcon from "@lucide/svelte/icons/bug";
 
-  const nav: { path: Page; jack: string; label: string; hint: string }[] = [
-    { path: "/activity", jack: "01", label: "Activity", hint: "Live access decisions" },
-    { path: "/routes", jack: "02", label: "Routes", hint: "Hostnames, health, policy" },
-    { path: "/people", jack: "03", label: "People", hint: "Invitations and passkeys" },
-    { path: "/sites", jack: "04", label: "Sites", hint: "Deployments and rollback" },
-    { path: "/simulator", jack: "05", label: "Policy simulator", hint: "Ask the engine why" },
+  // Operate is for whoever runs the edge day to day; Build is for the person
+  // who writes its configuration and policy (UI-005). Same pages, plain names.
+  const groups: { name: string; items: { path: Page; label: string }[] }[] = [
+    { name: "Operate", items: [
+      { path: "/overview", label: "Overview" },
+      { path: "/sites", label: "Sites" },
+      { path: "/people", label: "People" },
+      { path: "/activity", label: "Access log" },
+    ] },
+    { name: "Build", items: [
+      { path: "/routes", label: "Routes & policy" },
+      { path: "/simulator", label: "Why? Simulator" },
+    ] },
   ];
+  const nav = groups.flatMap((g) => g.items);
 
   const go = (e: MouseEvent, path: Page) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
@@ -28,7 +37,7 @@
   $effect(() => {
     const path = route.path;
     const search = route.search;
-    const title = nav.find((item) => item.path === path)?.label ?? "Access activity";
+    const title = nav.find((item) => item.path === path)?.label ?? "Overview";
     document.title = `${title} · Switchboard`;
     if (mounted) void tick().then(() => {
       document.querySelector<HTMLElement>('nav[aria-label="Console sections"] [aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -43,44 +52,39 @@
   <a href="#main-content" class="sr-only focus:not-sr-only focus:bg-background focus:text-foreground focus:ring-ring fixed top-2 left-2 z-50 rounded-md px-3 py-2 text-sm focus:ring-2">Skip to content</a>
   <div class="bg-sidebar border-sidebar-border hidden w-[17rem] shrink-0 border-r md:block">
   <aside class="sticky top-0 flex h-screen flex-col">
-    <a href="/activity" onclick={(e) => go(e, "/activity")} class="px-5 pt-6 pb-7" aria-label="Switchboard console home"><Wordmark /></a>
+    <a href="/overview" onclick={(e) => go(e, "/overview")} class="px-5 pt-6 pb-6" aria-label="Switchboard console home"><Wordmark /></a>
 
-    <p class="plate px-5 pb-2">Lines</p>
-    <nav class="flex flex-col gap-0.5 px-3" aria-label="Console">
-      {#each nav as item (item.path)}
-        {@const active = route.path === item.path}
-        <a
-          href={item.path}
-          onclick={(e) => go(e, item.path)}
-          aria-current={active ? "page" : undefined}
-          class={["group relative flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors",
-            active ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/50"]}
-        >
-          <span class={["grid size-8 shrink-0 place-items-center rounded-full border font-mono text-[0.65rem]",
-            active ? "border-primary/70 text-primary" : "border-sidebar-border text-muted-foreground"]}>{item.jack}</span>
-          <span class="min-w-0 flex-1">
-            <span class={["block text-sm font-medium", active && "text-sidebar-accent-foreground"]}>{item.label}</span>
-            <span class="text-muted-foreground block text-xs">{item.hint}</span>
-          </span>
-          <span class={["lamp", active ? "lamp-wait" : "lamp-idle"]} aria-hidden="true"></span>
-        </a>
+    <nav class="flex flex-col gap-5 px-3" aria-label="Console">
+      {#each groups as group (group.name)}
+        <div>
+          <p class="plate px-3 pb-1.5">{group.name}</p>
+          <div class="flex flex-col gap-0.5">
+            {#each group.items as item (item.path)}
+              {@const active = route.path === item.path}
+              <a
+                href={item.path}
+                onclick={(e) => go(e, item.path)}
+                aria-current={active ? "page" : undefined}
+                class={["flex items-center rounded-lg px-3 py-2 text-sm transition-colors",
+                  active ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-[inset_2px_0_0_var(--primary)]" : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground"]}
+              >{item.label}</a>
+            {/each}
+          </div>
+        </div>
       {/each}
     </nav>
 
     <div class="mt-auto space-y-4 p-5">
       <a href="/_/status" class="text-muted-foreground hover:text-foreground flex items-center gap-2 text-xs"><BugIcon class="size-3.5" /> Route debug · works without JavaScript</a>
-      <div class="border-sidebar-border rounded-lg border border-dashed p-3.5">
-        <p class="plate mb-1.5">Trust plane</p>
-        <p class="text-muted-foreground text-xs leading-relaxed">Identity, policy and access decisions. Host processes and backups live in Server Ops.</p>
-      </div>
+      <p class="text-muted-foreground border-sidebar-border border-t pt-3 text-xs leading-relaxed">Who gets in, and why. Processes and backups live in Server Ops.</p>
     </div>
   </aside>
   </div>
 
-  <div class="jack-field flex min-w-0 flex-1 flex-col">
+  <div class="flex min-w-0 flex-1 flex-col">
     <header class="bg-background/80 border-border sticky top-0 z-10 flex items-center justify-between gap-4 border-b px-5 py-3 backdrop-blur md:px-10">
       <div class="md:hidden"><Wordmark /></div>
-      <p class="plate hidden md:block">Local administrative console</p>
+      <p class="plate hidden md:block">Local console</p>
       <div class="flex items-center gap-3">
         {#if admin.token}<button type="button" class="text-muted-foreground hover:text-foreground focus-visible:outline-ring rounded px-2 py-1 text-xs underline underline-offset-4 focus-visible:outline-2" onclick={() => (admin.token = "")}>Clear admin token</button>{/if}
         <span class="border-border bg-card flex items-center gap-2 rounded-full border px-3 py-1 font-mono text-[0.7rem]">
@@ -95,7 +99,8 @@
       {/each}
     </nav>
     <main id="main-content" tabindex="-1" class="mx-auto w-full max-w-[1320px] flex-1 px-5 py-10 md:px-10">
-      {#if route.path === "/activity"}<Activity />
+      {#if route.path === "/overview"}<Overview />
+      {:else if route.path === "/activity"}<Activity />
       {:else if route.path === "/routes"}<Routes />
       {:else if route.path === "/people"}<People />
       {:else if route.path === "/sites"}<Sites />

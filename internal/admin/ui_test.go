@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"bytes"
 	"encoding/json"
 	"io/fs"
 	"net/http"
@@ -85,7 +86,7 @@ func TestConsoleHomeAndAssets(t *testing.T) {
 	handler := New(&fakeManager{}, broker, WithEvents(broker))
 
 	// Every client route gets the app shell with the strict CSP.
-	for _, path := range []string{"/", "/activity", "/routes", "/simulator"} {
+	for _, path := range []string{"/", "/overview", "/activity", "/routes", "/simulator"} {
 		rec := request(handler, http.MethodGet, path, "", "")
 		csp := rec.Header().Get("Content-Security-Policy")
 		if rec.Code != 200 || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/html") ||
@@ -94,6 +95,15 @@ func TestConsoleHomeAndAssets(t *testing.T) {
 		}
 		if strings.Contains(rec.Body.String(), "<script>") {
 			t.Fatalf("console %s has an inline script", path)
+		}
+	}
+
+	// The CSP allows fonts from this origin only. A font that Vite inlined as a
+	// data: URI is blocked by the browser, so none may be embedded in the CSS.
+	for _, css := range mustGlob(t, "console/assets/*.css") {
+		body, err := fs.ReadFile(consoleApp, css)
+		if err != nil || bytes.Contains(body, []byte("data:font")) {
+			t.Fatalf("%s inlines a font as a data: URI, which font-src 'self' refuses (%v)", css, err)
 		}
 	}
 
@@ -111,6 +121,13 @@ func TestConsoleHomeAndAssets(t *testing.T) {
 	if rec.Code != 200 || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/javascript") ||
 		!strings.Contains(rec.Header().Get("Cache-Control"), "immutable") || rec.Header().Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatalf("asset %s: %d %v", asset, rec.Code, rec.Header())
+	}
+	// The Overview (UI-005) is the console's first page and says what needs the
+	// operator, what changed, who got in and where each site came from.
+	for _, want := range []string{"Nothing needs you right now.", "Recent changes", "Who got in", "What is live, and where it came from", "uploaded by hand"} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("the embedded overview console lacks %q", want)
+		}
 	}
 	for _, want := range []string{
 		"pages.failed", "Deployment failed",
@@ -215,4 +232,13 @@ func TestStaticRouteShowsAccessAndNoProbe(t *testing.T) {
 	if strings.Contains(rec.Body.String(), "Unchecked") {
 		t.Fatal("static routes must not imply a pending HTTP probe")
 	}
+}
+
+func mustGlob(t *testing.T, pattern string) []string {
+	t.Helper()
+	files, err := fs.Glob(consoleApp, pattern)
+	if err != nil || len(files) == 0 {
+		t.Fatalf("no embedded files match %s: %v", pattern, err)
+	}
+	return files
 }

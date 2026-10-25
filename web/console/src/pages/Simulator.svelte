@@ -143,7 +143,7 @@
   };
 </script>
 
-<PageHeader eyebrow="Access control" title="Policy simulator" intro="Plug a hypothetical caller into a line and ask the real engine whether it connects. Nothing reaches the route or the identity provider.">
+<PageHeader eyebrow="Access control" title="Policy simulator" intro="Describe a visitor and ask the real engine whether it would let them in. Nothing reaches the route or the identity provider.">
   <div class="space-y-2">
     <span class="border-border bg-card flex items-center gap-2 rounded-full border px-3.5 py-1.5 font-mono text-xs"><span class="lamp lamp-idle" aria-hidden="true"></span>same engine as the proxy</span>
     <Freshness observedAt={routesObservedAt} refreshing={routesLoading && routes.length > 0} error={routesError} />
@@ -151,7 +151,7 @@
 </PageHeader>
 
 <div class="grid gap-6 xl:grid-cols-[minmax(340px,420px)_1fr]">
-  <Panel index="01" label="Caller" title="Request to simulate" sub="Describe a visitor for one line.">
+  <Panel index="01" label="Caller" title="Request to simulate" sub="Describe a visitor for one hostname.">
     <form class="space-y-5" onsubmit={run} novalidate>
       <div class="space-y-2">
         <Label for="route" class="text-muted-foreground font-mono text-[0.68rem] font-medium tracking-[0.12em] uppercase">Line</Label>
@@ -163,7 +163,7 @@
             {/each}
           </Select.Content>
         </Select.Root>
-        <p class={requestedRouteError ? "text-warning text-xs" : "text-muted-foreground text-xs"}>{selected ? (selected.protected ? `Login required · ${selected.policy}` : "Public · no login required") : routesError ? `Could not read routes (${routesError}).` : requestedRouteError || "Choose a line to see its requirement."}</p>
+        <p class={requestedRouteError ? "text-warning text-xs" : "text-muted-foreground text-xs"}>{selected ? (selected.protected ? `Login required · ${selected.policy}` : "Public · no login required") : routesError ? `Could not read routes (${routesError}).` : requestedRouteError || "Choose a hostname to see its requirement."}</p>
       </div>
 
       <div class="space-y-2">

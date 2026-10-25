@@ -68,7 +68,7 @@
   }
 </script>
 
-<PageHeader eyebrow="Routing" title="Routes & hostnames" intro="Every line Switchboard answers, who may be patched through, and whether the far end picks up. Hostnames here are routing keys, not published DNS.">
+<PageHeader eyebrow="Routing" title="Routes & hostnames" intro="Every hostname Switchboard answers, who may open it, and whether the app behind it responds. These are routing keys, not published DNS.">
   <div class="flex flex-col items-start gap-2 sm:items-end">
     <Button variant="outline" size="sm" onclick={load} disabled={loading}><RefreshIcon class={["size-3.5", loading && "animate-spin"]} /> Refresh</Button>
     <Freshness observedAt={observedAt} refreshing={loading && data !== null} error={error} />
@@ -79,9 +79,9 @@
   <span>{counts.total} routes</span><span>{counts.protected} require login</span><span>{counts.unhealthy} unhealthy</span>
 </div>
 <div class="mb-6 hidden gap-4 sm:grid sm:grid-cols-3">
-  <Stat label="Configured lines" value={data ? counts.total : "—"} note="Routes in the active snapshot" lamp={data ? "on" : "idle"} />
+  <Stat label="Hostnames" value={data ? counts.total : "—"} note="Routes in the active snapshot" lamp={data ? "on" : "idle"} />
   <Stat label="Require login" value={data ? counts.protected : "—"} note="Protected by an access policy" lamp={data && counts.protected ? "wait" : "idle"} />
-  <Stat label="Unhealthy upstreams" value={data ? counts.unhealthy : "—"} note="Far end not answering its probe" lamp={counts.unhealthy > 0 ? "off" : data ? "on" : "idle"} />
+  <Stat label="Unhealthy upstreams" value={data ? counts.unhealthy : "—"} note="The app behind it fails its health check" lamp={counts.unhealthy > 0 ? "off" : data ? "on" : "idle"} />
 </div>
 
 {#if data?.audit && !data.audit.available}
@@ -100,7 +100,7 @@
   </Panel>
 {/if}
 
-<Panel index="01" label="Patch panel" title="Lines" sub="Updated every 15 seconds" bodyClass="p-0">
+<Panel label="Routes" title="Hostnames" sub="Updated every 15 seconds" bodyClass="p-0">
   {#if !data}
     {#if error}<p class="text-destructive p-5 text-sm">Status could not be read ({error}). <button class="underline" onclick={load}>Retry</button></p>
     {:else}<div class="space-y-3 p-5" aria-busy="true" aria-label="Loading routes">{#each [1, 2, 3] as i (i)}<Skeleton class="h-12 w-full" />{/each}</div>{/if}
@@ -117,7 +117,7 @@
           </div>
           <dl class="mt-3 grid grid-cols-[5rem_1fr] gap-x-2 gap-y-1 text-xs">
             <dt class="text-muted-foreground">Access</dt><dd>{r.access} · {r.policy}</dd>
-            <dt class="text-muted-foreground">Signal</dt><dd class="flex items-center gap-2"><span class={["lamp", lampFor[r.state_class] ?? "lamp-idle"]} aria-hidden="true"></span>{r.state} · {r.latency}</dd>
+            <dt class="text-muted-foreground">Health</dt><dd class="flex items-center gap-2"><span class={["lamp", lampFor[r.state_class] ?? "lamp-idle"]} aria-hidden="true"></span>{r.state} · {r.latency}</dd>
           </dl>
           <details class="mt-3 text-xs"><summary class="text-muted-foreground cursor-pointer">Transport details</summary><dl class="mt-2 grid gap-1"><dt class="text-muted-foreground">Upstream</dt><dd class="break-all font-mono">{r.target}</dd><dt class="text-muted-foreground">Probe</dt><dd class="break-all font-mono">{r.health_path}</dd>{#if r.last_error}<dt class="text-destructive">Last error</dt><dd class="break-all">{r.last_error}</dd>{/if}</dl></details>
         </li>
@@ -127,12 +127,12 @@
     <div class="hidden overflow-x-auto md:block" role="region" tabindex="0" aria-label="Configured routes">
       <Table.Root>
         <Table.Header><Table.Row>
-          <Table.Head class="plate pl-5">Line</Table.Head><Table.Head class="plate">Access</Table.Head><Table.Head class="plate">Far end</Table.Head><Table.Head class="plate">Signal</Table.Head><Table.Head class="plate pr-5 text-right">Latency</Table.Head><Table.Head><span class="sr-only">Actions</span></Table.Head>
+          <Table.Head class="plate pl-5">Hostname</Table.Head><Table.Head class="plate">Access</Table.Head><Table.Head class="plate">Upstream</Table.Head><Table.Head class="plate">Health</Table.Head><Table.Head class="plate pr-5 text-right">Latency</Table.Head><Table.Head><span class="sr-only">Actions</span></Table.Head>
         </Table.Row></Table.Header>
         <Table.Body>
           {#each data.routes as r (r.host)}
             <Table.Row>
-              <Table.Cell class="max-w-48 pl-5 align-top"><div class="font-mono text-[0.82rem] break-all">{r.host}</div><div class="text-muted-foreground text-xs">{r.kind}</div></Table.Cell>
+              <Table.Cell class="max-w-80 min-w-56 pl-5 align-top"><div class="font-mono text-[0.82rem] break-all">{r.host}</div><div class="text-muted-foreground text-xs">{r.kind}</div></Table.Cell>
               <Table.Cell class="align-top">
                 <span class={["inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 font-mono text-[0.7rem] uppercase", r.access === "Protected" ? "border-primary/40 text-primary" : "border-border text-muted-foreground"]}>
                   {#if r.access === "Protected"}<LockIcon class="size-3" />{/if}{r.access === "Protected" ? "login" : "public"}

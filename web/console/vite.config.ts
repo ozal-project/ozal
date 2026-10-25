@@ -13,6 +13,9 @@ export default defineConfig({
     emptyOutDir: true,
     assetsDir: "assets",
     sourcemap: false,
+    // The console's CSP is font-src 'self' (no data:), so a small font that
+    // Vite would inline as a data: URI is blocked by the browser. Emit files.
+    assetsInlineLimit: 0,
   },
   // `npm run dev` proxies the admin API of a local Switchboard.
   server: { proxy: { "/_/": process.env.SWITCHBOARD_ADMIN ?? "http://127.0.0.1:9090" } },

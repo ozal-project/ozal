@@ -1,12 +1,10 @@
 <script lang="ts">
-  // Two jacks joined by a patch cord: the brand mark.
-  let { size = 32, class: className = "" }: { size?: number; class?: string } = $props();
+  // Two points joined by a line: the brand mark.
+  let { size = 28, class: className = "" }: { size?: number; class?: string } = $props();
 </script>
 
-<svg width={size} height={size} viewBox="0 0 32 32" class={className} aria-hidden="true">
-  <rect x="0.5" y="0.5" width="31" height="31" rx="8" fill="oklch(0.22 0.01 260)" stroke="oklch(0.34 0.012 260)" />
-  <path d="M9 22 C 9 8, 23 24, 23 10" class="cord" stroke-width="2.4" />
-  <circle cx="9" cy="23" r="3.6" fill="oklch(0.15 0.006 260)" stroke="var(--signal)" stroke-width="1.6" />
-  <circle cx="23" cy="9" r="3.6" fill="oklch(0.15 0.006 260)" stroke="var(--signal)" stroke-width="1.6" />
-  <circle cx="23" cy="9" r="1.3" fill="var(--success)" />
+<svg width={size} height={size} viewBox="0 0 26 26" class={className} aria-hidden="true">
+  <circle cx="6" cy="7" r="3.2" fill="var(--foreground)" />
+  <circle cx="20" cy="19" r="3.2" fill="var(--primary)" />
+  <path d="M6 10.5 C6 19, 20 7, 20 15.5" stroke="var(--foreground)" stroke-width="2" fill="none" stroke-linecap="round" />
 </svg>

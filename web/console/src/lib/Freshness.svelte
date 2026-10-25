@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { ageLabel, isStale } from "$lib/freshness";
+  import { ageLabel, elapsed, isStale } from "$lib/freshness";
 
   let { observedAt, refreshing = false, error = "", staleAfterMs = 60_000 } = $props<{
     observedAt: number | null;
@@ -15,8 +15,8 @@
     return () => clearInterval(timer);
   });
 
-  const ageText = $derived(observedAt === null ? "not loaded" : ageLabel(nowMs - observedAt));
-  const isOld = $derived(observedAt !== null && isStale(nowMs - observedAt, Boolean(error), staleAfterMs));
+  const ageText = $derived(observedAt === null ? "not loaded" : ageLabel(elapsed(nowMs, observedAt)));
+  const isOld = $derived(observedAt !== null && isStale(elapsed(nowMs, observedAt), Boolean(error), staleAfterMs));
   const statusLabel = $derived(observedAt === null ? "Not loaded" : error ? "Last read failed" : refreshing ? "Refreshing" : isOld ? "Stale" : "Current");
   const lamp = $derived(observedAt === null ? "lamp-idle" : error || isOld ? "lamp-off" : refreshing ? "lamp-wait" : "lamp-on");
 </script>
