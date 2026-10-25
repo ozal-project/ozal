@@ -9,7 +9,7 @@
       <svg width="28" height="10" viewBox="0 0 28 10" aria-hidden="true"><path d="M1 9 C 8 9, 10 1, 27 1" class="cord" stroke-width="1.6" /></svg>
       {eyebrow}
     </p>
-    <h1 class="text-[2.1rem] leading-tight font-semibold tracking-tight">{title}</h1>
+    <h1 tabindex="-1" class="focus-visible:outline-ring text-[2.1rem] leading-tight font-semibold tracking-tight">{title}</h1>
     <p class="text-muted-foreground mt-2 text-[0.95rem]">{intro}</p>
   </div>
   {@render children?.()}

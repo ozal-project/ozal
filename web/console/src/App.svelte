@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import { route, navigate, type Page } from "$lib/router.svelte";
+  import { admin } from "$lib/adminToken.svelte";
   import Activity from "./pages/Activity.svelte";
   import Routes from "./pages/Routes.svelte";
   import Simulator from "./pages/Simulator.svelte";
@@ -21,9 +23,24 @@
     e.preventDefault();
     navigate(path);
   };
+
+  let mounted = false;
+  $effect(() => {
+    const path = route.path;
+    const search = route.search;
+    const title = nav.find((item) => item.path === path)?.label ?? "Access activity";
+    document.title = `${title} · Switchboard`;
+    if (mounted) void tick().then(() => {
+      document.querySelector<HTMLElement>('nav[aria-label="Console sections"] [aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
+      document.querySelector<HTMLElement>("#main-content h1")?.focus();
+    });
+    mounted = true;
+    void search;
+  });
 </script>
 
 <div class="flex min-h-screen">
+  <a href="#main-content" class="sr-only focus:not-sr-only focus:bg-background focus:text-foreground focus:ring-ring fixed top-2 left-2 z-50 rounded-md px-3 py-2 text-sm focus:ring-2">Skip to content</a>
   <div class="bg-sidebar border-sidebar-border hidden w-[17rem] shrink-0 border-r md:block">
   <aside class="sticky top-0 flex h-screen flex-col">
     <a href="/activity" onclick={(e) => go(e, "/activity")} class="px-5 pt-6 pb-7" aria-label="Switchboard console home"><Wordmark /></a>
@@ -64,17 +81,20 @@
     <header class="bg-background/80 border-border sticky top-0 z-10 flex items-center justify-between gap-4 border-b px-5 py-3 backdrop-blur md:px-10">
       <div class="md:hidden"><Wordmark /></div>
       <p class="plate hidden md:block">Local administrative console</p>
-      <span class="border-border bg-card flex items-center gap-2 rounded-full border px-3 py-1 font-mono text-[0.7rem]">
-        <span class="lamp lamp-on" aria-hidden="true"></span>loopback only
-      </span>
+      <div class="flex items-center gap-3">
+        {#if admin.token}<button type="button" class="text-muted-foreground hover:text-foreground focus-visible:outline-ring rounded px-2 py-1 text-xs underline underline-offset-4 focus-visible:outline-2" onclick={() => (admin.token = "")}>Clear admin token</button>{/if}
+        <span class="border-border bg-card flex items-center gap-2 rounded-full border px-3 py-1 font-mono text-[0.7rem]">
+          <span class="lamp lamp-on" aria-hidden="true"></span>loopback only
+        </span>
+      </div>
     </header>
-    <nav class="border-border flex gap-1 overflow-x-auto border-b px-4 py-2 md:hidden" aria-label="Console (compact)">
+    <nav class="border-border flex gap-1 overflow-x-auto border-b px-4 py-2 md:hidden" aria-label="Console sections">
       {#each nav as item (item.path)}
         <a href={item.path} onclick={(e) => go(e, item.path)} aria-current={route.path === item.path ? "page" : undefined}
           class="rounded-md px-2.5 py-1.5 text-sm whitespace-nowrap aria-[current=page]:bg-accent aria-[current=page]:text-accent-foreground">{item.label}</a>
       {/each}
     </nav>
-    <main class="mx-auto w-full max-w-[1320px] flex-1 px-5 py-10 md:px-10">
+    <main id="main-content" tabindex="-1" class="mx-auto w-full max-w-[1320px] flex-1 px-5 py-10 md:px-10">
       {#if route.path === "/activity"}<Activity />
       {:else if route.path === "/routes"}<Routes />
       {:else if route.path === "/people"}<People />

@@ -8,6 +8,10 @@
   import { Input } from "$lib/components/ui/input";
   import { Button } from "$lib/components/ui/button";
   import { fetchOverview, type AccessEvent, type RouteOverview } from "$lib/api";
+  import { navigate } from "$lib/router.svelte";
+  import { LatestRequest } from "$lib/latestRequest";
+  import Freshness from "$lib/Freshness.svelte";
+  import PolicyEvidence from "$lib/PolicyEvidence.svelte";
   import { emptyFeed, receive } from "$lib/feed";
   import PauseIcon from "@lucide/svelte/icons/pause";
   import PlayIcon from "@lucide/svelte/icons/play";
@@ -18,10 +22,10 @@
   const labels: Record<string, string> = {
     "access.allowed": "Access allowed", "access.denied": "Access denied", "access.rate_limited": "Rate limited", "access.step_up": "Login requested again", "passkey.registered": "Passkey added", "passkey.revoked": "Passkey revoked", "user.invited": "Person invited", "user.disabled": "Person disabled", "user.enabled": "Person enabled",
     "login.started": "Login started", "login.failed": "Login failed", "login.succeeded": "Login succeeded",
-    "route.created": "Route added", "route.deleted": "Route removed", "config.reloaded": "Configuration reloaded",
+    "route.created": "Route added", "route.create_failed": "Route creation failed", "route.deleted": "Route removed", "route.delete_failed": "Route removal failed", "config.reloaded": "Configuration reloaded", "config.reload_failed": "Configuration reload failed",
     "tunnel.connected": "Tunnel connected", "tunnel.disconnected": "Tunnel disconnected", "tunnel.rejected": "Tunnel rejected", "connector.enrolled": "Connector enrolled", "connector.rotated": "Connector certificate rotated", "connector.revoked": "Connector revoked", "notify.chat_paired": "Alert chat paired",
     "origin.denied": "Origin pull rejected",
-    "pages.deployed": "Site deployed", "pages.rolled_back": "Site rolled back", "pages.refused": "Deployment refused",
+    "pages.deployed": "Site deployed", "pages.rolled_back": "Site rolled back", "pages.refused": "Deployment refused", "pages.failed": "Deployment failed",
   };
   const categories = [
     { value: "all", label: "All events" }, { value: "access", label: "Access decisions" }, { value: "login", label: "Logins" },
@@ -38,9 +42,12 @@
   let feed = $state(emptyFeed());
   let routes = $state<RouteOverview[] | null>(null);
   let routesError = $state(false);
+  let routesObservedAt = $state<number | null>(null);
+  let routesRefreshing = $state(false);
+  const routesRequest = new LatestRequest();
 
   const outcome = (e: AccessEvent) =>
-    e.error || /\.(denied|failed|rejected|refused)$/.test(e.type) ? "deny" : /\.(allowed|succeeded|deployed|rolled_back)$/.test(e.type) ? "allow" : "info";
+    e.error || /[._](denied|failed|rejected|refused)$/.test(e.type) ? "deny" : /[._](allowed|succeeded|deployed|rolled_back)$/.test(e.type) ? "allow" : "info";
   const group = (e: AccessEvent) =>
     e.type.startsWith("access.") || e.type.startsWith("origin.") ? "access" : e.type.startsWith("login.") ? "login" : e.type.startsWith("tunnel.") || e.type.startsWith("connector.") ? "tunnel" : e.type.startsWith("pages.") ? "pages" : "changes";
 
@@ -58,7 +65,25 @@
   };
 
   async function loadRoutes() {
-    try { routes = await fetchOverview(); routesError = false; } catch { routesError = true; }
+    const request = routesRequest.start();
+    routesRefreshing = routes !== null;
+    try {
+      const next = await fetchOverview(request.signal);
+      if (!request.isCurrent()) return;
+      routes = next;
+      routesError = false;
+      routesObservedAt = Date.now();
+    } catch {
+      if (!request.isCurrent()) return;
+      routesError = true;
+    } finally {
+      if (request.isCurrent()) routesRefreshing = false;
+      request.finish();
+    }
+  }
+
+  function inspect(host?: string) {
+    if (host) navigate("/routes", { host });
   }
 
   onMount(() => {
@@ -78,7 +103,7 @@
         events = [e, ...events].slice(0, MAX);
       } catch { /* ignore a malformed event */ }
     };
-    return () => { es.close(); clearInterval(refresh); };
+    return () => { es.close(); clearInterval(refresh); routesRequest.cancel(); };
   });
 
   const streamText = { connecting: "Connecting…", live: "Live event stream", reconnected: "Live · reconnected", lost: "Connection lost · retrying" };
@@ -98,7 +123,10 @@
   </div>
 {/if}
 
-<div class="mb-6 grid gap-4 sm:grid-cols-3">
+<div class="mb-5 flex flex-wrap gap-x-4 gap-y-1 rounded-lg border px-3 py-2 text-sm sm:hidden" aria-label="Activity summary">
+  <span>{shown.length} events</span><span>{denied} denied</span><span>{routes ? protectedCount : "—"} protected routes</span>
+</div>
+<div class="mb-6 hidden gap-4 sm:grid sm:grid-cols-3">
   <Stat label="Events retained" value={shown.length} note={`Most recent ${MAX} in this view`} lamp={shown.length ? "on" : "idle"} />
   <Stat label="Refused" value={denied} note="Access denied within the retained events" lamp={denied > 0 ? "off" : "idle"} />
   <Stat label="Lines requiring login" value={routes ? protectedCount : "—"} lamp={routes ? "wait" : "idle"}
@@ -132,7 +160,25 @@
         </p>
       </div>
     {:else}
-      <div class="overflow-x-auto">
+      <ul class="space-y-3 md:hidden">
+        {#each filtered as e, i (e.time + e.type + i)}
+          {@const o = outcome(e)}
+          {@const t = time(e.time)}
+          <li class="border-border rounded-lg border p-3">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex min-w-0 items-center gap-2 font-medium"><span class={["lamp shrink-0", o === "allow" ? "lamp-on" : o === "deny" ? "lamp-off" : "lamp-idle"]} aria-hidden="true"></span><span class="break-words">{labels[e.type] ?? e.type}</span></div>
+              <time class="text-muted-foreground shrink-0 font-mono text-xs" datetime={e.time} title={e.time}>{t.t}</time>
+            </div>
+            <div class="mt-2 pl-5 text-sm">{e.actor ?? "No actor recorded"}</div>
+            {#if e.host}<a href={`/routes?host=${encodeURIComponent(e.host)}`} onclick={(event) => { event.preventDefault(); inspect(e.host); }} class="text-muted-foreground mt-0.5 ml-5 block break-all font-mono text-xs underline underline-offset-4">{e.host}</a>{/if}
+            {#if e.code || e.reason || e.error}<p class="text-muted-foreground mt-2 text-xs"><span class="font-mono">{e.code}</span>{e.code && (e.reason || e.error) ? " · " : ""}{[e.reason, e.error].filter(Boolean).join(" · ")}</p>{/if}
+            {#if e.remote}<p class="text-muted-foreground mt-1 text-xs">Peer <span class="font-mono">{e.remote}</span></p>{/if}
+            <PolicyEvidence context={e.context} />
+          </li>
+        {/each}
+      </ul>
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex (keyboard users need to scroll this table region) -->
+      <div class="hidden overflow-x-auto md:block" role="region" tabindex="0" aria-label="Access activity events">
         <Table.Root>
           <Table.Header><Table.Row><Table.Head class="plate">Decision / event</Table.Head><Table.Head class="plate">Caller / line</Table.Head><Table.Head class="plate text-right">Time</Table.Head></Table.Row></Table.Header>
           <Table.Body>
@@ -146,10 +192,13 @@
                     {labels[e.type] ?? e.type}
                   </div>
                   {#if e.code || e.reason || e.error}<div class="text-muted-foreground mt-1 pl-5 text-xs"><span class="font-mono">{e.code}</span>{e.code && (e.reason || e.error) ? " · " : ""}{[e.reason, e.error].filter(Boolean).join(" · ")}</div>{/if}
+                  <PolicyEvidence context={e.context} />
                 </Table.Cell>
                 <Table.Cell class="align-top">
                   <div class="text-sm">{e.actor ?? "No actor recorded"}</div>
-                  <div class="text-muted-foreground font-mono text-xs">{e.host ?? "No route recorded"}</div>
+                  {#if e.host}
+                    <a class="text-muted-foreground hover:text-foreground focus-visible:outline-ring font-mono text-xs underline underline-offset-4 focus-visible:outline-2" href={`/routes?host=${encodeURIComponent(e.host)}`} onclick={(event) => { event.preventDefault(); inspect(e.host); }}>{e.host}</a>
+                  {:else}<div class="text-muted-foreground font-mono text-xs">No route recorded</div>{/if}
                   {#if e.remote}<div class="text-muted-foreground font-mono text-xs">{e.remote}</div>{/if}
                 </Table.Cell>
                 <Table.Cell class="text-right align-top font-mono text-xs tabular-nums"><time datetime={e.time} title={e.time}>{t.t}</time><div class="text-muted-foreground">{t.d}</div></Table.Cell>
@@ -163,20 +212,23 @@
 
   <div class="space-y-6">
     <Panel index="02" label="Line access" sub="Current login requirements">
-      {#if routesError}
-        <p class="text-destructive text-sm">Routes could not be read. <button class="underline" onclick={loadRoutes}>Retry</button></p>
-      {:else if !routes}
-        <p class="text-muted-foreground text-sm">Loading routes…</p>
+      <div class="mb-3"><Freshness observedAt={routesObservedAt} refreshing={routesRefreshing} error={routesError ? "Route configuration could not be refreshed" : ""} /></div>
+      {#if !routes}
+        {#if routesError}<p class="text-destructive text-sm">Routes could not be read. <button class="underline" onclick={loadRoutes}>Retry</button></p>
+        {:else}<p class="text-muted-foreground text-sm">Loading routes…</p>{/if}
+      {:else if routes.length === 0}
+        <p class="text-muted-foreground text-sm">No routes are configured.</p>
       {:else}
         <ul class="divide-border -my-2 divide-y">
           {#each routes as r (r.host)}
             <li class="flex items-start gap-3 py-3">
               <span class={["lamp mt-1.5", r.protected ? "lamp-wait" : "lamp-on"]} aria-hidden="true"></span>
-              <div class="min-w-0">
-                <div class="truncate font-mono text-[0.8rem]" title={r.host}>{r.host}</div>
+              <div class="min-w-0 flex-1">
+                <a href={`/routes?host=${encodeURIComponent(r.host)}`} onclick={(event) => { event.preventDefault(); inspect(r.host); }} class="truncate font-mono text-[0.8rem] underline underline-offset-4" title={r.host}>{r.host}</a>
                 <div class="text-muted-foreground mt-0.5 text-xs">{r.protected ? "Login · " : "Public · "}{r.policy}</div>
                 {#if r.connector}<div class="text-muted-foreground font-mono text-xs">{r.connector} · {r.connection}</div>{/if}
               </div>
+              <Button variant="ghost" size="sm" onclick={() => inspect(r.host)}>Inspect</Button>
             </li>
           {/each}
         </ul>
