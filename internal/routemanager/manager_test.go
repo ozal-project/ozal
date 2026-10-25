@@ -125,6 +125,59 @@ func TestReloadSwapsSnapshotAndPreservesLastGood(t *testing.T) {
 	}
 }
 
+func TestReloadHealthStatusContainsOnlyInstalledRoutesAndTargets(t *testing.T) {
+	oldOne := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
+	defer oldOne.Close()
+	oldTwo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
+	defer oldTwo.Close()
+	newOne := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
+	defer newOne.Close()
+	newTwo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
+	defer newTwo.Close()
+
+	initial := config.Config{
+		Listen: ":8888",
+		Routes: []config.Route{
+			{Host: "app.localhost", Upstreams: []string{oldOne.URL, oldTwo.URL}},
+			{Host: "removed.localhost", Target: oldTwo.URL},
+		},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	configPath := writeConfig(t, initial)
+	manager, err := New(ctx, configPath, time.Hour)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	updated := config.Config{
+		Listen: ":8888",
+		Routes: []config.Route{{Host: "app.localhost", Upstreams: []string{newOne.URL, newTwo.URL}}},
+	}
+	overwriteConfig(t, configPath, updated)
+	if err := manager.Reload(); err != nil {
+		t.Fatalf("Reload: %v", err)
+	}
+
+	statuses := manager.RouteStatuses()
+	if len(statuses) != 1 || statuses[0].Route.Host != "app.localhost" {
+		t.Fatalf("route health after reload = %+v, want only app.localhost", statuses)
+	}
+	gotTargets := make(map[string]bool, len(statuses[0].Upstreams))
+	for _, upstream := range statuses[0].Upstreams {
+		gotTargets[upstream.Target] = true
+	}
+	wantTargets := map[string]bool{newOne.URL: true, newTwo.URL: true}
+	if len(gotTargets) != len(wantTargets) {
+		t.Fatalf("upstream health after reload = %v, want %v", gotTargets, wantTargets)
+	}
+	for target := range wantTargets {
+		if !gotTargets[target] {
+			t.Fatalf("upstream health after reload = %v, missing %s", gotTargets, target)
+		}
+	}
+}
+
 func TestConcurrentRequestsSeeWholeSnapshots(t *testing.T) {
 	oldUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "old")
