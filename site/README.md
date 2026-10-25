@@ -1,8 +1,8 @@
 # Switchboard project page
 
 Static site for `switchboard.octaviosantacruz.com`, built with Astro and served by
-Switchboard Pages. Its tokens (dark graphite, violet brand, Geist) are the ones the
-console adopts in `UI-005`.
+Switchboard Pages. Its tokens (dark graphite, violet brand, Geist) are shared with the
+console (`UI-005`).
 
 The roadmap and changelog are not written here: `src/lib/tracker.ts` parses
 `../docs/TO_IMPLEMENT.md` and `../docs/IMPLEMENTED.md` at build time. A task counts
