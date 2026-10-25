@@ -22,16 +22,19 @@ var ErrInvalidGitHubToken = errors.New("GitHub token could not be verified")
 // signature/issuer/audience/expiry; deployauth adds project trust and lifetime.
 type GitHubVerifier struct {
 	now      func() time.Time
+	keys     *githubKeys
 	verifier *oidc.IDTokenVerifier
 }
 
-func NewGitHubVerifier(ctx context.Context, audience string, client *http.Client) *GitHubVerifier {
+// NewGitHubVerifier fetches keys lazily, on the first token. The context is
+// kept for API compatibility; each fetch is bound to the verifying request.
+func NewGitHubVerifier(_ context.Context, audience string, client *http.Client) *GitHubVerifier {
 	if client == nil {
 		client = &http.Client{Timeout: 5 * time.Second}
 	}
 	v := &GitHubVerifier{now: time.Now}
-	keys := oidc.NewRemoteKeySet(oidc.ClientContext(ctx, client), GitHubJWKS)
-	v.verifier = oidc.NewVerifier(GitHubIssuer, keys, &oidc.Config{ClientID: audience, SupportedSigningAlgs: []string{"RS256"}, Now: func() time.Time { return v.now() }})
+	v.keys = &githubKeys{client: client, url: GitHubJWKS, now: func() time.Time { return v.now() }}
+	v.verifier = oidc.NewVerifier(GitHubIssuer, v.keys, &oidc.Config{ClientID: audience, SupportedSigningAlgs: []string{"RS256"}, Now: func() time.Time { return v.now() }})
 	return v
 }
 func (v *GitHubVerifier) Verify(ctx context.Context, token string) (deployauth.Claims, error) {
@@ -49,6 +52,7 @@ func (v *GitHubVerifier) Verify(ctx context.Context, token string) (deployauth.C
 		OwnerID      string `json:"repository_owner_id"`
 		Ref          string `json:"ref"`
 		WorkflowRef  string `json:"workflow_ref"`
+		EventName    string `json:"event_name"`
 		JWTID        string `json:"jti"`
 		SHA          string `json:"sha"`
 		Repository   string `json:"repository"`
@@ -70,7 +74,7 @@ func (v *GitHubVerifier) Verify(ctx context.Context, token string) (deployauth.C
 	if err != nil || ownerID < 1 {
 		return deployauth.Claims{}, ErrInvalidGitHubToken
 	}
-	claims := deployauth.Claims{RepositoryID: repositoryID, RepositoryOwnerID: ownerID, Ref: raw.Ref, WorkflowRef: raw.WorkflowRef,
+	claims := deployauth.Claims{RepositoryID: repositoryID, RepositoryOwnerID: ownerID, Ref: raw.Ref, WorkflowRef: raw.WorkflowRef, EventName: raw.EventName,
 		JWTID: raw.JWTID, CommitSHA: raw.SHA, Repository: raw.Repository, RunID: raw.RunID, Audience: verified.Audience,
 		IssuedAt: verified.IssuedAt, ExpiresAt: verified.Expiry, ObservedAt: observedAt}
 	if claims.WorkflowRunURL() == "" {

@@ -68,7 +68,7 @@ try {
   const repositoryID = Number(process.env.GITHUB_REPOSITORY_ID);
   const ownerID = Number(process.env.GITHUB_REPOSITORY_OWNER_ID);
   const ref = process.env.GITHUB_REF;
-  if (github && (!Number.isSafeInteger(repositoryID) || repositoryID < 1 || !Number.isSafeInteger(ownerID) || ownerID < 1 || !ref?.startsWith("refs/"))) throw new Error("GitHub repository/owner/ref context is missing");
+  if (github && (!Number.isSafeInteger(repositoryID) || repositoryID < 1 || !Number.isSafeInteger(ownerID) || ownerID < 1 || !ref?.startsWith("refs/") || !process.env.GITHUB_WORKFLOW_REF)) throw new Error("GitHub repository/owner/ref/workflow context is missing");
 
   async function start(overrides = {}) {
     await stop();
@@ -109,6 +109,7 @@ try {
       ["repository", { repository_id: repositoryID + 1 }, "deployer.repository"],
       ["owner", { repository_owner_id: ownerID + 1 }, "deployer.owner"],
       ["ref", { ref: "refs/heads/switchboard-deliberately-untrusted" }, "deployer.ref"],
+      ["workflow", { workflow_ref: `${process.env.GITHUB_REPOSITORY}/.github/workflows/switchboard-untrusted.yml@${ref}` }, "deployer.workflow"],
     ]) { await start({ trust }); request("POST", upload, token, 401, code); console.log(`real OIDC rejects other ${label}: OK`); }
     await start({ audience: "https://wrong-audience.invalid" }); request("POST", upload, token, 401, "deployer.token_invalid");
     console.log("real OIDC rejects wrong audience: OK");
@@ -121,8 +122,8 @@ try {
   const live = run("curl", ["--silent", "--show-error", "--noproxy", "*", "--max-time", "15", "--header", "Host: site.localhost", "--url", `http://127.0.0.1:${publicPort}/`, "--write-out", "\n%{http_code}"]);
   const liveSplit = live.lastIndexOf("\n");
   if (Number(live.slice(liveSplit + 1)) !== 200 || live.slice(0, liveSplit) !== content) throw new Error(`public site did not serve the uploaded artifact (HTTP ${live.slice(liveSplit + 1)})`);
-  const readToken = github ? await githubToken() : token;
-  const status = request("GET", `${upload}/${deployed.id}`, readToken, 200);
+  // A status read reuses the upload token: reads spend neither its jti nor the deploy budget.
+  const status = request("GET", `${upload}/${deployed.id}`, token, 200);
   if (status.id !== deployed.id || status.project !== "acceptance") throw new Error("project status did not round-trip");
   if (github) {
     request("POST", upload, token, 401, "deployer.replay");

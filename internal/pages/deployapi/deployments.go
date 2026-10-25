@@ -12,7 +12,7 @@ import (
 )
 
 func (h *Handler) upload(w http.ResponseWriter, r *http.Request) {
-	project, id, ok := h.admit(w, r)
+	project, id, ok := h.admit(w, r, true)
 	if !ok {
 		return
 	}
@@ -59,26 +59,43 @@ func (h *Handler) upload(w http.ResponseWriter, r *http.Request) {
 	}
 	deployment, err := h.options.Store.DeployProject(ctx, project.Site, metadata, http.MaxBytesReader(w, r.Body, pages.MaxUploadBytes))
 	if err != nil {
+		status, code := 503, "deployment.failed"
 		var tooLarge *http.MaxBytesError
 		var refusal *pages.RefusedError
 		switch {
 		case errors.Is(err, pages.ErrProjectConflict):
-			h.reject(w, r, 409, "deployment.project_conflict", project, id)
+			status, code = 409, "deployment.project_conflict"
 		case errors.As(err, &tooLarge):
-			h.reject(w, r, 413, "deployment.upload_too_large", project, id)
+			status, code = 413, "deployment.upload_too_large"
 		case errors.As(err, &refusal):
-			h.reject(w, r, 422, string(refusal.Code), project, id)
-		default:
-			h.reject(w, r, 503, "deployment.failed", project, id)
+			status, code = 422, string(refusal.Code)
 		}
+		h.auditOutcome(r, events.Event{Time: h.options.Now().UTC(), Type: events.PagesDeployRefused, Actor: id.actor, Host: project.Site, Code: code, Reason: "deployment request refused", Deployment: &source})
+		h.reject(w, r, status, code, project, id)
 		return
 	}
-	h.options.Sink.Emit(events.Event{Time: h.options.Now().UTC(), Type: events.PagesDeployed, Actor: id.actor, Host: project.Site, Code: "deployment.created", Reason: "project deployment committed", Deployment: &source})
+	outcome := events.Event{Time: h.options.Now().UTC(), Type: events.PagesDeployed, Actor: id.actor, Host: project.Site, Code: "deployment.created", Reason: "project deployment committed", Deployment: &source}
+	h.auditOutcome(r, outcome)
+	h.options.Sink.Emit(outcome)
 	writeJSON(w, 201, deploymentView(deployment))
 }
 
+// auditOutcome closes the durable intent with what actually happened. It runs
+// after the deployment committed or failed, so a failed append cannot undo it:
+// the intent already made the attempt durable, the audit adapter counts and
+// logs the failure, and the response still tells the publisher the truth. The
+// append outlives a disconnected client so the journal is not left open.
+func (h *Handler) auditOutcome(r *http.Request, event events.Event) {
+	if !h.options.AuditEnabled || h.options.Audit == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
+	defer cancel()
+	_ = h.options.Audit.Append(ctx, event)
+}
+
 func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
-	project, id, ok := h.admit(w, r)
+	project, id, ok := h.admit(w, r, false)
 	if !ok {
 		return
 	}

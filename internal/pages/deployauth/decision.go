@@ -12,13 +12,18 @@ import (
 
 const MaxTokenLifetime = 10 * time.Minute
 
+// deployEvents are the GitHub events that may publish: a push to the trusted
+// ref, or a manual run by someone with write access. Pull request events,
+// including pull_request_target, never deploy.
+var deployEvents = []string{"push", "workflow_dispatch"}
+
 // Claims are verified token claims plus ObservedAt, supplied by the verifier's
 // local clock. ObservedAt is not read from the JWT.
 type Claims struct {
-	RepositoryID, RepositoryOwnerID                       int64
-	Ref, WorkflowRef, JWTID, CommitSHA, Repository, RunID string
-	Audience                                              []string
-	IssuedAt, ExpiresAt, ObservedAt                       time.Time
+	RepositoryID, RepositoryOwnerID                                  int64
+	Ref, WorkflowRef, EventName, JWTID, CommitSHA, Repository, RunID string
+	Audience                                                         []string
+	IssuedAt, ExpiresAt, ObservedAt                                  time.Time
 }
 
 type Trust struct {
@@ -52,8 +57,14 @@ func DecideDeployer(claims Claims, trust Trust) Decision {
 	if trust.Ref == "" || claims.Ref != trust.Ref {
 		return deny("deployer.ref", "ref is not trusted for this project")
 	}
-	if trust.WorkflowRef != "" && claims.WorkflowRef != trust.WorkflowRef {
+	// The ref alone is not enough: a pull_request_target workflow runs with the
+	// base branch's ref while handling a fork's pull request. Pinning the
+	// workflow file and the triggering event keeps that token out.
+	if trust.WorkflowRef == "" || claims.WorkflowRef != trust.WorkflowRef {
 		return deny("deployer.workflow", "workflow is not trusted for this project")
+	}
+	if !slices.Contains(deployEvents, claims.EventName) {
+		return deny("deployer.event", "workflow event cannot deploy")
 	}
 	if claims.JWTID == "" || len(claims.JWTID) > 256 || strings.IndexFunc(claims.JWTID, unicode.IsControl) >= 0 || !ValidCommit(claims.CommitSHA) {
 		return deny("deployer.claims", "token lacks valid replay or commit evidence")

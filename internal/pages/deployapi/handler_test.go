@@ -111,6 +111,9 @@ func callDeploy(h http.Handler, method, path, token string, body io.Reader) *htt
 
 const uploadPath = "/v1/projects/portfolio/deployments"
 
+// testWorkflowRef is the deploy workflow every GitHub fixture trusts.
+const testWorkflowRef = "owner/repo/.github/workflows/deploy.yml@refs/heads/main"
+
 func TestDuplicateAuthorizationAndSpoofedClientIPDoNotBypassChecks(t *testing.T) {
 	opts, store, _ := deployFixture(t)
 	h, _ := New(opts)
@@ -241,7 +244,7 @@ func TestDeniedUploadRespondsOnTheWireBeforeTheBody(t *testing.T) {
 
 func validOIDCClaims() deployauth.Claims {
 	now := time.Now()
-	return deployauth.Claims{RepositoryID: 123, RepositoryOwnerID: 42, Ref: "refs/heads/main", Audience: []string{"https://deploy.example"}, IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(4 * time.Minute), ObservedAt: now, JWTID: "once", CommitSHA: strings.Repeat("a", 40), Repository: "owner/repo", RunID: "42"}
+	return deployauth.Claims{RepositoryID: 123, RepositoryOwnerID: 42, Ref: "refs/heads/main", WorkflowRef: testWorkflowRef, EventName: "push", Audience: []string{"https://deploy.example"}, IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(4 * time.Minute), ObservedAt: now, JWTID: "once", CommitSHA: strings.Repeat("a", 40), Repository: "owner/repo", RunID: "42"}
 }
 
 func TestOIDCTrustAndReplayRefusalsDoNotReadBody(t *testing.T) {
@@ -254,13 +257,15 @@ func TestOIDCTrustAndReplayRefusalsDoNotReadBody(t *testing.T) {
 		{"ref", "deployer.ref", func(c *deployauth.Claims) { c.Ref = "refs/heads/evil" }},
 		{"audience", "deployer.audience", func(c *deployauth.Claims) { c.Audience = []string{"evil"} }},
 		{"expired", "deployer.expired", func(c *deployauth.Claims) { c.ExpiresAt = c.ObservedAt.Add(-time.Second) }},
+		{"other workflow", "deployer.workflow", func(c *deployauth.Claims) { c.WorkflowRef = "owner/repo/.github/workflows/triage.yml@refs/heads/main" }},
+		{"pull_request_target on main", "deployer.event", func(c *deployauth.Claims) { c.EventName = "pull_request_target" }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			opts, store, _ := deployFixture(t)
 			claims := validOIDCClaims()
 			tc.change(&claims)
 			opts.Projects = func() []config.Project {
-				return []config.Project{{Name: "portfolio", Site: "portfolio", Deployers: []config.ProjectDeployer{{GitHub: &config.ProjectGitHubTrust{RepositoryID: 123, RepositoryOwnerID: 42, Ref: "refs/heads/main"}}}}}
+				return []config.Project{{Name: "portfolio", Site: "portfolio", Deployers: []config.ProjectDeployer{{GitHub: &config.ProjectGitHubTrust{RepositoryID: 123, RepositoryOwnerID: 42, Ref: "refs/heads/main", WorkflowRef: testWorkflowRef}}}}}
 			}
 			opts.Verifier = verifyFunc(func(context.Context, string) (deployauth.Claims, error) { return claims, nil })
 			h, _ := New(opts)
@@ -274,7 +279,7 @@ func TestOIDCTrustAndReplayRefusalsDoNotReadBody(t *testing.T) {
 	opts, store, _ := deployFixture(t)
 	claims := validOIDCClaims()
 	opts.Projects = func() []config.Project {
-		return []config.Project{{Name: "portfolio", Site: "portfolio", Deployers: []config.ProjectDeployer{{GitHub: &config.ProjectGitHubTrust{RepositoryID: 123, RepositoryOwnerID: 42, Ref: "refs/heads/main"}}}}}
+		return []config.Project{{Name: "portfolio", Site: "portfolio", Deployers: []config.ProjectDeployer{{GitHub: &config.ProjectGitHubTrust{RepositoryID: 123, RepositoryOwnerID: 42, Ref: "refs/heads/main", WorkflowRef: testWorkflowRef}}}}}
 	}
 	opts.Verifier = verifyFunc(func(context.Context, string) (deployauth.Claims, error) { return claims, nil })
 	h, _ := New(opts)
@@ -348,13 +353,70 @@ func TestReplayStoreFailureCannotAuthorizeAnUpload(t *testing.T) {
 	claims := validOIDCClaims()
 	opts.Verifier = verifyFunc(func(context.Context, string) (deployauth.Claims, error) { return claims, nil })
 	opts.Projects = func() []config.Project {
-		return []config.Project{{Name: "portfolio", Site: "portfolio", Deployers: []config.ProjectDeployer{{GitHub: &config.ProjectGitHubTrust{RepositoryID: 123, RepositoryOwnerID: 42, Ref: "refs/heads/main"}}}}}
+		return []config.Project{{Name: "portfolio", Site: "portfolio", Deployers: []config.ProjectDeployer{{GitHub: &config.ProjectGitHubTrust{RepositoryID: 123, RepositoryOwnerID: 42, Ref: "refs/heads/main", WorkflowRef: testWorkflowRef}}}}}
 	}
 	h, _ := New(opts)
 	probe := &probeBody{}
 	response := callDeploy(h, "POST", uploadPath, "signed-test-token", probe)
 	if response.Code != 503 || probe.read.Load() || store.calls.Load() != 0 || strings.Contains(response.Body.String(), "private") {
 		t.Fatalf("replay store failure=%d %s,read=%v", response.Code, response.Body, probe.read.Load())
+	}
+}
+
+func TestStatusReadsDoNotSpendTheDeployTokenOrBudget(t *testing.T) {
+	opts, store, _ := deployFixture(t)
+	claims := validOIDCClaims()
+	opts.Projects = func() []config.Project {
+		return []config.Project{{Name: "portfolio", Site: "portfolio", Deployers: []config.ProjectDeployer{{GitHub: &config.ProjectGitHubTrust{RepositoryID: 123, RepositoryOwnerID: 42, Ref: "refs/heads/main", WorkflowRef: testWorkflowRef}}}}}
+	}
+	opts.Verifier = verifyFunc(func(context.Context, string) (deployauth.Claims, error) { return claims, nil })
+	// Two deployments per hour. If the two status reads spent this budget, the
+	// second upload would be rate limited instead of reaching the replay check.
+	opts.ProjectLimiter = ratelimit.NewLimiter(1.0/3600, 2, time.Hour)
+	h, _ := New(opts)
+	if res := callDeploy(h, "POST", uploadPath, "same", strings.NewReader("archive")); res.Code != 201 {
+		t.Fatalf("upload=%d %s", res.Code, res.Body)
+	}
+	statusPath := uploadPath + "/" + strings.Repeat("a", 64)
+	for i := range 2 {
+		if res := callDeploy(h, "GET", statusPath, "same", nil); res.Code != 200 {
+			t.Fatalf("status read %d with the upload token=%d %s", i+1, res.Code, res.Body)
+		}
+	}
+	// Reading never re-arms the token for writing.
+	body := &probeBody{}
+	if res := callDeploy(h, "POST", uploadPath, "same", body); res.Code != 401 || !strings.Contains(res.Body.String(), "deployer.replay") || body.read.Load() {
+		t.Fatalf("second upload with a spent token=%d %s", res.Code, res.Body)
+	}
+	if store.calls.Load() != 1 {
+		t.Fatalf("store calls=%d, want 1", store.calls.Load())
+	}
+}
+
+func TestUnauthenticatedNoiseDoesNotFloodActivity(t *testing.T) {
+	opts, _, sink := deployFixture(t)
+	h, _ := New(opts)
+	noise := []struct{ method, path string }{
+		{"GET", "/"},
+		{"GET", "/.env"},
+		{"DELETE", uploadPath},
+		{"POST", "/v1/projects/unknown/deployments"},
+		{"POST", "/v1/projects/../admin"},
+	}
+	for _, request := range noise {
+		if res := callDeploy(h, request.method, request.path, "guess", strings.NewReader("x")); res.Code < 400 {
+			t.Fatalf("%s %s = %d, want a refusal", request.method, request.path, res.Code)
+		}
+	}
+	if got := len(sink.Events()); got != 0 {
+		t.Fatalf("scanner requests emitted %d activity events: %+v", got, sink.Events())
+	}
+	// A refusal for a configured project is still visible to the operator.
+	if res := callDeploy(h, "POST", uploadPath, "wrong-token", &probeBody{}); res.Code != 401 {
+		t.Fatalf("wrong token=%d", res.Code)
+	}
+	if got := sink.Events(); len(got) != 1 || got[0].Type != events.PagesDeployRefused || got[0].Code != "deployer.token_invalid" {
+		t.Fatalf("project refusal events=%+v", got)
 	}
 }
 

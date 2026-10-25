@@ -8,8 +8,9 @@ import (
 
 func TestDecideDeployer(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0).UTC()
-	trust := Trust{RepositoryID: 123, RepositoryOwnerID: 42, Ref: "refs/heads/main", Audience: "https://deploy.example"}
-	valid := Claims{RepositoryID: 123, RepositoryOwnerID: 42, Ref: trust.Ref, Audience: []string{trust.Audience},
+	workflow := "owner/repo/.github/workflows/deploy.yml@refs/heads/main"
+	trust := Trust{RepositoryID: 123, RepositoryOwnerID: 42, Ref: "refs/heads/main", WorkflowRef: workflow, Audience: "https://deploy.example"}
+	valid := Claims{RepositoryID: 123, RepositoryOwnerID: 42, Ref: trust.Ref, WorkflowRef: workflow, EventName: "push", Audience: []string{trust.Audience},
 		JWTID: "unique-token", CommitSHA: strings.Repeat("a", 40), IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(4 * time.Minute), ObservedAt: now}
 	for _, tc := range []struct {
 		name, code string
@@ -25,10 +26,12 @@ func TestDecideDeployer(t *testing.T) {
 		{"future issue time", "deployer.lifetime", func(c *Claims, _ *Trust) { c.IssuedAt = now.Add(time.Minute) }},
 		{"missing jti", "deployer.claims", func(c *Claims, _ *Trust) { c.JWTID = "" }},
 		{"invalid commit", "deployer.claims", func(c *Claims, _ *Trust) { c.CommitSHA = "untrusted\nvalue" }},
-		{"other workflow", "deployer.workflow", func(c *Claims, tr *Trust) {
-			tr.WorkflowRef = "owner/repo/.github/workflows/deploy.yml@refs/heads/main"
-			c.WorkflowRef = "other"
-		}},
+		{"other workflow", "deployer.workflow", func(c *Claims, _ *Trust) { c.WorkflowRef = "owner/repo/.github/workflows/other.yml@refs/heads/main" }},
+		{"unpinned workflow", "deployer.workflow", func(_ *Claims, tr *Trust) { tr.WorkflowRef = "" }},
+		{"manual run", "deployer.allowed", func(c *Claims, _ *Trust) { c.EventName = "workflow_dispatch" }},
+		{"pull_request_target on the base branch", "deployer.event", func(c *Claims, _ *Trust) { c.EventName = "pull_request_target" }},
+		{"pull request", "deployer.event", func(c *Claims, _ *Trust) { c.EventName = "pull_request" }},
+		{"missing event", "deployer.event", func(c *Claims, _ *Trust) { c.EventName = "" }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			claims, configured := valid, trust

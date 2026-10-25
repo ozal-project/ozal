@@ -88,6 +88,8 @@ func JSONSchema() ([]byte, error) {
 	github["repository_id"].(map[string]any)["minimum"] = 1
 	github["repository_owner_id"].(map[string]any)["minimum"] = 1
 	github["ref"].(map[string]any)["pattern"] = "^refs/(heads|tags)/.+$"
+	github["workflow_ref"].(map[string]any)["pattern"] = "^[^/@\\s]+/[^/@\\s]+/\\.github/workflows/[^/@\\s]+\\.ya?ml@refs/(heads|tags)/\\S+$"
+	github["workflow_ref"].(map[string]any)["description"] = "The only workflow file allowed to deploy, exactly as GitHub's workflow_ref claim names it."
 
 	tls := properties["tls"].(map[string]any)
 	tlsRequired := tls["required"].([]string)

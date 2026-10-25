@@ -109,7 +109,11 @@ reaches the edge through a separate, narrow public handler:
   `https://token.actions.githubusercontent.com`, requires the configured
   audience, a short lifetime, and matches claims against the project's trust:
   `repository_id` and `repository_owner_id` (immutable, unlike names), `ref`
-  (production only from `refs/heads/main`), optionally `workflow_ref`. The
+  (production only from `refs/heads/main`), the pinned `workflow_ref` of the
+  deploy workflow file, and an `event_name` of `push` or `workflow_dispatch`.
+  The ref alone is not enough: a `pull_request_target` workflow runs with the
+  base branch's ref while handling a fork's pull request. With a reusable
+  workflow, `workflow_ref` names the caller in the project's repository. The
   token's `sha` becomes the deployment's recorded commit.
 - **Fallback: a per-project deploy token** for other CI systems or the homelab,
   referenced by `env:` or `file:` and compared through fixed-size SHA-256
@@ -120,8 +124,15 @@ reaches the edge through a separate, narrow public handler:
   extracted, 20 000 entries), a per-project rate limit, one deployment in
   flight per project, and a refusal before reading the body when the token is
   invalid.
-- **Audit:** every attempt, accepted or refused, emits an event with project,
-  repository, ref, commit and a stable refusal code. No token or raw error.
+- **Audit:** every request that names a configured project emits an event
+  with project, repository, ref, commit and a stable refusal code; requests
+  that never reach a project (wrong host, IP limit, method, path, unknown
+  project) only get their code in the response, so scanners cannot flood the
+  activity feed. With the `admin` audit family, the intent and then the
+  outcome of each authenticated upload are durable. No token or raw error.
+- **Key fetches:** GitHub's JWKS is fetched at most once a minute, also for
+  tokens naming an unknown key, and refreshed hourly so retired keys stop
+  verifying. A failed refresh keeps the keys already fetched from GitHub.
 - **Pure core (maintainer piece):** `DecideDeployer(claims, trust) Decision`,
   table-tested like `Authorize`, never importing `net/http` or the OIDC SDK.
 
@@ -136,12 +147,14 @@ require restart; project trust follows the current routing snapshot on reload.
 
 Both POST and GET require `Authorization: Bearer ...`. GitHub tokens must have
 the configured audience, valid signature/issuer/expiry, positive pinned numeric
-IDs, matching ref and optional workflow, `iat`/`exp` spanning at most ten minutes,
-and a nonempty `jti`. The SQLite replay store consumes each verified `jti` once
-across projects and process restarts, until expiry; request a fresh token for
-GET or retry. Capacity exhaustion fails closed. Per-project authenticated traffic
-is limited to one request/second with a burst of five; only one upload per project
-may run. An independent IP budget protects verification. Authentication, replay,
+IDs, matching ref and pinned workflow, a `push` or `workflow_dispatch` event,
+`iat`/`exp` spanning at most ten minutes, and a nonempty `jti`. An upload consumes
+its verified `jti` once in the SQLite replay store, across projects and process
+restarts, until expiry; a retried upload needs a fresh token. A status GET
+authenticates the same way but consumes neither the `jti` nor the deploy budget,
+so the workflow can poll with the token that uploaded; reading never re-arms it
+for writing. Capacity exhaustion fails closed. Per-project uploads are limited to
+one request/second with a burst of five; only one upload per project may run. An independent IP budget protects verification. Authentication, replay,
 limits and required durable intent all precede reading the archive.
 
 GitHub provenance comes from verified claims. Opaque project tokens record the
@@ -153,8 +166,11 @@ already authenticated uses its captured project trust until it finishes.
 
 The durable contract records `admin.mutation_requested` / `project.deploy`
 before upload execution when the `admin` audit family is enabled, using its
-existing required/best_effort policy. `pages.deployed` and `pages.deploy_refused`
-are live outcome events; an intent is not a claim that a deploy committed.
+existing required/best_effort policy. After the store returns, the outcome is
+appended too: `pages.deployed` / `deployment.created`, or `pages.deploy_refused`
+with the refusal code. The outcome append cannot undo a committed deployment;
+its failure is counted and logged by the audit adapter, and an intent without
+an outcome means the process stopped or the append failed.
 
 ### Verification and operator handoff
 
@@ -182,8 +198,8 @@ published or executed; `PAGES-008` stays open until its real-issuer run succeeds
 
 Responses expose a stable `code`: `deployer.token_invalid` for SDK verification
 failure (including signature, issuer, audience or expiry), more specific
-`deployer.repository` / `owner` / `ref` / `workflow` for verified but untrusted
-claims, and `deployer.replay` for a consumed token (401). Busy/provenance conflicts
+`deployer.repository` / `owner` / `ref` / `workflow` / `event` for verified but
+untrusted claims, and `deployer.replay` for a consumed token (401). Busy/provenance conflicts
 return 409, IP/project budgets 429, compressed-size refusal 413, archive-rule
 refusal 422 with the existing `entry.*` code, and replay/audit/storage availability
 failures 503. Unknown project/deployment is 404; methods other than GET/POST are

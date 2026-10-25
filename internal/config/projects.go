@@ -28,7 +28,10 @@ type ProjectGitHubTrust struct {
 	RepositoryID      int64  `json:"repository_id"`
 	RepositoryOwnerID int64  `json:"repository_owner_id"`
 	Ref               string `json:"ref"`
-	WorkflowRef       string `json:"workflow_ref,omitempty"`
+	// WorkflowRef pins the workflow file allowed to deploy, as GitHub writes
+	// it: owner/repo/.github/workflows/deploy.yml@refs/heads/main. The ref
+	// alone would also admit a pull_request_target workflow on that branch.
+	WorkflowRef string `json:"workflow_ref"`
 }
 
 // ValidateProjects is the pure cross-check between project trust and site
@@ -118,8 +121,8 @@ func ValidateProjects(projects []Project, routes []Route) error {
 				if !validProjectRef(github.Ref) {
 					return fmt.Errorf("%s.github.ref must start with refs/heads/ or refs/tags/ and include a name", deployerField)
 				}
-				if github.WorkflowRef != "" && (strings.TrimSpace(github.WorkflowRef) != github.WorkflowRef || strings.IndexFunc(github.WorkflowRef, unicode.IsControl) >= 0) {
-					return fmt.Errorf("%s.github.workflow_ref must not contain surrounding whitespace or control characters", deployerField)
+				if !validWorkflowRef(github.WorkflowRef) {
+					return fmt.Errorf("%s.github.workflow_ref must name the deploy workflow as owner/repo/.github/workflows/FILE.yml@refs/heads/BRANCH", deployerField)
 				}
 
 				key := githubTrust{repositoryID: github.RepositoryID, ref: github.Ref}
@@ -148,6 +151,23 @@ func validProjectRef(ref string) bool {
 		}
 	}
 	return false
+}
+
+// validWorkflowRef accepts the shape of GitHub's workflow_ref claim. It does
+// not resolve anything: equality with the verified claim is the real check.
+func validWorkflowRef(ref string) bool {
+	if ref == "" || strings.IndexFunc(ref, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) >= 0 {
+		return false
+	}
+	file, gitRef, ok := strings.Cut(ref, "@")
+	if !ok || !validProjectRef(gitRef) {
+		return false
+	}
+	repository, name, ok := strings.Cut(file, "/.github/workflows/")
+	if !ok || strings.Count(repository, "/") != 1 || strings.HasPrefix(repository, "/") || strings.HasSuffix(repository, "/") {
+		return false
+	}
+	return name != "" && !strings.Contains(name, "/") && (strings.HasSuffix(name, ".yml") || strings.HasSuffix(name, ".yaml"))
 }
 
 func validateProjectTokenReference(reference string) error {

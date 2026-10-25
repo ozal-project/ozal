@@ -91,7 +91,10 @@ vulnerability severity.
 
 ## Controlled validation plan
 
-`PAGES-008` adds regressions for other repo/owner/ref/audience and expired tokens,
+`PAGES-008` adds regressions for other repo/owner/ref/workflow/audience and expired
+tokens, `pull_request_target` and other non-deploy events on the trusted branch,
+status reads that must not spend the upload token, a durable intent+outcome
+journal, scanner requests that must not emit activity, a JWKS refresh cooldown,
 signed-claim tampering, persistent concurrent replay prevention, project-token
 scope/rotation, required audit refusal, archive rejection, per-project upload
 exclusion, forwarded-IP spoofing and credential-header ambiguity. Socket tests

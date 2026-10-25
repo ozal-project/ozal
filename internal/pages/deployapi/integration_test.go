@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -32,18 +33,24 @@ type orderedArchive struct {
 func (b *orderedArchive) Read(p []byte) (int, error) { b.read = true; return b.reader.Read(p) }
 
 type orderedAudit struct {
-	body  *orderedArchive
-	calls int
-	t     *testing.T
+	body    *orderedArchive
+	records []events.Event
+	t       *testing.T
 }
 
+// Append checks that the intent is durable before the archive is read and the
+// outcome only after, and keeps both for the journal sequence assertion.
 func (a *orderedAudit) Append(_ context.Context, e events.Event) error {
-	a.calls++
-	if a.body.read {
+	a.records = append(a.records, e)
+	intent := e.Code == "project.deploy"
+	if intent && a.body.read {
 		a.t.Error("durable intent came after body read")
 	}
-	if e.Code != "project.deploy" || e.Deployment == nil || e.Deployment.RepositoryID != 123 {
-		a.t.Errorf("unsafe/missing intent provenance: %+v", e)
+	if !intent && !a.body.read {
+		a.t.Error("durable outcome came before the archive was processed")
+	}
+	if e.Deployment == nil || e.Deployment.RepositoryID != 123 {
+		a.t.Errorf("unsafe/missing deployment provenance: %+v", e)
 	}
 	return nil
 }
@@ -104,7 +111,7 @@ func TestSignedOIDCDeployUsesRealStoreReplayAndArchiveChecks(t *testing.T) {
 			t.Fatal(err)
 		}
 		raw, err := jwt.Signed(signer).Claims(jwt.Claims{Issuer: GitHubIssuer, Subject: "repo:owner/repo:ref:refs/heads/main", Audience: jwt.Audience{"https://deploy.example"}, IssuedAt: jwt.NewNumericDate(now.Add(-time.Minute)), Expiry: jwt.NewNumericDate(now.Add(4 * time.Minute)), ID: jti}).Claims(map[string]any{
-			"repository_id": "123", "repository_owner_id": "42", "ref": "refs/heads/main", "sha": strings.Repeat("a", 40), "repository": "owner/repo", "run_id": "42",
+			"repository_id": "123", "repository_owner_id": "42", "ref": "refs/heads/main", "workflow_ref": testWorkflowRef, "event_name": "push", "sha": strings.Repeat("a", 40), "repository": "owner/repo", "run_id": "42",
 		}).Serialize()
 		if err != nil {
 			t.Fatal(err)
@@ -115,7 +122,7 @@ func TestSignedOIDCDeployUsesRealStoreReplayAndArchiveChecks(t *testing.T) {
 	audit := &orderedAudit{body: body, t: t}
 	sink := &events.Recorder{}
 	opts := Options{Host: "deploy.example", Audience: "https://deploy.example", Projects: func() []config.Project {
-		return []config.Project{{Name: "portfolio", Site: "portfolio", Deployers: []config.ProjectDeployer{{GitHub: &config.ProjectGitHubTrust{RepositoryID: 123, RepositoryOwnerID: 42, Ref: "refs/heads/main"}}}}}
+		return []config.Project{{Name: "portfolio", Site: "portfolio", Deployers: []config.ProjectDeployer{{GitHub: &config.ProjectGitHubTrust{RepositoryID: 123, RepositoryOwnerID: 42, Ref: "refs/heads/main", WorkflowRef: testWorkflowRef}}}}}
 	}, Store: store, Verifier: NewGitHubVerifier(ctx, "https://deploy.example", client), Replays: sqlite.NewDeployReplays(db), Sink: sink, AuditEnabled: true, AuditRequired: true, Audit: audit}
 	h, err := New(opts)
 	if err != nil {
@@ -166,8 +173,17 @@ func TestSignedOIDCDeployUsesRealStoreReplayAndArchiveChecks(t *testing.T) {
 	if response := callDeploy(restarted, "POST", uploadPath, token, probe); response.Code != 401 || probe.read.Load() {
 		t.Fatalf("restart replay=%d,read=%v", response.Code, probe.read.Load())
 	}
-	if audit.calls != 2 {
-		t.Fatalf("durable intents=%d,want successful and hostile authenticated uploads only", audit.calls)
+	// Only authenticated uploads reach the journal, each as intent + outcome.
+	var journal []string
+	for _, record := range audit.records {
+		journal = append(journal, string(record.Type)+"/"+record.Code)
+	}
+	want := []string{
+		string(events.AdminMutationRequested) + "/project.deploy", string(events.PagesDeployed) + "/deployment.created",
+		string(events.AdminMutationRequested) + "/project.deploy", string(events.PagesDeployRefused) + "/" + string(pages.UnsafePath),
+	}
+	if !slices.Equal(journal, want) {
+		t.Fatalf("durable journal=%v, want %v", journal, want)
 	}
 	for _, event := range sink.Events() {
 		encoded, _ := json.Marshal(event)

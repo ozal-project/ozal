@@ -13,6 +13,7 @@ func TestValidateProjects(t *testing.T) {
 			Name: name, Site: site, Hostnames: []string{host},
 			Deployers: []ProjectDeployer{{GitHub: &ProjectGitHubTrust{
 				RepositoryID: repositoryID, RepositoryOwnerID: 42, Ref: ref,
+				WorkflowRef: "octavio/" + name + "/.github/workflows/deploy.yml@refs/heads/main",
 			}}},
 		}
 	}
@@ -165,6 +166,56 @@ func TestValidateProjects(t *testing.T) {
 			wantErr:  true,
 		},
 		{
+			name: "github deployer must pin its workflow",
+			projects: func() []Project {
+				p := portfolio("portfolio", "portfolio", "octaviosantacruz.com", "refs/heads/main", 123)
+				p.Deployers[0].GitHub.WorkflowRef = ""
+				return projects(p)
+			}(),
+			routes:  routes(Route{Host: "octaviosantacruz.com", Site: "portfolio"}),
+			wantErr: true,
+		},
+		{
+			name: "workflow outside .github/workflows",
+			projects: func() []Project {
+				p := portfolio("portfolio", "portfolio", "octaviosantacruz.com", "refs/heads/main", 123)
+				p.Deployers[0].GitHub.WorkflowRef = "octavio/portfolio/deploy.yml@refs/heads/main"
+				return projects(p)
+			}(),
+			routes:  routes(Route{Host: "octaviosantacruz.com", Site: "portfolio"}),
+			wantErr: true,
+		},
+		{
+			name: "workflow path escapes the workflows directory",
+			projects: func() []Project {
+				p := portfolio("portfolio", "portfolio", "octaviosantacruz.com", "refs/heads/main", 123)
+				p.Deployers[0].GitHub.WorkflowRef = "octavio/portfolio/.github/workflows/../x.yml@refs/heads/main"
+				return projects(p)
+			}(),
+			routes:  routes(Route{Host: "octaviosantacruz.com", Site: "portfolio"}),
+			wantErr: true,
+		},
+		{
+			name: "workflow without a ref",
+			projects: func() []Project {
+				p := portfolio("portfolio", "portfolio", "octaviosantacruz.com", "refs/heads/main", 123)
+				p.Deployers[0].GitHub.WorkflowRef = "octavio/portfolio/.github/workflows/deploy.yml"
+				return projects(p)
+			}(),
+			routes:  routes(Route{Host: "octaviosantacruz.com", Site: "portfolio"}),
+			wantErr: true,
+		},
+		{
+			name: "workflow from a pull request ref",
+			projects: func() []Project {
+				p := portfolio("portfolio", "portfolio", "octaviosantacruz.com", "refs/heads/main", 123)
+				p.Deployers[0].GitHub.WorkflowRef = "octavio/portfolio/.github/workflows/deploy.yml@refs/pull/1/merge"
+				return projects(p)
+			}(),
+			routes:  routes(Route{Host: "octaviosantacruz.com", Site: "portfolio"}),
+			wantErr: true,
+		},
+		{
 			name:     "ref branch prefix must have a name after it",
 			projects: projects(portfolio("portfolio", "portfolio", "octaviosantacruz.com", "refs/heads/", 123)),
 			routes:   routes(Route{Host: "octaviosantacruz.com", Site: "portfolio"}),
@@ -221,7 +272,7 @@ func TestValidateNormalizesProjectHostnamesOnTheReturnedCopy(t *testing.T) {
 		Pages:  &Pages{Dir: t.TempDir()},
 		Projects: []Project{{
 			Name: "portfolio", Site: "portfolio", Hostnames: []string{"PORTFOLIO.EXAMPLE."},
-			Deployers: []ProjectDeployer{{GitHub: &ProjectGitHubTrust{RepositoryID: 123, RepositoryOwnerID: 42, Ref: "refs/heads/main"}}},
+			Deployers: []ProjectDeployer{{GitHub: &ProjectGitHubTrust{RepositoryID: 123, RepositoryOwnerID: 42, Ref: "refs/heads/main", WorkflowRef: "octavio/portfolio/.github/workflows/deploy.yml@refs/heads/main"}}},
 		}},
 		Routes: []Route{{Host: "portfolio.example", Site: "portfolio"}},
 	}

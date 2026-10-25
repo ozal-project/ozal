@@ -154,7 +154,10 @@ func requestHostname(raw string) (string, error) {
 	return host, nil
 }
 
-func (h *Handler) admit(w http.ResponseWriter, r *http.Request) (config.Project, identity, bool) {
+// admit authenticates the caller for one project. A mutation also spends the
+// project's deploy budget and the OIDC token's one-time jti; a status read
+// does neither, so a workflow can poll with the token that uploaded.
+func (h *Handler) admit(w http.ResponseWriter, r *http.Request, mutation bool) (config.Project, identity, bool) {
 	var project config.Project
 	for _, candidate := range h.options.Projects() {
 		if candidate.Name == r.PathValue("project") {
@@ -181,6 +184,9 @@ func (h *Handler) admit(w http.ResponseWriter, r *http.Request) (config.Project,
 	if status != 0 {
 		h.reject(w, r, status, code, project, id)
 		return project, id, false
+	}
+	if !mutation {
+		return project, id, true
 	}
 	if allowed, wait := h.options.ProjectLimiter.Allow(project.Name); !allowed {
 		seconds := int64((wait + time.Second - 1) / time.Second)
@@ -212,12 +218,17 @@ func (h *Handler) reject(w http.ResponseWriter, r *http.Request, status int, cod
 	if status == 401 {
 		w.Header().Set("WWW-Authenticate", "Bearer")
 	}
-	var source *events.DeploymentSource
-	if project.Name != "" {
-		copy := id.source
-		copy.Project = project.Name
-		source = &copy
+	// Requests that never named a configured project (wrong host, IP limit,
+	// method, path, unknown project) are internet background noise: they get
+	// their stable code in the response but no activity event, so scanners
+	// cannot flood the operator's feed.
+	if project.Name == "" {
+		writeJSON(w, status, map[string]string{"code": code, "error": "deployment request refused"})
+		return
 	}
+	copy := id.source
+	copy.Project = project.Name
+	source := &copy
 	h.options.Sink.Emit(events.Event{Time: h.options.Now().UTC(), Type: events.PagesDeployRefused, Host: project.Site, Actor: id.actor, Code: code, Reason: "deployment request refused", Deployment: source})
 	writeJSON(w, status, map[string]string{"code": code, "error": "deployment request refused"})
 }

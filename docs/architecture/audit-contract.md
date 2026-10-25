@@ -208,10 +208,15 @@ archive or calling the Pages store. `audit.admin_mode` retains the same default
 `project`, numeric `repository_id`, `ref` and `commit_sha`; tokens, `jti`, secret
 references and raw verifier/storage errors never enter the journal.
 
-Authentication refusals and the `pages.deploy_refused` / `pages.deployed` outcome
-events remain live activity. A durable intent truthfully records the requested
-operation even if extraction fails or the process stops before commit. This
-does not claim a transaction spanning JSONL, SQLite and deployment files.
+After the store returns, the upload's outcome is appended to the same family:
+`pages.deployed` / `deployment.created`, or `pages.deploy_refused` with the
+archive, conflict or storage refusal code, carrying the same `deployment`
+object. It is appended even if the client disconnected. A committed deployment
+is not undone when the outcome append fails; the adapter counts and logs that
+failure. An intent without an outcome means the process stopped or the outcome
+append failed. Authentication refusals stay live activity only, and requests
+that never name a configured project emit no event at all. This does not
+claim a transaction spanning JSONL, SQLite and deployment files.
 
 The optional `deployment` field extends the v1 record payload. Records without
 it retain their existing encoding/hashes. An older binary that does not know
