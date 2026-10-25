@@ -467,7 +467,7 @@ func (w *Writer) Close() error {
 		w.lockFile = nil
 		return w.failed
 	}
-		syncErr := w.syncCurrentFile()
+	syncErr := w.syncCurrentFile()
 	closeErr := w.file.Close()
 	w.file = nil
 	if syncErr != nil {
