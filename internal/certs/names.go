@@ -33,6 +33,9 @@ func ValidateName(name string) error {
 	if base == "" {
 		return fmt.Errorf("certs: empty certificate name")
 	}
+	if len(name) > 253 {
+		return fmt.Errorf("certs: %q exceeds the DNS name length limit", name)
+	}
 	labels := strings.Split(base, ".")
 	if IsWildcard(name) && len(labels) < 2 {
 		return fmt.Errorf("certs: wildcard %q must sit above a registered domain", name)

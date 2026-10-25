@@ -1,6 +1,25 @@
 package certs
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+func TestValidateNameEnforcesDNSNameLength(t *testing.T) {
+	plain := strings.Join([]string{strings.Repeat("a", 63), strings.Repeat("b", 63), strings.Repeat("c", 63), strings.Repeat("d", 61)}, ".")
+	if len(plain) != 253 {
+		t.Fatalf("bad test fixture length: %d", len(plain))
+	}
+	if err := ValidateName(plain); err != nil {
+		t.Fatalf("253-byte DNS name rejected: %v", err)
+	}
+	if err := ValidateName(plain + "a"); err == nil {
+		t.Fatal("254-byte DNS name was accepted")
+	}
+	if err := ValidateName("*." + strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + "." + strings.Repeat("d", 61)); err == nil {
+		t.Fatal("wildcard name over 253 bytes was accepted")
+	}
+}
 
 func TestCovers(t *testing.T) {
 	tests := []struct {

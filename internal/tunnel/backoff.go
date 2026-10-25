@@ -1,6 +1,7 @@
 package tunnel
 
 import (
+	"math"
 	"math/rand/v2"
 	"time"
 )
@@ -21,17 +22,47 @@ var DefaultBackoff = Backoff{Base: time.Second, Max: 30 * time.Second}
 
 // Delay returns the wait before retry number `attempt` (0 for the first).
 func (b Backoff) Delay(attempt int) time.Duration {
+	if b.Base <= 0 {
+		return 0
+	}
+	max := b.Max
+	if max < b.Base {
+		// A malformed cap must not turn a configured retry loop into a
+		// zero-delay spin. Treat Base as the smallest usable cap.
+		max = b.Base
+	}
 	ceil := b.Base
-	for i := 0; i < attempt && ceil < b.Max; i++ {
+	for i := 0; i < attempt && ceil < max; i++ {
+		// Compare before doubling so large, valid durations cannot wrap
+		// negative and escape the configured cap.
+		if ceil > max/2 {
+			ceil = max
+			break
+		}
 		ceil *= 2
 	}
-	if ceil > b.Max {
-		ceil = b.Max
+	if ceil > max {
+		ceil = max
 	}
 	r := b.Rand
 	if r == nil {
 		r = rand.Float64
 	}
 	half := ceil / 2
-	return half + time.Duration(r()*float64(half))
+	if half == 0 {
+		return ceil
+	}
+	value := r()
+	if math.IsNaN(value) || value < 0 {
+		value = 0
+	} else if value >= 1 {
+		value = math.Nextafter(1, 0)
+	}
+	jitter := time.Duration(value * float64(half))
+	// Float64 cannot represent every nanosecond near MaxInt64; clamp a
+	// rounded endpoint so the result still stays below the exponential cap.
+	if jitter >= half {
+		jitter = half - 1
+	}
+	return half + jitter
 }
