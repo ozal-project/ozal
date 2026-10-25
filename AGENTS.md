@@ -7,11 +7,8 @@ The single instruction file for any coding agent working on Switchboard.
 Before changing code, read completely:
 
 1. `AGENTS.md` (this file).
-2. `.agents/skills/switchboard-mentor/SKILL.md`: the working mode. The
-   maintainer is learning Go and the protocols involved; every task follows
-   that loop.
-3. `docs/architecture/design.md`: the design pattern every package follows.
-4. `docs/TO_IMPLEMENT.md`: find the task's ID, state and done criteria.
+2. `docs/architecture/design.md`: the design pattern every package follows.
+3. `docs/TO_IMPLEMENT.md`: find the task's ID, state and done criteria.
 
 Read `VISION.md` when a task touches direction or scope, and
 `docs/architecture/stack.md` before adding or changing a dependency.
@@ -21,7 +18,7 @@ report the difference before making a broad change.
 
 ## What this is
 
-Switchboard is a year-long open-source learning project (October 2026 –
+Switchboard is a year-long open-source project (October 2026 –
 September 2027): a self-hostable **transparent zero-trust access platform**
 in a single Go binary. Today it is a host-based reverse proxy with health
 checks, ACME TLS, OIDC login against an external provider, per-route claim
@@ -96,6 +93,21 @@ it, never as a standalone big-bang refactor.
   secrets back to disk.
 - The admin listener stays loopback-only.
 
+## Product and implementation ownership
+
+The maintainer defines product direction, priorities, requirements and scope.
+The agent owns technical design and complete implementation: core logic,
+adapters, tests, integration, documentation and verification.
+
+- Implement all parts of the approved task, including security decisions and
+  pure core functions. Do not reserve code for the maintainer, leave exercises,
+  or skip tests while waiting for the maintainer to implement a function.
+- Choose routine technical details within the approved scope autonomously.
+  Ask only when a missing product decision or external authorization is needed.
+- Explain material tradeoffs, resulting behavior and verification clearly.
+  Lessons and learning journals are not required deliverables.
+- Commit and push still require explicit authorization.
+
 ## Working rules
 
 - Run `git status --short` before editing and preserve unrelated work.
@@ -105,7 +117,6 @@ it, never as a standalone big-bang refactor.
 - Run `scripts/verify.sh` before reporting a change as complete.
 - Track work only in `docs/TO_IMPLEMENT.md` (active) and `docs/IMPLEMENTED.md`
   (closed, with commit). Do not create parallel roadmaps.
-- Add a line to `docs/learning/LEARNING_LOG.md` for each closed task.
 - Report changed files, tests, tracker updates, blockers and whether the work
   is committed. Do not commit or push unless explicitly asked.
 
@@ -116,7 +127,7 @@ After reading the required files and inspecting the repository, summarize:
 - the concrete requirement and its tracker ID;
 - the owning package(s) and where it sits in the design pattern;
 - relevant current behavior;
-- the core piece the maintainer could write (per the mentor skill);
+- the implementation boundaries and intended behavior;
 - the verification you will run.
 
 Then implement the approved task rather than stopping at a proposal.

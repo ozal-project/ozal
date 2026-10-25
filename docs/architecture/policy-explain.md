@@ -210,11 +210,10 @@ and `scripts/verify.sh` are the gate.
 - The help text states the scope limit: authorization only.
 - `scripts/verify.sh` passes.
 
-## Teaching slice
+## Implementation boundaries
 
-The maintainer can write most of this without new security logic: flags,
-route lookup, `auth.Principal` construction and output formatting. The only
-security-sensitive rule is to call `auth.Authorize` exactly as the proxy does
-and to keep `authentication_required` at the Gate level. A failing table test
-for the denied-group case is a good first piece; the implementation should not
-change `auth.Authorize` to make it pass.
+The CLI adapter owns flags, route lookup, `auth.Principal` construction and
+output formatting. The security-sensitive rule is to call `auth.Authorize` exactly as the proxy does
+and to keep `authentication_required` at the Gate level. A regression test
+for the denied-group case must verify that behavior; the implementation must
+not change `auth.Authorize` to make it pass.

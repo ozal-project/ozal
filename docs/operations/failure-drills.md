@@ -90,8 +90,8 @@ does not establish the whole gateway path.
 The active tracker asks for a blameless postmortem of an `origin-cert` startup
 failure. This checkout contains no incident timestamp, impact, triggering
 configuration, observed logs, or operator actions for that specific failure;
-the learning log records successful staging and production certificate
-acceptance but is not evidence for the failure. Do not fill in a cause or
+the `EDGE-007` tracker records successful staging and production certificate
+acceptance, which is not evidence for the failure. Do not fill in a cause or
 impact from inference. Attach the incident evidence first, then record impact,
 detection, timeline, contributing conditions, recovery, and specific
 follow-up actions without assigning individual blame.

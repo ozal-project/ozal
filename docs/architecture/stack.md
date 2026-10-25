@@ -11,17 +11,17 @@ project.
 
 | Area | Choice | Why |
 |---|---|---|
-| Language | Go (minimum `go 1.26`, recommended toolchain `go1.27.3`) | Single static binary, excellent `net/http` and `crypto/*`, the maintainer's chosen learning language |
+| Language | Go (minimum `go 1.26`, recommended toolchain `go1.27.3`) | Single static binary, excellent `net/http` and `crypto/*`, the chosen implementation language |
 | HTTP, TLS, proxy | stdlib `net/http`, `crypto/tls`, `httputil.ReverseProxy` (migrate to `Rewrite`) | Mature and enough; post-quantum hybrid key exchange (X25519MLKEM768) on by default |
 | Public certificates | `golang.org/x/crypto/acme/autocert` today → **own bounded manager on the existing `golang.org/x/crypto/acme` + Cloudflare DNS API via stdlib `net/http`** (`EDGE-007`, revised 2026-10-18) | DNS-01 validates without inbound challenge connections and preserves a publicly trusted origin certificate behind Cloudflare. Initial scope is one name, `preview.octaviosantacruz.com`, with zero new Go modules. Learning and dependency control justify owning the lifecycle only with explicit storage, cleanup, retry and renewal acceptance; see [lifecycle contract](#public-origin-certificate-contract). CertMagic is a fallback if maintaining this bounded implementation proves too costly. |
 | Upstream OIDC login and GitHub deployment identity | `coreos/go-oidc` + `golang.org/x/oauth2` | Existing verifier reused for Pages with pinned GitHub issuer/JWKS, RS256, audience and expiry checks; no new dependency |
 | JOSE / JWT | `go-jose/go-jose/v4` | Already a dependency; reused for the OIDC provider |
 | Config | JSON with `DisallowUnknownFields` | Already in use; strict and dependency-free |
 | Logging | stdlib `log/slog` (JSON handler) | Structured logs without a dependency |
-| Rate limiting | `golang.org/x/time/rate` or own token bucket | Own implementation is a good small learning piece; x/time/rate as fallback |
+| Rate limiting | `golang.org/x/time/rate` or own token bucket | A bounded token bucket can remain local; x/time/rate is the library alternative |
 | Persistent state | SQLite via **`modernc.org/sqlite`** | Embedded: no extra service, so the gate cannot lose its database while it runs; pure Go (no cgo) keeps cross-compiling trivial; one file to back up. Kept behind consumer-declared ports so a Postgres adapter can be added later |
 | Migrations | Embedded numbered `.sql` files + small own runner | Same discipline as DSHub: sequential and immutable once applied |
-| Tunnels | **`github.com/hashicorp/yamux v0.1.2`** over mTLS (`TUN-001` local spike); `quic-go` evaluated later | Reuse reviewed stream multiplexing rather than invent framing/flow control. TLS authenticates both peers; one configured connector and upstream in the local spike. QUIC is a later learning step. |
+| Tunnels | **`github.com/hashicorp/yamux v0.1.2`** over mTLS (`TUN-001` local spike); `quic-go` evaluated later | Reuse reviewed stream multiplexing rather than invent framing/flow control. TLS authenticates both peers; one configured connector and upstream in the local spike. QUIC is a later protocol option. |
 | Passkeys | **`go-webauthn/webauthn`** v0.18.2 (in use since 2026-10-21, `ID-003`) | WebAuthn verification is subtle; learn it through a reviewed library. Brings 8 indirect modules (`fxamacker/cbor`, `go-webauthn/x`, `golang-jwt/jwt/v5` and `go-viper/mapstructure` for authenticator metadata, `google/go-tpm`, `tinylib/msgp`, `philhofer/fwd`, `x448/float16`); `govulncheck` clean at adoption |
 | SSH (Q2–Q3) | `golang.org/x/crypto/ssh` | Certificates, server and client in one package |
 | Dashboard | **Decided 2026-10-20 (owner):** the console is a Svelte 5 single-page app built with Vite 8, styled with Tailwind CSS 4 and shadcn-svelte components (bits-ui), icons from `@lucide/svelte`. Source in `web/console`, built by `scripts/build-console.sh` into `internal/admin/console`, committed and embedded with `embed.FS`. Plain Vite, not SvelteKit: SvelteKit's static output boots with an inline script, which the console CSP (`script-src 'self'`, no `unsafe-inline`) forbids. `/_/status` stays a server-rendered `html/template` route-debug view that works without JavaScript. | Node is a build-time tool only, so the binary stays self-contained and `go build` needs no Node. The owner preferred a styled component system over hand-written HTML/JS. Versions are pinned exactly in `package-lock.json` and were each at least two weeks old when chosen (TypeScript 6.0.3, not 7, because `svelte-check` needs the TypeScript API). `verify.sh` rebuilds the console when its toolchain is installed and fails if the embedded copy is stale. Same-origin only; the admin token is held in memory for the simulator, never in `localStorage` or a cookie |
@@ -61,9 +61,9 @@ is implemented in `internal/certs` (commit `2698e62`, 2026-10-18) with
 simulated-ACME/DNS/storage tests; the autocert HTTP-01 path remains for
 listeners without `tls.dns01`. Real staging and production issuance still need
 an operator-supplied DNS token and are not claimed as verified. The
-[renewal exercise](../learning/EDGE-007-renewal-exercise.md)
-prepares its first pure decision; the full lifecycle is covered by the
-package's tests, not by the exercise alone.
+[renewal decision contract](certificate-renewal.md)
+documents its pure decision; the full lifecycle is covered by the package's
+tests, beyond that decision alone.
 
 - **Bounded ownership:** one configured hostname and Cloudflare DNS, using the
   existing `x/crypto/acme` protocol client and a small `net/http` adapter. Do not

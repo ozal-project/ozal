@@ -5,9 +5,8 @@ import (
 	"time"
 )
 
-// TestRenewalDue is the exercise test from
-// docs/learning/EDGE-007-renewal-exercise.md, kept case for case: the
-// boundary, the unusable intervals and the clock-in-another-zone case.
+// TestRenewalDue covers docs/architecture/certificate-renewal.md:
+// the boundary, unusable intervals and the clock-in-another-zone case.
 func TestRenewalDue(t *testing.T) {
 	start := time.Date(2026, time.October, 1, 0, 0, 0, 0, time.UTC)
 	end := start.Add(90 * 24 * time.Hour)

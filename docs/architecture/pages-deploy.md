@@ -83,7 +83,7 @@ so no new public surface is added.
 
 ## Slices
 
-1. `internal/pages`: `CheckEntry` (maintainer), `Extract`, manifest hash,
+1. `internal/pages`: `CheckEntry`, `Extract`, manifest hash,
    filesystem layout. Tests with malicious archives.
 2. SQLite deployments + `Live` registry + `"site"` routes.
 3. Admin API, CLI, events.

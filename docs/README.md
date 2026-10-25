@@ -6,8 +6,6 @@
   priorities, states, blockers and done criteria.
 - [Implemented](IMPLEMENTED.md) — closed work with commits and evidence. No
   open tasks.
-- [Learning log](learning/LEARNING_LOG.md) — one line per closed task; raw
-  material for release write-ups.
 
 ## Direction
 
@@ -46,11 +44,11 @@
   evidence, safe disposable recovery procedure, and limits still open under
   `LAB-002`.
 
-## Learning labs
+## Engineering labs
 
 Engineering labs (performance, failure drills, threat model, test quality,
 accessibility, conformance, formal methods) are tracked as `LAB-*` entries in
-[TO_IMPLEMENT](TO_IMPLEMENT.md). They are learning work, not release
+[TO_IMPLEMENT](TO_IMPLEMENT.md). They are engineering experiments, not release
 commitments.
 
 - [Trust boundaries and threat model](security/threat-model.md) — source-based
@@ -61,5 +59,3 @@ commitments.
 ## For agents
 
 - [`AGENTS.md`](../AGENTS.md) — instructions for any coding agent.
-- [`.agents/skills/switchboard-mentor`](../.agents/skills/switchboard-mentor/SKILL.md)
-  — teaching-mode workflow.

@@ -911,7 +911,7 @@ history and grouped by the original phases.
 
 | Commit | Result |
 |---|---|
-| _uncommitted_ | Full audit (findings now `SEC-001`–`SEC-005`, `BUG-001`–`BUG-008`); `VISION.md`; `AGENTS.md`; mentor skill; design pattern, stack and tracker docs; `scripts/verify.sh`. |
+| _uncommitted_ | Full audit (findings now `SEC-001`–`SEC-005`, `BUG-001`–`BUG-008`); `VISION.md`; `AGENTS.md`; design pattern, stack and tracker docs; `scripts/verify.sh`. |
 
 ## Security findings (2026-10-17)
 
@@ -1029,7 +1029,7 @@ a request cancellation left the session usable. A compiler overlay removing the
 exact identity check makes its regression fail. Temporary processes/listeners and
 lab identities were removed. Optional staticcheck/govulncheck are not installed.
 
-The first gate stopped at a concurrent unfinished rate-limit exercise; that work
+The first gate stopped at a concurrent unfinished rate-limit implementation; that work
 was preserved and later completed, after which the full gate was repeated green.
 No VPS, live credential, DNS change or deployment was needed. See the
 [lab guide and findings](architecture/tunnel-local-spike.md). Automatic reconnect,

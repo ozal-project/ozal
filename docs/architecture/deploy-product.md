@@ -133,7 +133,7 @@ reaches the edge through a separate, narrow public handler:
 - **Key fetches:** GitHub's JWKS is fetched at most once a minute, also for
   tokens naming an unknown key, and refreshed hourly so retired keys stop
   verifying. A failed refresh keeps the keys already fetched from GitHub.
-- **Pure core (maintainer piece):** `DecideDeployer(claims, trust) Decision`,
+- **Pure authorization core:** `DecideDeployer(claims, trust) Decision`,
   table-tested like `Authorize`, never importing `net/http` or the OIDC SDK.
 
 ### Endpoint contract
@@ -278,9 +278,9 @@ The owner accepted the recommendation for each question.
 | D6 | Preview hostname scheme | `<site>-<branch>.<zone>` (one level, Universal SSL). |
 | D7 | Should a production deploy require approval (Telegram, console)? | Not initially; revisit with `NTF` approvals. |
 
-## Core pieces for the maintainer
+## Pure decision components
 
-Per the [mentor skill](../../.agents/skills/switchboard-mentor/SKILL.md):
+The agent implements and tests these components within their owning tasks:
 
 - `DecideDeployer`: OIDC claims + project trust → allow/deny with a stable code.
 - The deployment state machine: `received → stored → preview | live →
