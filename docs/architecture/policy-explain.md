@@ -1,9 +1,11 @@
-# Policy explain (design proposal)
+# Policy explain
 
 **Status:** implemented 2026-10-20 (`cmd/switchboard/policy.go`,
-`auth.Explain`); see `IMPLEMENTED.md`. Proposed 2026-10-19. Tracker:
+`auth.Explain`); see `IMPLEMENTED.md`. This file is the original design record;
+the current CLI also reports sourced context and supports hypothetical session
+and request-method evidence for configured context rules. Tracker:
 `ARCH-008` in [TO_IMPLEMENT.md](../TO_IMPLEMENT.md). This is not a release
-promise.
+promise or an end-to-end access test.
 
 Related: [`auth.Authorize`](../../internal/auth/authz.go),
 [`config.AccessPolicy`](../../internal/config/access.go),
@@ -22,9 +24,10 @@ denial, without binding listeners or starting an OIDC flow.
 
 ## What it proves and what it does not
 
-It proves the pure authorization function for the supplied inputs: identity
-allowlists, verified email, required groups and the resulting stable code and
-reason.
+It evaluates the pure authorization function for supplied identity and
+optional hypothetical context inputs: identity allowlists, verified email,
+required groups, session evidence and request-method classification. It prints
+the resulting stable code and reason.
 
 It does **not** prove OIDC discovery, the login redirect, session creation or
 lookup, cookie attributes, TLS, trusted-proxy IP resolution, rate limiting,
@@ -66,9 +69,14 @@ Flags:
 | `-email` | Principal email for an authenticated simulation. Required for a protected route unless `-no-session` is used; optional for a public route. |
 | `-verified` | Sets `Principal.EmailVerified`. |
 | `-groups` | Comma-separated groups; empty or omitted means none. |
-| `-no-session` | Simulates an unauthenticated request at the Gate level; prints `authentication_required` for protected routes and never calls `Authorize`; for a public route it still reports the public decision. Mutually exclusive with `-email`. |
+| `-method` | Hypothetical login method: `oidc` or `passkey`; used by configured context rules. |
+| `-device-bound` | Hypothetical non-syncable passkey evidence; requires `-method passkey`. |
+| `-user-verified` | Hypothetical WebAuthn user-verification result (`true` or `false`); requires `-method passkey`. Omitted means unknown. |
+| `-device-first-seen` | Hypothetical one-time new-passkey evidence (`true` or `false`); requires `-method passkey`. Omitted means unknown. |
+| `-request-method` | Hypothetical supported HTTP method; supplies the input for `action_risky` context rules. |
+| `-no-session` | Simulates an unauthenticated request at the Gate level; prints `authentication_required` for protected routes and never calls `Authorize`; for a public route it still reports the public decision. Mutually exclusive with principal, session and request evidence flags. |
 | `-json` | Stable machine-readable output. |
-| `-expect` | Optional `allowed` or `denied`; exits non-zero if the decision differs. Useful in CI. |
+| `-expect` | Optional `allowed`, `denied` or `step_up`; exits non-zero if the decision differs. |
 
 Exit codes:
 
@@ -86,7 +94,7 @@ principal: ana@example.com verified=true groups=[engineering,oncall]
 decision: allowed
 code: allowed
 reason: allowed
-scope: authorization only; OIDC, session and transport are not evaluated
+scope: authorization only; supplied session evidence is hypothetical, and OIDC, TLS and transport are not evaluated
 ```
 
 Denied by group:
@@ -136,7 +144,11 @@ Machine output (`-json`) should expose stable fields, for example:
 The exact JSON field names become a small public contract; keep them stable
 and version them if they change.
 
-## Implementation sketch
+## Original implementation outline
+
+This section records the first implementation plan. The code now also carries
+typed context evidence and supports the flags above; follow the tracker and
+README for the current behavior.
 
 - Add `cmd/switchboard/policy.go` with `runPolicyExplain(ctx, args, out) error`
   and wire it into the existing subcommand dispatcher in `main.go`. Follow the

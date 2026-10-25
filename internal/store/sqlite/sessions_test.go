@@ -286,16 +286,57 @@ func TestSessionsKeepAuthTimeAndMethod(t *testing.T) {
 	store := migratedSessions(t, t.TempDir()+"/state.db", time.Hour)
 	login := time.Unix(1800000000, 0)
 	store.now = func() time.Time { return login }
-	id, err := store.Create(ctx, auth.Principal{Subject: "s", AuthTime: login, Method: auth.MethodPasskey, DeviceBound: true})
+	userVerified := true
+	firstSeen := true
+	id, err := store.Create(ctx, auth.Principal{Subject: "s", AuthTime: login, Method: auth.MethodPasskey, DeviceBound: true, UserVerified: &userVerified, DeviceFirstSeen: &firstSeen})
 	if err != nil {
 		t.Fatal(err)
 	}
 	session, ok := store.Get(ctx, id)
-	if !ok || !session.Principal.AuthTime.Equal(login) || session.Principal.Method != auth.MethodPasskey || !session.Principal.DeviceBound {
+	if !ok || !session.Principal.AuthTime.Equal(login) || session.Principal.Method != auth.MethodPasskey || !session.Principal.DeviceBound || session.Principal.UserVerified == nil || !*session.Principal.UserVerified || session.Principal.DeviceFirstSeen == nil || !*session.Principal.DeviceFirstSeen {
 		t.Fatalf("session = %+v, %v", session.Principal, ok)
 	}
+	userVerified = false
+	firstSeen = false
+	id, err = store.Create(ctx, auth.Principal{Subject: "uv-false", Method: auth.MethodPasskey, UserVerified: &userVerified, DeviceFirstSeen: &firstSeen})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if session, ok := store.Get(ctx, id); !ok || session.Principal.UserVerified == nil || *session.Principal.UserVerified || session.Principal.DeviceFirstSeen == nil || *session.Principal.DeviceFirstSeen {
+		t.Fatalf("false authenticator UV evidence = %+v, %v", session.Principal, ok)
+	}
 	id, _ = store.Create(ctx, auth.Principal{Subject: "no-time"})
-	if session, ok := store.Get(ctx, id); !ok || !session.Principal.AuthTime.IsZero() {
-		t.Fatalf("missing auth time = %v, %v", session.Principal.AuthTime, ok)
+	if session, ok := store.Get(ctx, id); !ok || !session.Principal.AuthTime.IsZero() || session.Principal.UserVerified != nil {
+		t.Fatalf("missing auth evidence = %+v, %v", session.Principal, ok)
+	}
+}
+
+func TestSessionUserVerificationMigrationKeepsOldRowsUnknown(t *testing.T) {
+	ctx := context.Background()
+	db, _ := openTestDB(t)
+	migrations, err := LoadMigrations(Migrations())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Migrate(ctx, db, migrations[:len(migrations)-1]); err != nil {
+		t.Fatalf("apply schema before user-verification column: %v", err)
+	}
+	id := "legacy-session"
+	hash := sha256.Sum256([]byte(id))
+	now := time.Now().Unix()
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO sessions (id_hash, subject, email, email_verified, groups_json, created_at, expires_at, last_seen_at, auth_time, amr, device_bound)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		hash[:], "legacy-user", "legacy@example.test", true, "[]", now, now+3600, now, now, auth.MethodPasskey, false,
+	); err != nil {
+		t.Fatalf("insert pre-migration session: %v", err)
+	}
+	if _, err := Migrate(ctx, db, migrations); err != nil {
+		t.Fatalf("apply user-verification migration: %v", err)
+	}
+	store := NewSessions(db, auth.Lifetime{Absolute: time.Hour})
+	session, ok := store.Get(ctx, id)
+	if !ok || session.Principal.UserVerified != nil || session.Principal.DeviceFirstSeen != nil {
+		t.Fatalf("old session evidence UV=%+v first_seen=%+v, %v; want unknown", session.Principal.UserVerified, session.Principal.DeviceFirstSeen, ok)
 	}
 }

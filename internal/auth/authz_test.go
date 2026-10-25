@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/octaviosantacruz/switchboard/internal/policycontext"
 )
 
 func TestAuthorize(t *testing.T) {
@@ -54,6 +55,13 @@ func TestAuthorize(t *testing.T) {
 			name:     "domain allowlist match is case-insensitive",
 			p:        Principal{Email: "bob@Example.COM", EmailVerified: true},
 			policy:   config.AccessPolicy{AllowedDomains: []string{"example.com"}},
+			wantCode: CodeAllowed,
+			wantOK:   true,
+		},
+		{
+			name:     "Unicode domain matching is case-insensitive",
+			p:        Principal{Email: "bob@example.ς", EmailVerified: true},
+			policy:   config.AccessPolicy{AllowedDomains: []string{"example.σ"}},
 			wantCode: CodeAllowed,
 			wantOK:   true,
 		},
@@ -179,6 +187,26 @@ func TestAuthorize(t *testing.T) {
 
 func TestPolicyAuthorizerImplementsAuthorizer(t *testing.T) {
 	var _ Authorizer = PolicyAuthorizer{}
+}
+
+func TestAuthorizeWithContextPreservesCurrentPolicyBehavior(t *testing.T) {
+	context := policycontext.Build(policycontext.Input{
+		ObservedAt:      time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC),
+		Sensitivity:     policycontext.Known("high", "operator_catalog"),
+		DeviceFirstSeen: policycontext.Known(true, "passkey_registry"),
+	})
+	for _, tc := range []struct {
+		principal Principal
+		policy    config.AccessPolicy
+	}{
+		{Principal{Email: "anyone@example.com"}, config.AccessPolicy{}},
+		{Principal{Email: "alice@example.com", EmailVerified: true}, config.AccessPolicy{AllowedDomains: []string{"example.com"}}},
+		{Principal{Email: "eve@other.com", EmailVerified: true}, config.AccessPolicy{AllowedDomains: []string{"example.com"}}},
+	} {
+		if got, want := AuthorizeWithContext(tc.principal, context, tc.policy), Authorize(tc.principal, tc.policy); got.Allowed != want.Allowed || got.Code != want.Code {
+			t.Errorf("AuthorizeWithContext = %+v, Authorize = %+v", got, want)
+		}
+	}
 }
 
 func TestFreshStepUp(t *testing.T) {

@@ -27,6 +27,34 @@ func TestCreateAndGet(t *testing.T) {
 	}
 }
 
+func TestSessionStoreCopiesMutableEvidence(t *testing.T) {
+	store := NewSessionStore(Lifetime{Absolute: time.Hour})
+	verified := true
+	firstSeen := true
+	id, err := store.Create(context.Background(), Principal{Subject: "sub", UserVerified: &verified, DeviceFirstSeen: &firstSeen})
+	if err != nil {
+		t.Fatal(err)
+	}
+	verified = false
+	firstSeen = false
+	first, ok := store.Get(context.Background(), id)
+	if !ok || first.Principal.UserVerified == nil || !*first.Principal.UserVerified {
+		t.Fatalf("stored user verification changed with caller input: %+v", first.Principal)
+	}
+	if first.Principal.DeviceFirstSeen == nil || !*first.Principal.DeviceFirstSeen {
+		t.Fatalf("stored first-seen evidence changed with caller input: %+v", first.Principal)
+	}
+	*first.Principal.UserVerified = false
+	*first.Principal.DeviceFirstSeen = false
+	second, ok := store.Get(context.Background(), id)
+	if !ok || second.Principal.UserVerified == nil || !*second.Principal.UserVerified {
+		t.Fatalf("returned user verification mutated stored session: %+v", second.Principal)
+	}
+	if second.Principal.DeviceFirstSeen == nil || !*second.Principal.DeviceFirstSeen {
+		t.Fatalf("returned first-seen evidence mutated stored session: %+v", second.Principal)
+	}
+}
+
 func TestGetUnknownID(t *testing.T) {
 	store := NewSessionStore(Lifetime{Absolute: time.Hour})
 	if _, ok := store.Get(context.Background(), "does-not-exist"); ok {

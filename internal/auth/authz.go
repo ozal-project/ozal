@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/octaviosantacruz/switchboard/internal/policycontext"
 )
 
 // DecisionCode identifies why an authorization decision came out the way it
@@ -22,6 +23,9 @@ const (
 	CodeMissingRequiredGroup   DecisionCode = "missing_required_group"
 	CodeReauthRequired         DecisionCode = "reauthentication_required"
 	CodeDeviceBoundRequired    DecisionCode = "device_bound_required"
+	CodeContextRuleDenied      DecisionCode = "context_rule_denied"
+	CodeContextSignalUnknown   DecisionCode = "context_signal_unknown"
+	CodeContextStepUpRequired  DecisionCode = "context_step_up_required"
 	CodeMethodNotAllowed       DecisionCode = "method_not_allowed"
 	CodeAllowed                DecisionCode = "allowed"
 )
@@ -31,6 +35,7 @@ const (
 // reads in a log line or an error page.
 type Decision struct {
 	Allowed bool
+	StepUp  bool
 	Code    DecisionCode
 	Reason  string
 }
@@ -41,14 +46,14 @@ type Decision struct {
 // producible by an Authorizer: the caller only reaches this decision once
 // Authenticate has already confirmed a Principal exists.
 type Authorizer interface {
-	Authorize(p Principal, policy config.AccessPolicy) Decision
+	Authorize(p Principal, context policycontext.Context, policy config.AccessPolicy) Decision
 }
 
 // PolicyAuthorizer is the default, pure Authorizer implementation.
 type PolicyAuthorizer struct{}
 
-func (PolicyAuthorizer) Authorize(p Principal, policy config.AccessPolicy) Decision {
-	return Authorize(p, policy)
+func (PolicyAuthorizer) Authorize(p Principal, context policycontext.Context, policy config.AccessPolicy) Decision {
+	return AuthorizeWithContext(p, context, policy)
 }
 
 // Authorize evaluates:
@@ -100,6 +105,17 @@ func Authorize(p Principal, policy config.AccessPolicy) Decision {
 	}
 
 	return Decision{Allowed: true, Code: CodeAllowed, Reason: "allowed"}
+}
+
+// AuthorizeWithContext evaluates identity policy first, then the optional
+// context rule against sourced evidence. Missing signals cannot accidentally
+// satisfy a rule: they return an explicit fail-closed decision.
+func AuthorizeWithContext(p Principal, context policycontext.Context, policy config.AccessPolicy) Decision {
+	decision := Authorize(p, policy)
+	if !decision.Allowed || policy.ContextRule == nil {
+		return decision
+	}
+	return evaluateContextRule(context, policy.ContextRule)
 }
 
 // Fresh is the step-up check, separate from Authorize because it depends on

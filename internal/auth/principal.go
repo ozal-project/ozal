@@ -23,6 +23,13 @@ type Principal struct {
 	// DeviceBound reports that the login used a passkey that cannot be
 	// synced to other devices.
 	DeviceBound bool
+	// UserVerified is the authenticator's WebAuthn user-verification flag.
+	// Nil means the authentication method or a legacy session did not record it.
+	UserVerified *bool
+	// DeviceFirstSeen reports that this passkey was newly observed for the
+	// account during registration or its first successful login. Nil means
+	// the method or an older credential did not record this history.
+	DeviceFirstSeen *bool
 }
 
 // Login methods recorded in a session (its amr); the same names as

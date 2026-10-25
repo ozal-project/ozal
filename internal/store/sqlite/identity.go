@@ -165,7 +165,7 @@ func (s *Identity) Enrol(ctx context.Context, tokenHash []byte, userID string, c
 		return passkey.ErrInvitationInvalid
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO passkeys (credential_id, user_id, credential_json, backup_eligible, created_at) VALUES (?, ?, ?, ?, ?)`,
+		`INSERT INTO passkeys (credential_id, user_id, credential_json, backup_eligible, created_at, first_seen_pending) VALUES (?, ?, ?, ?, ?, 0)`,
 		credential.ID, userID, string(encoded), credential.Flags.BackupEligible, now,
 	); err != nil {
 		return fmt.Errorf("insert passkey: %w", err)
@@ -211,23 +211,39 @@ func (s *Identity) ActiveUser(ctx context.Context, id string) (passkey.User, err
 }
 
 // RecordLogin implements passkey.Directory. A revoked credential is not
-// updated: a login racing a revocation must not bring it back.
-func (s *Identity) RecordLogin(ctx context.Context, credential webauthn.Credential) error {
+// updated: a login racing a revocation must not bring it back. The conditional
+// update consumes first-seen evidence exactly once across concurrent logins.
+func (s *Identity) RecordLogin(ctx context.Context, credential webauthn.Credential) (bool, error) {
 	encoded, err := json.Marshal(credential)
 	if err != nil {
-		return fmt.Errorf("encode credential: %w", err)
+		return false, fmt.Errorf("encode credential: %w", err)
 	}
+	updatedAt := s.now().Unix()
 	result, err := s.db.ExecContext(ctx,
-		`UPDATE passkeys SET credential_json = ?, last_used_at = ? WHERE credential_id = ? AND revoked_at IS NULL`,
-		string(encoded), s.now().Unix(), credential.ID,
+		`UPDATE passkeys SET credential_json = ?, last_used_at = ?, first_seen_pending = 0 WHERE credential_id = ? AND revoked_at IS NULL AND first_seen_pending = 1`,
+		string(encoded), updatedAt, credential.ID,
 	)
 	if err != nil {
-		return fmt.Errorf("record login: %w", err)
+		return false, fmt.Errorf("record login: %w", err)
 	}
-	if n, err := result.RowsAffected(); err != nil || n != 1 {
-		return passkey.ErrNotFound
+	if n, err := result.RowsAffected(); err != nil {
+		return false, fmt.Errorf("record first passkey login: %w", err)
+	} else if n == 1 {
+		return true, nil
 	}
-	return nil
+	result, err = s.db.ExecContext(ctx,
+		`UPDATE passkeys SET credential_json = ?, last_used_at = ? WHERE credential_id = ? AND revoked_at IS NULL AND first_seen_pending = 0`,
+		string(encoded), updatedAt, credential.ID,
+	)
+	if err != nil {
+		return false, fmt.Errorf("record login: %w", err)
+	}
+	if n, err := result.RowsAffected(); err != nil {
+		return false, fmt.Errorf("record login result: %w", err)
+	} else if n != 1 {
+		return false, passkey.ErrNotFound
+	}
+	return false, nil
 }
 
 // Users lists every user, enabled or not, by email.
@@ -370,8 +386,8 @@ func (s *Identity) AddPasskey(ctx context.Context, userID string, credential web
 		return fmt.Errorf("encode credential: %w", err)
 	}
 	result, err := s.db.ExecContext(ctx,
-		`INSERT INTO passkeys (credential_id, user_id, credential_json, backup_eligible, created_at)
-		 SELECT ?, id, ?, ?, ? FROM users WHERE id = ? AND disabled_at IS NULL`,
+		`INSERT INTO passkeys (credential_id, user_id, credential_json, backup_eligible, created_at, first_seen_pending)
+		 SELECT ?, id, ?, ?, ?, 1 FROM users WHERE id = ? AND disabled_at IS NULL`,
 		credential.ID, string(encoded), credential.Flags.BackupEligible, s.now().Unix(), userID,
 	)
 	if err != nil {

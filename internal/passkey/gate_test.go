@@ -177,6 +177,9 @@ func TestEnrolThenLoginOnAnotherBrowser(t *testing.T) {
 	if !ok || principal.Email != "ana@example.com" || !principal.EmailVerified || !strings.HasPrefix(principal.Subject, passkey.SubjectPrefix) {
 		t.Fatalf("after enrolment: %+v, %v", principal, ok)
 	}
+	if principal.DeviceFirstSeen == nil || !*principal.DeviceFirstSeen {
+		t.Fatalf("newly enrolled passkey was not marked first seen: %+v", principal.DeviceFirstSeen)
+	}
 	if len(principal.Groups) != 1 || principal.Groups[0] != "ops" {
 		t.Fatalf("groups = %v", principal.Groups)
 	}
@@ -192,7 +195,7 @@ func TestEnrolThenLoginOnAnotherBrowser(t *testing.T) {
 	if result["redirect"] != "https://"+appHost+"/reports?q=1" {
 		t.Fatalf("redirect = %v", result["redirect"])
 	}
-	if again, ok := second.signedIn(); !ok || again.Subject != principal.Subject {
+	if again, ok := second.signedIn(); !ok || again.Subject != principal.Subject || again.DeviceFirstSeen == nil || *again.DeviceFirstSeen {
 		t.Fatalf("second browser: %+v, %v", again, ok)
 	}
 	if !h.events.has(events.LoginSucceeded, "passkey") {
@@ -504,20 +507,25 @@ func TestSessionRecordsDeviceBoundPasskeys(t *testing.T) {
 		if code := b.enrol(t, device, h.invite(t, fmt.Sprintf("user-%v@example.com", synced), false)); code != http.StatusOK {
 			t.Fatalf("enrol = %d", code)
 		}
-		if p, ok := b.signedIn(); !ok || p.DeviceBound == synced {
-			t.Fatalf("synced %v: after enrolment DeviceBound = %v", synced, p.DeviceBound)
+		if p, ok := b.signedIn(); !ok || p.DeviceBound == synced || p.UserVerified == nil || !*p.UserVerified || p.DeviceFirstSeen == nil || !*p.DeviceFirstSeen {
+			t.Fatalf("synced %v: after enrolment session evidence = %+v", synced, p)
 		}
 		if code, _ := b.login(t, device, "", loginOrigin); code != http.StatusOK {
 			t.Fatalf("login = %d", code)
 		}
-		if p, ok := b.signedIn(); !ok || p.DeviceBound == synced {
-			t.Fatalf("synced %v: after login DeviceBound = %v", synced, p.DeviceBound)
+		if p, ok := b.signedIn(); !ok || p.DeviceBound == synced || p.UserVerified == nil || !*p.UserVerified || p.DeviceFirstSeen == nil || *p.DeviceFirstSeen {
+			t.Fatalf("synced %v: after login session evidence = %+v", synced, p)
 		}
 	}
 	rec := httptest.NewRecorder()
 	h.gate.RedirectToStepUp(rec, httptest.NewRequest(http.MethodGet, "https://"+appHost+"/admin", nil), auth.CodeDeviceBoundRequired, nil)
 	if loc := rec.Header().Get("Location"); !strings.HasSuffix(loc, "&reauth=device") {
 		t.Fatalf("Location = %q", loc)
+	}
+	contextStepUp := httptest.NewRecorder()
+	h.gate.RedirectToStepUp(contextStepUp, httptest.NewRequest(http.MethodGet, "https://"+appHost+"/admin", nil), auth.CodeContextStepUpRequired, []string{auth.MethodOIDC})
+	if loc := contextStepUp.Header().Get("Location"); !strings.HasSuffix(loc, "&reauth=method&methods=passkey") {
+		t.Fatalf("context rule Location = %q", loc)
 	}
 }
 
@@ -670,8 +678,19 @@ func TestSelfServiceDevices(t *testing.T) {
 	if !added {
 		t.Fatal("adding a passkey sent no passkey.registered alert")
 	}
-	if code, _ := h.browser().login(t, laptop, "", loginOrigin); code != http.StatusOK {
+	firstLogin := h.browser()
+	if code, _ := firstLogin.login(t, laptop, "", loginOrigin); code != http.StatusOK {
 		t.Fatalf("login with the added passkey = %d", code)
+	}
+	if p, ok := firstLogin.signedIn(); !ok || p.DeviceFirstSeen == nil || !*p.DeviceFirstSeen {
+		t.Fatalf("newly added passkey first login evidence = %+v, %v", p.DeviceFirstSeen, ok)
+	}
+	repeatLogin := h.browser()
+	if code, _ := repeatLogin.login(t, laptop, "", loginOrigin); code != http.StatusOK {
+		t.Fatalf("repeat login with the added passkey = %d", code)
+	}
+	if p, ok := repeatLogin.signedIn(); !ok || p.DeviceFirstSeen == nil || *p.DeviceFirstSeen {
+		t.Fatalf("previously seen passkey evidence = %+v, %v", p.DeviceFirstSeen, ok)
 	}
 
 	// Someone else's passkey is not found.

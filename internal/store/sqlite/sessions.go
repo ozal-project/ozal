@@ -14,7 +14,7 @@ import (
 )
 
 // Sessions is the persistent auth.SessionBackend over migrations 001 and
-// 005–007. The
+// 005–009. The
 // cookie carries the raw ID; only its SHA-256 is stored, so a leaked
 // database file cannot be replayed as session cookies. Times are stored as
 // Unix seconds, the same shape the migration defines.
@@ -64,6 +64,14 @@ func (s *Sessions) Create(ctx context.Context, principal auth.Principal) (string
 	if err != nil {
 		return "", err
 	}
+	var userVerified any
+	if principal.UserVerified != nil {
+		userVerified = *principal.UserVerified
+	}
+	var deviceFirstSeen any
+	if principal.Method == auth.MethodPasskey && principal.DeviceFirstSeen != nil {
+		deviceFirstSeen = *principal.DeviceFirstSeen
+	}
 	now := s.now()
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -84,10 +92,10 @@ func (s *Sessions) Create(ctx context.Context, principal auth.Principal) (string
 		return "", auth.ErrStoreFull
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO sessions (id_hash, subject, email, email_verified, groups_json, created_at, expires_at, last_seen_at, auth_time, amr, device_bound)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO sessions (id_hash, subject, email, email_verified, groups_json, created_at, expires_at, last_seen_at, auth_time, amr, device_bound, user_verified, device_first_seen)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		hash[:], principal.Subject, principal.Email, principal.EmailVerified, groups,
-		now.Unix(), now.Add(s.lifetime.Absolute).Unix(), now.Unix(), storedAuthTime(principal.AuthTime), principal.Method, principal.DeviceBound,
+		now.Unix(), now.Add(s.lifetime.Absolute).Unix(), now.Unix(), storedAuthTime(principal.AuthTime), principal.Method, principal.DeviceBound, userVerified, deviceFirstSeen,
 	); err != nil {
 		return "", fmt.Errorf("insert session: %w", err)
 	}
@@ -104,21 +112,23 @@ func (s *Sessions) Create(ctx context.Context, principal auth.Principal) (string
 func (s *Sessions) Get(ctx context.Context, id string) (auth.Session, bool) {
 	hash := sha256.Sum256([]byte(id))
 	var (
-		subject     string
-		email       string
-		verified    int64
-		groupsJSON  string
-		expiresUnix int64
-		createdUnix int64
-		seenUnix    int64
-		authUnix    int64
-		method      string
-		deviceBound int64
+		subject         string
+		email           string
+		verified        int64
+		groupsJSON      string
+		expiresUnix     int64
+		createdUnix     int64
+		seenUnix        int64
+		authUnix        int64
+		method          string
+		deviceBound     int64
+		userVerified    sql.NullInt64
+		deviceFirstSeen sql.NullInt64
 	)
 	err := s.db.QueryRowContext(ctx,
-		`SELECT subject, email, email_verified, groups_json, expires_at, created_at, last_seen_at, auth_time, amr, device_bound FROM sessions WHERE id_hash = ?`,
+		`SELECT subject, email, email_verified, groups_json, expires_at, created_at, last_seen_at, auth_time, amr, device_bound, user_verified, device_first_seen FROM sessions WHERE id_hash = ?`,
 		hash[:],
-	).Scan(&subject, &email, &verified, &groupsJSON, &expiresUnix, &createdUnix, &seenUnix, &authUnix, &method, &deviceBound)
+	).Scan(&subject, &email, &verified, &groupsJSON, &expiresUnix, &createdUnix, &seenUnix, &authUnix, &method, &deviceBound, &userVerified, &deviceFirstSeen)
 	if errors.Is(err, sql.ErrNoRows) {
 		return auth.Session{}, false
 	}
@@ -150,15 +160,27 @@ func (s *Sessions) Get(ctx context.Context, id string) (auth.Session, bool) {
 		slog.Default().Debug("session groups are not readable", "error", err)
 		groups = nil
 	}
+	var verifiedByAuthenticator *bool
+	if userVerified.Valid {
+		value := userVerified.Int64 == 1
+		verifiedByAuthenticator = &value
+	}
+	var firstSeenCredential *bool
+	if method == auth.MethodPasskey && deviceFirstSeen.Valid {
+		value := deviceFirstSeen.Int64 == 1
+		firstSeenCredential = &value
+	}
 	return auth.Session{
 		Principal: auth.Principal{
-			Subject:       subject,
-			Email:         email,
-			EmailVerified: verified == 1,
-			Groups:        groups,
-			AuthTime:      timeOrZero(authUnix),
-			Method:        method,
-			DeviceBound:   deviceBound == 1,
+			Subject:         subject,
+			Email:           email,
+			EmailVerified:   verified == 1,
+			Groups:          groups,
+			AuthTime:        timeOrZero(authUnix),
+			Method:          method,
+			DeviceBound:     deviceBound == 1,
+			UserVerified:    verifiedByAuthenticator,
+			DeviceFirstSeen: firstSeenCredential,
 		},
 		ExpiresAt: s.expiresAt(created, lastSeen, issued),
 	}, true

@@ -72,8 +72,10 @@ type Directory interface {
 	UserByHandle(ctx context.Context, handle []byte) (User, []webauthn.Credential, error)
 	// ActiveUser returns an enabled user by ID.
 	ActiveUser(ctx context.Context, id string) (User, error)
-	// RecordLogin stores a credential's new sign counter and flags.
-	RecordLogin(ctx context.Context, credential webauthn.Credential) error
+	// RecordLogin stores a credential's new sign counter and flags. It returns
+	// true exactly once for a credential newly added to an existing account,
+	// when its first successful assertion consumes that first-seen signal.
+	RecordLogin(ctx context.Context, credential webauthn.Credential) (firstSeen bool, err error)
 
 	// Self-service (ID-008), always from a session with a recent passkey
 	// proof; the gate checks that before calling.

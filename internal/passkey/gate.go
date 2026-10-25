@@ -184,6 +184,8 @@ func (g *Gate) RedirectToStepUp(w http.ResponseWriter, r *http.Request, code aut
 		reason = "&reauth=device"
 	case auth.CodeMethodNotAllowed:
 		reason = "&reauth=method&methods=" + url.QueryEscape(strings.Join(methods, ","))
+	case auth.CodeContextStepUpRequired:
+		reason = "&reauth=method&methods=" + url.QueryEscape(auth.MethodPasskey)
 	default:
 		g.RedirectToLogin(w, r)
 		return
@@ -405,12 +407,13 @@ func (g *Gate) loginFinish(w http.ResponseWriter, r *http.Request) (any, *apiErr
 		g.emit(r, events.Event{Type: events.LoginFailed, Actor: subject, Code: "passkey_clone_warning"})
 		return nil, &errLoginFailed
 	}
-	if err := g.dir.RecordLogin(r.Context(), *credential); err != nil {
+	firstSeen, err := g.dir.RecordLogin(r.Context(), *credential)
+	if err != nil {
 		// Revoked between lookup and now, or a storage failure: refuse.
 		g.emit(r, events.Event{Type: events.LoginFailed, Actor: subject, Code: "passkey_record_failed", Error: err.Error()})
 		return nil, &errLoginFailed
 	}
-	if apiErr := g.startSession(w, r, found.user, !credential.Flags.BackupEligible); apiErr != nil {
+	if apiErr := g.startSession(w, r, found.user, !credential.Flags.BackupEligible, credential.Flags.UserVerified, firstSeen); apiErr != nil {
 		return nil, apiErr
 	}
 	g.emit(r, events.Event{Type: events.LoginSucceeded, Actor: subject, Code: "passkey"})
@@ -488,7 +491,7 @@ func (g *Gate) enrolFinish(w http.ResponseWriter, r *http.Request) (any, *apiErr
 	// Alerted when notifications are configured: a passkey nobody expected
 	// is the sign that a link or a session was stolen.
 	g.emit(r, events.Event{Type: events.PasskeyRegistered, Actor: user.Subject(), Code: kind})
-	if apiErr := g.startSession(w, r, user, !credential.Flags.BackupEligible); apiErr != nil {
+	if apiErr := g.startSession(w, r, user, !credential.Flags.BackupEligible, credential.Flags.UserVerified, true); apiErr != nil {
 		return nil, apiErr
 	}
 	return g.finished(pending.returnTo), nil
@@ -498,19 +501,22 @@ func (g *Gate) enrolFinish(w http.ResponseWriter, r *http.Request) (any, *apiErr
 
 // startSession issues a new session ID (never reusing one that existed
 // before the login) and ends the session the browser had, if any.
-func (g *Gate) startSession(w http.ResponseWriter, r *http.Request, user User, deviceBound bool) *apiError {
+func (g *Gate) startSession(w http.ResponseWriter, r *http.Request, user User, deviceBound, userVerified, deviceFirstSeen bool) *apiError {
 	if previous, err := r.Cookie(auth.SessionCookieName); err == nil {
 		g.sessions.Delete(r.Context(), previous.Value)
 	}
+	firstSeenEvidence := deviceFirstSeen
 	id, err := g.sessions.Create(r.Context(), auth.Principal{
 		Subject: user.Subject(),
 		Email:   user.Email,
 		// The operator asserted this address when inviting the user.
-		EmailVerified: true,
-		Groups:        user.Groups,
-		AuthTime:      g.now(),
-		Method:        auth.MethodPasskey,
-		DeviceBound:   deviceBound,
+		EmailVerified:   true,
+		Groups:          user.Groups,
+		AuthTime:        g.now(),
+		Method:          auth.MethodPasskey,
+		DeviceBound:     deviceBound,
+		UserVerified:    &userVerified,
+		DeviceFirstSeen: &firstSeenEvidence,
 	})
 	if errors.Is(err, auth.ErrStoreFull) {
 		g.emit(r, events.Event{Type: events.LoginFailed, Actor: user.Subject(), Code: "session_store_full"})

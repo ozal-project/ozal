@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"slices"
 	"sync"
 	"time"
 )
@@ -154,7 +155,7 @@ func (s *SessionStore) Create(ctx context.Context, principal Principal) (string,
 		return "", ErrStoreFull
 	}
 	now := s.now()
-	s.sessions[id] = storedSession{principal: principal, created: now, lastSeen: now}
+	s.sessions[id] = storedSession{principal: clonePrincipal(principal), created: now, lastSeen: now}
 
 	return id, nil
 }
@@ -193,7 +194,20 @@ func (s *SessionStore) Get(ctx context.Context, id string) (Session, bool) {
 		sess.lastSeen = now
 		s.sessions[id] = sess
 	}
-	return Session{Principal: sess.principal, ExpiresAt: expiry(sess.created, sess.lastSeen, s.lifetime)}, true
+	return Session{Principal: clonePrincipal(sess.principal), ExpiresAt: expiry(sess.created, sess.lastSeen, s.lifetime)}, true
+}
+
+func clonePrincipal(principal Principal) Principal {
+	principal.Groups = slices.Clone(principal.Groups)
+	if principal.UserVerified != nil {
+		verified := *principal.UserVerified
+		principal.UserVerified = &verified
+	}
+	if principal.DeviceFirstSeen != nil {
+		firstSeen := *principal.DeviceFirstSeen
+		principal.DeviceFirstSeen = &firstSeen
+	}
+	return principal
 }
 
 // Delete removes a session by ID.

@@ -3,8 +3,10 @@ package auth
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/octaviosantacruz/switchboard/internal/policycontext"
 )
 
 func TestExplain(t *testing.T) {
@@ -68,5 +70,36 @@ func TestExplainStatesStepUp(t *testing.T) {
 	got := Explain(route, &Principal{Subject: "s"})
 	if !got.Decision.Allowed || !strings.Contains(got.Decision.Reason, "15 min") {
 		t.Fatalf("explanation = %+v", got.Decision)
+	}
+}
+
+func TestNewReportIncludesContextAndUnknownSignals(t *testing.T) {
+	observedAuthTime := time.Date(2026, 10, 25, 11, 0, 0, 0, time.UTC)
+	principal := &Principal{Email: "ana@example.com", EmailVerified: true, Method: MethodPasskey, AuthTime: observedAuthTime}
+	report := NewReport("admin.example.com", config.Route{
+		Host:   "admin.example.com",
+		Access: &config.AccessPolicy{},
+	}, principal)
+	if report.Context.Version == 0 {
+		t.Fatal("policy report omitted decision context")
+	}
+	if got := report.Context.Resource.Route.Value; got == nil || *got != "admin.example.com" {
+		t.Fatalf("route signal = %+v", report.Context.Resource.Route)
+	}
+	if report.Context.Resource.Owner.Value != nil || report.Context.Resource.DataClass.Value != nil ||
+		report.Context.Resource.Sensitivity.Value != nil || report.Context.Resource.Sensitivity.Source != policycontext.SourceUnconfigured {
+		t.Fatalf("unconfigured resource catalog was inferred: %+v", report.Context.Resource)
+	}
+	if got := report.Context.Session.Method.Value; got == nil || *got != MethodPasskey {
+		t.Fatalf("session method signal = %+v", report.Context.Session.Method)
+	}
+	if got := report.Context.Session.UserVerified.Value; got != nil {
+		t.Fatalf("email verification was incorrectly treated as WebAuthn UV: %+v", report.Context.Session.UserVerified)
+	}
+	if got := report.Context.Network.ArrivalPath.Value; got != nil || report.Context.Network.ArrivalPath.Source != policycontext.SourceSimulationNoRequest {
+		t.Fatalf("offline simulation inferred network path: %+v", report.Context.Network.ArrivalPath)
+	}
+	if report.Context.Session.Method.ObservedAt.IsZero() {
+		t.Fatal("policy report context has no observation time")
 	}
 }

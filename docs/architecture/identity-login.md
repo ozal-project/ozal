@@ -55,12 +55,20 @@ users        id (random, stable)  · name · email (operator-asserted) · groups
              · disabled_at · created_at
 passkeys     credential_id · user_id · public_key (COSE) · sign_count
              · aaguid · transports · backup_eligible · backed_up
-             · created_at · last_used_at · revoked_at
+             · created_at · last_used_at · revoked_at · first_seen_pending
 invitations  token_hash · user_id · purpose (enrol|recover) · expires_at
              · used_at
-sessions     (existing table, new columns) auth_time · amr · credential_id
-             · device_bound
+sessions     (existing table, new columns) auth_time · amr · device_bound
+             · user_verified · device_first_seen (nullable; unknown for
+               older/OIDC sessions)
 ```
+
+`first_seen_pending` is set only for passkeys added after migration 009. The
+first successful assertion consumes it in the same SQLite update that records
+the credential, so concurrent logins cannot both claim to be first. Older
+credentials migrate as already known; the raw credential ID is not copied into
+session context or decision events. The enrolment session records the new
+credential as first-seen, while later sessions record false.
 
 - **Subject.** A passkey user is `sb:<user id>`. Upstream providers keep their
   own namespaces (`oidc:<issuer>|<sub>`, later `atproto:<did>`), so a policy

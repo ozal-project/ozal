@@ -6,9 +6,25 @@ import (
 	"net/netip"
 	"slices"
 	"strings"
+
+	"github.com/octaviosantacruz/switchboard/internal/policycontext"
 )
 
 type clientIPKey struct{}
+type trustEvidenceKey struct{}
+
+// TrustEvidence is the source-level provenance selected by the trust stage.
+// It contains no client address, so it can be attached to a policy decision
+// without duplicating personal network data.
+type TrustEvidence struct {
+	ArrivalPath     string
+	VisitorIPSource string
+}
+
+type trustDecision struct {
+	ClientIP netip.Addr
+	TrustEvidence
+}
 
 // ClientIP returns the address selected by Trust. RemoteAddr remains the
 // actual transport peer; consumers must not reinterpret forwarding headers.
@@ -17,12 +33,19 @@ func ClientIP(ctx context.Context) (netip.Addr, bool) {
 	return ip, ok && ip.IsValid()
 }
 
+// TrustEvidenceFrom reports the arrival path and source of the selected
+// visitor IP. It deliberately does not return the address itself.
+func TrustEvidenceFrom(ctx context.Context) (TrustEvidence, bool) {
+	evidence, ok := ctx.Value(trustEvidenceKey{}).(TrustEvidence)
+	return evidence, ok
+}
+
 // TrustWithProxies captures an immutable peer allowlist for this snapshot.
 // Only one valid CF-Connecting-IP from a trusted TCP peer is accepted.
 func TrustWithProxies(proxies []netip.Prefix) Stage {
 	trusted := slices.Clone(proxies)
-	return trustStage(func(r *http.Request) netip.Addr {
-		return resolveClientIP(r.RemoteAddr, headerValues(r.Header, "CF-Connecting-IP"), trusted)
+	return trustStage(func(r *http.Request) trustDecision {
+		return resolveClientEvidence(r.RemoteAddr, headerValues(r.Header, "CF-Connecting-IP"), trusted)
 	})
 }
 
@@ -32,8 +55,8 @@ func TrustWithProxies(proxies []netip.Prefix) Stage {
 // identity headers. Use it only on a handler that is reachable exclusively
 // through that tunnel.
 func TrustAuthenticatedTunnel() Stage {
-	address := trustStage(func(r *http.Request) netip.Addr {
-		return resolveTunnelClientIP(r.RemoteAddr, headerValues(r.Header, VisitorIPHeader))
+	address := trustStage(func(r *http.Request) trustDecision {
+		return resolveTunnelEvidence(r.RemoteAddr, headerValues(r.Header, VisitorIPHeader))
 	})
 	return func(next http.Handler) http.Handler {
 		inner := address(next)
@@ -51,60 +74,76 @@ func TrustAuthenticatedTunnel() Stage {
 
 // trustStage runs resolve once on the original headers, then strips every
 // spoofable header, so nothing after it can read a client-supplied value.
-func trustStage(resolve func(*http.Request) netip.Addr) Stage {
+func trustStage(resolve func(*http.Request) trustDecision) Stage {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// An outer Trust already resolved the address from the original
 			// headers; running again would see them stripped and downgrade
 			// the client to the transport peer.
-			ip, resolved := ClientIP(r.Context())
-			if !resolved {
-				ip = resolve(r)
+			evidence, hasEvidence := TrustEvidenceFrom(r.Context())
+			decision := trustDecision{TrustEvidence: evidence}
+			if ip, ok := ClientIP(r.Context()); ok {
+				decision.ClientIP = ip
+			}
+			if !hasEvidence && !decision.ClientIP.IsValid() {
+				decision = resolve(r)
 			}
 			stripIdentityHeaders(r.Header)
 			stripForwardingHeaders(r.Header)
-			if !resolved && ip.IsValid() {
-				r = r.WithContext(context.WithValue(r.Context(), clientIPKey{}, ip))
+			ctx := context.WithValue(r.Context(), trustEvidenceKey{}, decision.TrustEvidence)
+			if decision.ClientIP.IsValid() {
+				ctx = context.WithValue(ctx, clientIPKey{}, decision.ClientIP)
 			}
+			r = r.WithContext(ctx)
 			next.ServeHTTP(w, r)
 		})
 	}
 }
 
-func resolveClientIP(remoteAddr string, forwarded []string, trusted []netip.Prefix) netip.Addr {
+func resolveClientEvidence(remoteAddr string, forwarded []string, trusted []netip.Prefix) trustDecision {
 	peer, err := netip.ParseAddrPort(remoteAddr)
 	if err != nil {
-		return netip.Addr{}
+		return trustDecision{}
 	}
 	ip := peer.Addr().Unmap().WithZone("")
-	if len(forwarded) != 1 {
-		return ip
-	}
+	evidence := trustDecision{ClientIP: ip, TrustEvidence: TrustEvidence{ArrivalPath: policycontext.ArrivalDirect, VisitorIPSource: policycontext.IPSourcePeer}}
+	trustedPeer := false
 	for _, prefix := range trusted {
-		if !prefix.Contains(ip) {
-			continue
+		if prefix.Contains(ip) {
+			trustedPeer = true
+			break
 		}
-		if client, ok := parseVisitorAddr(forwarded[0]); ok {
-			return client
-		}
-		break
 	}
-	return ip
+	if !trustedPeer {
+		return evidence
+	}
+	evidence.TrustEvidence.ArrivalPath = policycontext.ArrivalProxy
+	if len(forwarded) == 1 {
+		if client, ok := parseVisitorAddr(forwarded[0]); ok {
+			evidence.ClientIP = client
+			evidence.TrustEvidence.VisitorIPSource = policycontext.IPSourceProxy
+		}
+	}
+	return evidence
 }
 
-// resolveTunnelClientIP prefers the edge's single valid assertion and falls
+// resolveTunnelEvidence prefers the edge's single valid assertion and falls
 // back to the tunnel peer, so a malformed or repeated claim degrades safely.
-func resolveTunnelClientIP(remoteAddr string, asserted []string) netip.Addr {
+func resolveTunnelEvidence(remoteAddr string, asserted []string) trustDecision {
+	evidence := trustDecision{TrustEvidence: TrustEvidence{ArrivalPath: policycontext.ArrivalTunnel, VisitorIPSource: policycontext.IPSourcePeer}}
 	if len(asserted) == 1 {
 		if client, ok := parseVisitorAddr(asserted[0]); ok {
-			return client
+			evidence.ClientIP = client
+			evidence.TrustEvidence.VisitorIPSource = policycontext.IPSourceTunnel
+			return evidence
 		}
 	}
 	peer, err := netip.ParseAddrPort(remoteAddr)
 	if err != nil {
-		return netip.Addr{}
+		return evidence
 	}
-	return peer.Addr().Unmap().WithZone("")
+	evidence.ClientIP = peer.Addr().Unmap().WithZone("")
+	return evidence
 }
 
 // parseVisitorAddr accepts one plain unicast address, as a visitor address
