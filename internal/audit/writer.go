@@ -46,7 +46,12 @@ var ErrClosed = errors.New("audit writer is closed")
 var ErrDirectoryLocked = errors.New("audit directory is already in use")
 var ErrAppendQueueFull = errors.New("audit append queue is full")
 var ErrUnsupportedPlatform = errors.New("owner-only audit storage is not supported on this platform yet")
-var errUnterminatedRecord = errors.New("last record is not newline terminated")
+
+// ErrIncompleteTail identifies a journal whose final record lacks its newline
+// terminator. Startup must stop so an operator can inspect and repair it.
+var ErrIncompleteTail = errors.New("last record is not newline terminated")
+
+var errUnterminatedRecord = ErrIncompleteTail
 
 type appendRequest struct {
 	ctx   context.Context

@@ -20,6 +20,10 @@ GOMAXPROCS=1 go test -run '^$' \
   ./internal/auth ./internal/proxy
 go test -run '^$' -bench '^BenchmarkLimiter' \
   -benchmem -benchtime=250ms -count=5 ./internal/ratelimit
+GOMAXPROCS=8 GOTMPDIR="$HOME/.cache/go-tmp" go test \
+  ./internal/audit ./internal/proxy -run '^$' \
+  -bench '^(BenchmarkWriterAppendGrouped|BenchmarkProxyProtectedRoute|BenchmarkProxyProtectedRouteRequiredAudit(Parallel)?)$' \
+  -benchmem -benchtime=1s -count=3
 ```
 
 For a CPU profile of the protected proxy path:
@@ -37,6 +41,15 @@ limiting both serially and under parallel contention. The proxy uses an
 in-process response stub to isolate application overhead. Do not compare its
 absolute timings to a live edge.
 
+The durable-audit benchmarks use a private log directory created under the
+package working directory, so they exercise that filesystem rather than `/tmp`.
+`BenchmarkWriterAppendGrouped` starts exactly 1, 8 or 64 concurrent callers
+against one writer; each caller waits for its result from `respondToBatch`,
+which is returned after the batch sync. It includes record encoding, hashing,
+queueing, writes and the shared `fsync`, but excludes writer startup and close.
+The protected-route benchmarks compare the synthetic protected handler with no
+audit, `required` audit serially, and `required` audit through `RunParallel`.
+
 ## First local result
 
 Captured 2026-10-25 on Linux/amd64, Go 1.27.3, Intel Core i7-1255U, with
@@ -49,6 +62,33 @@ host before making capacity claims.
 | `AuthorizeEmailAndGroup` median | 182.4 ns/op, 24 B/op, 1 alloc/op | 36.46 ns/op, 0 B/op, 0 allocs/op | Email allowlist comparison lost its temporary lowercase allocation. |
 | `FreshPasskey` median | 16.42 ns/op, 0 allocs/op | 16.51 ns/op, 0 allocs/op | No meaningful change in the adjacent pure policy check. |
 | `BenchmarkProxyProtectedRoute` median | 19.2 µs/op, 35,475 B/op, 32 allocs/op | 10.9 µs/op, 2,680 B/op, 30 allocs/op | Reusing and clearing the 32 KiB response-copy buffer reduced bytes/op by 92%; timing improved in this run. |
+
+## Durable audit cost (AUD-001)
+
+Captured 2026-10-25 on Linux/amd64, Go 1.27.3, Intel Core i7-1255U,
+`GOMAXPROCS=8`. Each result is the median of three one-second samples from the
+command above. The appenders share one writer and one local audit directory.
+
+| Benchmark | Median | B/op | allocs/op |
+|---|---:|---:|---:|
+| `WriterAppendGrouped/appenders_1` | 9.09 ms/op | 1,736 | 17 |
+| `WriterAppendGrouped/appenders_8` | 1.16 ms/op | 1,517 | 14 |
+| `WriterAppendGrouped/appenders_64` | 185 µs/op | 1,489 | 14 |
+| `ProxyProtectedRoute` (no audit) | 16.14 µs/op | 3,715 | 40 |
+| `ProxyProtectedRouteRequiredAudit` | 9.00 ms/op | 9,152 | 57 |
+| `ProxyProtectedRouteRequiredAuditParallel` | 1.48 ms/op | 8,793 | 55 |
+
+The single-appender result includes a separate durable sync for each call. With
+8 and 64 callers, group commit amortizes that sync across concurrent records;
+all callers still wait for the group sync before `Append` returns. In this
+synthetic route test, serial `required` audit is about 558 times the no-audit
+average, while concurrent calls share sync work. These numbers are specific to
+this host and filesystem. Benchmark `ns/op` is an average, not p50/p99; the
+proxy transport is in-process, and the parallel benchmark's concurrency comes
+from Go's benchmark harness rather than a controlled arrival-rate load test.
+It does not measure physical power-loss guarantees, queue saturation, listener
+overhead, TLS or storage on a deployment host. Keep `AUD-001` open until a
+representative filesystem and listener-level latency budget are measured.
 
 `internal/auth/authz.go` uses `strings.EqualFold` for email and domain
 allowlists. That matches the documented case-insensitive policy, avoids

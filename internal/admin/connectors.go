@@ -85,6 +85,9 @@ func (h *Handler) enrollConnector(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if !h.recordMutationIntent(w, r, "connector.enroll", req.Name) {
+		return
+	}
 	if err := h.connectors.Enroll(r.Context(), req.Name, fp); err != nil {
 		h.connectorError(w, err)
 		return
@@ -119,6 +122,9 @@ func (h *Handler) rotateConnector(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if !h.recordMutationIntent(w, r, "connector.rotate", name) {
+		return
+	}
 	if err := h.connectors.Rotate(r.Context(), name, expected, next); err != nil {
 		h.connectorError(w, err)
 		return
@@ -129,6 +135,9 @@ func (h *Handler) rotateConnector(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) revokeConnector(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
+	if !h.recordMutationIntent(w, r, "connector.revoke", name) {
+		return
+	}
 	if err := h.connectors.Revoke(r.Context(), name); err != nil {
 		h.connectorError(w, err)
 		return

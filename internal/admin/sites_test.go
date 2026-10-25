@@ -51,9 +51,10 @@ func (f *fakeDeployments) Sites(context.Context) ([]pages.Site, error) {
 	return []pages.Site{{Name: "blog", Live: strings.Repeat("a", 64)}}, nil
 }
 
-func sitesHandler(store *fakeDeployments, sink events.Sink) http.Handler {
+func sitesHandler(store *fakeDeployments, sink events.Sink, extra ...Option) http.Handler {
 	manager := &fakeManager{cfg: config.Config{Admin: config.Admin{Token: "secret"}}}
-	return New(manager, sink, WithPages(store))
+	options := append([]Option{WithPages(store)}, extra...)
+	return New(manager, sink, options...)
 }
 
 func TestDeployRequiresTheAdminToken(t *testing.T) {
@@ -72,7 +73,8 @@ func TestDeployRequiresTheAdminToken(t *testing.T) {
 func TestDeployAndRollbackEmitEvents(t *testing.T) {
 	store := &fakeDeployments{}
 	sink := &events.Recorder{}
-	handler := sitesHandler(store, sink)
+	audit := &recordingMutationAudit{}
+	handler := sitesHandler(store, sink, WithAdminMutationAudit(audit, true))
 
 	rec := request(handler, http.MethodPost, "/_/api/sites/blog/deployments", "secret", "archive")
 	if rec.Code != http.StatusCreated || len(store.received) != 1 || store.received[0] != "blog:archive" {
@@ -96,6 +98,16 @@ func TestDeployAndRollbackEmitEvents(t *testing.T) {
 	}
 	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &listed) != nil || len(listed.Sites) != 1 {
 		t.Fatalf("list: %d %s", rec.Code, rec.Body)
+	}
+	for _, code := range []string{"site.deploy", "site.rollback"} {
+		if !hasMutationCode(audit.events, code) {
+			t.Errorf("durable admin intents missing %q: %+v", code, audit.events)
+		}
+	}
+	for _, event := range audit.events {
+		if event.Type != events.AdminMutationRequested || event.Host != "blog" {
+			t.Errorf("site mutation intent = %+v, want safe blog target", event)
+		}
 	}
 }
 

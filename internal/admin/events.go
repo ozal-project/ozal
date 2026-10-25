@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/octaviosantacruz/switchboard/internal/events"
 	"github.com/octaviosantacruz/switchboard/internal/policycontext"
@@ -30,14 +31,58 @@ func WithCertificateStatus(provider func() CertificateStatus) Option {
 	}
 }
 
-// WithAuditStatus adds the durable access-audit state to both admin status
-// views. A nil provider omits the field when audit is not configured.
+// WithAuditStatus adds the durable audit state for selected event families to
+// both admin status views. A nil provider omits the field when audit is not
+// configured.
 func WithAuditStatus(provider func() AuditStatus) Option {
 	return func(h *Handler) {
 		if provider != nil {
 			h.auditStatus = provider
 		}
 	}
+}
+
+// WithAdminMutationAudit installs the durable intent appender for admin
+// mutations. Required mode fails the request before the mutation adapter runs.
+func WithAdminMutationAudit(appender events.AuditAppender, required bool) Option {
+	return func(h *Handler) {
+		h.mutationAudit = appender
+		h.auditMutationsRequired = required
+	}
+}
+
+func (h *Handler) recordMutationIntent(w http.ResponseWriter, r *http.Request, code, target string) bool {
+	if h.mutationAudit == nil {
+		if h.auditMutationsRequired {
+			http.Error(w, "administrative audit unavailable", http.StatusServiceUnavailable)
+			return false
+		}
+		return true
+	}
+	event := events.Event{
+		Type: events.AdminMutationRequested, Actor: actor(r), Host: safeMutationTarget(target),
+		Code: code, Reason: "authenticated operator requested mutation",
+	}
+	appendErr := h.mutationAudit.Append(r.Context(), event)
+	if appendErr != nil && h.auditMutationsRequired {
+		http.Error(w, "administrative audit unavailable", http.StatusServiceUnavailable)
+		return false
+	}
+	h.emit(event)
+	return true
+}
+
+func safeMutationTarget(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > 254 {
+		return ""
+	}
+	for _, char := range value {
+		if unicode.IsControl(char) || unicode.IsSpace(char) || char == '/' || char == '\\' {
+			return ""
+		}
+	}
+	return value
 }
 
 const heartbeat = 15 * time.Second

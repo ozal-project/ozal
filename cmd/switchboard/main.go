@@ -39,6 +39,7 @@ import (
 )
 
 const healthCheckInterval = 10 * time.Second
+const auditStartupFailure = "durable audit journal unavailable; verify with 'switchboard audit verify'; if the final record is incomplete, stop Switchboard and use 'switchboard audit repair -dir ABSOLUTE_PATH'"
 
 // subcommands are the one-shot commands run as `switchboard <name> ...`. Each
 // gets a context that SIGINT/SIGTERM cancel, so none can outlive a stop signal.
@@ -125,8 +126,10 @@ func main() {
 	if loaded.Audit != nil {
 		writer, openErr := audit.Open(ctx, loaded.Audit.Dir, audit.Options{MaxSegmentBytes: loaded.Audit.MaxSegmentBytes})
 		if openErr != nil {
-			if requiresDurableAccessAudit(*loaded) {
-				log.Fatalf("required access audit unavailable: %v", openErr)
+			if errors.Is(openErr, audit.ErrIncompleteTail) ||
+				requiresDurableAccessAudit(*loaded) ||
+				requiresDurableAdminAudit(*loaded) {
+				log.Fatal(auditStartupFailure)
 			}
 			reporter := newAuditFailureReporter(nil, logger, openErr)
 			reporter.report(openErr)
@@ -143,7 +146,9 @@ func main() {
 				}
 			}()
 		}
-		managerOpts = append(managerOpts, routemanager.WithAuditAppender(auditAppender))
+		if loaded.Audit.Includes("access") {
+			managerOpts = append(managerOpts, routemanager.WithAuditAppender(auditAppender))
+		}
 	}
 	var configuredEdge *configuredTunnel
 	if loaded.Tunnel != nil && *dbPath == "" {
@@ -153,6 +158,9 @@ func main() {
 		log.Fatal("pages configuration requires -db pointing at migrated state")
 	}
 	var adminOpts []admin.Option
+	if loaded.Audit != nil && loaded.Audit.Includes("admin") {
+		adminOpts = append(adminOpts, admin.WithAdminMutationAudit(auditAppender, loaded.Audit.AdminRequired()))
+	}
 	if auditStatus != nil {
 		adminOpts = append(adminOpts, admin.WithAuditStatus(auditStatus))
 	}
@@ -297,7 +305,7 @@ func main() {
 }
 
 func requiresDurableAccessAudit(cfg config.Config) bool {
-	if cfg.Audit == nil {
+	if cfg.Audit == nil || !cfg.Audit.Includes("access") {
 		return false
 	}
 	for _, route := range cfg.Routes {
@@ -306,6 +314,10 @@ func requiresDurableAccessAudit(cfg config.Config) bool {
 		}
 	}
 	return false
+}
+
+func requiresDurableAdminAudit(cfg config.Config) bool {
+	return cfg.Audit != nil && cfg.Audit.Includes("admin") && cfg.Audit.AdminRequired()
 }
 
 // Timeouts guard the listener itself against slow-client attacks

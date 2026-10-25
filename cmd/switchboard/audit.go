@@ -68,5 +68,5 @@ func (r *auditFailureReporter) report(err error) {
 	if err == nil || r.logger == nil {
 		return
 	}
-	r.once.Do(func() { r.logger.Error("durable access audit unavailable", "failure_class", "storage") })
+	r.once.Do(func() { r.logger.Error("durable audit unavailable", "failure_class", "storage") })
 }

@@ -27,6 +27,7 @@ func TestRequiresDurableAccessAudit(t *testing.T) {
 		want bool
 	}{
 		{name: "audit disabled", cfg: config.Config{Routes: []config.Route{{AuthRequired: true}}}},
+		{name: "admin-only audit does not require access family", cfg: config.Config{Audit: &config.AuditConfig{Dir: "/var/lib/switchboard/audit", Include: []string{"admin"}}, Routes: []config.Route{{AuthRequired: true}}}},
 		{name: "public defaults best effort", cfg: config.Config{Audit: auditConfig, Routes: []config.Route{{Host: "public.localhost", Target: "http://upstream.local"}}}},
 		{name: "protected defaults required", cfg: config.Config{Audit: auditConfig, Routes: []config.Route{{Host: "private.localhost", Target: "http://upstream.local", AuthRequired: true}}}, want: true},
 		{name: "public can opt into required", cfg: config.Config{Audit: auditConfig, Routes: []config.Route{{Host: "public.localhost", Target: "http://upstream.local", AuditMode: "required"}}}, want: true},
@@ -34,6 +35,25 @@ func TestRequiresDurableAccessAudit(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := requiresDurableAccessAudit(tc.cfg); got != tc.want {
 				t.Fatalf("requiresDurableAccessAudit() = %t, want %t", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRequiresDurableAdminAudit(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cfg  config.Config
+		want bool
+	}{
+		{name: "audit disabled", cfg: config.Config{}},
+		{name: "admin family absent", cfg: config.Config{Audit: &config.AuditConfig{Dir: "/var/lib/switchboard/audit", Include: []string{"access"}}}},
+		{name: "admin defaults required", cfg: config.Config{Audit: &config.AuditConfig{Dir: "/var/lib/switchboard/audit", Include: []string{"admin"}}}, want: true},
+		{name: "best effort is optional", cfg: config.Config{Audit: &config.AuditConfig{Dir: "/var/lib/switchboard/audit", Include: []string{"admin"}, AdminMode: "best_effort"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := requiresDurableAdminAudit(tc.cfg); got != tc.want {
+				t.Fatalf("requiresDurableAdminAudit() = %t, want %t", got, tc.want)
 			}
 		})
 	}
@@ -49,7 +69,7 @@ func TestAuditFailureReporterReturnsFailureAndLogsOnce(t *testing.T) {
 			t.Fatalf("Append() error = %v, want %v", err, failure)
 		}
 	}
-	if count := strings.Count(output.String(), "durable access audit unavailable"); count != 1 {
+	if count := strings.Count(output.String(), "durable audit unavailable"); count != 1 {
 		t.Fatalf("alert count = %d, want 1: %s", count, output.String())
 	}
 	if got := output.String(); strings.Contains(got, "disk full") || !strings.Contains(got, "failure_class=storage") {

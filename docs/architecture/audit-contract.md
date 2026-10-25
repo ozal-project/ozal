@@ -3,8 +3,9 @@
 **Status:** proposed 2026-10-19; partial `AUD-001` implementation in
 `internal/audit`, wired on 2026-10-25 for opt-in `access.*` events. Manual
 Ed25519 checkpoint creation and local verification are partial `AUD-002`.
-Automatic checkpoint cadence, external-retention drills and broad
-admin/login/certificate/tunnel coverage remain unimplemented. Tracker:
+Automatic checkpoint cadence, external-retention drills, login, certificate
+and tunnel coverage remain unimplemented. `admin` mutation-intent records are
+defined below and are the current `AUD-001` extension. Tracker:
 `AUD-001`, `AUD-002` and `AUD-003` in [TO_IMPLEMENT.md](../TO_IMPLEMENT.md).
 This is not a release promise.
 
@@ -54,10 +55,12 @@ called "tamper-evident" and keeps the stronger transparency-log work separate.
    then check the tail. Without an externally retained checkpoint, the tool
    reports internal consistency only. The CLI cannot attest that a supplied
    checkpoint actually came from outside the host.
-5. **Explicit failure policy per route.** Protected HTTP access decisions can
-   require a durable append before responding or forwarding; if it fails, fail
-   closed. Public/static access decisions can use best-effort mode with an
-   independent process-log alert. Admin mutations are not yet wired.
+5. **Explicit failure policy.** Protected HTTP access decisions can require a
+   durable append before responding or forwarding; if it fails, fail closed.
+   Public/static access decisions can use best-effort mode with an independent
+   process-log alert. When `include` contains `admin`, the operator can choose
+   `audit.admin_mode`; its default is `required` because these operations change
+   trust state.
 6. **RFC 9162 is phase 2.** Hash chain plus signed checkpoints first. Merkle
    tree, signed tree heads, inclusion/consistency proofs and witnesses come
    later; do not call the first version a transparency log.
@@ -141,6 +144,59 @@ Rules:
   enrolment/revocation/attachment and origin denials. The exact inclusion list
   is a config decision, not a code accident.
 
+## Administrative mutation records (`AUD-001`, first extension)
+
+Set `"admin"` in `audit.include` to audit mutations through the admin API.
+For example, to persist both access decisions and admin mutation intents:
+
+```json
+{"audit":{"dir":"/var/lib/switchboard/audit","include":["access","admin"],"admin_mode":"required"}}
+```
+
+The first supported set is:
+
+| Domain | Durable intent code (`Event.Code`) | Existing live outcome event |
+|---|---|---|
+| Route/config | `route.create`, `route.delete`, `config.reload` | `route.created`, `route.deleted`, `config.reloaded` or their existing `*.failed` forms |
+| People | `user.invite`, `user.disable`, `user.enable`, `passkey.revoke` | `user.invited`, `user.disabled`, `user.enabled`, `passkey.revoked` |
+| Connectors | `connector.enroll`, `connector.rotate`, `connector.revoke` | `connector.enrolled`, `connector.rotated`, `connector.revoked` |
+| Sites | `site.deploy`, `site.rollback` | `pages.deployed`, `pages.rolled_back`, `pages.failed` |
+
+The durable event type is `admin.mutation_requested`. It is appended after
+request authentication and operation metadata parsing, but before calling the
+manager, identity store, connector registry or deployment store. Site archive
+validation happens inside the deployment store, so a malformed archive may
+have a durable intent followed by a refusal. Its fields are the
+actor (`local` or the admin TCP peer), the operation code above, a safe target
+identifier when available, and a generic reason. It never contains request
+bodies, invitation links/tokens, certificate PEM/private keys or raw errors.
+User email targets are personal data; local log retention and access controls
+apply to them.
+
+The record means **an authenticated operator requested this operation**. It is
+not a claim that the operation committed. Existing `route.created`,
+`connector.revoked`, `pages.deployed` and other result events remain live
+activity events emitted after the operation. If an operation fails after its
+intent was durably recorded, the audit chain still truthfully records the
+attempt; if the process stops after the intent, its result is unknown. This
+avoids writing a success record before the change or claiming atomicity between
+the JSONL file and SQLite/config/site storage.
+
+`audit.admin_mode` is valid only when `admin` is included and accepts
+`required` or `best_effort`; omitted means `required`:
+
+- `required`: wait for the intent record's `fsync` before executing the
+  mutation. If append fails, return `503` and do not call the mutation adapter.
+  Startup fails when this required audit writer cannot be opened.
+- `best_effort`: try the append before executing the mutation, then continue
+  when it fails. The independent process log and audit status report the
+  storage failure; that request's intent may be absent from the durable chain.
+
+Requests rejected before an authenticated mutation handler (including
+malformed JSON), read-only admin calls, Telegram pairing,
+login/passkey self-service and certificate/tunnel lifecycle are outside this
+first extension. Their existing live-event behavior is unchanged.
+
 ## Checkpoints and verification
 
 Checkpoint payload:
@@ -183,8 +239,12 @@ Checkpoint payload:
 |---|---|---|
 | Protected HTTP access decisions | `required` (default) | Return 503 before forwarding; alert through the process log; fail startup if the log cannot be opened |
 | Public/static access decisions | `best_effort` (default) | Serve; emit to the live event stream; increment a process-local failure count, show unavailable in admin status, log once; events may be missing |
-| Admin mutations | Not wired | The live event stream is not a durable audit record |
+| Admin mutation intent (`admin.mutation_requested`) | `audit.admin_mode` (`required` when omitted) | `required`: return 503 without running the mutation if the intent cannot be synced. `best_effort`: run it, alert independently and expose audit unavailability; the intent may be missing. The durable record is an attempt, not proof of commit. |
 | Certificate/tunnel control plane | `required` | Refuse the state change if its audit record cannot be persisted; an unaudited trust change is a bug |
+
+An unterminated final record is structural journal damage, not a transient
+append failure. Startup stops in every audit mode and prints the stable repair
+command; run `switchboard audit repair` explicitly before restarting.
 
 - A bounded durable queue may absorb bursts, but it does not replace the
   per-route fallback decision. If the disk is full, the queue fails too.

@@ -75,7 +75,7 @@ func TestAuditConfigAndRouteFailureModes(t *testing.T) {
 
 	for _, tc := range []struct{ name, from, to string }{
 		{"relative directory", `"dir":"/var/lib/switchboard/audit"`, `"dir":"audit"`},
-		{"unsupported family", `"include":["access"]`, `"include":["admin"]`},
+		{"unsupported family", `"include":["access"]`, `"include":["unknown"]`},
 		{"duplicate family", `"include":["access"]`, `"include":["access","access"]`},
 		{"no family", `"include":["access"]`, `"include":[]`},
 		{"negative segment size", `"include":["access"]`, `"include":["access"],"max_segment_bytes":-1`},
@@ -86,6 +86,28 @@ func TestAuditConfigAndRouteFailureModes(t *testing.T) {
 				t.Fatal("Parse accepted invalid audit config")
 			}
 		})
+	}
+	adminAudit, err := Parse([]byte(`{"listen":":8888","audit":{"dir":"/var/lib/switchboard/audit","include":["admin"]},"routes":[{"host":"app.localhost","target":"http://localhost:9000"}]}`))
+	if err != nil {
+		t.Fatalf("Parse admin audit config: %v", err)
+	}
+	if !adminAudit.Audit.AdminRequired() {
+		t.Fatal("admin audit must default to required")
+	}
+	bestEffort, err := Parse([]byte(`{"listen":":8888","audit":{"dir":"/var/lib/switchboard/audit","include":["admin"],"admin_mode":"best_effort"},"routes":[{"host":"app.localhost","target":"http://localhost:9000"}]}`))
+	if err != nil {
+		t.Fatalf("Parse best-effort admin audit config: %v", err)
+	}
+	if bestEffort.Audit.AdminRequired() {
+		t.Fatal("best-effort admin audit was treated as required")
+	}
+	for _, raw := range []string{
+		`{"listen":":8888","audit":{"dir":"/var/lib/switchboard/audit","include":["access"],"admin_mode":"required"},"routes":[{"host":"app.localhost","target":"http://localhost:9000"}]}`,
+		`{"listen":":8888","audit":{"dir":"/var/lib/switchboard/audit","include":["admin"],"admin_mode":"ignore"},"routes":[{"host":"app.localhost","target":"http://localhost:9000"}]}`,
+	} {
+		if _, err := Parse([]byte(raw)); err == nil {
+			t.Errorf("Parse accepted invalid admin audit settings: %s", raw)
+		}
 	}
 	for _, tc := range []struct{ name, route string }{
 		{"best effort on protected route", `{"host":"private.localhost","target":"http://localhost:9001","access":{},"audit_mode":"best_effort"}`},
@@ -101,6 +123,10 @@ func TestAuditConfigAndRouteFailureModes(t *testing.T) {
 	withoutAudit := `{"listen":":8888","routes":[{"host":"public.localhost","target":"http://localhost:9000","audit_mode":"required"}]}`
 	if _, err := Parse([]byte(withoutAudit)); err == nil {
 		t.Fatal("route.audit_mode was accepted without top-level audit settings")
+	}
+	withoutAccessFamily := `{"listen":":8888","audit":{"dir":"/var/lib/switchboard/audit","include":["admin"]},"routes":[{"host":"public.localhost","target":"http://localhost:9000","audit_mode":"required"}]}`
+	if _, err := Parse([]byte(withoutAccessFamily)); err == nil {
+		t.Fatal("route.audit_mode was accepted without the access audit family")
 	}
 }
 

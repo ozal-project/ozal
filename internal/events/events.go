@@ -21,6 +21,9 @@ const (
 	AccessRateLimited Type = "access.rate_limited"
 	// An operator repaired an incomplete final record in the local audit log.
 	AuditRepaired Type = "audit.repaired"
+	// An authenticated operator requested a control-plane mutation. Durable
+	// admin audit records this before execution, so it is not a success claim.
+	AdminMutationRequested Type = "admin.mutation_requested"
 	// An allowed visitor was sent to log in again because the route's
 	// max_auth_age had passed (ID-005 step-up).
 	AccessStepUp       Type = "access.step_up"

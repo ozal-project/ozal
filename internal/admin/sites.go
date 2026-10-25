@@ -61,6 +61,13 @@ func (h *Handler) deploySite(w http.ResponseWriter, r *http.Request) {
 	controller := http.NewResponseController(w)
 	_ = controller.SetReadDeadline(deadline)
 	_ = controller.SetWriteDeadline(deadline)
+	target := site
+	if !pages.ValidSiteName(site) {
+		target = ""
+	}
+	if !h.recordMutationIntent(w, r, "site.deploy", target) {
+		return
+	}
 	body := http.MaxBytesReader(w, r.Body, pages.MaxUploadBytes)
 	deployment, err := h.pages.Deploy(r.Context(), site, body)
 	if err != nil {
@@ -78,6 +85,13 @@ func (h *Handler) rollbackSite(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := decodeJSON(w, r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	target := site
+	if !pages.ValidSiteName(site) {
+		target = ""
+	}
+	if !h.recordMutationIntent(w, r, "site.rollback", target) {
 		return
 	}
 	deployment, err := h.pages.Rollback(r.Context(), site, request.ID)

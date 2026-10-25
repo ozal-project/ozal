@@ -10,12 +10,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/octaviosantacruz/switchboard/internal/config"
 	"github.com/octaviosantacruz/switchboard/internal/events"
 	"github.com/octaviosantacruz/switchboard/internal/store/sqlite"
 )
 
-func peopleHandler(t *testing.T) (http.Handler, *sqlite.Identity, *events.Recorder) {
+func peopleHandler(t *testing.T, extra ...Option) (http.Handler, *sqlite.Identity, *events.Recorder) {
 	t.Helper()
 	ctx := context.Background()
 	db, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "state.db"))
@@ -40,13 +41,15 @@ func peopleHandler(t *testing.T) (http.Handler, *sqlite.Identity, *events.Record
 		},
 	}}
 	recorder := &events.Recorder{}
-	return New(manager, recorder, WithPeople(identity)), identity, recorder
+	options := append([]Option{WithPeople(identity)}, extra...)
+	return New(manager, recorder, options...), identity, recorder
 }
 
 // The console does what `switchboard user` does: invite with a link that
 // only the admin token can obtain, list, disable and enable.
 func TestPeopleInviteListDisable(t *testing.T) {
-	handler, identity, recorder := peopleHandler(t)
+	audit := &recordingMutationAudit{}
+	handler, identity, recorder := peopleHandler(t, WithAdminMutationAudit(audit, true))
 
 	invite := `{"email":"Ana@Example.com","name":"Ana","groups":["owner"," "],"return_to":"https://private.example.com/notes"}`
 	if rec := request(handler, http.MethodPost, "/_/api/people/invite", "", invite); rec.Code != http.StatusUnauthorized {
@@ -112,11 +115,33 @@ func TestPeopleInviteListDisable(t *testing.T) {
 	if users, _ := identity.Users(context.Background()); users[0].DisabledAt.IsZero() {
 		t.Fatal("user not disabled")
 	}
+	if rec := request(handler, http.MethodPost, "/_/api/people/ana@example.com/enable", "secret", ""); rec.Code != http.StatusOK {
+		t.Fatalf("enable = %d %s", rec.Code, rec.Body)
+	}
+	if users, _ := identity.Users(context.Background()); !users[0].DisabledAt.IsZero() {
+		t.Fatal("user not enabled")
+	}
+	users, err := identity.Users(context.Background())
+	if err != nil || len(users) != 1 {
+		t.Fatalf("users before passkey revoke = %+v, %v", users, err)
+	}
+	credential := webauthn.Credential{ID: []byte("1234567890abcdef")}
+	if err := identity.AddPasskey(context.Background(), users[0].ID, credential); err != nil {
+		t.Fatalf("add test passkey: %v", err)
+	}
+	if rec := request(handler, http.MethodPost, "/_/api/people/ana@example.com/passkeys/3132/revoke", "secret", ""); rec.Code != http.StatusOK {
+		t.Fatalf("revoke passkey = %d %s", rec.Code, rec.Body)
+	}
 	if rec := request(handler, http.MethodPost, "/_/api/people/nobody@example.com/disable", "secret", ""); rec.Code != http.StatusNotFound {
 		t.Fatalf("disable unknown = %d", rec.Code)
 	}
 	if rec := request(handler, http.MethodPost, "/_/api/people/ana@example.com/passkeys/abcd/revoke", "", ""); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("revoke without token = %d", rec.Code)
+	}
+	for _, code := range []string{"user.invite", "user.disable", "user.enable", "passkey.revoke"} {
+		if !hasMutationCode(audit.events, code) {
+			t.Errorf("durable admin intents missing %q: %+v", code, audit.events)
+		}
 	}
 }
 

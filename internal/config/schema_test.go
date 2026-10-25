@@ -69,8 +69,13 @@ func TestJSONSchemaMatchesConfigFieldsAndDeclaresCrossFieldConstraints(t *testin
 	}
 	audit := properties["audit"].(map[string]any)["properties"].(map[string]any)
 	include := audit["include"].(map[string]any)
-	if include["minItems"] != float64(1) || include["uniqueItems"] != true || include["items"].(map[string]any)["enum"].([]any)[0] != "access" {
+	includeFamilies := include["items"].(map[string]any)["enum"].([]any)
+	if include["minItems"] != float64(1) || include["uniqueItems"] != true || len(includeFamilies) != 2 || includeFamilies[0] != "access" || includeFamilies[1] != "admin" {
 		t.Fatalf("audit.include schema = %v", include)
+	}
+	adminMode := audit["admin_mode"].(map[string]any)["enum"].([]any)
+	if len(adminMode) != 2 || adminMode[0] != "required" || adminMode[1] != "best_effort" {
+		t.Fatalf("audit.admin_mode enum = %v", adminMode)
 	}
 	auditMode := route["properties"].(map[string]any)["audit_mode"].(map[string]any)["enum"].([]any)
 	if len(auditMode) != 2 || auditMode[0] != "required" || auditMode[1] != "best_effort" {

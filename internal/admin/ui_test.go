@@ -70,7 +70,7 @@ func TestAuditStatusAppearsInHTMLAndJSONWithoutRawIOError(t *testing.T) {
 		t.Fatalf("audit status = %+v", body.Audit)
 	}
 	page := request(handler, http.MethodGet, "/_/status", "", "")
-	for _, want := range []string{"Durable access audit", "Unavailable", "3", status.LastFailureAt, "Required routes fail closed"} {
+	for _, want := range []string{"Durable audit", "Selected event families", "Unavailable", "3", status.LastFailureAt, "Required operations fail closed"} {
 		if !strings.Contains(page.Body.String(), want) {
 			t.Errorf("status page did not show %q", want)
 		}

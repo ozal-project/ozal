@@ -56,7 +56,22 @@ type RouteResource struct {
 type AuditConfig struct {
 	Dir             string   `json:"dir"`
 	Include         []string `json:"include"`
+	AdminMode       string   `json:"admin_mode,omitempty"`
 	MaxSegmentBytes int64    `json:"max_segment_bytes,omitempty"`
+}
+
+// AdminRequired selects fail-closed behavior for admin mutation intent
+// records. It is consulted only when audit.include contains "admin".
+func (a AuditConfig) AdminRequired() bool { return a.AdminMode != "best_effort" }
+
+// Includes reports whether the durable audit configuration selects a family.
+func (a AuditConfig) Includes(family string) bool {
+	for _, configured := range a.Include {
+		if configured == family {
+			return true
+		}
+	}
+	return false
 }
 
 // IsStatic reports whether the route serves files (a fixed Root or a
@@ -423,13 +438,21 @@ func Validate(cfg Config) (*Config, error) {
 		}
 		seenAuditFamilies := make(map[string]struct{}, len(cfg.Audit.Include))
 		for _, family := range cfg.Audit.Include {
-			if family != "access" {
+			if family != "access" && family != "admin" {
 				return nil, fmt.Errorf("config: audit.include contains unsupported event family %q", family)
 			}
 			if _, exists := seenAuditFamilies[family]; exists {
 				return nil, fmt.Errorf("config: audit.include repeats %q", family)
 			}
 			seenAuditFamilies[family] = struct{}{}
+		}
+		if cfg.Audit.AdminMode != "" {
+			if _, enabled := seenAuditFamilies["admin"]; !enabled {
+				return nil, fmt.Errorf("config: audit.admin_mode requires audit.include to contain admin")
+			}
+			if cfg.Audit.AdminMode != "required" && cfg.Audit.AdminMode != "best_effort" {
+				return nil, fmt.Errorf("config: audit.admin_mode must be required or best_effort")
+			}
 		}
 	}
 	seenHosts := make(map[string]struct{}, len(cfg.Routes))
@@ -462,6 +485,9 @@ func Validate(cfg Config) (*Config, error) {
 		if r.AuditMode != "" {
 			if cfg.Audit == nil {
 				return nil, fmt.Errorf("config: route %q audit_mode requires top-level audit settings", host)
+			}
+			if !cfg.Audit.Includes("access") {
+				return nil, fmt.Errorf("config: route %q audit_mode requires audit.include to contain access", host)
 			}
 			if r.AuditMode != "required" && r.AuditMode != "best_effort" {
 				return nil, fmt.Errorf("config: route %q audit_mode must be required or best_effort", host)

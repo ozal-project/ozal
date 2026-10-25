@@ -106,6 +106,37 @@ func TestAppendWritesSafeRecordAndReopensChain(t *testing.T) {
 	}
 }
 
+func TestAdminMutationIntentIsStoredInVerifiedChain(t *testing.T) {
+	requireAuditFS(t)
+	ctx := context.Background()
+	dir := filepath.Join(t.TempDir(), "audit")
+	writer, err := Open(ctx, dir, Options{})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	event := events.Event{
+		Type: events.AdminMutationRequested, Actor: "local", Host: "ana@example.com",
+		Code: "user.invite", Reason: "authenticated operator requested mutation",
+	}
+	if err := writer.Append(ctx, event); err != nil {
+		t.Fatalf("Append admin intent: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	var got Record
+	verification, err := ReadVerified(ctx, dir, func(record Record) error {
+		got = record
+		return nil
+	})
+	if err != nil || verification.Records != 1 {
+		t.Fatalf("ReadVerified = %+v, %v", verification, err)
+	}
+	if got.Type != events.AdminMutationRequested || got.Actor != event.Actor || got.Host != event.Host || got.Code != event.Code || got.Reason != event.Reason {
+		t.Fatalf("verified admin intent = %+v, want %+v", got, event)
+	}
+}
+
 func TestReadVerifiedVisitsRecordsUnderTheChainCheck(t *testing.T) {
 	requireAuditFS(t)
 	ctx := context.Background()

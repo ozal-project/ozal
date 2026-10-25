@@ -145,6 +145,9 @@ func (h *Handler) invitePerson(w http.ResponseWriter, r *http.Request) {
 			groups = append(groups, g)
 		}
 	}
+	if !h.recordMutationIntent(w, r, "user.invite", req.Email) {
+		return
+	}
 	invitation, err := h.people.Invite(r.Context(), req.Email, strings.TrimSpace(req.Name), groups, req.Recover, ttl)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -166,6 +169,13 @@ func (h *Handler) invitePerson(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) setPersonDisabled(disabled bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		email := r.PathValue("email")
+		code := "user.enable"
+		if disabled {
+			code = "user.disable"
+		}
+		if !h.recordMutationIntent(w, r, code, email) {
+			return
+		}
 		if err := h.people.SetDisabled(r.Context(), email, disabled); err != nil {
 			h.personError(w, err)
 			return
@@ -181,6 +191,9 @@ func (h *Handler) setPersonDisabled(disabled bool) http.HandlerFunc {
 
 func (h *Handler) revokePersonPasskey(w http.ResponseWriter, r *http.Request) {
 	email, id := r.PathValue("email"), r.PathValue("id")
+	if !h.recordMutationIntent(w, r, "passkey.revoke", email) {
+		return
+	}
 	if err := h.people.RevokePasskey(r.Context(), email, id); err != nil {
 		h.personError(w, err)
 		return

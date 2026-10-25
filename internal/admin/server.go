@@ -33,16 +33,18 @@ type routeManager interface {
 
 // Handler serves the administrative dashboard and authenticated mutations.
 type Handler struct {
-	manager     routeManager
-	sink        events.Sink
-	broker      *events.Broker
-	certificate func() CertificateStatus
-	auditStatus func() AuditStatus
-	pages       deployments
-	people      people
-	connectors  connectors
-	pairing     pairing
-	mux         *http.ServeMux
+	manager                routeManager
+	sink                   events.Sink
+	broker                 *events.Broker
+	certificate            func() CertificateStatus
+	auditStatus            func() AuditStatus
+	mutationAudit          events.AuditAppender
+	auditMutationsRequired bool
+	pages                  deployments
+	people                 people
+	connectors             connectors
+	pairing                pairing
+	mux                    *http.ServeMux
 }
 
 func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
@@ -309,6 +311,9 @@ func (h *Handler) status(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (h *Handler) reload(w http.ResponseWriter, r *http.Request) {
+	if !h.recordMutationIntent(w, r, "config.reload", "") {
+		return
+	}
 	if err := h.manager.Reload(); err != nil {
 		h.emit(events.Event{
 			Type: events.ConfigReloadFailed, Actor: actor(r), Code: "config.reload_failed",
@@ -325,6 +330,9 @@ func (h *Handler) addRoute(w http.ResponseWriter, r *http.Request) {
 	var route config.Route
 	if err := decodeJSON(w, r, &route); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !h.recordMutationIntent(w, r, "route.create", safeRouteEventHost(route.Host)) {
 		return
 	}
 	if err := h.manager.AddRoute(route); err != nil {
@@ -347,6 +355,9 @@ func (h *Handler) addRoute(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) deleteRoute(w http.ResponseWriter, r *http.Request) {
 	host := r.PathValue("host")
+	if !h.recordMutationIntent(w, r, "route.delete", safeRouteEventHost(host)) {
+		return
+	}
 	if err := h.manager.DeleteRoute(host); err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, routemanager.ErrRouteNotFound) {

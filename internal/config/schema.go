@@ -99,7 +99,8 @@ func JSONSchema() ([]byte, error) {
 	audit["dir"].(map[string]any)["minLength"] = 1
 	audit["include"].(map[string]any)["minItems"] = 1
 	audit["include"].(map[string]any)["uniqueItems"] = true
-	audit["include"].(map[string]any)["items"].(map[string]any)["enum"] = []string{"access"}
+	audit["include"].(map[string]any)["items"].(map[string]any)["enum"] = []string{"access", "admin"}
+	audit["admin_mode"].(map[string]any)["enum"] = []string{"required", "best_effort"}
 	audit["max_segment_bytes"].(map[string]any)["minimum"] = 0
 	audit["max_segment_bytes"].(map[string]any)["maximum"] = 1 << 40
 

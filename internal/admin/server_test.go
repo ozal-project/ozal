@@ -261,7 +261,8 @@ func TestAdminTokenReferenceIsResolvedPerRequest(t *testing.T) {
 func TestRouteMutationsAndReloadAreAudited(t *testing.T) {
 	manager := &fakeManager{cfg: config.Config{Admin: config.Admin{Token: "secret"}}}
 	recorder := &events.Recorder{}
-	handler := New(manager, recorder)
+	audit := &recordingMutationAudit{}
+	handler := New(manager, recorder, WithAdminMutationAudit(audit, true))
 
 	body := `{"host":"new.localhost","target":"http://localhost:9001"}`
 	if rec := request(handler, http.MethodPost, "/routes", "secret", body); rec.Code != http.StatusCreated {
@@ -297,6 +298,15 @@ func TestRouteMutationsAndReloadAreAudited(t *testing.T) {
 	}
 	if reloaded.ConfigSHA256 != manager.ConfigDigest() || reloaded.ConfigSHA256 == "" {
 		t.Errorf("config.reloaded does not name the config in effect: %+v", reloaded)
+	}
+	wantIntentCodes := []string{"route.create", "route.delete", "config.reload"}
+	if len(audit.events) != len(wantIntentCodes) {
+		t.Fatalf("durable mutation intents = %+v, want codes %v", audit.events, wantIntentCodes)
+	}
+	for i, code := range wantIntentCodes {
+		if got := audit.events[i]; got.Type != events.AdminMutationRequested || got.Code != code || got.Actor == "" {
+			t.Errorf("durable intent %d = %+v, want type %q code %q and actor", i, got, events.AdminMutationRequested, code)
+		}
 	}
 }
 

@@ -23,7 +23,7 @@ import (
 	"github.com/octaviosantacruz/switchboard/internal/tunnel"
 )
 
-func connectorHandler(t *testing.T) (http.Handler, *events.Recorder) {
+func connectorHandler(t *testing.T, extra ...Option) (http.Handler, *events.Recorder) {
 	t.Helper()
 	ctx := context.Background()
 	db, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "state.db"))
@@ -40,7 +40,8 @@ func connectorHandler(t *testing.T) (http.Handler, *events.Recorder) {
 	}
 	recorder := &events.Recorder{}
 	manager := &fakeManager{cfg: config.Config{Admin: config.Admin{Token: "secret"}}}
-	return New(manager, recorder, WithConnectors(tunnel.NewRegistry(db))), recorder
+	options := append([]Option{WithConnectors(tunnel.NewRegistry(db))}, extra...)
+	return New(manager, recorder, options...), recorder
 }
 
 func certificatePEM(t *testing.T) (string, string) {
@@ -78,7 +79,8 @@ func jsonBody(t *testing.T, v any) string {
 // Whoever enrols a certificate decides which machine serves a protected
 // host: no bearer may change the registry, the socket may, with an event.
 func TestConnectorChangesAreHostOnly(t *testing.T) {
-	handler, recorder := connectorHandler(t)
+	audit := &recordingMutationAudit{}
+	handler, recorder := connectorHandler(t, WithAdminMutationAudit(audit, true))
 	cert, sum := certificatePEM(t)
 	enrol := jsonBody(t, map[string]string{"name": "portfolio", "certificate_pem": cert})
 
@@ -133,6 +135,9 @@ func TestConnectorChangesAreHostOnly(t *testing.T) {
 
 	var kinds []events.Type
 	for _, e := range recorder.Events() {
+		if e.Type == events.AdminMutationRequested {
+			continue
+		}
 		if e.Actor != "local" || e.Host != "portfolio" {
 			t.Fatalf("event %+v, want actor local on portfolio", e)
 		}
@@ -141,6 +146,16 @@ func TestConnectorChangesAreHostOnly(t *testing.T) {
 	want := []events.Type{events.ConnectorEnrolled, events.ConnectorRotated, events.ConnectorRevoked}
 	if len(kinds) != len(want) || kinds[0] != want[0] || kinds[1] != want[1] || kinds[2] != want[2] {
 		t.Fatalf("events = %v, want %v", kinds, want)
+	}
+	for _, code := range []string{"connector.enroll", "connector.rotate", "connector.revoke"} {
+		if !hasMutationCode(audit.events, code) {
+			t.Errorf("durable admin intents missing %q: %+v", code, audit.events)
+		}
+	}
+	for _, event := range audit.events {
+		if event.Type != events.AdminMutationRequested || event.Host != "portfolio" || strings.Contains(event.Reason, "CERTIFICATE") {
+			t.Errorf("unsafe connector mutation intent: %+v", event)
+		}
 	}
 }
 
