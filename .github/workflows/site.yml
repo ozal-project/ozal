@@ -1,0 +1,96 @@
+name: site
+
+# Builds the public project page and publishes it to switchboard.octaviosantacruz.com
+# through this edge's own deploy endpoint (PAGES-004/PAGES-008). The edge trusts
+# only this file, in this repository, on main, run by a push or by hand, through
+# a GitHub OIDC token: no deploy secret is stored here. Renaming this file or the
+# branch stops deployments until the edge's project trust is updated
+# (server-ops render-preview-config.py).
+on:
+  push:
+    branches: [main]
+    # The roadmap and changelog are read from the trackers at build time.
+    paths: [site/**, docs/TO_IMPLEMENT.md, docs/IMPLEMENTED.md, scripts/pages/**, .github/workflows/site.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-production
+  cancel-in-progress: false
+
+env:
+  DEPLOY_ENDPOINT: https://deploy.octaviosantacruz.com
+  DEPLOY_PROJECT: switchboard-site
+  SITE_URL: https://switchboard.octaviosantacruz.com
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Build
+        working-directory: site
+        run: |
+          npm ci
+          npm run build
+
+      - name: Refuse secrets in the build output
+        run: scripts/pages/check-dist.sh site/dist
+
+      - name: Pack
+        run: tar -czf "$RUNNER_TEMP/site.tar.gz" -C site/dist .
+
+      # The last build that passed acceptance, to put back if this one fails.
+      # Re-uploading it makes the same content-addressed deployment live again.
+      - name: Restore the last good build
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/last-good
+          key: site-live-${{ github.sha }}
+          restore-keys: site-live-
+
+      - name: Deploy
+        id: deploy
+        run: |
+          scripts/pages/publish.sh "$RUNNER_TEMP/site.tar.gz" "$RUNNER_TEMP/deployment.json"
+          jq -r '"Deployed `\(.id[0:12])` from commit `\((.commit_sha // "unknown")[0:12])`, live: \(.live)"' \
+            "$RUNNER_TEMP/deployment.json" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Public acceptance
+        run: scripts/pages/accept.sh "$SITE_URL" site/dist
+
+      - name: Remember this build as the last good one
+        run: |
+          mkdir -p "$RUNNER_TEMP/last-good"
+          cp "$RUNNER_TEMP/site.tar.gz" "$RUNNER_TEMP/last-good/site.tar.gz"
+
+      - name: Save the last good build
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/last-good
+          key: site-live-${{ github.sha }}
+
+      - name: Roll back to the last good build
+        if: failure() && steps.deploy.outcome == 'success'
+        run: |
+          if [ -f "$RUNNER_TEMP/last-good/site.tar.gz" ]; then
+            scripts/pages/publish.sh "$RUNNER_TEMP/last-good/site.tar.gz" "$RUNNER_TEMP/rollback.json"
+            echo "Acceptance failed: rolled back to the last good build." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::Acceptance failed and no previous build is cached: roll back on the edge with 'switchboard site rollback -site switchboard-site'."
+          fi
