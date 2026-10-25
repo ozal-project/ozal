@@ -36,7 +36,9 @@ so no new public surface is added.
 - `CheckEntry(name, kind, size, limits) EntryDecision` judges one archive
   entry: allowed (with its cleaned relative path) or refused with a stable
   code (`entry.unsafe_path`, `entry.link`, `entry.type`, `entry.too_large`,
-  `entry.too_deep`). No I/O. Table tests and a fuzz target.
+  `entry.too_deep`, `entry.secret_file` for `.env*`, `.git`, `.npmrc` and
+  private SSH key names anywhere in the path, any case). No I/O. Table tests
+  and a fuzz target.
 - `ManifestHash(files)`: the deployment ID is the SHA-256 of the sorted
   `path NUL sha256` list, so the same site gives the same ID whatever the tar
   order or timestamps.

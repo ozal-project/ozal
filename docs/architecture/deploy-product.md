@@ -214,7 +214,7 @@ and [go-oidc verifier/key-set API](https://pkg.go.dev/github.com/coreos/go-oidc/
 | Kind | Example | Where it lives | Rule |
 |---|---|---|---|
 | Public build variable | `VITE_API_BASE`, `PUBLIC_SITE_URL` | GitHub repository variables | Ends up in the downloaded JS. The docs and console say so. |
-| Build secret | A CMS token used only while building | GitHub secrets | Must not reach `dist`: the endpoint scans the archive for known secret patterns and for `.env*` files and refuses it. |
+| Build secret | A CMS token used only while building | GitHub secrets | Must not reach `dist`: CI scans the build output for secret files and credential patterns before uploading, and the endpoint refuses `.env*`, `.git`, `.npmrc` and private SSH key names (`entry.secret_file`). |
 | Application runtime value | `DATABASE_URL` of `sigea-api` | The host where the application runs | Out of scope: Switchboard does not run applications (D1). |
 
 A console screen for build variables, Cloudflare-Pages style, is a later

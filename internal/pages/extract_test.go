@@ -85,6 +85,7 @@ func TestExtractRefusesHostileArchives(t *testing.T) {
 	}{
 		{"zip slip", []entry{index, {name: "../escaped.txt", body: "pwned"}}, DefaultLimits, UnsafePath},
 		{"absolute path", []entry{index, {name: "/tmp/escaped.txt", body: "pwned"}}, DefaultLimits, UnsafePath},
+		{"env file shipped by a build", []entry{index, {name: "./.env.production", body: "API_TOKEN=x"}}, DefaultLimits, SecretFile},
 		// The classic two-step escape: a link, then a file "inside" it.
 		{"symlink then file through it", []entry{index, {name: "assets", flag: tar.TypeSymlink, link: "/"}, {name: "assets/etc/x", body: "pwned"}}, DefaultLimits, Link},
 		{"hard link", []entry{index, {name: "copy", flag: tar.TypeLink, link: "index.html"}}, DefaultLimits, Link},

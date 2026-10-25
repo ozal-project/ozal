@@ -51,6 +51,19 @@ func TestCheckEntry(t *testing.T) {
 		{"one byte over the file limit", "big.bin", KindFile, 1001, TooLarge, ""},
 		{"negative size", "weird.bin", KindFile, -1, TooLarge, ""},
 		{"deeper than the limit", "a/b/c/d/e.txt", KindFile, 1, TooDeep, ""},
+
+		// Names that only ever hold secrets: refused wherever they appear.
+		{"env file at the root", ".env", KindFile, 1, SecretFile, ""},
+		{"env variant", "./.env.production", KindFile, 1, SecretFile, ""},
+		{"env file in a subdirectory", "assets/.env.local", KindFile, 1, SecretFile, ""},
+		{"env in another case", ".ENV", KindFile, 1, SecretFile, ""},
+		{"git directory", ".git/", KindDir, 0, SecretFile, ""},
+		{"file inside .git", ".git/config", KindFile, 1, SecretFile, ""},
+		{"npm credentials", ".npmrc", KindFile, 1, SecretFile, ""},
+		{"private SSH key", "keys/id_ed25519", KindFile, 1, SecretFile, ""},
+		{"public SSH key is fine", "keys/id_ed25519.pub", KindFile, 1, EntryAllowed, "keys/id_ed25519.pub"},
+		{"a name that only contains env", "environment.html", KindFile, 1, EntryAllowed, "environment.html"},
+		{"dotenv-like page is fine", "docs/env.html", KindFile, 1, EntryAllowed, "docs/env.html"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := CheckEntry(tc.entry, tc.kind, tc.size, lim)
@@ -76,7 +89,7 @@ func TestCheckEntry(t *testing.T) {
 // FuzzCheckEntry states the invariant directly: whatever the name, an allowed
 // path is relative, slash-separated and has no ".." component.
 func FuzzCheckEntry(f *testing.F) {
-	for _, seed := range []string{"index.html", "./a/b", "../x", "/abs", `a\b`, "a/../b", "C:/x", "a//b/", "."} {
+	for _, seed := range []string{"index.html", "./a/b", "../x", "/abs", `a\b`, "a/../b", "C:/x", "a//b/", ".", "a/.env", ".git/HEAD", "./.Env.local"} {
 		f.Add(seed)
 	}
 	f.Fuzz(func(t *testing.T, name string) {
@@ -90,6 +103,9 @@ func FuzzCheckEntry(f *testing.F) {
 		for part := range strings.SplitSeq(got.Path, "/") {
 			if part == ".." {
 				t.Fatalf("allowed a .. component in %q from %q", got.Path, name)
+			}
+			if lower := strings.ToLower(part); lower == ".env" || strings.HasPrefix(lower, ".env.") || lower == ".git" {
+				t.Fatalf("allowed a secret file component in %q from %q", got.Path, name)
 			}
 		}
 	})

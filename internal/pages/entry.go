@@ -27,6 +27,10 @@ const (
 	TooLarge Code = "entry.too_large"
 	// TooDeep: more path components than Limits.MaxDepth.
 	TooDeep Code = "entry.too_deep"
+	// SecretFile: a name that only ever holds secrets or repository internals
+	// (.env files, .git, .npmrc, private SSH keys). Whatever is deployed is
+	// public, so a build that ships one is refused rather than served.
+	SecretFile Code = "entry.secret_file"
 )
 
 // Kind is the type of an archive entry, mapped from the tar typeflag by the
@@ -110,7 +114,34 @@ func CheckEntry(name string, kind Kind, size int64, lim Limits) EntryDecision {
 	if strings.Count(clean, "/")+1 > lim.MaxDepth {
 		return refuse(TooDeep, "entry is nested deeper than the limit")
 	}
+	for part := range strings.SplitSeq(clean, "/") {
+		if secretName(part) {
+			return refuse(SecretFile, "entry name belongs to a secret or repository file")
+		}
+	}
 	return EntryDecision{Allowed: true, Path: clean, Code: EntryAllowed, Reason: "regular entry inside the site"}
+}
+
+// secretName reports a path component that never belongs in a public site.
+// Case is ignored: a case-insensitive filesystem would serve .ENV as .env.
+// Contents are not scanned here; CI checks the build output for credential
+// patterns before uploading it.
+func secretName(part string) bool {
+	part = strings.ToLower(part)
+	switch {
+	case part == ".env" || strings.HasPrefix(part, ".env."):
+		return true
+	case part == ".git" || part == ".npmrc":
+		return true
+	case strings.HasSuffix(part, ".pub"):
+		return false
+	}
+	for _, key := range []string{"id_rsa", "id_ed25519", "id_ecdsa", "id_dsa"} {
+		if strings.HasPrefix(part, key) {
+			return true
+		}
+	}
+	return false
 }
 
 func refuse(code Code, reason string) EntryDecision {
