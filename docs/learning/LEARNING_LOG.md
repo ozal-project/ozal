@@ -690,3 +690,12 @@ duplicate ownership and repository/ref trust without reading a token file.
 Secret references stay in raw configuration; adapters resolve them only when
 needed. Deep-copy assertions must preserve nil slices too: `nil` and an empty
 slice compare differently with `reflect.DeepEqual` even when both have length zero.
+
+## 2026-10-25 — a ref is not an identity (PAGES-008)
+
+GitHub's OIDC `ref` claim says which branch a workflow runs on, not who
+triggered it: `pull_request_target` runs on the base branch while handling a
+fork's pull request. Trusting a deploy token therefore needs the workflow file
+and the event as well. Verified tokens also need replay state that survives
+restarts, and a key-set cache needs a refresh cooldown, or every forged token
+becomes an outbound request.

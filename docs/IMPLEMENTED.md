@@ -1,10 +1,49 @@
 # Implemented — Switchboard
 
-**Last review:** 2026-10-21
+**Last review:** 2026-10-25
 **Code reviewed up to:** baseline `0ddb606`; feature commits listed below.
 
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
+
+## PAGES-008 — authenticated project deploy endpoint — 2026-10-25 (`adbc3d1`, `627f2b4`)
+
+A dedicated hostname (`pages.deploy.host`) routes to an internal handler that
+accepts only `POST /v1/projects/{project}/deployments` and `GET` of one
+deployment's status; every other path or method on that host is refused and
+the admin listener stays loopback-only. Publishers authenticate with a GitHub
+Actions OIDC token or a per-project `env:`/`file:` token compared in constant
+time. go-oidc checks signature, issuer, audience and expiry; the pure
+`deployauth.DecideDeployer` then requires the pinned repository and owner IDs,
+ref and `workflow_ref`, a `push` or `workflow_dispatch` event, a lifetime of at
+most ten minutes, a `jti` and a valid commit SHA. Uploads consume the `jti` in
+a persistent SQLite replay store (migration 011); status reads authenticate
+without spending it or the deploy budget. IP and per-project limits, one
+upload in flight per project, the durable intent and all refusals precede
+reading the archive, which then goes through the existing Pages pipeline with
+verified provenance (project, commit, run URL; migration 010).
+
+With the `admin` audit family, the intent and the upload's outcome are durable.
+Requests that never name a configured project emit no activity event. GitHub's
+JWKS is fetched at most once a minute and refreshed hourly.
+
+Review fixes in `627f2b4`: the ref alone admitted a `pull_request_target`
+workflow on the trusted branch, so `workflow_ref` became required together
+with the event allowlist; status reads no longer spent the upload token;
+the outcome joined the durable journal; scanner noise left the activity feed;
+go-oidc's per-unknown-kid JWKS refetch gained a cooldown.
+
+Evidence: regressions for other repository/owner/ref/workflow/audience/event,
+expiry and lifetime, signed-claim tampering, replay across restart, token scope
+and rotation, required audit refusal, archive rejection, per-project upload
+exclusion, spoofed forwarding headers and duplicate credentials, status reads,
+the durable journal sequence, scanner noise and JWKS refresh counts; each
+review fix's regression fails without it. `scripts/verify.sh` passed, and CI
+passed on Ubuntu, Windows and macOS for `627f2b4`. Real GitHub issuer
+acceptance (`.github/workflows/pages-oidc-acceptance.yml`, real tokens, curl
+to a loopback Switchboard) succeeded on `adbc3d1` (run 40215339823) and on
+`627f2b4` (run 40215550325), including the wrong-workflow refusal and replay
+after a restart. Not deployed: the public edge has no `pages.deploy` yet.
 
 ## PAGES-007 — project configuration and read-only views — 2026-10-25 (`1e1bb3e`)
 

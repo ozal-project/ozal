@@ -193,8 +193,8 @@ tokens, uses the current repository/owner/ref/workflow as trust, tests another
 repository/owner/ref and wrong audience, deploys through curl, checks commit/run
 provenance and rejects replay before and after restarting Switchboard. Tokens
 are kept in memory and curl stdin; they are not printed, stored in config, put
-in argv or uploaded as artifacts. This workflow is prepared but has not been
-published or executed; `PAGES-008` stays open until its real-issuer run succeeds.
+in argv or uploaded as artifacts. It succeeded with real GitHub tokens on
+2026-10-25 (runs 40215339823 and 40215550325); `PAGES-008` is closed.
 
 Responses expose a stable `code`: `deployer.token_invalid` for SDK verification
 failure (including signature, issuer, audience or expiry), more specific
