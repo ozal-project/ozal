@@ -2,6 +2,7 @@ package admin
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -338,5 +339,74 @@ func TestReloadFailureReturnsUnprocessableEntity(t *testing.T) {
 	rec := request(New(manager, nil), http.MethodPost, "/_/reload", "secret", "")
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422", rec.Code)
+	}
+}
+
+func TestAdminFailureEventsUseStableDetails(t *testing.T) {
+	const raw = "/private/switchboard/config.json: secret-token"
+	tests := []struct {
+		name       string
+		method     string
+		target     string
+		body       string
+		status     int
+		failed     events.Type
+		succeeded  events.Type
+		code       string
+		reason     string
+		host       string
+		setFailure func(*fakeManager)
+	}{
+		{
+			name: "reload", method: http.MethodPost, target: "/_/reload", status: http.StatusUnprocessableEntity,
+			failed: events.ConfigReloadFailed, succeeded: events.ConfigReloaded,
+			code: "config.reload_failed", reason: "the configuration could not be loaded or validated",
+			setFailure: func(m *fakeManager) { m.reloadErr = errors.New(raw) },
+		},
+		{
+			name: "route create", method: http.MethodPost, target: "/routes",
+			body: `{"host":"new.localhost","target":"http://localhost:9001"}`, status: http.StatusInternalServerError,
+			failed: events.RouteCreateFailed, succeeded: events.RouteCreated,
+			code: "route.persistence_failed", reason: "the route could not be created", host: "new.localhost",
+			setFailure: func(m *fakeManager) { m.addErr = fmt.Errorf("%w: %s", routemanager.ErrPersistence, raw) },
+		},
+		{
+			name: "route delete", method: http.MethodDelete, target: "/routes/app.localhost", status: http.StatusNotFound,
+			failed: events.RouteDeleteFailed, succeeded: events.RouteDeleted,
+			code: "route.not_found", reason: "the route could not be removed", host: "app.localhost",
+			setFailure: func(m *fakeManager) { m.deleteErr = fmt.Errorf("%w: %s", routemanager.ErrRouteNotFound, raw) },
+		},
+		{
+			name: "invalid route host", method: http.MethodPost, target: "/routes",
+			body: `{"host":"bad\nhost","target":"http://localhost:9001"}`, status: http.StatusBadRequest,
+			failed: events.RouteCreateFailed, succeeded: events.RouteCreated,
+			code: "route.invalid_or_unavailable", reason: "the route could not be created", host: "",
+			setFailure: func(m *fakeManager) { m.addErr = errors.New(raw) },
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manager := &fakeManager{cfg: config.Config{Admin: config.Admin{Token: "secret"}}}
+			tt.setFailure(manager)
+			sink := &events.Recorder{}
+			rec := request(New(manager, sink), tt.method, tt.target, "secret", tt.body)
+			if rec.Code != tt.status {
+				t.Fatalf("status = %d, want %d; body = %s", rec.Code, tt.status, rec.Body.String())
+			}
+			got, ok := sink.Find(tt.failed)
+			if !ok {
+				t.Fatalf("missing failure event %q", tt.failed)
+			}
+			if got.Code != tt.code || got.Reason != tt.reason || got.Host != tt.host || got.Error != "" {
+				t.Fatalf("failure event = %+v, want stable code/reason and no raw error", got)
+			}
+			if sink.Has(tt.succeeded) {
+				t.Fatalf("failed operation also emitted success event %q", tt.succeeded)
+			}
+			if strings.Contains(got.Code+got.Reason+got.Host+got.Actor, raw) || strings.Contains(got.Code+got.Reason+got.Host+got.Actor, "secret-token") {
+				t.Fatalf("failure event exposed raw diagnostics: %+v", got)
+			}
+		})
 	}
 }

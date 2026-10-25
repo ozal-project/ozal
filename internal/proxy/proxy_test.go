@@ -2,7 +2,9 @@ package proxy
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -25,6 +27,51 @@ import (
 	"github.com/octaviosantacruz/switchboard/internal/pages"
 	"github.com/octaviosantacruz/switchboard/internal/pipeline"
 )
+
+type auditAppenderFunc func(context.Context, events.Event) error
+
+func (f auditAppenderFunc) Append(ctx context.Context, event events.Event) error {
+	return f(ctx, event)
+}
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func TestRequiredAccessAuditFailureStopsBeforeUpstream(t *testing.T) {
+	upstreamCalled := false
+	transport := roundTripperFunc(func(_ *http.Request) (*http.Response, error) {
+		upstreamCalled = true
+		return &http.Response{StatusCode: http.StatusNoContent, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(""))}, nil
+	})
+
+	gate := &fakeGate{authenticated: true, principal: auth.Principal{Subject: "person-1"}}
+	var appended events.Event
+	appender := auditAppenderFunc(func(_ context.Context, event events.Event) error {
+		appended = event
+		return errors.New("disk full")
+	})
+	handler, err := New([]config.Route{{Host: "private.localhost", Target: "http://upstream.local", Access: &config.AccessPolicy{}}}, nil, gate, WithAuditAppender(appender), WithTransport(transport))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "http://private.localhost/", nil)
+	req.Host = "private.localhost"
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", rec.Code)
+	}
+	if upstreamCalled {
+		t.Fatal("upstream received request after required audit append failed")
+	}
+	if appended.Type != events.AccessAllowed || appended.Host != "private.localhost" {
+		t.Fatalf("appended event = %+v", appended)
+	}
+}
 
 func TestRoutesByHost(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -116,6 +163,51 @@ func (f *fakeGate) Authenticate(r *http.Request) (auth.Principal, bool) {
 func (f *fakeGate) RedirectToLogin(w http.ResponseWriter, r *http.Request) {
 	f.redirected = true
 	http.Redirect(w, r, "/_/auth/login", http.StatusFound)
+}
+
+func TestUpstream5xxDoesNotPreventRecovery(t *testing.T) {
+	calls := 0
+	transport := roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		calls++
+		statusCode := http.StatusOK
+		body := "recovered"
+		if calls == 1 {
+			statusCode = http.StatusServiceUnavailable
+			body = "temporarily unavailable\n"
+		}
+		return &http.Response{
+			StatusCode: statusCode,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(body)),
+			Request:    req,
+		}, nil
+	})
+
+	handler, err := New([]config.Route{{Host: "recover.localhost", Target: "http://upstream.local"}}, nil, nil, WithTransport(transport))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	for _, tc := range []struct {
+		name       string
+		statusCode int
+		body       string
+	}{
+		{name: "upstream 503 is preserved", statusCode: http.StatusServiceUnavailable, body: "temporarily unavailable\n"},
+		{name: "later request recovers", statusCode: http.StatusOK, body: "recovered"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "http://recover.localhost/", nil)
+			req.Host = "recover.localhost"
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != tc.statusCode {
+				t.Fatalf("status = %d, want %d", rec.Code, tc.statusCode)
+			}
+			if got := rec.Body.String(); got != tc.body {
+				t.Fatalf("body = %q, want %q", got, tc.body)
+			}
+		})
+	}
 }
 
 func TestAuthRequiredRouteRedirectsWhenUnauthenticated(t *testing.T) {
@@ -219,6 +311,10 @@ func TestAccessPolicyRejectsAuthenticatedPrincipalWithoutClaims(t *testing.T) {
 			Host:   "private.localhost",
 			Target: upstream.URL,
 			Access: &config.AccessPolicy{AllowedDomains: []string{"example.com"}},
+			Resource: &config.RouteResource{
+				Owner: "platform", DataClass: "account_data", Sensitivity: "restricted",
+				RiskyActions: []string{"POST", "DELETE"},
+			},
 		}},
 		nil, gate, WithEventSink(recorder),
 	)
@@ -240,6 +336,15 @@ func TestAccessPolicyRejectsAuthenticatedPrincipalWithoutClaims(t *testing.T) {
 	denied, ok := recorder.Find(events.AccessDenied)
 	if !ok || denied.Actor != "user-123" || denied.Host != "private.localhost" || denied.Code == "" {
 		t.Fatalf("access.denied event = %+v, %v", denied, ok)
+	}
+	if denied.Context == nil || denied.Context.Resource.Route.Value == nil || *denied.Context.Resource.Route.Value != "private.localhost" || denied.Context.Session.UserVerified.Value != nil {
+		t.Fatalf("access.denied event lost route evidence or inferred unknown user verification: %+v", denied.Context)
+	}
+	if denied.Context.Resource.Owner.Value == nil || *denied.Context.Resource.Owner.Value != "platform" ||
+		denied.Context.Resource.DataClass.Value == nil || *denied.Context.Resource.DataClass.Value != "account_data" ||
+		denied.Context.Resource.Sensitivity.Value == nil || *denied.Context.Resource.Sensitivity.Value != "restricted" ||
+		denied.Context.Action.Risky.Value == nil || *denied.Context.Action.Risky.Value {
+		t.Fatalf("access.denied event omitted route labels or misclassified GET: %+v", denied.Context)
 	}
 }
 
@@ -285,6 +390,9 @@ func TestAccessPolicyAllowsMatchingClaims(t *testing.T) {
 	allowed, ok := recorder.Find(events.AccessAllowed)
 	if !ok || allowed.Actor != "user-123" || allowed.Host != "private.localhost" {
 		t.Fatalf("access.allowed event = %+v, %v", allowed, ok)
+	}
+	if allowed.Context == nil || allowed.Context.Action.HTTPMethod.Value == nil || *allowed.Context.Action.HTTPMethod.Value != http.MethodGet {
+		t.Fatalf("access.allowed event lost request context: %+v", allowed.Context)
 	}
 }
 
@@ -1213,5 +1321,70 @@ func TestStepUpTellsTheLoginPasskeyOnly(t *testing.T) {
 	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "http://admin.localhost/", nil))
 	if gate.code != auth.CodeMethodNotAllowed || !slices.Equal(gate.methods, []string{auth.MethodPasskey}) {
 		t.Fatalf("code %q, methods %v", gate.code, gate.methods)
+	}
+}
+
+func TestContextRuleStepUpIsAuditedAndRequiresPasskey(t *testing.T) {
+	reached := false
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { reached = true }))
+	defer upstream.Close()
+	gate := &stepUpGate{fakeGate: fakeGate{authenticated: true, principal: auth.Principal{Subject: "g-1", AuthTime: time.Now(), Method: auth.MethodOIDC}}}
+	recorder := &events.Recorder{}
+	policy := &config.AccessPolicy{ContextRule: &config.ContextRule{
+		When: config.ContextConditions{SessionMethod: auth.MethodOIDC, ResourceSensitivity: "restricted"},
+		Then: "step_up",
+	}}
+	route := config.Route{
+		Host:   "admin.localhost",
+		Target: upstream.URL,
+		Access: policy,
+		Resource: &config.RouteResource{
+			Owner: "platform", DataClass: "account_data", Sensitivity: "restricted",
+		},
+	}
+	handler, err := New([]config.Route{route}, nil, gate, WithEventSink(recorder))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://admin.localhost/", nil))
+	if rec.Code != http.StatusFound || reached || gate.code != auth.CodeContextStepUpRequired || !slices.Equal(gate.methods, []string{auth.MethodPasskey}) {
+		t.Fatalf("status %d, upstream reached %v, step-up code %q methods %v", rec.Code, reached, gate.code, gate.methods)
+	}
+	stepUp, ok := recorder.Find(events.AccessStepUp)
+	if !ok || stepUp.Code != string(auth.CodeContextStepUpRequired) || !strings.Contains(stepUp.Reason, "resource.sensitivity=\"restricted\"") {
+		t.Fatalf("context step-up event = %+v, found %t", stepUp, ok)
+	}
+}
+
+func TestNewPasskeyContextStepUpIsAuditedBeforeForward(t *testing.T) {
+	reached := false
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { reached = true }))
+	defer upstream.Close()
+	firstSeen := true
+	gate := &stepUpGate{fakeGate: fakeGate{authenticated: true, principal: auth.Principal{
+		Subject: "sb-new-device", AuthTime: time.Now(), Method: auth.MethodPasskey, DeviceFirstSeen: &firstSeen,
+	}}}
+	recorder := &events.Recorder{}
+	route := config.Route{
+		Host:   "admin.localhost",
+		Target: upstream.URL,
+		Access: &config.AccessPolicy{ContextRule: &config.ContextRule{
+			When: config.ContextConditions{DeviceFirstSeen: &firstSeen},
+			Then: "step_up",
+		}},
+	}
+	handler, err := New([]config.Route{route}, nil, gate, WithEventSink(recorder))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://admin.localhost/private", nil))
+	if rec.Code != http.StatusFound || reached || gate.code != auth.CodeContextStepUpRequired || !slices.Equal(gate.methods, []string{auth.MethodPasskey}) {
+		t.Fatalf("status %d, upstream reached %v, step-up code %q methods %v", rec.Code, reached, gate.code, gate.methods)
+	}
+	stepUp, ok := recorder.Find(events.AccessStepUp)
+	if !ok || stepUp.Code != string(auth.CodeContextStepUpRequired) || !strings.Contains(stepUp.Reason, "history.device_first_seen=true") {
+		t.Fatalf("new-passkey context step-up event = %+v, found %t", stepUp, ok)
 	}
 }

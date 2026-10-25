@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"math"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -22,7 +23,36 @@ type Allower interface {
 type RateLimitOption func(*rateLimitConfig)
 
 type rateLimitConfig struct {
-	sink events.Sink
+	sink          events.Sink
+	audit         events.AuditAppender
+	catalog       map[string]*config.RouteResource
+	auditRequired map[string]bool
+}
+
+// WithRouteCatalog lets early pipeline stages attach the same declared route
+// metadata as the proxy. It copies the catalog so a later config mutation
+// cannot change evidence on an in-flight generation.
+func WithRouteCatalog(routes []config.Route) RateLimitOption {
+	return func(cfg *rateLimitConfig) {
+		cfg.catalog = make(map[string]*config.RouteResource, len(routes))
+		cfg.auditRequired = make(map[string]bool, len(routes))
+		for _, route := range routes {
+			host, err := config.NormalizeHost(route.Host)
+			if err != nil {
+				continue // config validation rejects this before the stage is built
+			}
+			copy := config.CloneRoute(route)
+			cfg.catalog[host] = copy.Resource
+			cfg.auditRequired[host] = copy.AuditRequired()
+		}
+	}
+}
+
+// WithRateLimitAudit synchronously persists access.rate_limited before the
+// limiter writes its response. Required routes fail closed if that append
+// fails; best-effort routes preserve the limiter response.
+func WithRateLimitAudit(appender events.AuditAppender) RateLimitOption {
+	return func(cfg *rateLimitConfig) { cfg.audit = appender }
 }
 
 // WithRateLimitSink publishes an event for every refused request. Without it
@@ -64,15 +94,26 @@ func RateLimit(general, auth Allower, authPrefix string, opts ...RateLimitOption
 			}
 			if limiter != nil {
 				if allowed, wait := limiter.Allow(key); !allowed {
-					WriteRetryAfter(w, wait)
-					cfg.sink.Emit(events.Event{
-						Time:       time.Now(),
+					observedAt := time.Now().UTC()
+					decisionContext := RequestPolicyContext(r, host, nil, observedAt, routeResource(cfg.catalog, host))
+					event := events.Event{
+						Time:       observedAt,
 						Type:       events.AccessRateLimited,
-						Host:       r.Host,
+						Host:       host,
 						Code:       code,
 						Reason:     "rate limit reached",
 						RemoteAddr: r.RemoteAddr,
-					})
+						Context:    &decisionContext,
+					}
+					if cfg.audit != nil {
+						if err := cfg.audit.Append(r.Context(), event); err != nil && routeAuditRequired(cfg.auditRequired, host) {
+							cfg.sink.Emit(event)
+							http.Error(w, "audit unavailable", http.StatusServiceUnavailable)
+							return
+						}
+					}
+					cfg.sink.Emit(event)
+					WriteRetryAfter(w, wait)
 					http.Error(w, "too many requests", http.StatusTooManyRequests)
 					return
 				}
@@ -80,6 +121,28 @@ func RateLimit(general, auth Allower, authPrefix string, opts ...RateLimitOption
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func routeAuditRequired(routes map[string]bool, host string) bool {
+	if required, ok := routes[host]; ok {
+		return required
+	}
+	bare, _, err := net.SplitHostPort(host)
+	if err == nil {
+		return routes[bare]
+	}
+	return false
+}
+
+func routeResource(catalog map[string]*config.RouteResource, host string) *config.RouteResource {
+	if resource, ok := catalog[host]; ok {
+		return resource
+	}
+	bare, _, err := net.SplitHostPort(host)
+	if err == nil {
+		return catalog[bare]
+	}
+	return nil
 }
 
 // WriteRetryAfter sets the Retry-After header from a real wait and writes

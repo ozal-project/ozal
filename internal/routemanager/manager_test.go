@@ -47,6 +47,16 @@ func routeConfig(target string) config.Config {
 	}
 }
 
+func TestAuditTargetCannotChangeOnReload(t *testing.T) {
+	before := routeConfig("http://upstream.local")
+	before.Audit = &config.AuditConfig{Dir: "/var/lib/switchboard/audit", Include: []string{"access"}}
+	after := config.Clone(before)
+	after.Audit.Dir = "/var/lib/switchboard/new-audit"
+	if sameServerConfig(before, after) {
+		t.Fatal("sameServerConfig accepted a changed audit directory")
+	}
+}
+
 func serve(manager *Manager) (int, string) {
 	req := httptest.NewRequest(http.MethodGet, "http://app.localhost/", nil)
 	req.Host = "app.localhost"

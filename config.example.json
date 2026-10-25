@@ -6,6 +6,15 @@
   },
   "routes": [
     { "host": "magiclink.localhost:8888", "target": "http://localhost:8090" },
-    { "host": "auditanchor.localhost:8888", "target": "http://localhost:8081" }
+    {
+      "host": "auditanchor.localhost:8888",
+      "target": "http://localhost:8081",
+      "resource": {
+        "owner": "platform",
+        "data_class": "demo_site",
+        "sensitivity": "public",
+        "risky_actions": []
+      }
+    }
   ]
 }

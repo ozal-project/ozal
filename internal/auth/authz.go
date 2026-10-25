@@ -158,9 +158,8 @@ func RequiredMethods(policy config.AccessPolicy) []string {
 }
 
 func emailAllowed(email string, allowed []string) bool {
-	email = strings.ToLower(email)
 	for _, a := range allowed {
-		if email == strings.ToLower(a) {
+		if strings.EqualFold(email, a) {
 			return true
 		}
 	}
@@ -175,9 +174,9 @@ func domainAllowed(email string, allowed []string) bool {
 	if at == -1 {
 		return false
 	}
-	domain := strings.ToLower(email[at+1:])
+	domain := email[at+1:]
 	for _, a := range allowed {
-		if domain == strings.ToLower(a) {
+		if strings.EqualFold(domain, a) {
 			return true
 		}
 	}

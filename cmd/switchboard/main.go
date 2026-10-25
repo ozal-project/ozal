@@ -24,6 +24,7 @@ import (
 	"golang.org/x/crypto/acme/autocert"
 
 	"github.com/octaviosantacruz/switchboard/internal/admin"
+	"github.com/octaviosantacruz/switchboard/internal/audit"
 	"github.com/octaviosantacruz/switchboard/internal/auth"
 	"github.com/octaviosantacruz/switchboard/internal/certs"
 	"github.com/octaviosantacruz/switchboard/internal/config"
@@ -105,6 +106,32 @@ func main() {
 		sink = append(sink, alertSink)
 	}
 	managerOpts := []routemanager.Option{routemanager.WithEventSink(sink)}
+	var auditWriter *audit.Writer
+	var auditAppender events.AuditAppender
+	var auditStatus func() admin.AuditStatus
+	if loaded.Audit != nil {
+		writer, openErr := audit.Open(ctx, loaded.Audit.Dir, audit.Options{MaxSegmentBytes: loaded.Audit.MaxSegmentBytes})
+		if openErr != nil {
+			if requiresDurableAccessAudit(*loaded) {
+				log.Fatalf("required access audit unavailable: %v", openErr)
+			}
+			reporter := newAuditFailureReporter(nil, logger, openErr)
+			reporter.report(openErr)
+			auditAppender = reporter
+			auditStatus = reporter.Status
+		} else {
+			auditWriter = writer
+			reporter := newAuditFailureReporter(writer, logger, nil)
+			auditAppender = reporter
+			auditStatus = reporter.Status
+			defer func() {
+				if err := writer.Close(); err != nil {
+					logger.Error("close durable audit writer", "failure_class", "storage")
+				}
+			}()
+		}
+		managerOpts = append(managerOpts, routemanager.WithAuditAppender(auditAppender))
+	}
 	var configuredEdge *configuredTunnel
 	if loaded.Tunnel != nil && *dbPath == "" {
 		log.Fatal("tunnel configuration requires -db pointing at migrated state")
@@ -113,6 +140,9 @@ func main() {
 		log.Fatal("pages configuration requires -db pointing at migrated state")
 	}
 	var adminOpts []admin.Option
+	if auditStatus != nil {
+		adminOpts = append(adminOpts, admin.WithAuditStatus(auditStatus))
+	}
 	if pairer != nil {
 		// CLI-001: `switchboard notify pair` asks the process over the admin
 		// socket; the process alone reads the bot's updates.
@@ -175,6 +205,9 @@ func main() {
 	cfg := manager.Config()
 	if !reflect.DeepEqual(loaded.Tunnel, cfg.Tunnel) || !reflect.DeepEqual(loaded.Pages, cfg.Pages) {
 		log.Fatal("tunnel or pages configuration changed during startup; restart with a stable config")
+	}
+	if !reflect.DeepEqual(loaded.Audit, cfg.Audit) {
+		log.Fatal("audit configuration changed during startup; restart with a stable config")
 	}
 
 	// EDGE-007: with tls.dns01 configured, Switchboard owns the origin
@@ -243,6 +276,23 @@ func main() {
 		}
 	}
 	closeCertificates()
+	if auditWriter != nil {
+		if err := auditWriter.Close(); err != nil {
+			logger.Error("close durable audit writer", "failure_class", "storage")
+		}
+	}
+}
+
+func requiresDurableAccessAudit(cfg config.Config) bool {
+	if cfg.Audit == nil {
+		return false
+	}
+	for _, route := range cfg.Routes {
+		if route.AuditRequired() {
+			return true
+		}
+	}
+	return false
 }
 
 // Timeouts guard the listener itself against slow-client attacks

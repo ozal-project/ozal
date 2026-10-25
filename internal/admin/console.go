@@ -82,6 +82,7 @@ func (h *Handler) apiStatus(w http.ResponseWriter, _ *http.Request) {
 		GeneratedAt  string             `json:"generated_at"`
 		ConfigSHA256 string             `json:"config_sha256"`
 		Certificate  *CertificateStatus `json:"certificate,omitempty"`
+		Audit        *AuditStatus       `json:"audit,omitempty"`
 		Routes       []routeView        `json:"routes"`
-	}{view.GeneratedAt, h.manager.ConfigDigest(), view.Certificate, view.Routes})
+	}{view.GeneratedAt, h.manager.ConfigDigest(), view.Certificate, view.Audit, view.Routes})
 }

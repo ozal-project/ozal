@@ -3,6 +3,7 @@ package admin
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"runtime"
@@ -11,7 +12,46 @@ import (
 	"time"
 
 	"github.com/octaviosantacruz/switchboard/internal/events"
+	"github.com/octaviosantacruz/switchboard/internal/policycontext"
 )
+
+func TestEventViewPreservesDecisionContext(t *testing.T) {
+	decisionContext := policycontext.Build(policycontext.Input{
+		ObservedAt: time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC),
+		PathClass:  policycontext.Known(policycontext.PathApplication, policycontext.SourceClassifier),
+	})
+	data, err := json.Marshal(toView("epoch-1", events.Event{Type: events.AccessAllowed, Context: &decisionContext}))
+	if err != nil {
+		t.Fatalf("marshal event view: %v", err)
+	}
+	var view map[string]any
+	if err := json.Unmarshal(data, &view); err != nil {
+		t.Fatalf("decode event view: %v", err)
+	}
+	context, ok := view["context"].(map[string]any)
+	if !ok || context["version"] != float64(policycontext.Version) {
+		t.Fatalf("event view dropped decision context: %s", data)
+	}
+}
+
+func TestEventViewOmitsRawError(t *testing.T) {
+	data, err := json.Marshal(toView("epoch-1", events.Event{
+		Type: events.LoginFailed, Code: "token_exchange_failed", Error: "/private/provider: secret-token",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "/private/provider") || strings.Contains(string(data), "secret-token") {
+		t.Fatalf("event view exposed a raw error: %s", data)
+	}
+	var view map[string]any
+	if err := json.Unmarshal(data, &view); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := view["error"]; ok {
+		t.Fatalf("event view retained an error field: %s", data)
+	}
+}
 
 func newStreamServer(t *testing.T, broker *events.Broker) *httptest.Server {
 	t.Helper()

@@ -1,14 +1,24 @@
 package pipeline
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/octaviosantacruz/switchboard/internal/config"
 	"github.com/octaviosantacruz/switchboard/internal/events"
+	"github.com/octaviosantacruz/switchboard/internal/policycontext"
 	"github.com/octaviosantacruz/switchboard/internal/ratelimit"
 )
+
+type auditAppenderFunc func(context.Context, events.Event) error
+
+func (f auditAppenderFunc) Append(ctx context.Context, event events.Event) error {
+	return f(ctx, event)
+}
 
 type stubAllower struct {
 	allow bool
@@ -86,6 +96,90 @@ func TestRateLimitStageEmitsEvent(t *testing.T) {
 	}
 	if event.Code != "ip_route" || event.RemoteAddr != "203.0.113.9:1234" {
 		t.Fatalf("event = %+v", event)
+	}
+}
+
+func TestRateLimitEventIncludesDeclaredRouteCatalog(t *testing.T) {
+	recorder := &events.Recorder{}
+	route := config.Route{
+		Host: "app.localhost",
+		Resource: &config.RouteResource{
+			Owner: "platform", DataClass: "account_data", Sensitivity: "restricted",
+			RiskyActions: []string{"POST"},
+		},
+	}
+	denied := &stubAllower{allow: false, wait: time.Second}
+	h := Chain(Trust, RateLimit(denied, denied, "/_/auth/",
+		WithRateLimitSink(recorder), WithRouteCatalog([]config.Route{route})))(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	req := httptest.NewRequest(http.MethodPost, "http://app.localhost/action?private=value", nil)
+	req.RemoteAddr = "203.0.113.9:1234"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	event, ok := recorder.Find(events.AccessRateLimited)
+	if !ok || event.Context == nil {
+		t.Fatalf("rate-limit event missing: %+v", event)
+	}
+	if event.Context.Resource.Owner.Value == nil || *event.Context.Resource.Owner.Value != "platform" ||
+		event.Context.Resource.Sensitivity.Value == nil || *event.Context.Resource.Sensitivity.Value != "restricted" ||
+		event.Context.Action.Risky.Value == nil || !*event.Context.Action.Risky.Value {
+		t.Fatalf("rate-limit event lost declared catalog: %+v", event.Context)
+	}
+	if event.Context.Action.PathClass.Value == nil || *event.Context.Action.PathClass.Value != policycontext.PathApplication {
+		t.Fatalf("rate-limit event path classification = %+v", event.Context.Action.PathClass)
+	}
+}
+
+func TestRateLimitAuditFailureFollowsRouteMode(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		route      config.Route
+		wantStatus int
+	}{
+		{name: "protected required", route: config.Route{Host: "private.localhost", Target: "http://localhost:9000", Access: &config.AccessPolicy{}}, wantStatus: http.StatusServiceUnavailable},
+		{name: "public best effort", route: config.Route{Host: "public.localhost", Target: "http://localhost:9000"}, wantStatus: http.StatusTooManyRequests},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			denied := &stubAllower{allow: false, wait: time.Second}
+			recorder := &events.Recorder{}
+			appender := auditAppenderFunc(func(_ context.Context, event events.Event) error {
+				if event.Type != events.AccessRateLimited {
+					t.Fatalf("appended event type = %q", event.Type)
+				}
+				return errors.New("disk full")
+			})
+			handler := Chain(Trust, RateLimit(denied, denied, "/_/auth/",
+				WithRateLimitSink(recorder), WithRouteCatalog([]config.Route{tc.route}), WithRateLimitAudit(appender)))(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+				t.Fatal("rate-limited request reached next handler")
+			}))
+			req := httptest.NewRequest(http.MethodGet, "http://"+tc.route.Host+"/", nil)
+			req.Host = tc.route.Host
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d", rec.Code, tc.wantStatus)
+			}
+			if !recorder.Has(events.AccessRateLimited) {
+				t.Fatal("live event was not emitted after audit failure")
+			}
+		})
+	}
+}
+
+func TestRouteCatalogPreservesExplicitEmptyRiskyActions(t *testing.T) {
+	route := config.Route{
+		Host: "app.localhost",
+		Resource: &config.RouteResource{
+			Owner: "platform", DataClass: "demo", Sensitivity: "public",
+			RiskyActions: []string{},
+		},
+	}
+	cfg := rateLimitConfig{}
+	WithRouteCatalog([]config.Route{route})(&cfg)
+	resource := routeResource(cfg.catalog, "app.localhost")
+	context := RequestPolicyContext(httptest.NewRequest(http.MethodPost, "http://app.localhost/", nil), "app.localhost", nil, time.Now().UTC(), resource)
+	if context.Action.Risky.Value == nil || *context.Action.Risky.Value {
+		t.Fatalf("explicitly empty risky_actions was treated as unknown or risky: %+v", context.Action.Risky)
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/octaviosantacruz/switchboard/internal/events"
+	"github.com/octaviosantacruz/switchboard/internal/policycontext"
 )
 
 // Option configures optional admin features.
@@ -29,24 +30,35 @@ func WithCertificateStatus(provider func() CertificateStatus) Option {
 	}
 }
 
+// WithAuditStatus adds the durable access-audit state to both admin status
+// views. A nil provider omits the field when audit is not configured.
+func WithAuditStatus(provider func() AuditStatus) Option {
+	return func(h *Handler) {
+		if provider != nil {
+			h.auditStatus = provider
+		}
+	}
+}
+
 const heartbeat = 15 * time.Second
 
 type eventView struct {
-	ID     string `json:"id"`
-	Time   string `json:"time"`
-	Type   string `json:"type"`
-	Actor  string `json:"actor,omitempty"`
-	Host   string `json:"host,omitempty"`
-	Code   string `json:"code,omitempty"`
-	Reason string `json:"reason,omitempty"`
-	Error  string `json:"error,omitempty"`
-	Remote string `json:"remote,omitempty"`
+	ID      string                 `json:"id"`
+	Time    string                 `json:"time"`
+	Type    string                 `json:"type"`
+	Actor   string                 `json:"actor,omitempty"`
+	Host    string                 `json:"host,omitempty"`
+	Code    string                 `json:"code,omitempty"`
+	Reason  string                 `json:"reason,omitempty"`
+	Remote  string                 `json:"remote,omitempty"`
+	Context *policycontext.Context `json:"context,omitempty"`
 }
 
 func toView(id string, e events.Event) eventView {
 	return eventView{
 		ID: id, Time: e.Time.UTC().Format(time.RFC3339), Type: string(e.Type), Actor: e.Actor,
-		Host: e.Host, Code: e.Code, Reason: e.Reason, Error: e.Error, Remote: e.RemoteAddr,
+		Host: e.Host, Code: e.Code, Reason: e.Reason, Remote: e.RemoteAddr,
+		Context: e.Context,
 	}
 }
 

@@ -37,6 +37,12 @@ func WithEventSink(sink events.Sink) Option {
 	}
 }
 
+// WithAuditAppender installs the process-owned durable writer for access
+// decisions. Its directory is fixed for this manager's lifetime.
+func WithAuditAppender(appender events.AuditAppender) Option {
+	return func(m *Manager) { m.audit = appender }
+}
+
 // WithSessionBackend supplies the session storage factory. The default is
 // the in-memory store; the composition root passes the SQLite adapter to
 // make sessions survive a restart. The factory is called again when the
@@ -82,6 +88,7 @@ func WithSites(sites proxy.SiteDirs) Option {
 type RouteStatus struct {
 	Route              config.Route
 	Health             healthcheck.Status
+	Upstreams          []healthcheck.TargetStatus
 	ConnectorConnected bool
 }
 
@@ -129,6 +136,7 @@ type Manager struct {
 	transportTimeout    time.Duration
 	rateLimiters        *rateLimiters
 	sink                events.Sink
+	audit               events.AuditAppender
 	connectorRoutes     ConnectorRoutes
 	sites               proxy.SiteDirs
 	passkeys            passkey.Directory
@@ -274,8 +282,9 @@ func (m *Manager) RouteStatuses() []RouteStatus {
 	statuses := make([]RouteStatus, len(snapshot.cfg.Routes))
 	for i, route := range snapshot.cfg.Routes {
 		statuses[i] = RouteStatus{
-			Route:  config.CloneRoute(route),
-			Health: snapshot.checker.Status(route.Host),
+			Route:     config.CloneRoute(route),
+			Health:    snapshot.checker.Status(route.Host),
+			Upstreams: snapshot.checker.UpstreamStatuses(route.Host),
 		}
 		if route.Connector != "" && m.connectorRoutes != nil {
 			statuses[i].ConnectorConnected = m.connectorRoutes.ConnectorConnected(route.Connector)
@@ -478,7 +487,7 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 	if m.sites != nil {
 		proxyOpts = append(proxyOpts, proxy.WithSites(m.sites))
 	}
-	proxyOpts = append(proxyOpts, proxy.WithTrustedProxies(trustedProxies), proxy.WithEventSink(m.sink), proxy.WithTransport(transport))
+	proxyOpts = append(proxyOpts, proxy.WithTrustedProxies(trustedProxies), proxy.WithEventSink(m.sink), proxy.WithAuditAppender(m.audit), proxy.WithTransport(transport))
 	if cfg.DevErrors {
 		proxyOpts = append(proxyOpts, proxy.WithDevErrors())
 	}
@@ -499,7 +508,8 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 		// first for the client IP; the copy inside the proxy is a no-op.
 		handler = pipeline.Chain(
 			pipeline.TrustWithProxies(trustedProxies),
-			pipeline.RateLimit(limiters.general, limiters.auth, "/_/auth/", pipeline.WithRateLimitSink(m.sink)),
+			pipeline.RateLimit(limiters.general, limiters.auth, "/_/auth/",
+				pipeline.WithRateLimitSink(m.sink), pipeline.WithRouteCatalog(cfg.Routes), pipeline.WithRateLimitAudit(m.audit)),
 		)(handler)
 	}
 	checker.Start(healthCtx, cfg.Routes, m.healthCheckInterval)
@@ -681,6 +691,7 @@ func sameServerConfig(a, b config.Config) bool {
 		a.TLS.OriginClientCAFile == b.TLS.OriginClientCAFile &&
 		reflect.DeepEqual(a.TLS.DNS01, b.TLS.DNS01) &&
 		reflect.DeepEqual(a.Notify, b.Notify) &&
+		reflect.DeepEqual(a.Audit, b.Audit) &&
 		reflect.DeepEqual(a.Tunnel, b.Tunnel) &&
 		reflect.DeepEqual(a.Pages, b.Pages) &&
 		slices.Equal(a.TLS.Domains, b.TLS.Domains)

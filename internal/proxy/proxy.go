@@ -13,6 +13,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/octaviosantacruz/switchboard/internal/auth"
@@ -20,6 +21,7 @@ import (
 	"github.com/octaviosantacruz/switchboard/internal/events"
 	"github.com/octaviosantacruz/switchboard/internal/pages"
 	"github.com/octaviosantacruz/switchboard/internal/pipeline"
+	"github.com/octaviosantacruz/switchboard/internal/routing"
 	"github.com/octaviosantacruz/switchboard/internal/static"
 )
 
@@ -33,6 +35,7 @@ type options struct {
 	logger                *slog.Logger
 	devErrors             bool
 	sink                  events.Sink
+	audit                 events.AuditAppender
 	trustedProxies        []netip.Prefix
 	assertVisitor         bool
 	tunnelTrust           bool
@@ -131,11 +134,69 @@ func WithEventSink(sink events.Sink) Option {
 	}
 }
 
+// WithAuditAppender persists access decisions before the request is denied,
+// redirected for step-up, or forwarded. It is independent from the live UI
+// event sink, which remains available when durable storage fails.
+func WithAuditAppender(appender events.AuditAppender) Option {
+	return func(o *options) { o.audit = appender }
+}
+
 type route struct {
-	target       string
-	handler      http.Handler // reverse proxy, or static site for root routes
-	authRequired bool
-	access       config.AccessPolicy
+	target        string
+	handler       http.Handler // static routes have one fixed handler
+	upstreams     []routeUpstream
+	selector      *routeSelector
+	authRequired  bool
+	access        config.AccessPolicy
+	resource      *config.RouteResource
+	auditRequired bool
+}
+
+type routeUpstream struct {
+	target  string
+	handler http.Handler
+}
+
+type routeSelector struct {
+	mu   sync.Mutex
+	next int
+}
+
+func (s *routeSelector) selectIndex(upstreams []routeUpstream, checker HealthChecker, host string) (int, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	index, ok := routing.Select(s.next, len(upstreams), func(index int) bool {
+		return upstreamHealthy(checker, host, upstreams[index].target)
+	})
+	if ok {
+		s.next = (index + 1) % len(upstreams)
+	}
+	return index, ok
+}
+
+func upstreamHealthy(checker HealthChecker, host, target string) bool {
+	if checker == nil {
+		return true
+	}
+	if targetChecker, ok := checker.(interface {
+		HealthyTarget(host, target string) bool
+	}); ok {
+		return targetChecker.HealthyTarget(host, target)
+	}
+	return checker.Healthy(host)
+}
+
+type passiveFailureReporter interface {
+	ReportFailure(host, target string)
+}
+
+func cloneRouteResource(resource *config.RouteResource) *config.RouteResource {
+	if resource == nil {
+		return nil
+	}
+	copy := *resource
+	copy.RiskyActions = slices.Clone(resource.RiskyActions)
+	return &copy
 }
 
 // HealthChecker reports whether the upstream for a route's host is
@@ -173,6 +234,7 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 		cfg.transport = NewUpstreamTransport(cfg.responseHeaderTimeout)
 	}
 	byHost := make(map[string]route, len(routes))
+	responseBuffers := newResponseBufferPool()
 
 	for _, r := range routes {
 		host, err := config.NormalizeHost(r.Host)
@@ -184,8 +246,9 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 		}
 		transport, assertVisitor := cfg.transport, cfg.assertVisitor
 		destination := r
+		targets := r.UpstreamTargets()
 		if r.Connector != "" {
-			if r.Target != "" || r.IsStatic() {
+			if r.Target != "" || len(r.Upstreams) > 0 || r.IsStatic() {
 				return nil, fmt.Errorf("route %s: unsupported connector destination", r.Host)
 			}
 			transport = cfg.connectorTransports[r.Connector]
@@ -193,17 +256,45 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 				return nil, fmt.Errorf("route %s: connector transport unavailable", r.Host)
 			}
 			destination.Target = "http://tunnel.invalid"
+			targets = []string{destination.Target}
 			assertVisitor = true
 		}
-		handler, err := upstreamHandler(destination, cfg.devErrors, assertVisitor, transport, cfg.sites, cfg.logger)
-		if err != nil {
-			return nil, err
+		var handler http.Handler
+		var routeUpstreams []routeUpstream
+		if r.IsStatic() {
+			handler, err = upstreamHandler(r, cfg.devErrors, assertVisitor, transport, cfg.sites, cfg.logger, responseBuffers, nil)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			if len(targets) == 0 {
+				return nil, fmt.Errorf("route %s: HTTP route requires a target or at least two upstreams", r.Host)
+			}
+			routeUpstreams = make([]routeUpstream, 0, len(targets))
+			for _, target := range targets {
+				upstreamRoute := destination
+				upstreamRoute.Target = target
+				upstreamRoute.Upstreams = nil
+				var reportFailure func()
+				if reporter, ok := checker.(passiveFailureReporter); ok && r.Connector == "" {
+					reportFailure = func() { reporter.ReportFailure(host, target) }
+				}
+				upstreamHandler, err := upstreamHandler(upstreamRoute, cfg.devErrors, assertVisitor, transport, cfg.sites, cfg.logger, responseBuffers, reportFailure)
+				if err != nil {
+					return nil, err
+				}
+				routeUpstreams = append(routeUpstreams, routeUpstream{target: target, handler: upstreamHandler})
+			}
 		}
 		byHost[host] = route{
-			target:       r.Destination(),
-			handler:      handler,
-			authRequired: r.RequiresAuth(),
-			access:       r.Policy(),
+			target:        r.Destination(),
+			handler:       handler,
+			upstreams:     routeUpstreams,
+			selector:      &routeSelector{},
+			authRequired:  r.RequiresAuth(),
+			access:        r.Policy(),
+			resource:      cloneRouteResource(r.Resource),
+			auditRequired: r.AuditRequired(),
 		}
 	}
 
@@ -235,6 +326,7 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 			http.Error(w, "upstream unhealthy: "+host, http.StatusServiceUnavailable)
 			return
 		}
+		selectedIndex := -1
 		if rt.authRequired {
 			if gate == nil {
 				http.Error(w, "auth misconfigured for this route", http.StatusInternalServerError)
@@ -245,17 +337,44 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 				gate.RedirectToLogin(w, req)
 				return
 			}
-			decision := auth.Authorize(principal, rt.access)
+			observedAt := time.Now().UTC()
+			decisionContext := pipeline.RequestPolicyContext(req, host, &principal, observedAt, rt.resource)
+			decision := auth.AuthorizeWithContext(principal, decisionContext, rt.access)
+			if decision.Code == auth.CodeContextStepUpRequired {
+				event := events.Event{
+					Time:       observedAt,
+					Type:       events.AccessStepUp,
+					Actor:      principal.Subject,
+					Host:       host,
+					Code:       string(decision.Code),
+					Reason:     decision.Reason,
+					RemoteAddr: req.RemoteAddr,
+					Context:    &decisionContext,
+				}
+				if !emitAccessEvent(w, req, cfg, event, rt.auditRequired) {
+					return
+				}
+				if stepUp, ok := gate.(StepUpGate); ok {
+					stepUp.RedirectToStepUp(w, req, decision.Code, []string{auth.MethodPasskey})
+				} else {
+					gate.RedirectToLogin(w, req)
+				}
+				return
+			}
 			if !decision.Allowed {
-				cfg.sink.Emit(events.Event{
-					Time:       time.Now(),
+				event := events.Event{
+					Time:       observedAt,
 					Type:       events.AccessDenied,
 					Actor:      principal.Subject,
 					Host:       host,
 					Code:       string(decision.Code),
 					Reason:     decision.Reason,
 					RemoteAddr: req.RemoteAddr,
-				})
+					Context:    &decisionContext,
+				}
+				if !emitAccessEvent(w, req, cfg, event, rt.auditRequired) {
+					return
+				}
 				http.Error(w, "access denied", http.StatusForbidden)
 				return
 			}
@@ -263,15 +382,19 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 			// passkey on a route that needs a device-bound one. The new login
 			// replaces the session, which rotates its ID.
 			if fresh := auth.Fresh(principal, rt.access, time.Now()); !fresh.Allowed {
-				cfg.sink.Emit(events.Event{
-					Time:       time.Now(),
+				event := events.Event{
+					Time:       observedAt,
 					Type:       events.AccessStepUp,
 					Actor:      principal.Subject,
 					Host:       host,
 					Code:       string(fresh.Code),
 					Reason:     fresh.Reason,
 					RemoteAddr: req.RemoteAddr,
-				})
+					Context:    &decisionContext,
+				}
+				if !emitAccessEvent(w, req, cfg, event, rt.auditRequired) {
+					return
+				}
 				if stepUp, ok := gate.(StepUpGate); ok {
 					stepUp.RedirectToStepUp(w, req, fresh.Code, auth.RequiredMethods(rt.access))
 				} else {
@@ -284,27 +407,43 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 			// refused request never counts as allowed.
 			if cfg.identityLimiter != nil {
 				if allowed, wait := cfg.identityLimiter.Allow("identity|" + principal.Subject); !allowed {
-					pipeline.WriteRetryAfter(w, wait)
-					cfg.sink.Emit(events.Event{
-						Time:       time.Now(),
+					event := events.Event{
+						Time:       observedAt,
 						Type:       events.AccessRateLimited,
 						Actor:      principal.Subject,
 						Host:       host,
 						Code:       "identity",
 						Reason:     "rate limit reached",
 						RemoteAddr: req.RemoteAddr,
-					})
+						Context:    &decisionContext,
+					}
+					if !emitAccessEvent(w, req, cfg, event, rt.auditRequired) {
+						return
+					}
+					pipeline.WriteRetryAfter(w, wait)
 					http.Error(w, "too many requests", http.StatusTooManyRequests)
 					return
 				}
 			}
-			cfg.sink.Emit(events.Event{
-				Time:       time.Now(),
+			if len(rt.upstreams) > 0 {
+				index, available := rt.selector.selectIndex(rt.upstreams, checker, host)
+				if !available {
+					http.Error(w, "upstream unhealthy: "+host, http.StatusServiceUnavailable)
+					return
+				}
+				selectedIndex = index
+			}
+			event := events.Event{
+				Time:       observedAt,
 				Type:       events.AccessAllowed,
 				Actor:      principal.Subject,
 				Host:       host,
 				RemoteAddr: req.RemoteAddr,
-			})
+				Context:    &decisionContext,
+			}
+			if !emitAccessEvent(w, req, cfg, event, rt.auditRequired) {
+				return
+			}
 			req = req.WithContext(pipeline.WithVisitor(req.Context(), pipeline.Visitor{Subject: principal.Subject, Email: principal.Email}))
 		}
 		// The identity the application trusts: the one this edge just
@@ -319,15 +458,29 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 		if ip, ok := pipeline.ClientIP(req.Context()); ok {
 			clientIP = ip.String()
 		}
+		handler := rt.handler
+		target := rt.target
+		if len(rt.upstreams) > 0 {
+			if selectedIndex < 0 {
+				var available bool
+				selectedIndex, available = rt.selector.selectIndex(rt.upstreams, checker, host)
+				if !available {
+					http.Error(w, "upstream unhealthy: "+host, http.StatusServiceUnavailable)
+					return
+				}
+			}
+			handler = rt.upstreams[selectedIndex].handler
+			target = rt.upstreams[selectedIndex].target
+		}
 		// Path only: a query string can carry tokens and must never be logged.
 		cfg.logger.LogAttrs(req.Context(), slog.LevelInfo, "proxy.forward",
 			slog.String("method", req.Method),
 			slog.String("host", host),
 			slog.String("path", req.URL.Path),
-			slog.String("target", rt.target),
+			slog.String("target", targetLogLabel(target)),
 			slog.String("client_ip", clientIP),
 		)
-		rt.handler.ServeHTTP(w, req)
+		handler.ServeHTTP(w, req)
 	})
 
 	// The trust stage runs before anything reads the request: spoofed
@@ -337,6 +490,22 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 		trust = pipeline.TrustAuthenticatedTunnel()
 	}
 	return pipeline.Chain(trust)(forward), nil
+}
+
+// emitAccessEvent appends before publishing to the live event stream. A
+// required-route failure prevents any response or upstream forwarding; a
+// best-effort failure is reported by the appender wrapper and remains visible
+// in the live stream while normal request handling continues.
+func emitAccessEvent(w http.ResponseWriter, r *http.Request, cfg options, event events.Event, required bool) bool {
+	if cfg.audit != nil {
+		if err := cfg.audit.Append(r.Context(), event); err != nil && required {
+			cfg.sink.Emit(event)
+			http.Error(w, "audit unavailable", http.StatusServiceUnavailable)
+			return false
+		}
+	}
+	cfg.sink.Emit(event)
+	return true
 }
 
 // stripCookie returns a Cookie header value without the named cookie, keeping
@@ -376,7 +545,7 @@ func writeDevNotFound(w http.ResponseWriter, requested string, byHost map[string
 
 // upstreamHandler builds what a route forwards to. A static root must already
 // exist as a directory so a typo fails at startup instead of serving 404s.
-func upstreamHandler(r config.Route, devErrors, assertVisitor bool, transport http.RoundTripper, sites SiteDirs, logger *slog.Logger) (http.Handler, error) {
+func upstreamHandler(r config.Route, devErrors, assertVisitor bool, transport http.RoundTripper, sites SiteDirs, logger *slog.Logger, responseBuffers *responseBufferPool, reportFailure func()) (http.Handler, error) {
 	if r.Site != "" {
 		// A site may have no deployment yet: that is a 503 at request time,
 		// not a startup error, so the first deploy can follow the route.
@@ -401,7 +570,8 @@ func upstreamHandler(r config.Route, devErrors, assertVisitor bool, transport ht
 		return nil, fmt.Errorf("route %s: invalid target %q: %w", r.Host, r.Target, err)
 	}
 	proxy := &httputil.ReverseProxy{
-		Transport: transport,
+		Transport:  transport,
+		BufferPool: responseBuffers,
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			// The identify stage already read the session cookie; the outbound
 			// request is where it stops, so no upstream ever sees the edge
@@ -441,17 +611,23 @@ func upstreamHandler(r config.Route, devErrors, assertVisitor bool, transport ht
 			pr.Out.Host = pr.In.Host
 		},
 		ErrorHandler: func(w http.ResponseWriter, req *http.Request, err error) {
+			if req.Context().Err() != nil {
+				return
+			}
+			if reportFailure != nil {
+				reportFailure()
+			}
 			status := http.StatusBadGateway
 			if isTimeout(err) {
 				status = http.StatusGatewayTimeout
 			}
-			// The failure goes to the operator's log; the visitor only gets
-			// the error class unless development errors are on.
+			// Logs keep a stable failure class and the target authority only.
+			// Transport error strings can contain credentials, paths or tokens.
 			logger.LogAttrs(req.Context(), slog.LevelWarn, "proxy.upstream_error",
 				slog.String("host", req.Host),
-				slog.String("target", target.String()),
+				slog.String("target_host", target.Host),
 				slog.Int("status", status),
-				slog.String("error", err.Error()),
+				slog.String("failure_class", upstreamFailureClass(err)),
 			)
 			if devErrors {
 				w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -490,6 +666,28 @@ func NewUpstreamTransport(responseHeaderTimeout time.Duration) *http.Transport {
 func isTimeout(err error) bool {
 	var netErr net.Error
 	return errors.As(err, &netErr) && netErr.Timeout()
+}
+
+func upstreamFailureClass(err error) string {
+	if isTimeout(err) {
+		return "timeout"
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return "network"
+	}
+	return "transport"
+}
+
+func targetLogLabel(raw string) string {
+	if strings.HasPrefix(raw, "connector:") || strings.HasPrefix(raw, "site:") {
+		return raw
+	}
+	target, err := config.ParseTarget(raw)
+	if err != nil {
+		return "static"
+	}
+	return target.Scheme + "://" + target.Host
 }
 
 // withoutPort returns a normalized host without its port, and whether it had

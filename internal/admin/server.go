@@ -16,6 +16,7 @@ import (
 
 	"github.com/octaviosantacruz/switchboard/internal/config"
 	"github.com/octaviosantacruz/switchboard/internal/events"
+	"github.com/octaviosantacruz/switchboard/internal/healthcheck"
 	"github.com/octaviosantacruz/switchboard/internal/routemanager"
 )
 
@@ -36,6 +37,7 @@ type Handler struct {
 	sink        events.Sink
 	broker      *events.Broker
 	certificate func() CertificateStatus
+	auditStatus func() AuditStatus
 	pages       deployments
 	people      people
 	connectors  connectors
@@ -146,6 +148,15 @@ type CertificateStatus struct {
 	Pending     int    `json:"pending"`
 }
 
+// AuditStatus is an operational projection for the configured durable access
+// audit. FailureCount and LastFailureAt are process-local; no filesystem path
+// or raw I/O error is exposed to the console.
+type AuditStatus struct {
+	Available     bool   `json:"available"`
+	FailureCount  uint64 `json:"failure_count"`
+	LastFailureAt string `json:"last_failure_at,omitempty"`
+}
+
 type statusView struct {
 	Active      string
 	Protected   int
@@ -154,24 +165,34 @@ type statusView struct {
 	HasActivity bool
 	GeneratedAt string
 	Certificate *CertificateStatus
+	Audit       *AuditStatus
 	Routes      []routeView
 }
 
 type routeView struct {
-	Access         string `json:"access"`
-	Policy         string `json:"policy"`
-	Kind           string `json:"kind"`
-	IsStatic       bool   `json:"is_static"`
-	IsTunnel       bool   `json:"is_tunnel"`
-	Host           string `json:"host"`
-	Target         string `json:"target"`
-	HealthPath     string `json:"health_path"`
-	State          string `json:"state"`
-	StateClass     string `json:"state_class"`
-	Latency        string `json:"latency"`
-	LastCheck      string `json:"last_check"`
-	LastTransition string `json:"last_transition"`
-	LastError      string `json:"last_error"`
+	Access         string         `json:"access"`
+	Policy         string         `json:"policy"`
+	Kind           string         `json:"kind"`
+	IsStatic       bool           `json:"is_static"`
+	IsTunnel       bool           `json:"is_tunnel"`
+	Host           string         `json:"host"`
+	Target         string         `json:"target"`
+	HealthPath     string         `json:"health_path"`
+	State          string         `json:"state"`
+	StateClass     string         `json:"state_class"`
+	Latency        string         `json:"latency"`
+	LastCheck      string         `json:"last_check"`
+	LastTransition string         `json:"last_transition"`
+	LastError      string         `json:"last_error"`
+	Upstreams      []upstreamView `json:"upstreams,omitempty"`
+}
+
+type upstreamView struct {
+	Target     string `json:"target"`
+	State      string `json:"state"`
+	StateClass string `json:"state_class"`
+	LastCheck  string `json:"last_check"`
+	LastError  string `json:"last_error,omitempty"`
 }
 
 // buildStatusView projects route health and the certificate state; both the
@@ -187,6 +208,10 @@ func (h *Handler) buildStatusView() statusView {
 	if h.certificate != nil {
 		status := h.certificate()
 		view.Certificate = &status
+	}
+	if h.auditStatus != nil {
+		status := h.auditStatus()
+		view.Audit = &status
 	}
 	for i, status := range statuses {
 		healthPath := status.Route.HealthPath
@@ -243,9 +268,33 @@ func (h *Handler) buildStatusView() statusView {
 			LastCheck:      lastCheck,
 			LastTransition: lastTransition,
 			LastError:      status.Health.LastError,
+			Upstreams:      upstreamViews(status.Upstreams),
 		}
 	}
 	return view
+}
+
+func upstreamViews(statuses []healthcheck.TargetStatus) []upstreamView {
+	views := make([]upstreamView, 0, len(statuses))
+	for _, target := range statuses {
+		state := "Unchecked"
+		stateClass := "unknown"
+		lastCheck := "-"
+		if target.Status.Checked {
+			state = "Healthy"
+			stateClass = "healthy"
+			if !target.Status.Healthy {
+				state = "Unhealthy"
+				stateClass = "unhealthy"
+			}
+			lastCheck = target.Status.LastCheck.UTC().Format(time.RFC3339)
+		}
+		views = append(views, upstreamView{
+			Target: target.Target, State: state, StateClass: stateClass,
+			LastCheck: lastCheck, LastError: target.Status.LastError,
+		})
+	}
+	return views
 }
 
 func (h *Handler) status(w http.ResponseWriter, _ *http.Request) {
