@@ -64,6 +64,7 @@ func TestParseValidatesDeclaredRouteResource(t *testing.T) {
 }
 
 func TestAuditConfigAndRouteFailureModes(t *testing.T) {
+	skipOnWindows(t, "audit.dir fixtures are POSIX absolute paths")
 	base := `{"listen":":8888","auth":{"issuer":"https://accounts.google.com","client_id":"id","client_secret":"secret","redirect_url":"http://private.localhost/_/auth/callback"},"audit":{"dir":"/var/lib/switchboard/audit","include":["access"]},"routes":[{"host":"public.localhost","target":"http://localhost:9000"},{"host":"private.localhost","target":"http://localhost:9001","access":{}}]}`
 	cfg, err := Parse([]byte(base))
 	if err != nil {
@@ -425,7 +426,7 @@ func TestParseRejectsUnknownAndMultipleValues(t *testing.T) {
 func TestValidateDoesNotMutateInput(t *testing.T) {
 	cfg := Config{
 		Listen: ":8888",
-		Audit:  &AuditConfig{Dir: "/var/lib/switchboard/audit", Include: []string{"access"}},
+		Audit:  &AuditConfig{Dir: t.TempDir(), Include: []string{"access"}}, // absolute on every OS
 		Routes: []Route{{
 			Host:   "APP.Localhost.",
 			Target: "http://localhost:9000",

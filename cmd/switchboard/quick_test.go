@@ -25,7 +25,7 @@ func TestInitCreatesPrivateValidConfigWithoutOverwrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := info.Mode().Perm(); got != 0o600 {
+	if got := info.Mode().Perm(); hasUnixPermissions() && got != 0o600 {
 		t.Fatalf("config mode = %o, want 600", got)
 	}
 	if _, err := config.Load(path); err != nil {
@@ -65,13 +65,19 @@ func TestDoctorSuppressesConfigurationValuesOnFailure(t *testing.T) {
 }
 
 func TestDoctorReportsStateRequiredWithoutCreatingDatabase(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.json")
-	configJSON := `{"listen":"127.0.0.1:8888","pages":{"dir":"/tmp/switchboard-pages"},"routes":[{"host":"site.localhost:8888","site":"docs"}]}`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	// pages.dir must be absolute on the running OS; a POSIX literal is not on Windows.
+	pagesDir, err := json.Marshal(filepath.Join(dir, "pages"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	configJSON := `{"listen":"127.0.0.1:8888","pages":{"dir":` + string(pagesDir) + `},"routes":[{"host":"site.localhost:8888","site":"docs"}]}`
 	if err := os.WriteFile(path, []byte(configJSON), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	err := runDoctor(context.Background(), []string{"-config", path}, &out)
+	err = runDoctor(context.Background(), []string{"-config", path}, &out)
 	if err == nil || !strings.Contains(out.String(), "needs persistent state") {
 		t.Fatalf("doctor result = %q, error = %v", out.String(), err)
 	}

@@ -48,9 +48,12 @@ func (b *synchronizedBuffer) String() string {
 
 // TestDifferentialProxyAgainstCaddyOrNginx compares the request semantics of
 // Switchboard's host-routed reverse proxy with an installed reference proxy.
-// It is an opt-in-by-installation integration harness: CI without either
-// binary still runs the deterministic unit and fuzz-seed tests above.
+// It is opt-in through SWITCHBOARD_DIFFERENTIAL_PROXY=1: hosted CI images ship
+// nginx, and the gate must not depend on whatever a runner has installed.
 func TestDifferentialProxyAgainstCaddyOrNginx(t *testing.T) {
+	if os.Getenv("SWITCHBOARD_DIFFERENTIAL_PROXY") != "1" {
+		t.Skip("set SWITCHBOARD_DIFFERENTIAL_PROXY=1 and install caddy or nginx to run the differential proxy harness")
+	}
 	type engine struct {
 		name string
 		path string
@@ -178,6 +181,12 @@ func startReferenceProxy(t *testing.T, name, binary, upstreamURL string) string 
 	output := &synchronizedBuffer{}
 	cmd = exec.CommandContext(ctx, cmd.Path, cmd.Args[1:]...)
 	cmd.Stdout, cmd.Stderr = output, output
+	// nginx's master forks a worker that inherits the output pipe. Killing only
+	// the master left Wait blocked on that pipe until the test binary timed
+	// out. An interrupt is a fast shutdown that stops the workers too, and
+	// WaitDelay bounds both the kill and the wait for the pipe to close.
+	cmd.Cancel = func() error { return cmd.Process.Signal(os.Interrupt) }
+	cmd.WaitDelay = 2 * time.Second
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start %s: %v", name, err)
 	}
@@ -189,12 +198,7 @@ func startReferenceProxy(t *testing.T, name, binary, upstreamURL string) string 
 	}()
 	t.Cleanup(func() {
 		cancel()
-		select {
-		case <-done:
-		case <-time.After(2 * time.Second):
-			_ = cmd.Process.Kill()
-			<-done
-		}
+		<-done
 	})
 
 	deadline := time.Now().Add(5 * time.Second)

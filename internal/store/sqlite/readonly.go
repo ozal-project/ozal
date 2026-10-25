@@ -10,12 +10,13 @@ import (
 
 // OpenReadOnly opens an existing SQLite database without creating files or
 // changing its journal mode. It is for diagnostics and recovery tooling.
+// The DSN is built like Open's: a url.URL path turns a Windows path such as
+// C:\state.db into an invalid URI authority.
 func OpenReadOnly(ctx context.Context, path string) (*sql.DB, error) {
-	u := url.URL{Scheme: "file", Path: path}
 	query := url.Values{}
 	query.Set("mode", "ro")
 	query.Add("_pragma", "busy_timeout(5000)")
-	db, err := sql.Open("sqlite", u.String()+"?"+query.Encode())
+	db, err := sql.Open("sqlite", "file:"+path+"?"+query.Encode())
 	if err != nil {
 		return nil, fmt.Errorf("open database read-only: %w", err)
 	}
