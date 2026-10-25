@@ -682,3 +682,11 @@ not become an open redirect. A virtual authenticator in the tests (an ECDSA
 key that builds authenticator data and signs like a device) is what made
 each of those checks testable, and breaking each one on purpose showed
 which tests actually guard it.
+
+## 2026-10-25 — validate trust without resolving secrets (PAGES-007)
+
+A pure validator can compare canonical hostnames and use maps to detect
+duplicate ownership and repository/ref trust without reading a token file.
+Secret references stay in raw configuration; adapters resolve them only when
+needed. Deep-copy assertions must preserve nil slices too: `nil` and an empty
+slice compare differently with `reflect.DeepEqual` even when both have length zero.

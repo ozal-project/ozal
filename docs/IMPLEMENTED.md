@@ -6,6 +6,29 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## PAGES-007 — project configuration and read-only views — 2026-10-25 (`1e1bb3e`)
+
+Optional projects bind one Pages site and its routed hostnames to GitHub
+repository/owner IDs and refs, or to `env:`/`file:` token references. The pure
+validator rejects duplicate projects/sites, overlapping repository/ref trust,
+missing or mismatched routes, empty or mixed authentication methods and inline
+tokens. Validation never resolves secrets or mutates its inputs; the returned
+config normalizes hostnames on a deep copy. Existing site routes need no project.
+
+`GET /_/api/projects` requires the admin bearer (or the existing host-local
+socket credential) and projects only safe fields. The Sites console shows this
+read-only view. Migration 010 adds nullable project, commit SHA and workflow-run
+URL columns; store reads preserve them while the unauthenticated local site
+list omits source metadata. Schema and example config include projects.
+
+Evidence: the active validator table failed against the stub before the
+implementation; it and the compatibility, normalization, cloning, secret/API
+redaction and metadata round-trip regressions pass. The complete Linux gate
+`GOTMPDIR=$HOME/.cache/go-tmp scripts/verify.sh` passed, including race tests,
+build, short fuzz runs, linters and console/script checks. Loopback/cache access
+required execution outside the restrictive sandbox. No push or deployment;
+the public deploy endpoint and actual project-token use remain `PAGES-008`.
+
 ## Platform-aware migration and upgrade test fixtures — 2026-10-21 (committed with this change)
 
 [Run 39711694730](https://github.com/octaviosantacruz/switchboard/actions/runs/39711694730)
