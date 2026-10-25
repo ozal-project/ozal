@@ -205,18 +205,19 @@ func TestEnrolThenLoginOnAnotherBrowser(t *testing.T) {
 
 // The destination survives the invitation and the enrolment, validated
 // like a login's: an allowed host is returned to, anything else is not, and
-// without one the page gets explicit links to the protected sites.
+// without one the person lands on the portal (ID-012), never on a foreign site.
 func TestEnrolmentReturnsToAValidatedDestination(t *testing.T) {
+	portal := loginOrigin + "/_/auth/me"
 	for name, tc := range map[string]struct {
 		returnTo, redirect string
 		sites              bool
 	}{
 		"protected host":    {"https://" + appHost + "/reports", "https://" + appHost + "/reports", false},
-		"other site":        {"https://evil.example/", "", true},
-		"scheme trick":      {"javascript:alert(1)", "", true},
-		"no destination":    {"", "", true},
-		"userinfo trick":    {"https://" + appHost + "@evil.example/", "", true},
-		"protocol-relative": {"//evil.example/", "", true},
+		"other site":        {"https://evil.example/", portal, true},
+		"scheme trick":      {"javascript:alert(1)", portal, true},
+		"no destination":    {"", portal, true},
+		"userinfo trick":    {"https://" + appHost + "@evil.example/", portal, true},
+		"protocol-relative": {"//evil.example/", portal, true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			h := newHarness(t)
@@ -338,8 +339,10 @@ func TestLoginRefusals(t *testing.T) {
 	t.Run("open redirect", func(t *testing.T) {
 		h, device := setup(t)
 		code, result := h.browser().login(t, device, "https://evil.example/", loginOrigin)
-		if code != http.StatusOK || result["redirect"] != "" {
-			t.Fatalf("code = %d, redirect = %v; want 200 and no redirect", code, result["redirect"])
+		// A foreign destination is dropped; the person lands on the portal of
+		// the login host, never on the host they asked for.
+		if code != http.StatusOK || result["redirect"] != loginOrigin+"/_/auth/me" {
+			t.Fatalf("code = %d, redirect = %v; want 200 and the portal, not evil.example", code, result["redirect"])
 		}
 		if sites, _ := result["sites"].([]any); len(sites) != 1 || sites[0] != "https://"+appHost+"/" {
 			t.Fatalf("sites = %v, want the protected host as an explicit link", result["sites"])

@@ -8,6 +8,7 @@ import (
 	"html"
 	"net/http"
 	"path"
+	"strings"
 	"sync"
 
 	"github.com/octaviosantacruz/switchboard/internal/config"
@@ -72,6 +73,8 @@ func (g *Gate) servePage(w http.ResponseWriter, r *http.Request) {
 		name = "assets/enrol.html"
 	case "/_/auth/devices":
 		name = "assets/devices.html"
+	case portalPath:
+		name = "assets/me.html"
 	}
 	body, err := assets.ReadFile(name)
 	if err != nil {
@@ -90,10 +93,10 @@ func (g *Gate) servePage(w http.ResponseWriter, r *http.Request) {
 }
 
 var assetTypes = map[string]string{
-	".js":  "text/javascript; charset=utf-8",
-	".css": "text/css; charset=utf-8",
-	".ttf": "font/ttf",
-	".svg": "image/svg+xml",
+	".js":    "text/javascript; charset=utf-8",
+	".css":   "text/css; charset=utf-8",
+	".woff2": "font/woff2",
+	".svg":   "image/svg+xml",
 }
 
 func serveAsset(w http.ResponseWriter, r *http.Request) {
@@ -121,7 +124,7 @@ func serveAsset(w http.ResponseWriter, r *http.Request) {
 	// served fresh, so an old link never pins old code.
 	if v := r.URL.Query().Get("v"); v != "" && v == assetVersions()[name] {
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-	} else if name == "manrope.ttf" || dir == "assets/icons/" {
+	} else if strings.HasSuffix(name, ".woff2") || dir == "assets/icons/" {
 		// The font and the provider icons are linked without a version;
 		// they change only with a new release of their source.
 		w.Header().Set("Cache-Control", "public, max-age=604800")

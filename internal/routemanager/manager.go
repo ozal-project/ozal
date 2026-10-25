@@ -293,6 +293,23 @@ func (m *Manager) RouteStatuses() []RouteStatus {
 	return statuses
 }
 
+// protectedRoutes are the routes behind a login in the installed snapshot,
+// read when asked: the passkey gate outlives a reload that changes only
+// policies, and the portal must list what is allowed now.
+func (m *Manager) protectedRoutes() []config.Route {
+	current := m.current.Load()
+	if current == nil {
+		return nil
+	}
+	var routes []config.Route
+	for _, route := range current.cfg.Routes {
+		if route.RequiresAuth() {
+			routes = append(routes, route)
+		}
+	}
+	return routes
+}
+
 // ServeHTTP delegates the entire request to one immutable snapshot.
 func (m *Manager) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	snapshot := m.current.Load()
@@ -442,6 +459,7 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 				gateCancel = cancelGate
 				passkeyGate.WithOIDC(oidcGate, cfg.Auth.ProviderName)
 			}
+			passkeyGate.WithApps(m.protectedRoutes)
 			builtGate = passkeyGate
 		} else {
 			oidcGate, cancelGate, err := m.buildOIDCGate(cfg.Auth, protectedHosts, sessions)

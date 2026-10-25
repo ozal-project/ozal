@@ -54,6 +54,8 @@ type Gate struct {
 	// oidc is the upstream login offered beside passkeys, if any.
 	oidc     OIDCLogin
 	oidcName string
+	// apps returns the current routes for the portal (ID-012).
+	apps func() []config.Route
 }
 
 // NewGate builds the gate from a validated auth config. protectedHosts are
@@ -236,6 +238,10 @@ func (g *Gate) ServeAuthEndpoint(w http.ResponseWriter, r *http.Request) bool {
 		g.servePage(w, r)
 	case "/_/auth/devices":
 		g.serveDevicesPage(w, r)
+	case portalPath:
+		g.serveMePage(w, r)
+	case portalPath + "/data":
+		g.api(w, r, g.meData)
 	case "/_/auth/devices/list":
 		g.api(w, r, g.devicesList)
 	case "/_/auth/devices/add/begin":
@@ -244,7 +250,7 @@ func (g *Gate) ServeAuthEndpoint(w http.ResponseWriter, r *http.Request) bool {
 		g.api(w, r, g.devicesAddFinish)
 	case "/_/auth/devices/revoke":
 		g.api(w, r, g.devicesRevoke)
-	case "/_/auth/passkey.js", "/_/auth/passkey.css", "/_/auth/manrope.ttf":
+	case "/_/auth/passkey.js", "/_/auth/passkey.css", "/_/auth/geist-400.woff2", "/_/auth/geist-600.woff2":
 		serveAsset(w, r)
 	case "/_/auth/login/begin":
 		g.api(w, r, g.loginBegin)
@@ -282,6 +288,7 @@ var (
 	errWrongOrigin   = apiError{http.StatusForbidden, "Sign in from the login page."}
 	errWrongMethod   = apiError{http.StatusMethodNotAllowed, "Method not allowed."}
 	errWrongEncoding = apiError{http.StatusUnsupportedMediaType, "Send JSON."}
+	errSignedOut     = apiError{http.StatusUnauthorized, "You are signed out. Sign in again."}
 )
 
 // api runs a JSON endpoint behind the checks every one of them needs:
@@ -369,11 +376,14 @@ func (g *Gate) destination(returnTo string) string {
 	return ""
 }
 
+// finished says where a sign-in or enrolment goes next: the validated
+// destination, or else the portal, where the person sees the applications
+// they may open (ID-012). Sites stays for a page script that cannot redirect.
 func (g *Gate) finished(returnTo string) finishResponse {
 	if returnTo != "" {
 		return finishResponse{Redirect: returnTo}
 	}
-	return finishResponse{Sites: g.protected}
+	return finishResponse{Redirect: g.origin + portalPath, Sites: g.protected}
 }
 
 func (g *Gate) loginFinish(w http.ResponseWriter, r *http.Request) (any, *apiError) {

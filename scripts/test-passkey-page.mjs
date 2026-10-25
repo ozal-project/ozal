@@ -9,13 +9,13 @@ import assert from "node:assert/strict";
 
 const src = readFileSync(new URL("../internal/passkey/assets/passkey.js", import.meta.url), "utf8");
 
-function render(search, { oidc = "", webauthn = true, page = "login", fetch = () => new Promise(() => {}) } = {}) {
+function render(search, { oidc = "", webauthn = true, page = "login", fetch = () => new Promise(() => {}), assign = () => {} } = {}) {
   const els = {};
   const el = (id) => (els[id] ??= {
     id, textContent: "", hidden: id === "oidc", href: "", disabled: false, dataset: {}, children: [],
     addEventListener() {}, focus() {}, setAttribute() {}, append(...c) { this.children.push(...c); }, replaceChildren(...c) { this.children = c; },
   });
-  ["title", "intro", "action", "oidc", "status", "first-time", "username", "sites", "devices", "who", "email", "signout"].forEach(el);
+  ["title", "intro", "action", "oidc", "status", "first-time", "username", "sites", "devices", "who", "email", "signout", "apps", "manage"].forEach(el);
   const label = { hidden: false };
   const head = [];
   let ready;
@@ -31,7 +31,7 @@ function render(search, { oidc = "", webauthn = true, page = "login", fetch = ()
   const ctx = {
     document, URL, URLSearchParams, encodeURIComponent, AbortController, atob, btoa, JSON, Date, String, Uint8Array,
     window: webauthn ? { PublicKeyCredential: function () {} } : {},
-    location: { search, hash: "", pathname: "/_/auth/" + page, origin: "https://auth.example.com", assign() {} },
+    location: { search, hash: "", pathname: "/_/auth/" + page, origin: "https://auth.example.com", assign },
     history: { replaceState() {} },
     localStorage: { setItem() {}, getItem: () => null, removeItem() {} },
     navigator: webauthn ? { credentials: { get: () => new Promise(() => {}) } } : {},
@@ -42,15 +42,19 @@ function render(search, { oidc = "", webauthn = true, page = "login", fetch = ()
   vm.runInContext(src, ctx);
   ready();
   return {
-    title: els.title.textContent,
-    intro: els.intro.textContent,
-    passkey: els.action.hidden ? "hidden" : els.action.disabled ? "disabled" : "shown",
-    oidc: els.oidc.hidden ? "" : els.oidc.textContent,
-    href: els.oidc.href,
-    firstTime: !els["first-time"].hidden,
-    status: els.status.textContent,
+    // Live reads: a page that loads data answers after render() returns.
+    get title() { return els.title.textContent; },
+    get intro() { return els.intro.textContent; },
+    get passkey() { return els.action.hidden ? "hidden" : els.action.disabled ? "disabled" : "shown"; },
+    get oidc() { return els.oidc.hidden ? "" : els.oidc.textContent; },
+    get href() { return els.oidc.href; },
+    get firstTime() { return !els["first-time"].hidden; },
+    get status() { return els.status.textContent; },
     get devices() { return els.devices.children; },
-    preconnect: head.filter((n) => n.rel === "preconnect").map((n) => n.href),
+    get apps() { return els.apps.children.map((a) => [a.href, a.textContent, (a.children[0] || {}).textContent || ""]); },
+    who: () => (els.who.hidden ? "" : els.email.textContent),
+    manageShown: () => !els.manage.hidden,
+    get preconnect() { return head.filter((n) => n.rel === "preconnect").map((n) => n.href); },
   };
 }
 
@@ -111,4 +115,40 @@ assert.equal(page.devices[1].children[0].textContent, "Apple Passwords");
 assert.equal(page.devices[1].children[2].children[0].textContent, "Synced");
 assert.equal(page.devices[1].children[3].src, "/_/auth/icons/apple.svg", "the provider's logo");
 
-console.log("passkey pages: 10 variants OK");
+// The portal shows what the server lists, needs no WebAuthn, and sends a
+// signed-out person to log in and come back.
+async function portal(reply, opts = {}) {
+  const calls = [];
+  const assigned = [];
+  const page = render("", {
+    page: "me",
+    webauthn: false,
+    fetch: async (url, init) => {
+      calls.push([url, init && init.method]);
+      return reply;
+    },
+    ...opts,
+    assign: (url) => assigned.push(url),
+  });
+  await new Promise((r) => setTimeout(r, 10));
+  return { page, calls, assigned };
+}
+const ok = (body) => ({ ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) });
+
+let shown = await portal(ok({ email: "ana@example.com", method: "passkey", passkeys: true, apps: [{ host: "wiki.example.com", url: "https://wiki.example.com/", note: "May ask you to sign in again" }] }));
+assert.deepEqual(shown.calls[0], ["/_/auth/me/data", "POST"]);
+assert.deepEqual(shown.page.apps, [["https://wiki.example.com/", "wiki.example.com", "May ask you to sign in again"]], "the note is visible, not only a tooltip");
+assert.equal(shown.page.who(), "ana@example.com");
+assert.equal(shown.page.manageShown(), true);
+assert.match(shown.page.intro, /These are the apps/);
+
+shown = await portal(ok({ email: "bob@example.com", method: "oidc", passkeys: false, apps: [] }));
+assert.deepEqual(shown.page.apps, []);
+assert.equal(shown.page.manageShown(), false, "no passkey management for a provider login");
+assert.match(shown.page.intro, /No app is open to you yet/);
+
+shown = await portal({ ok: false, status: 401, json: async () => ({ error: "You are signed out. Sign in again." }), text: async () => "" });
+assert.deepEqual(shown.assigned, ["/_/auth/login?return_to=" + encodeURIComponent("https://auth.example.com/_/auth/me")], "a signed-out person logs in and comes back to the portal");
+assert.equal(shown.page.who(), "", "nothing about a person is shown without a session");
+
+console.log("passkey pages: 13 variants OK");

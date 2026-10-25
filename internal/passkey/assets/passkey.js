@@ -354,9 +354,51 @@ function setupDevices(button) {
   load().catch(fail);
 }
 
+// setupMe is the portal (ID-012): who is signed in and the apps they may open.
+// The server decides the list; the page only shows it. Nothing here needs
+// WebAuthn, so it runs on any browser.
+function setupMe() {
+  const apps = document.getElementById("apps");
+  const intro = document.getElementById("intro");
+  const login = "/_/auth/login?return_to=" + encodeURIComponent(location.origin + "/_/auth/me");
+
+  async function load() {
+    const data = await post("/_/auth/me/data", {});
+    document.getElementById("email").textContent = data.email;
+    document.getElementById("who").hidden = false;
+    document.getElementById("manage").hidden = !data.passkeys;
+    apps.replaceChildren(...data.apps.map((app) => {
+      const a = document.createElement("a");
+      a.href = app.url;
+      a.textContent = app.host;
+      if (app.note) {
+        const note = document.createElement("small");
+        note.textContent = app.note;
+        a.append(note);
+      }
+      return a;
+    }));
+    intro.textContent = data.apps.length
+      ? "These are the apps you can open. Pick one to go there."
+      : "No app is open to you yet. Ask the person who runs this to give you access.";
+  }
+
+  document.getElementById("signout").addEventListener("click", async () => {
+    await fetch("/_/auth/logout", { method: "POST", credentials: "same-origin" }).catch(() => {});
+    location.assign("/_/auth/login");
+  });
+
+  load().catch((error) => {
+    if (/signed out/i.test(error.message)) return location.assign(login);
+    intro.textContent = "";
+    show(explain(error, "enrol"), "error");
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   const button = document.getElementById("action");
   const kind = document.body.dataset.page;
+  if (kind === "me") return setupMe();
   const page = kind === "login" ? setupLoginPage(button) : null;
   if (!window.PublicKeyCredential || !navigator.credentials) {
     button.disabled = true;

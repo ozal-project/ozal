@@ -346,3 +346,16 @@ Password Manager, a security key) is the authenticator, and approvals for
 sensitive actions can use the existing Telegram notifier (`NTF-001`). TOTP
 apps (Google Authenticator) stay out of the login: their codes can be phished
 through a proxy page, which is the attack passkeys stop.
+
+## The portal (`ID-012`)
+
+`/_/auth/me` is the page a person who uses the applications lands on after
+signing in with no other destination. It states who is signed in and lists the
+applications their identity may open. The list is not stored: each request
+evaluates every protected route of the installed configuration with
+`auth.Explain`, the decision the proxy makes, so a policy change shows at once
+and a refused route is never named. It shows no policy, no group of anyone else
+and no route that is not theirs. A route whose policy can ask the person to
+sign in again (max auth age, device-bound passkey, allowed methods) carries a
+note saying so. Like every login API, its data endpoint is a POST that checks
+the `Origin`.
