@@ -111,8 +111,10 @@ internal/
 ```
 
 Today's mapping: `auth/authz.go` → `policy`, `auth/principal.go` →
-`identity`, `auth/oidc.go` → `oidc`, `proxy` → `httpedge` + `pipeline`,
-`routemanager` → `routing`.
+`identity`, `auth/oidc.go` → `oidc`, `proxy` → `httpedge` + `pipeline`, and
+`routemanager` → immutable routing snapshot. `routing.Select` is the pure,
+health-aware upstream-index decision; the proxy advances a per-snapshot
+round-robin cursor across it.
 
 ## Proposed extensions (not current behavior)
 

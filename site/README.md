@@ -9,5 +9,7 @@ npm run dev     # local preview
 npm run build   # astro check + static build into dist/
 ```
 
-Only list features under "shipped today" when they have tests and a running deployment
-(`REL-008`); everything else belongs on the roadmap.
+Describe capabilities only at the level supported by the current alpha. Keep
+automated test coverage, observed single-host operation, experimental code and
+roadmap items distinct (`REL-008`); a passing build alone is not deployment
+evidence.

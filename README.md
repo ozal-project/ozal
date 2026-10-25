@@ -50,13 +50,16 @@ Switchboard is not "Caddy with Okta built in."
   host-based routing for local services and small self-hosted deployments,
   with a configuration a developer can read in one sitting.
 - **Okta, Google, Auth0, and similar services** are identity providers.
-  Switchboard does not manage users, passwords, MFA, consent, signing keys,
-  or token issuance. It delegates login to one of those providers via OIDC,
-  verifies the resulting identity, and applies a route's access policy.
+  Switchboard is not a general-purpose identity provider. It can delegate
+  sign-in to one of them through OIDC, or use an optional local passkey flow
+  for proxy access. That local registry has no passwords, public self-signup,
+  consent framework, or general-purpose token issuance; recovery is an
+  operator-controlled host action.
 - **Pomerium** is a mature, policy-heavy identity-aware proxy. Switchboard
   borrows the useful shape of that idea for a smaller audience: a single Go
   binary that lets a developer put a local or self-hosted app behind a name,
-  TLS, and optional OIDC access control without assembling several services.
+  TLS, and optional OIDC or passkey access control without assembling several
+  services.
 
 Put plainly: Switchboard is an **identity-aware application gateway**. It
 connects `app.localhost` or `app.example.com` to an upstream service, then
@@ -72,10 +75,12 @@ TLS and optional external OIDC access control with one understandable config.
 That is the MVP, not a temporary compromise before rebuilding Caddy or Okta.
 
 The project should grow only where a capability makes that path more reliable,
-safer, or easier to operate. Its first release goal is a trustworthy public
-alpha, with secrets outside JSON, fuzz coverage for the security boundaries,
-CI and release artifacts. The measurable release gates and dates are in
-[TO_IMPLEMENT.md](docs/TO_IMPLEMENT.md#alpha-release-gates).
+safer, or easier to operate. `v0.1.0-alpha.1` was published on 2026-10-21
+with secrets outside JSON, fuzz coverage for the security boundaries, CI and
+release artifacts. GitHub currently reports this repository as private, so
+the release is available only to people with repository access. Public access
+and production readiness remain separate goals. The measurable gates and
+dates are in [TO_IMPLEMENT.md](docs/TO_IMPLEMENT.md#alpha-release-gates).
 
 ## Local tunnel experiment (no VPS required)
 
@@ -91,9 +96,9 @@ integration, visitor assertions and credential rotation remain in `TUN-002`.
 
 ## SQLite migrations
 
-The embedded state database currently has migrations for `sessions` and
-`connectors`. Apply them through the Go runner so transaction boundaries,
-checksums and migration history are preserved:
+The embedded state database currently has migrations for `sessions`,
+`connectors` and static-site `deployments`. Apply them through the Go runner so
+transaction boundaries, checksums and migration history are preserved:
 
 ```bash
 ./scripts/migrate.sh status -db /absolute/path/state.db
@@ -107,7 +112,7 @@ root. `status` checks history and lists pending migrations without applying
 application SQL, but can create a fresh database and its history table.
 Repeated `up` runs skip applied migrations. A changed applied migration or a
 database newer than the runner is rejected. Use this checkout's runner so the
-embedded migrations include `002_create_connectors`.
+embedded migrations include `003_create_deployments`.
 
 To author a future schema change:
 
@@ -121,6 +126,50 @@ file. Applied SQL files stay immutable. The runner owns transactions; do not
 add `BEGIN`/`COMMIT` to migration files. Session persistence in the normal
 application is enabled only by starting it with `-db PATH` (see sessions below);
 creating its table alone does not enable it.
+
+## CLI diagnostics and database recovery
+
+The one-shot commands help prepare and inspect a local install without
+starting the proxy:
+
+```bash
+switchboard init -config config.json
+switchboard validate -config config.json
+switchboard doctor -config config.json [-db /var/lib/switchboard/state.db]
+switchboard schema > switchboard-config.schema.json
+switchboard completion bash    # also: zsh, fish, powershell
+switchboard version -json
+```
+
+`init` creates a starter config with mode `0600`, contains no credentials and
+refuses to overwrite an existing file. `doctor` validates config, checks an
+optional database read-only and reports pending migrations; it does not probe
+upstreams or print config/parser/database values. The generated JSON Schema
+comes from the same Go config types, while `validate` remains authoritative
+for cross-field rules.
+
+State snapshots include SQLite's live WAL consistently and are written with
+mode `0600` to a path that must not exist:
+
+```bash
+switchboard db backup -db /var/lib/switchboard/state.db \
+  -out /var/lib/switchboard/state.backup.db
+switchboard db restore \
+  -from /var/lib/switchboard/state.backup.db \
+  -to /var/lib/switchboard/state-restored.db
+```
+
+Restore validates the snapshot and writes a new database; it never replaces
+the source or an existing target, clears sessions by default, and does not
+apply migrations. `-keep-sessions` is an explicit opt-out that can make old
+session cookies valid again. The restore is a point-in-time snapshot for
+users, passkeys, invitations and connectors: a backup from before a revocation
+or disable can restore that older credential state. Review and reconcile those
+records when restoring an older backup. Stop the service before selecting the
+restored database, then run `switchboard doctor` and explicitly apply any
+pending migrations.
+The full state inventory and local recovery drill are in
+[the backup and restore runbook](docs/operations/backup-restore.md).
 
 The module keeps `go 1.26.0` as its language minimum and recommends toolchain
 `go1.27.3` (fixes `GO-2026-6809` in `crypto/x509`); normal Go toolchain
@@ -214,8 +263,8 @@ route directly to an enrolled connector:
 ```
 
 Start with `switchboard -config PATH -db STATE` after explicitly migrating the
-state and enrolling `portfolio`. One destination per route: `target`, `root`,
-or `connector`. A private bind requires an explicit wholly private `network`
+state and enrolling `portfolio`. One destination per route: `target`, `upstreams`,
+`root`, `site` or `connector`. A private bind requires an explicit wholly private `network`
 CIDR; public/wildcard tunnel binds are refused. Connector routes reload without
 restarting the listener or dropping sessions, and an offline connector returns
 502 without a direct-origin fallback. Tunnel listener/identity changes require
@@ -266,25 +315,22 @@ In progress (Phase 1 hardening, see [TO_IMPLEMENT.md](docs/TO_IMPLEMENT.md)):
 
 ## Next work
 
-The next engineering block is the release work that makes the alpha usable by
-someone else, before adding more proxy behavior:
+The first alpha tag and its platform archives are published, but the
+repository is private and the alpha is not production-ready. Remaining work
+and its evidence are tracked in [TO_IMPLEMENT.md](docs/TO_IMPLEMENT.md); the
+release gates distinguish code completion, private staging and public access.
+Do not treat the release artifact as a claim that every planned capability is
+part of the supported alpha path.
 
-1. Release engineering (`REL-005`, `REL-006`): GoReleaser artifacts with
-   checksums, then the `v0.1.0-alpha.1` tag. CI already runs
-   `scripts/verify.sh` (including the short fuzz pass) on Linux, macOS and
-   Windows.
+### Design records and implementation boundaries
 
-After that comes Phase 4: multiple upstreams with round-robin selection,
-active and passive health checks, safe retries, circuit breaking, per-route
-timeouts, explicit WebSocket/SSE coverage and request IDs. The full ordered
-backlog remains in [TO_IMPLEMENT.md](docs/TO_IMPLEMENT.md).
+These documents record design decisions, implemented slices and remaining
+limits; the tracker distinguishes current capability from planned work:
 
-### Design records (proposed, not shipped)
-
-These documents record proposed work and its limits; they are not features yet:
-
-- [Durable audit contract](docs/architecture/audit-contract.md) — append-only
-  audit, signed checkpoints and failure semantics.
+- [Durable audit contract](docs/architecture/audit-contract.md) — local
+  append-only access audit is implemented behind opt-in config; signed
+  checkpoints and broader event coverage remain partial. A transparency log
+  with external witnesses is a later goal.
 - [Policy explain](docs/architecture/policy-explain.md) — explain an
   authorization decision with the existing pure `Authorize`.
 - [Shield challenge](docs/architecture/shield-challenge.md) — a self-hosted
@@ -339,7 +385,54 @@ Configure a bearer token to enable mutations:
 `Authorization: Bearer <token>`. Route changes are validated, written atomically
 to the active config file, and only then installed as a complete runtime
 snapshot. Duplicate creates return `409`; deleting the final route is rejected.
-Every accepted or rejected control-plane change is written to the audit log.
+Accepted control-plane changes are emitted to the live event stream, Activity
+page and configured alerts. The opt-in durable audit currently covers selected
+`access.*` decisions only; it does not yet record admin mutations, login,
+certificate or tunnel lifecycle events.
+
+**Durable access audit (AUD-001, partial).** Add this optional top-level block
+to `config.json` to persist access decisions in a private, local JSONL hash
+chain:
+
+```json
+"audit": {
+  "dir": "/var/lib/switchboard/audit",
+  "include": ["access"],
+  "max_segment_bytes": 16777216
+}
+```
+
+The process user must own the directory with mode `0700`; segment files use
+`0600`. Protected routes default to `required`: a failed append or `fsync`
+returns `503` before forwarding. Public routes default to `best_effort` and
+continue serving after a storage failure, which is reported once to the
+process log and shown as unavailable in the admin status/API with a
+process-local failure count. A route can set `"audit_mode": "required"` to require access
+event durability even when public. Audit settings take effect on restart and
+cannot be changed by reload. The first event family includes rate-limit
+decisions and authenticated access allow, deny and step-up decisions. It does
+not record the full request or query string. The verifier currently checks
+only local chain consistency: without an externally retained signed
+checkpoint, a host operator can rewrite the whole log. There is no retention
+or pruning policy yet, so configure disk monitoring and capacity accordingly.
+Run `switchboard audit verify -config config.json` with the gateway stopped (or
+pass `-dir ABSOLUTE_PATH`) to check local consistency. `switchboard audit
+keygen` creates an Ed25519 signing key without printing the private value;
+`switchboard audit checkpoint` signs the current chain tail, and `audit verify
+-checkpoint FILE -public-key FILE` checks that signature against the pinned
+key. The verifier reports `checkpoint_verified: true` when the signature and
+chain position match, but always keeps `tamper_evident: false`: it cannot
+prove the checkpoint or public-key pin was stored outside the gateway host.
+Copy both to an independent location and preserve that boundary yourself.
+
+If an interrupted append leaves the final audit record without its newline,
+`switchboard audit repair -dir ABSOLUTE_PATH` verifies the complete prefix and
+prints a dry-run plan. Stop the gateway, review the byte count and suffix hash,
+then run the same command with `-apply`. It atomically replaces the final
+segment, preserves a complete valid record when only its newline is missing,
+and appends an `audit.repaired` record to the chain. It refuses corruption in
+complete records or earlier segments. Run `audit verify` after repair. This is
+an explicit recovery action; startup never truncates audit data on its own.
 
 **Admin socket and the CLI (CLI-001).** Set `admin.socket` to an absolute path
 (for a systemd unit, under its `RuntimeDirectory=` with mode `0700`) and the
@@ -407,6 +500,51 @@ go run ./cmd/switchboard policy explain -config config.json \
 go run ./cmd/switchboard policy explain -config config.json -host app.example.com -no-session -json
 ```
 
+Inspect the configured identity policy for a route, or review its verified
+local decision history without changing policy:
+
+```bash
+go run ./cmd/switchboard policy who-can -config config.json \
+  -host app.example.com -json
+go run ./cmd/switchboard policy review -config config.json \
+  -dir /var/lib/switchboard/audit -host app.example.com \
+  -since 2026-10-01T00:00:00Z -json
+```
+
+`who-can` reports the route's configured allowlist and the actual OR/AND
+semantics; it cannot enumerate external provider group memberships or account
+state. `review` verifies the full local audit chain before printing, counts
+recorded allow/deny/step-up decisions, and groups observed subjects under short
+HMAC-SHA-256 fingerprints keyed with fresh random bytes for each run, so reports
+cannot correlate a subject across runs. `-subjects` bounds the in-memory
+aggregation (default 100, hard cap 10000); further decision counts remain in
+the total and are reported as unattributed. It does not print raw audit
+subjects or edit config.
+Configured email/domain/group candidates stay `unknown`: the audit record stores
+an opaque OIDC/passkey subject and does not record a join to email or group
+membership. Therefore the report does not call a candidate unused or suggest a
+policy trim from missing evidence. A decision event is also not proof that the
+upstream successfully served a request. Stop Switchboard before running the
+review so its writer releases the audit directory lock. Local chain validation
+does not claim tamper evidence without an independently retained checkpoint.
+
+`policy replay` evaluates a candidate route's `access.context_rule` against
+retained access decisions without changing live policy:
+
+```bash
+go run ./cmd/switchboard policy replay -config candidate.json \
+  -dir /var/lib/switchboard/audit -host app.example.com \
+  -since 2026-10-25T00:00:00Z -json
+```
+
+The command requires Switchboard to be stopped so it can take the audit
+directory's read lock. It verifies the full local chain before printing any
+report, then shows counts and event/actor references that would be denied,
+stepped up or left unknown. A missing context is reported as unknown; it is
+never read as evidence of safe access. This replays only the context-rule
+stage, not identity policy or upstream health, and local chain verification
+does not claim tamper evidence without an independently retained checkpoint.
+
 ### Local development (plain HTTP)
 
 `config.json`:
@@ -421,9 +559,75 @@ go run ./cmd/switchboard policy explain -config config.json -host app.example.co
 }
 ```
 
-`health_path` defaults to `/` if omitted. An unchecked or healthy upstream
-gets traffic; an upstream that fails its check (5xx or unreachable) gets a
-503 from Switchboard instead of being proxied to.
+`health_path` defaults to `/` if omitted. A single upstream stays configured
+as `target`; use `upstreams` for round-robin across two or more unique HTTP(S)
+targets:
+
+```json
+{
+  "host": "app.localhost:8888",
+  "upstreams": ["http://localhost:9000", "http://localhost:9001"],
+  "health_path": "/healthz"
+}
+```
+
+The active probe checks each target independently. A 5xx response or a failed
+probe removes that target from selection; a successful later probe restores
+it. A transport error during a visitor request passively removes only that
+target until an active probe succeeds. Switchboard returns 503 only when every
+target is unavailable. It does not replay the failed request on a second
+target, so a POST is never duplicated by failover.
+
+Routes may also declare optional `resource` metadata: `owner`, `data_class`,
+`sensitivity` (`public`, `internal`, `confidential` or `restricted`) and a list
+of risky HTTP methods. `access` remains the route's authorization requirement;
+resource labels are evidence for `policy explain` and Activity events. An
+omitted catalog remains unknown, never implicitly public or low sensitivity.
+
+Protected routes can add one explicit context rule. The conditions are joined
+with AND; a matched rule can deny or require a fresh passkey after an OIDC
+login:
+
+```json
+{
+  "access": {
+    "context_rule": {
+      "when": {
+        "session_method": "oidc",
+        "resource_sensitivity": "restricted"
+      },
+      "then": "step_up"
+    }
+  },
+  "resource": {
+    "owner": "platform",
+    "data_class": "account_data",
+    "sensitivity": "restricted"
+  }
+}
+```
+
+`context_rule.when` supports `session_method`, `session_device_bound`,
+`resource_sensitivity`, `action_risky` and `device_first_seen`. Login methods
+must be configured; resource labels and risky-action lists must be declared on
+the same route, and `device_first_seen` needs passkey login. A missing required
+signal denies access with `context_signal_unknown` and names its source in the
+decision event and `policy explain`. `step_up` is accepted when the condition
+includes `session_method: "oidc"` or the one-time `device_first_seen: true`,
+so a successful passkey assertion makes the rule stop matching instead of
+creating a redirect loop. Only passkeys added after migration 009 can be new;
+existing credentials are treated as known, and the first successful assertion
+consumes the marker exactly once. Credential IDs never enter session context
+or events. To simulate a method in
+`policy explain`, pass `-method oidc` or `-method passkey`; `-device-bound`
+marks a hypothetical passkey as non-syncable. Passkey sessions now persist the
+authenticator's WebAuthn `user_verified` flag; OIDC and sessions created before
+that signal was stored remain unknown. Simulate it with
+`-user-verified true|false` (only with `-method passkey`). Simulate first-seen
+evidence with `-device-first-seen true|false` (also passkey-only).
+`-request-method POST` supplies the hypothetical HTTP method for `action_risky`
+conditions; the admin simulator exposes the same inputs. These are simulation
+evidence, not observations of a live request.
 
 ### Static sites
 
@@ -458,8 +662,10 @@ switchboard site list                        # history, * marks the live one
 switchboard site rollback -site blog -to <id>
 ```
 
-`pages` requires `-db`. A deployment is named by the SHA-256 of its file list,
-so uploading the same build twice reuses it. The admin API refuses archives
+`pages` requires `-db`. `keep` is the total number of deployments retained per
+site (default 5), including the live deployment; the live one is always kept.
+A deployment is named by the SHA-256 of its file list, so uploading the same
+build twice reuses it. The admin API refuses archives
 with `..`, absolute paths, links, special files, more than 20 000 entries,
 files over 100 MiB or more than 500 MiB in total (counting the bytes actually
 written), and writes through `os.Root`. A site with no deployment yet answers

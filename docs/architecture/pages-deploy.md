@@ -60,11 +60,15 @@ so no new public surface is added.
 - Admin API (loopback, bearer token): `POST /_/api/sites/{name}/deployments`
   (archive body, size-capped), `GET /_/api/sites`, `POST
   /_/api/sites/{name}/rollback`. Each emits `pages.deployed` /
-  `pages.rolled_back` / `pages.refused` to the activity feed.
-- CLI: `switchboard deploy -site NAME ./dist` (packs the directory, refusing
-  symlinks in the source) and `switchboard rollback -site NAME -to ID`.
-- Retention: the last N deployments (default 5) plus the live one; older
-  directories are removed after a successful deploy.
+  `pages.rolled_back` / `pages.refused` to the activity feed; an internal
+  deployment failure emits `pages.failed` with a stable generic code and no
+  raw filesystem error.
+- CLI: `switchboard site deploy -site NAME ./dist` (packs the directory,
+  refusing symlinks in the source), `switchboard site list`, and
+  `switchboard site rollback -site NAME -to ID`.
+- Retention: `pages.keep` is the total retained deployments per site
+  (default 5), including the live one; older directories are removed after a
+  successful deploy.
 - Console: a **Sites** page with the live ID, history and rollback.
 
 ## Limits (defaults)
@@ -83,7 +87,8 @@ so no new public surface is added.
    filesystem layout. Tests with malicious archives.
 2. SQLite deployments + `Live` registry + `"site"` routes.
 3. Admin API, CLI, events.
-4. Console Sites page; `publish-site.py` switches to `switchboard deploy`.
+4. Console Sites page. The CLI and control-plane integration are implemented;
+   deployment automation is documented with the `switchboard site` commands.
 
 Non-goals here: Git builds (`PAGES-004`), previews (`PAGES-005`).
 

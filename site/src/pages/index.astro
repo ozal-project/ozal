@@ -3,8 +3,8 @@ import Base from "../layouts/Base.astro";
 import Logo from "../components/Logo.astro";
 
 const repo = "https://github.com/octaviosantacruz/switchboard";
-// The repository is private until the first alpha tag; flip this when it opens
-// so no public link ends in a GitHub 404.
+const release = `${repo}/releases/tag/v0.1.0-alpha.1`;
+// Keep repository links hidden while GitHub reports the repository as private.
 const sourcePublic = false;
 
 // Hero patch panel: a grid of jacks, a few patched cords and their lamps.
@@ -20,35 +20,35 @@ const cordPath = ([c1, r1, c2, r2]: [number, number, number, number]) => {
 const lampColor = { on: "var(--color-green)", off: "var(--color-red)", wait: "var(--color-amber)" };
 
 const shipped = [
-  { k: "01", t: "Names, not ports", d: "Each app answers to a hostname. The same config runs on a laptop (`app.localhost`) and on a real domain." },
-  { k: "02", t: "Automatic TLS", d: "ACME certificates over HTTP-01 or DNS-01, including a single-level wildcard, renewed in the background." },
-  { k: "03", t: "Login per route", d: "OIDC against your existing provider, then a pure policy check on verified email, domain and group claims." },
-  { k: "04", t: "Explainable decisions", d: "Every allow or deny carries a stable code and a reason. `policy explain` and the console simulator ask the same engine." },
-  { k: "05", t: "Outbound tunnels", d: "A connector dials out over mutual TLS, so a homelab app is published without opening an inbound port." },
-  { k: "06", t: "Static sites", d: "Pages serves a built site straight from disk, with SPA fallback and its control files kept private." },
-  { k: "07", t: "Access console", d: "A loopback-only console: live decision feed over SSE, route health and the policy simulator." },
-  { k: "08", t: "Secrets by reference", d: "`env:` and `file:` references; the control plane never writes a resolved secret back to disk." },
+  { k: "01", t: "Names, not ports", d: "Routes HTTP services by hostname, with health checks and one config for localhost or a real domain.", evidence: "Automated tests · Linux edge dogfooding" },
+  { k: "02", t: "Automatic HTTPS", d: "ACME TLS-ALPN-01 or Cloudflare DNS-01, including a single-level wildcard and background renewal.", evidence: "Production certificate on the author's VPS · DNS adapter is Cloudflare-specific" },
+  { k: "03", t: "Login per route", d: "Delegates sign-in to an external OIDC provider and checks verified email, domain and group claims.", evidence: "Automated tests · no built-in identity provider" },
+  { k: "04", t: "Explainable decisions", d: "`policy explain` and the console simulator use the same policy engine and return a stable code and reason.", evidence: "Automated tests · CLI and console" },
+  { k: "05", t: "Static site publishing", d: "Deploy immutable builds, switch the live version, roll back, and use the supported subset of `_redirects` and `_headers`.", evidence: "VPS deployment and rollback observed · single host" },
+  { k: "06", t: "Access console", d: "Loopback-only console with an activity feed, route inspection, policy simulation and Pages history.", evidence: "Local admin surface · never expose it publicly" },
+  { k: "07", t: "Secrets by reference", d: "Resolve `env:` and `file:` references at runtime; the control plane does not persist resolved values.", evidence: "Automated tests · one binary, optional embedded SQLite" },
 ];
 
 const pipeline = [
   { s: "trust", d: "Client IP, trusted proxies, origin certificate", state: "on" },
   { s: "ratelimit", d: "Per IP and per identity buckets", state: "wait" },
   { s: "shield", d: "WAF rules and challenges", state: "idle" },
-  { s: "identify", d: "Session or OIDC login", state: "on" },
+  { s: "identify", d: "OIDC session in alpha.1", state: "on" },
   { s: "authorize", d: "Pure policy decision with a code", state: "on" },
   { s: "route", d: "Host lookup in an atomic snapshot", state: "on" },
-  { s: "forward", d: "Upstream, static files or tunnel", state: "on" },
+  { s: "forward", d: "HTTP upstream or Pages; tunnel path is experimental", state: "on" },
 ] as const;
 
 const roadmap = [
-  { v: "v0.1", n: "Edge", when: "Oct – Dec 2026", now: true, items: ["Host routing, TLS, OIDC and claim policy", "Pages, tunnels, access console", "CI on Linux, macOS and Windows; first alpha tag"] },
+  { v: "v0.1", n: "Edge", when: "Oct – Dec 2026", now: true, items: ["Alpha.1 published 21 Oct: routing, TLS, external OIDC, policy and Pages", "Limited single-host Linux dogfooding", "The repository and release currently require GitHub access"] },
   { v: "v0.2", n: "PKI", when: "Jan – Mar 2027", now: false, items: ["Internal CA and ACME server", "mTLS between edge, agent and origin", "SSH CA and workload identity"] },
   { v: "v0.3", n: "Access", when: "Apr – Jun 2027", now: false, items: ["SSH and databases over tunnels", "Just-in-time access with approvals", "Session recording, WAF with Coraza + CRS"] },
   { v: "v0.4", n: "Trust", when: "Jul – Sep 2027", now: false, items: ["Transparency log with witnesses", "Risk signals and explanations", "AI-agent / MCP gateway"] },
 ];
 ---
-<Base title="Switchboard — every connection, decided and explained" description="A self-hostable, identity-aware gateway in one Go binary: routing, TLS, OIDC login, claim-based policy and outbound tunnels, with every access decision explained.">
+<Base title="Switchboard — every connection, decided and explained" description="A self-hostable gateway in one Go binary: host routing, ACME TLS, external OIDC login, claim-based policy and static-site deployments, with each access decision explained.">
   <div class="jack-field">
+    <a class="sr-only focus:not-sr-only focus:bg-paper focus:text-ink focus:ring-ink fixed top-2 left-2 z-50 rounded px-3 py-2 text-sm focus:ring-2" href="#main-content">Skip to content</a>
     <header class="border-line/70 bg-paper/80 sticky top-0 z-20 border-b backdrop-blur">
       <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3.5">
         <a href="/" class="flex items-center gap-2.5" aria-label="Switchboard home">
@@ -62,16 +62,26 @@ const roadmap = [
           <a href="#roadmap" class="hover:text-ink">Roadmap</a>
           <a href="#start" class="hover:text-ink">Get started</a>
         </nav>
+        <details class="relative md:hidden">
+          <summary class="btn btn-ghost cursor-pointer !px-3 !py-2">Sections</summary>
+          <nav class="panel absolute right-0 z-30 mt-2 grid min-w-48 gap-1 p-2 text-sm" aria-label="Mobile sections">
+            <a class="rounded px-3 py-2 hover:bg-paper" href="#today">What works</a>
+            <a class="rounded px-3 py-2 hover:bg-paper" href="#how">How it works</a>
+            <a class="rounded px-3 py-2 hover:bg-paper" href="#console">Console</a>
+            <a class="rounded px-3 py-2 hover:bg-paper" href="#roadmap">Roadmap</a>
+            <a class="rounded px-3 py-2 hover:bg-paper" href="#start">Get started</a>
+          </nav>
+        </details>
         {sourcePublic && <a href={repo} class="btn btn-ghost !px-3 !py-1.5">GitHub</a>}
       </div>
     </header>
 
-    <main>
+    <main id="main-content" tabindex="-1">
       <!-- Hero -->
       <section class="mx-auto grid max-w-6xl items-center gap-12 px-5 pt-20 pb-24 lg:grid-cols-[1.05fr_1fr]">
         <div>
           <p class="border-line bg-panel inline-flex items-center gap-2 rounded-full border px-3 py-1 font-mono text-[0.72rem]">
-            <span class="lamp lamp-wait"></span> v0.1 “Edge” in development · not production-ready
+            <span class="lamp lamp-wait"></span> v0.1.0-alpha.1 · private release · not production-ready
           </p>
           <h1 class="mt-6 text-[2.6rem] leading-[1.05] font-semibold tracking-tight sm:text-6xl">
             Every connection,<br /><span class="text-amber">decided</span> and <span class="text-amber">explained</span>.
@@ -82,10 +92,10 @@ const roadmap = [
             request was let through or refused.
           </p>
           <div class="mt-8 flex flex-wrap gap-3">
-            <a href="#start" class="btn btn-primary">Get started</a>
-            {sourcePublic ? <a href={repo} class="btn btn-ghost">View the source</a> : <a href="#roadmap" class="btn btn-ghost">See the roadmap</a>}
+            <a href="#today" class="btn btn-primary">See what works</a>
+            <a href={release} class="btn btn-ghost">Open alpha release</a>
           </div>
-          <p class="text-muted mt-6 font-mono text-xs">{!sourcePublic && "source opens with the first alpha · "}MIT licensed · one binary · one JSON config · no external database</p>
+          <p class="text-muted mt-6 font-mono text-xs">GitHub access required for the alpha · MIT licensed · one binary · optional embedded SQLite</p>
         </div>
 
         <div class="panel min-w-0 p-5" aria-hidden="true">
@@ -115,25 +125,36 @@ const roadmap = [
       </section>
 
       <!-- Today -->
-      <section id="today" class="border-line/70 border-t">
+      <section id="today" class="border-line/70 scroll-mt-20 border-t">
         <div class="mx-auto max-w-6xl px-5 py-20">
-          <p class="plate"><b>01</b> / shipped today</p>
-          <h2 class="mt-3 max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl">What works now, tested on every commit.</h2>
-          <p class="text-muted mt-3 max-w-2xl">Only features with tests and a running deployment are listed here. Everything else is on the roadmap below, and labelled as such.</p>
+          <p class="plate"><b>01</b> / included in alpha.1</p>
+          <h2 class="mt-3 max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl">What the release includes, and where it has run.</h2>
+          <p class="text-muted mt-3 max-w-2xl">The alpha has automated test coverage and limited Linux dogfooding by one operator. Each note names the boundary; it is not a production-readiness claim.</p>
           <div class="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {shipped.map((f) => (
               <article class="panel p-5">
                 <div class="flex items-center justify-between"><span class="text-ink font-mono text-xs">{f.k}</span><span class="lamp lamp-on"></span></div>
                 <h3 class="mt-4 font-semibold">{f.t}</h3>
                 <p class="text-muted mt-2 text-sm leading-relaxed" set:html={f.d.replace(/`([^`]+)`/g, '<code class="text-ink font-mono text-[0.78rem]">$1</code>')} />
+                <p class="border-line text-muted mt-4 border-t pt-3 font-mono text-xs leading-relaxed">{f.evidence}</p>
               </article>
             ))}
+          </div>
+          <div class="border-line mt-8 grid gap-5 border-t pt-6 md:grid-cols-2">
+            <div>
+              <h3 class="font-semibold">Identity boundary</h3>
+              <p class="text-muted mt-2 text-sm leading-relaxed">This release delegates login to an external OIDC provider. It does not include built-in passkey sign-in or user self-service recovery. Account recovery is a host CLI operation over the local admin socket; the bearer-token HTTP API refuses it.</p>
+            </div>
+            <div>
+              <h3 class="font-semibold">Experimental features</h3>
+              <p class="text-muted mt-2 text-sm leading-relaxed">Outbound tunnels, rate limiting and Telegram alerts exist in the codebase but are experimental, off by default, and outside the alpha's release promise. They are not part of the supported deployment path.</p>
+            </div>
           </div>
         </div>
       </section>
 
       <!-- How it works -->
-      <section id="how" class="border-line/70 border-t">
+      <section id="how" class="border-line/70 scroll-mt-20 border-t">
         <div class="mx-auto grid max-w-6xl gap-12 px-5 py-20 lg:grid-cols-[1fr_1.1fr]">
           <div class="min-w-0">
             <p class="plate"><b>02</b> / how a request flows</p>
@@ -165,7 +186,7 @@ scope:     authorization only; OIDC, session and transport are not evaluated</pr
       </section>
 
       <!-- Console -->
-      <section id="console" class="border-line/70 border-t">
+      <section id="console" class="border-line/70 scroll-mt-20 border-t">
         <div class="mx-auto max-w-6xl px-5 py-20">
           <p class="plate"><b>03</b> / the access console</p>
           <div class="mt-3 flex flex-wrap items-end justify-between gap-4">
@@ -174,12 +195,13 @@ scope:     authorization only; OIDC, session and transport are not evaluated</pr
           </div>
           <figure class="panel mt-10 overflow-hidden p-2">
             <img src="/console-simulator.png" alt="The Switchboard console's policy simulator showing a denied request: the account is missing the required group oncall." class="w-full rounded-lg" loading="lazy" width="1440" height="1200" />
+            <figcaption class="text-muted px-3 py-2 font-mono text-xs">Development screenshot of the policy simulator. Its navigation predates alpha.1; use it as an illustration of the decision view, not a current full-console capture.</figcaption>
           </figure>
         </div>
       </section>
 
       <!-- Roadmap -->
-      <section id="roadmap" class="border-line/70 border-t">
+      <section id="roadmap" class="border-line/70 scroll-mt-20 border-t">
         <div class="mx-auto max-w-6xl px-5 py-20">
           <p class="plate"><b>04</b> / roadmap</p>
           <h2 class="mt-3 max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl">Toward zero trust you can verify.</h2>
@@ -206,16 +228,16 @@ scope:     authorization only; OIDC, session and transport are not evaluated</pr
       </section>
 
       <!-- Get started -->
-      <section id="start" class="border-line/70 border-t">
+      <section id="start" class="border-line/70 scroll-mt-20 border-t">
         <div class="mx-auto grid max-w-6xl gap-10 px-5 py-20 lg:grid-cols-[0.9fr_1.1fr]">
           <div>
             <p class="plate"><b>05</b> / get started</p>
-            <h2 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Route two apps by name in a minute.</h2>
-            <p class="text-muted mt-4 leading-relaxed">Needs Go. Point names at the ports your apps already use, run one binary, and open the console on loopback.</p>
+            <h2 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Try the v0.1.0-alpha.1 release.</h2>
+            <p class="text-muted mt-4 leading-relaxed">The prerelease has platform archives and a quickstart. The repository is private, so you need GitHub access to download it. Alpha builds can change their interfaces and state format.</p>
             <ul class="text-muted mt-6 space-y-2 text-sm">
-              <li class="flex gap-2"><span class="lamp lamp-on mt-1.5"></span>Same config file from localhost to a VPS.</li>
+              <li class="flex gap-2"><span class="lamp lamp-on mt-1.5"></span>Linux, macOS and Windows archives are attached to alpha.1.</li>
               <li class="flex gap-2"><span class="lamp lamp-on mt-1.5"></span><code class="text-ink font-mono text-xs">validate</code> checks a config without starting anything.</li>
-              <li class="flex gap-2"><span class="lamp lamp-wait mt-1.5"></span>Release binaries arrive with the first alpha tag.</li>
+              <li class="flex gap-2"><span class="lamp lamp-wait mt-1.5"></span>Dogfooding is limited to a single Linux host; not production-ready.</li>
             </ul>
           </div>
           <div class="min-w-0 space-y-4">
@@ -228,10 +250,13 @@ scope:     authorization only; OIDC, session and transport are not evaluated</pr
     &#123; "host": "docs.localhost:8888", "target": "http://localhost:4321" &#125;
   ]
 &#125;</pre>
-            {!sourcePublic && <p class="text-muted text-sm">The repository opens with the first alpha tag; until then these steps show what running it looks like.</p>}
             <pre class="code"><span class="text-muted">$</span> git clone {repo}
-<span class="text-muted">$</span> cd switchboard && go run ./cmd/switchboard -config config.json
-<span class="text-muted"># open http://app.localhost:8888 · console on http://127.0.0.1:9090</span></pre>
+<span class="text-muted">$</span> cd switchboard
+<span class="text-muted">$</span> ./switchboard validate -config config.json
+<span class="text-muted">$</span> ./switchboard -config config.json
+<span class="text-muted"># release archive includes QUICKSTART.md</span></pre>
+            <p class="text-muted text-sm">Source checkout steps are for collaborators with repository access. For a binary, use the release link.</p>
+            <a href={release} class="btn btn-primary">Open v0.1.0-alpha.1 <span aria-hidden="true">↗</span></a>
           </div>
         </div>
       </section>
@@ -241,7 +266,7 @@ scope:     authorization only; OIDC, session and transport are not evaluated</pr
       <div class="text-muted mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-8 text-sm">
         <span class="flex items-center gap-2.5"><Logo size={22} /> <span class="font-mono text-xs">switchboard · MIT</span></span>
         <span>Built in public by <a href="https://octaviosantacruz.com" class="text-ink underline decoration-muted underline-offset-4">Octavio Santacruz</a> — a year-long learning project, Oct 2026 – Sep 2027.</span>
-        {sourcePublic ? <a href={repo} class="hover:text-ink font-mono text-xs">github.com/octaviosantacruz/switchboard</a> : <span class="font-mono text-xs">source: opens with the first alpha</span>}
+        {sourcePublic ? <a href={repo} class="hover:text-ink font-mono text-xs">github.com/octaviosantacruz/switchboard</a> : <span class="font-mono text-xs">source: private · alpha access requires GitHub permission</span>}
       </div>
     </footer>
   </div>

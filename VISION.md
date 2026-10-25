@@ -166,7 +166,14 @@ learning is:
   server key; the edge brokers it from a small built-in vault.
 - Browser-based terminal and DB console for emergency access.
 
-### 5. Transparency log (the thesis, implemented)
+### 5. Transparency log (the thesis; long-range target)
+
+The transparency log described here is not implemented yet. Current code has
+an optional local access-decision audit with a hash chain and manual signed
+checkpoints; the verifier reports `tamper_evident=false` because it cannot
+prove that a checkpoint was retained outside the host. See the partial scope
+in [the audit contract](docs/architecture/audit-contract.md) and tracker
+entries `AUD-001`/`AUD-002`.
 
 - Tiled, static, append-only Merkle log in the style of the Static CT API /
   Sunlight: cheap to serve, cacheable, easy to mirror.
@@ -174,7 +181,9 @@ learning is:
   access grants, approvals, session metadata.
 - Signed checkpoints; witnesses (other people's instances) can co-sign.
 - Clients and agents verify inclusion before trusting a certificate or policy.
-- `switchboard audit verify` replays the log and proves nothing was rewritten.
+- Future `switchboard audit verify` and log clients should check inclusion and
+  consistency against independently retained checkpoints; local verification
+  alone cannot prove that an operator did not rewrite the full log.
 - Raw data stays private where needed: only hashes or commitments go in public
   entries.
 
