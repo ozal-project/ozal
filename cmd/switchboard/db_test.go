@@ -54,7 +54,7 @@ func TestDBBackupAndRestoreCreatePrivateSnapshots(t *testing.T) {
 	checkSnapshot(t, ctx, backup)
 	if info, err := os.Stat(backup); err != nil {
 		t.Fatal(err)
-	} else if got := info.Mode().Perm(); got != 0o600 {
+	} else if got := info.Mode().Perm(); hasUnixPermissions() && got != 0o600 {
 		t.Fatalf("backup permissions = %o, want 600", got)
 	}
 
