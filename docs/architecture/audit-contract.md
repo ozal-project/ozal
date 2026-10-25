@@ -1,8 +1,16 @@
 # Durable audit contract
 
-**Status:** proposed 2026-10-19. Design only; no implementation. Tracker:
+**Status:** proposed 2026-10-19; partial `AUD-001` implementation in
+`internal/audit`, wired on 2026-10-25 for opt-in `access.*` events. Manual
+Ed25519 checkpoint creation and local verification are partial `AUD-002`.
+Automatic checkpoint cadence, external-retention drills and broad
+admin/login/certificate/tunnel coverage remain unimplemented. Tracker:
 `AUD-001`, `AUD-002` and `AUD-003` in [TO_IMPLEMENT.md](../TO_IMPLEMENT.md).
 This is not a release promise.
+
+The current writer requires POSIX owner-only mode bits. It fails closed on
+Windows until a private-ACL adapter is implemented. When configured, it runs
+synchronously before the configured access decision is returned or forwarded.
 
 Related: [VISION](../../VISION.md) (transparency log), [AuditAnchor](../../../auditanchor/README.md)
 (P3, optional adapter), [events](../../internal/events/events.go) and
@@ -36,17 +44,20 @@ called "tamper-evident" and keeps the stronger transparency-log work separate.
 2. **Append-only, owner-only JSONL.** One record per line, global sequence
    number, previous-record hash and record hash. The writer appends and
    `fsync`s; files and directories are `0600`/`0700`.
-3. **Signed checkpoints.** Every N records or T seconds (and on clean
-   shutdown), sign `{version, log_id, seq, hash, time, key_id}` with Ed25519.
-   The checkpoint must be copied outside the host/admin boundary. A checkpoint
-   stored only next to the log does not add trust.
-4. **Verify against a retained checkpoint.** `switchboard audit verify` checks
-   the chain from a trusted checkpoint to the current tail and reports
-   modification, reordering, insertion or truncation. Without a checkpoint,
-   the tool can only report internal consistency, not tamper evidence.
-5. **Explicit failure policy per route.** Protected/admin routes can require a
-   durable append before serving; if it fails, fail closed. Public/static
-   routes can use a best-effort mode with an alert. No mode silently drops.
+3. **Signed checkpoints.** The operator can manually sign
+   `{v, log_id, seq, hash, time, key_id}` with Ed25519. Automatic cadence and
+   clean-shutdown checkpoints remain open. The checkpoint must be copied
+   outside the host/admin boundary. A checkpoint stored only next to the log
+   does not add trust.
+4. **Verify against a retained checkpoint.** `switchboard audit verify` can
+   validate a checkpoint signature, match its sequence/hash to the local chain,
+   then check the tail. Without an externally retained checkpoint, the tool
+   reports internal consistency only. The CLI cannot attest that a supplied
+   checkpoint actually came from outside the host.
+5. **Explicit failure policy per route.** Protected HTTP access decisions can
+   require a durable append before responding or forwarding; if it fails, fail
+   closed. Public/static access decisions can use best-effort mode with an
+   independent process-log alert. Admin mutations are not yet wired.
 6. **RFC 9162 is phase 2.** Hash chain plus signed checkpoints first. Merkle
    tree, signed tree heads, inclusion/consistency proofs and witnesses come
    later; do not call the first version a transparency log.
@@ -67,9 +78,25 @@ called "tamper-evident" and keeps the stronger transparency-log work separate.
 | Forged event content from an application | No | Integrity/order of records, not truth of the claim |
 | Confidentiality | No | Restrict file permissions; encrypt only if a separate requirement exists |
 
-The honest promise is: **detect modifications and truncation relative to
-checkpoints previously retained outside the process's control.** It is not
-"prove that nobody edited the log" and it is not "the operator cannot lie".
+The current `switchboard audit verify` checks internal chain consistency and,
+when given a checkpoint and pinned key, verifies the checkpoint signature and
+chain position. It refuses to read while a writer holds the directory lock.
+The result always says `tamper_evident=false` because the CLI cannot prove that
+the checkpoint and public-key pin were retained outside the host's control.
+The protection becomes meaningful only when the operator independently
+preserves both; it is not "prove that nobody edited the log" and it is not
+"the operator cannot lie".
+
+Checkpoint v1 signs the UTF-8 bytes of
+`switchboard-audit-checkpoint-v1\x00` followed by compact JSON with properties
+in this order: `v`, `log_id`, `seq`, `hash`, `time`, `key_id`. `signature` is
+standard base64 Ed25519. `switchboard audit keygen` writes the private key as
+base64 mode `0600` and the public-key pin as base64; it never prints the
+private value. `switchboard audit checkpoint` requires a `file:` or `env:` key
+reference and writes one new mode-`0600` checkpoint file. Copy the checkpoint
+and pin outside the host before relying on it. Stop the gateway before
+checkpointing or verifying; the writer lock refuses concurrent access. Key
+rotation policy and automatic checkpoint scheduling are not implemented.
 
 ## Record format v1
 
@@ -90,16 +117,25 @@ Required fields:
 - `prev`: lowercase hex SHA-256 of the previous record, or 32 zero bytes for
   `seq=1`.
 - `hash`: lowercase hex SHA-256 of
-  `"switchboard-audit-v1\x00" || uint64be(seq) || prev ||
-  uint64be(len(record_without_hash)) || record_without_hash`. The length prefix
-  keeps the concatenation unambiguous.
+  `"switchboard-audit-v1\x00" || uint64be(seq) || decode_hex(prev) ||
+  uint64be(len(record_without_hash)) || record_without_hash`. `prev` is the
+  raw 32-byte digest in the hash input, though its JSON field is lowercase hex.
+  `record_without_hash` is the exact compact JSON object bytes with the final
+  `hash` property omitted. The length prefix keeps the concatenation
+  unambiguous.
 
 Rules:
 
 - Never include tokens, cookies, request bodies, resolved secret references,
   private keys or challenge values.
-- Prefer stable decision codes; do not copy raw error strings if they may
-  contain secrets. `error` is optional and must be redacted at the source.
+- Prefer stable decision codes and reviewed generic reasons. `Event.Error` is
+  an in-process diagnostic only: `events.Multi`, `events.Broker`, the admin
+  event serializer and `SlogSink` remove it before events reach observers.
+  The durable audit record also omits it, including for direct appends.
+- Admin operation failures use their own stable event types
+  (`config.reload_failed`, `route.create_failed`, `route.delete_failed`,
+  `pages.failed`) and reviewed codes. They are never represented as successful
+  changes. Invalid route host input is omitted from failure events.
 - Do not log every static asset by default. Audit security decisions: access
   allow/deny, login, admin mutations, certificate lifecycle, tunnel
   enrolment/revocation/attachment and origin denials. The exact inclusion list
@@ -145,8 +181,9 @@ Checkpoint payload:
 
 | Route class | Mode | On append/fsync/checkpoint failure |
 |---|---|---|
-| Protected HTTP/admin | `required` (default) | Do not serve; return 503; alert through an independent channel; keep the process alive for diagnosis or fail startup if the log cannot be opened |
-| Public/static | `best_effort` | Serve; increment a counter; alert; events may be missing and the gap must be visible |
+| Protected HTTP access decisions | `required` (default) | Return 503 before forwarding; alert through the process log; fail startup if the log cannot be opened |
+| Public/static access decisions | `best_effort` (default) | Serve; emit to the live event stream; increment a process-local failure count, show unavailable in admin status, log once; events may be missing |
+| Admin mutations | Not wired | The live event stream is not a durable audit record |
 | Certificate/tunnel control plane | `required` | Refuse the state change if its audit record cannot be persisted; an unaudited trust change is a bug |
 
 - A bounded durable queue may absorb bursts, but it does not replace the
@@ -156,6 +193,12 @@ Checkpoint payload:
 - On startup, verify the existing log/checkpoint state before serving
   `required` routes. A corrupt or unverifiable audit state must not be silently
   reset.
+- Startup never repairs an incomplete tail. With the writer stopped,
+  `switchboard audit repair` first verifies the complete prefix and shows a
+  dry-run plan; `-apply` atomically publishes the repaired final segment with
+  an `audit.repaired` marker. A complete valid JSON record missing only its
+  newline is preserved; a complete record with a bad hash and any corruption
+  before the final incomplete tail are refused. Verify the chain after repair.
 - On unclean shutdown, records since the last `fsync` may be lost; a checkpoint
   can only attest to records it covers. There is no way to detect an event
   that was never persisted. Define the RPO for `required` routes and test it
@@ -197,8 +240,12 @@ Checkpoint payload:
 
 - Unit tests: record encoding, hash/chain continuity, checkpoint signing and
   verification, tamper/insert/reorder/truncate cases, key rotation, retention.
-- Integration: real process append + `SIGKILL` + restart + verify; disk-full or
-  read-only failure applies the route policy; no secret appears in output.
+- Integration: a child-process regression appends and `fsync`s, is killed with
+  `SIGKILL`, then reopens, appends again and verifies the chain. The test does
+  not simulate a kill during a physical partial write or power loss; a
+  deterministic torn-tail fixture covers recovery semantics. Real disk-full
+  or read-only failure drills and a check that no secret appears in operator
+  output remain open; simulated append failures cover both route modes.
 - Performance: measure append+fsync latency and throughput; define a budget
   for `required` routes before enabling them.
 - Operations: documented checkpoint export/copy, retention, backup/restore,
