@@ -68,21 +68,22 @@ type Options struct {
 // Record is one durable event. Error is intentionally absent: upstream and
 // parser error strings can contain request data or secret material.
 type Record struct {
-	V            int                    `json:"v"`
-	LogID        string                 `json:"log_id"`
-	Seq          uint64                 `json:"seq"`
-	Time         time.Time              `json:"time"`
-	Type         events.Type            `json:"type"`
-	Actor        string                 `json:"actor,omitempty"`
-	Host         string                 `json:"host,omitempty"`
-	Code         string                 `json:"code,omitempty"`
-	Reason       string                 `json:"reason,omitempty"`
-	RemoteAddr   string                 `json:"remote_addr,omitempty"`
-	Count        int                    `json:"count,omitempty"`
-	ConfigSHA256 string                 `json:"config_sha256,omitempty"`
-	Context      *policycontext.Context `json:"context,omitempty"`
-	Prev         string                 `json:"prev"`
-	Hash         string                 `json:"hash"`
+	V            int                      `json:"v"`
+	LogID        string                   `json:"log_id"`
+	Seq          uint64                   `json:"seq"`
+	Time         time.Time                `json:"time"`
+	Type         events.Type              `json:"type"`
+	Actor        string                   `json:"actor,omitempty"`
+	Host         string                   `json:"host,omitempty"`
+	Code         string                   `json:"code,omitempty"`
+	Reason       string                   `json:"reason,omitempty"`
+	RemoteAddr   string                   `json:"remote_addr,omitempty"`
+	Count        int                      `json:"count,omitempty"`
+	ConfigSHA256 string                   `json:"config_sha256,omitempty"`
+	Context      *policycontext.Context   `json:"context,omitempty"`
+	Deployment   *events.DeploymentSource `json:"deployment,omitempty"`
+	Prev         string                   `json:"prev"`
+	Hash         string                   `json:"hash"`
 }
 
 // Verification describes local chain consistency. CheckpointVerified reports
@@ -122,20 +123,21 @@ type RepairResult struct {
 }
 
 type recordPayload struct {
-	V            int                    `json:"v"`
-	LogID        string                 `json:"log_id"`
-	Seq          uint64                 `json:"seq"`
-	Time         time.Time              `json:"time"`
-	Type         events.Type            `json:"type"`
-	Actor        string                 `json:"actor,omitempty"`
-	Host         string                 `json:"host,omitempty"`
-	Code         string                 `json:"code,omitempty"`
-	Reason       string                 `json:"reason,omitempty"`
-	RemoteAddr   string                 `json:"remote_addr,omitempty"`
-	Count        int                    `json:"count,omitempty"`
-	ConfigSHA256 string                 `json:"config_sha256,omitempty"`
-	Context      *policycontext.Context `json:"context,omitempty"`
-	Prev         string                 `json:"prev"`
+	V            int                      `json:"v"`
+	LogID        string                   `json:"log_id"`
+	Seq          uint64                   `json:"seq"`
+	Time         time.Time                `json:"time"`
+	Type         events.Type              `json:"type"`
+	Actor        string                   `json:"actor,omitempty"`
+	Host         string                   `json:"host,omitempty"`
+	Code         string                   `json:"code,omitempty"`
+	Reason       string                   `json:"reason,omitempty"`
+	RemoteAddr   string                   `json:"remote_addr,omitempty"`
+	Count        int                      `json:"count,omitempty"`
+	ConfigSHA256 string                   `json:"config_sha256,omitempty"`
+	Context      *policycontext.Context   `json:"context,omitempty"`
+	Deployment   *events.DeploymentSource `json:"deployment,omitempty"`
+	Prev         string                   `json:"prev"`
 }
 
 // Writer serializes appends within one process, takes an exclusive directory
@@ -370,7 +372,7 @@ func (w *Writer) appendBatch(batch []appendRequest) {
 			V: Version, LogID: logID, Seq: w.seq + 1, Time: at.UTC(), Type: request.event.Type,
 			Actor: request.event.Actor, Host: request.event.Host, Code: request.event.Code, Reason: request.event.Reason,
 			RemoteAddr: request.event.RemoteAddr, Count: request.event.Count, ConfigSHA256: request.event.ConfigSHA256,
-			Context: request.event.Context, Prev: prev,
+			Context: request.event.Context, Deployment: request.event.Deployment, Prev: prev,
 		}
 		line, digest, err := encodeRecord(record)
 		if err != nil {
@@ -809,7 +811,7 @@ func marshalPayload(record Record) ([]byte, error) {
 		V: record.V, LogID: record.LogID, Seq: record.Seq, Time: record.Time,
 		Type: record.Type, Actor: record.Actor, Host: record.Host, Code: record.Code,
 		Reason: record.Reason, RemoteAddr: record.RemoteAddr, Count: record.Count,
-		ConfigSHA256: record.ConfigSHA256, Context: record.Context, Prev: record.Prev,
+		ConfigSHA256: record.ConfigSHA256, Context: record.Context, Deployment: record.Deployment, Prev: record.Prev,
 	})
 }
 

@@ -25,7 +25,7 @@
     "route.created": "Route added", "route.create_failed": "Route creation failed", "route.deleted": "Route removed", "route.delete_failed": "Route removal failed", "config.reloaded": "Configuration reloaded", "config.reload_failed": "Configuration reload failed",
     "tunnel.connected": "Tunnel connected", "tunnel.disconnected": "Tunnel disconnected", "tunnel.rejected": "Tunnel rejected", "connector.enrolled": "Connector enrolled", "connector.rotated": "Connector certificate rotated", "connector.revoked": "Connector revoked", "notify.chat_paired": "Alert chat paired",
     "origin.denied": "Origin pull rejected",
-    "pages.deployed": "Site deployed", "pages.rolled_back": "Site rolled back", "pages.refused": "Deployment refused", "pages.failed": "Deployment failed",
+    "pages.deployed": "Site deployed", "pages.rolled_back": "Site rolled back", "pages.refused": "Deployment refused", "pages.deploy_refused": "Project deployment refused", "pages.failed": "Deployment failed",
   };
   const categories = [
     { value: "all", label: "All events" }, { value: "access", label: "Access decisions" }, { value: "login", label: "Logins" },
@@ -52,9 +52,10 @@
     e.type.startsWith("access.") || e.type.startsWith("origin.") ? "access" : e.type.startsWith("login.") ? "login" : e.type.startsWith("tunnel.") || e.type.startsWith("connector.") ? "tunnel" : e.type.startsWith("pages.") ? "pages" : "changes";
 
   const shown = $derived(frozen ?? events);
+  const deploymentSource = (e: AccessEvent) => e.deployment ? [e.deployment.project, e.deployment.repository_id ? `repository ${e.deployment.repository_id}` : "", e.deployment.ref, e.deployment.commit_sha?.slice(0, 12)].filter(Boolean).join(" · ") : "";
   const filtered = $derived(
     shown.filter((e) => (category === "all" || group(e) === category) &&
-      (!query || [e.type, e.actor, e.host, e.code, e.reason, e.error, e.remote].some((v) => (v ?? "").toLowerCase().includes(query.toLowerCase())))),
+      (!query || [e.type, e.actor, e.host, e.code, e.reason, e.error, e.remote, e.deployment?.project, e.deployment?.ref, e.deployment?.commit_sha].some((v) => (v ?? "").toLowerCase().includes(query.toLowerCase())))),
   );
   const denied = $derived(shown.filter((e) => e.type === "access.denied").length);
   const protectedCount = $derived(routes?.filter((r) => r.protected).length ?? 0);
@@ -173,6 +174,7 @@
             {#if e.host}<a href={`/routes?host=${encodeURIComponent(e.host)}`} onclick={(event) => { event.preventDefault(); inspect(e.host); }} class="text-muted-foreground mt-0.5 ml-5 block break-all font-mono text-xs underline underline-offset-4">{e.host}</a>{/if}
             {#if e.code || e.reason || e.error}<p class="text-muted-foreground mt-2 text-xs"><span class="font-mono">{e.code}</span>{e.code && (e.reason || e.error) ? " · " : ""}{[e.reason, e.error].filter(Boolean).join(" · ")}</p>{/if}
             {#if e.remote}<p class="text-muted-foreground mt-1 text-xs">Peer <span class="font-mono">{e.remote}</span></p>{/if}
+            {#if e.deployment}<p class="text-muted-foreground mt-2 break-all font-mono text-xs">{deploymentSource(e)}</p>{/if}
             <PolicyEvidence context={e.context} />
           </li>
         {/each}
@@ -192,6 +194,7 @@
                     {labels[e.type] ?? e.type}
                   </div>
                   {#if e.code || e.reason || e.error}<div class="text-muted-foreground mt-1 pl-5 text-xs"><span class="font-mono">{e.code}</span>{e.code && (e.reason || e.error) ? " · " : ""}{[e.reason, e.error].filter(Boolean).join(" · ")}</div>{/if}
+                  {#if e.deployment}<p class="text-muted-foreground mt-2 break-all pl-5 font-mono text-xs">{deploymentSource(e)}</p>{/if}
                   <PolicyEvidence context={e.context} />
                 </Table.Cell>
                 <Table.Cell class="align-top">

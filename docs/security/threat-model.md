@@ -66,6 +66,7 @@ protection offered by local file permissions or a local hash chain.
 | Gateway → upstream | Forwarded request and injected identity headers | Client identity headers and session cookie are stripped; edge writes the authenticated identity after authorization. See `internal/pipeline/visitor.go` and `internal/proxy/proxy.go`. | Upstream must only trust these headers from Switchboard or an equally trusted edge. Network reachability is not enforced by this code. |
 | Edge → connector | Client certificate, connector name, framed HTTP request and visitor assertion | TLS peer identity, enrolled-name authorization, duplicate-session protection, revocation and stream cancellation. See `internal/tunnel/tls.go`, `internal/tunnel/registry.go`, `internal/tunnel/transport.go`. | Private CA, certificate distribution, host networking and any public ingress remain deployment boundaries; tunnel acceptance is tracked separately. |
 | Operator → admin plane | HTTP Host, bearer token, local socket, mutation payload | Loopback-host check, bearer checks on TCP mutations, Unix-socket local marker and bounded request bodies. See `internal/admin/server.go`, `cmd/switchboard/main.go`, `internal/admin/local.go`. | Loopback binding does not defend against a compromised local browser/process. Unix permissions and systemd runtime ownership need host verification. |
+| CI → dedicated Pages deploy hostname (`PAGES-008`) | Bearer JWT or project secret, project name, artifact and deployment ID | Separate internal hostname handler; GitHub issuer/JWKS/RS256/audience/expiry verification plus pure pinned repo/owner/ref/workflow checks; ten-minute maximum token lifetime; SQLite one-time `jti` digests; project-scoped secret references; IP/project budgets; one upload per project; archive limits; required durable mutation intent before body read. See `internal/pages/deployauth`, `internal/pages/deployapi`, `internal/store/sqlite/deploy_replays.go` and `cmd/switchboard/pages_deploy.go`. | Real GitHub issuer acceptance is prepared as a manual workflow and remains unexecuted. Protect workflow code and project tokens; active uploads retain their captured trust. Restoring an older state database can restore replay eligibility until the short token expiry. The host administrator remains trusted. |
 | Process → persistent state | Config, SQLite, ACME files, static deployments and audit directory | Strict config validation, secret references, explicit migrations, bounded site archives, atomic route snapshots and owner-only audit files. | Broader filesystem ACLs, disk-full/read-only behavior, backups, encryption at rest and Windows audit ACLs need separate verification. |
 | Local audit → independent witness | Local JSONL chain, signing key, checkpoint and public-key pin | Sequence/hash validation and optional Ed25519 checkpoint verification. See `internal/audit`. | The verifier explicitly does not claim tamper evidence without an independently retained checkpoint. Admin/login/cert/tunnel coverage, external-retention drills, key rotation and pruning remain open. |
 
@@ -89,6 +90,16 @@ operational and coverage gaps below are not assigned
 vulnerability severity.
 
 ## Controlled validation plan
+
+`PAGES-008` adds regressions for other repo/owner/ref/audience and expired tokens,
+signed-claim tampering, persistent concurrent replay prevention, project-token
+scope/rotation, required audit refusal, archive rejection, per-project upload
+exclusion, forwarded-IP spoofing and credential-header ambiguity. Socket tests
+prove immediate denials without even a small body, including unknown paths and
+methods. Host-port aliases remain inside the deploy handler; admin paths on that
+host return 404. A signed local JWKS fixture exercises the complete adapter/store
+path; `scripts/pages-008-acceptance.mjs` exercises the actual binary with curl and
+an opaque token. These do not establish a successful real GitHub workflow run.
 
 The tests named above are repository regressions, not proof of deployment
 behavior. The following cases define the next disposable-fixture run. Use only

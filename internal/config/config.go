@@ -247,8 +247,9 @@ type Telegram struct {
 // serves the live deployment. Keep is how many deployments per site are
 // retained (zero selects the default). Changing it requires a restart.
 type Pages struct {
-	Dir  string `json:"dir"`
-	Keep int    `json:"keep,omitempty"`
+	Dir    string          `json:"dir"`
+	Keep   int             `json:"keep,omitempty"`
+	Deploy *DeployEndpoint `json:"deploy,omitempty"`
 }
 
 // siteNamePattern: a site name becomes a directory name, so it follows the
@@ -698,6 +699,9 @@ func Validate(cfg Config) (*Config, error) {
 		}
 	}
 
+	if err := validateDeployEndpoint(&cfg); err != nil {
+		return nil, err
+	}
 	if len(cfg.Projects) > 0 {
 		for i, project := range cfg.Projects {
 			for j, deployer := range project.Deployers {
@@ -1072,6 +1076,10 @@ func Clone(source Config) Config {
 	}
 	if source.Pages != nil {
 		pages := *source.Pages
+		if source.Pages.Deploy != nil {
+			deploy := *source.Pages.Deploy
+			pages.Deploy = &deploy
+		}
 		clone.Pages = &pages
 	}
 	if source.Audit != nil {

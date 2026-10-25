@@ -88,22 +88,23 @@ func safeMutationTarget(value string) string {
 const heartbeat = 15 * time.Second
 
 type eventView struct {
-	ID      string                 `json:"id"`
-	Time    string                 `json:"time"`
-	Type    string                 `json:"type"`
-	Actor   string                 `json:"actor,omitempty"`
-	Host    string                 `json:"host,omitempty"`
-	Code    string                 `json:"code,omitempty"`
-	Reason  string                 `json:"reason,omitempty"`
-	Remote  string                 `json:"remote,omitempty"`
-	Context *policycontext.Context `json:"context,omitempty"`
+	ID         string                   `json:"id"`
+	Time       string                   `json:"time"`
+	Type       string                   `json:"type"`
+	Actor      string                   `json:"actor,omitempty"`
+	Host       string                   `json:"host,omitempty"`
+	Code       string                   `json:"code,omitempty"`
+	Reason     string                   `json:"reason,omitempty"`
+	Remote     string                   `json:"remote,omitempty"`
+	Context    *policycontext.Context   `json:"context,omitempty"`
+	Deployment *events.DeploymentSource `json:"deployment,omitempty"`
 }
 
 func toView(id string, e events.Event) eventView {
 	return eventView{
 		ID: id, Time: e.Time.UTC().Format(time.RFC3339), Type: string(e.Type), Actor: e.Actor,
 		Host: e.Host, Code: e.Code, Reason: e.Reason, Remote: e.RemoteAddr,
-		Context: e.Context,
+		Context: e.Context, Deployment: e.Deployment,
 	}
 }
 

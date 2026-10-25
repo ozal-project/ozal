@@ -39,6 +39,7 @@ func TestAppendWritesSafeRecordAndReopensChain(t *testing.T) {
 		Time: observedAt, Type: events.AccessDenied, Actor: "user-17", Host: "app.example.test",
 		Code: "email_not_allowed", Reason: "email is not on the allowlist", Error: "secret-marker",
 		RemoteAddr: "203.0.113.7:4210", Context: &decisionContext,
+		Deployment: &events.DeploymentSource{Project: "portfolio", RepositoryID: 123, Ref: "refs/heads/main", CommitSHA: strings.Repeat("a", 40)},
 	}); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
@@ -60,6 +61,9 @@ func TestAppendWritesSafeRecordAndReopensChain(t *testing.T) {
 	var record Record
 	if err := json.Unmarshal(bytes.TrimSuffix(line, []byte("\n")), &record); err != nil {
 		t.Fatalf("decode record: %v", err)
+	}
+	if !bytes.Contains(line, []byte(`"project":"portfolio"`)) || !bytes.Contains(line, []byte(`"repository_id":123`)) {
+		t.Fatalf("durable event omitted reviewed deployment provenance: %s", line)
 	}
 	if record.V != Version || record.Seq != 1 || record.Type != events.AccessDenied || record.Prev != zeroHash ||
 		!record.Time.Equal(observedAt) || record.Context == nil || record.Hash == "" || record.LogID == "" {

@@ -197,6 +197,27 @@ malformed JSON), read-only admin calls, Telegram pairing,
 login/passkey self-service and certificate/tunnel lifecycle are outside this
 first extension. Their existing live-event behavior is unchanged.
 
+### Public project deployment (`PAGES-008`)
+
+The dedicated deploy hostname uses the `admin` family for an authenticated CI
+mutation intent: type `admin.mutation_requested`, code `project.deploy`. Append
+occurs after project authentication/replay/rate checks and before reading the
+archive or calling the Pages store. `audit.admin_mode` retains the same default
+`required` and `best_effort` failure behavior. Required append failure produces
+503 and no body read or storage mutation. The optional `deployment` object holds
+`project`, numeric `repository_id`, `ref` and `commit_sha`; tokens, `jti`, secret
+references and raw verifier/storage errors never enter the journal.
+
+Authentication refusals and the `pages.deploy_refused` / `pages.deployed` outcome
+events remain live activity. A durable intent truthfully records the requested
+operation even if extraction fails or the process stops before commit. This
+does not claim a transaction spanning JSONL, SQLite and deployment files.
+
+The optional `deployment` field extends the v1 record payload. Records without
+it retain their existing encoding/hashes. An older binary that does not know
+this field cannot verify/reopen records containing it; keep the current audit
+tooling when rolling back application code rather than discarding the journal.
+
 ## Checkpoints and verification
 
 Checkpoint payload:

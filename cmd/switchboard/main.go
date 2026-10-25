@@ -151,6 +151,8 @@ func main() {
 		}
 	}
 	var configuredEdge *configuredTunnel
+	var pagesStore *pages.Store
+	var deployReplays *sqlite.DeployReplays
 	if loaded.Tunnel != nil && *dbPath == "" {
 		log.Fatal("tunnel configuration requires -db pointing at migrated state")
 	}
@@ -200,6 +202,8 @@ func main() {
 			}
 			managerOpts = append(managerOpts, routemanager.WithSites(store))
 			adminOpts = append(adminOpts, admin.WithPages(store))
+			pagesStore = store
+			deployReplays = sqlite.NewDeployReplays(db)
 			log.Printf("pages: deployments under %s", loaded.Pages.Dir)
 		}
 		if loaded.Tunnel != nil {
@@ -272,14 +276,18 @@ func main() {
 		log.Fatalf("admin listener: %v", err)
 	}
 	servers := []*http.Server{adminServer}
+	publicHandler, err := publicPagesHandler(ctx, cfg, manager, pagesStore, deployReplays, sink, auditAppender)
+	if err != nil {
+		log.Fatal("public deploy handler could not be configured")
+	}
 	if cfg.TLS.Enabled {
-		tlsServers, err := startTLS(&cfg, manager, sink, certificateManager)
+		tlsServers, err := startTLS(&cfg, publicHandler, sink, certificateManager)
 		if err != nil {
 			log.Fatalf("public listener: %v", err)
 		}
 		servers = append(servers, tlsServers...)
 	} else {
-		plainServer, err := startPlain(&cfg, manager)
+		plainServer, err := startPlain(&cfg, publicHandler)
 		if err != nil {
 			log.Fatalf("public listener: %v", err)
 		}

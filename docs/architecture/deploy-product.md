@@ -2,8 +2,10 @@
 
 **Status:** accepted 2026-10-25. The owner approved the direction (builds run
 in GitHub Actions and Switchboard receives finished artifacts) and the
-recommendations for decisions D1–D7 the same day. Not implemented yet. Tracker: `PAGES-004`, `PAGES-005`,
-`PAGES-007`–`PAGES-009` in [TO_IMPLEMENT](../TO_IMPLEMENT.md); workspace
+recommendations for decisions D1–D7 the same day. Project configuration and
+read-only views are implemented as `PAGES-007` (`1e1bb3e`); the deploy endpoint
+is in progress. Tracker: `PAGES-004`, `PAGES-005`,
+`PAGES-008`–`PAGES-009` in [TO_IMPLEMENT](../TO_IMPLEMENT.md); workspace
 `CROSS-011`.
 
 ## Problem
@@ -64,9 +66,9 @@ them and later mutate them through the admin API; the CLI and the console are
 clients of that API (`CLI-001`).
 
 Project deploy tokens are secret references (`env:NAME` or `file:/path`),
-never inline values. Only the reference is kept in configuration; resolved
-tokens will be compared in constant time when `PAGES-008` adds the deploy
-endpoint, and are not returned by the admin API. The read-only projects view
+never inline values. Only the reference is kept in configuration; the opt-in
+`PAGES-008` endpoint compares resolved tokens in constant time, and the admin
+API never returns them. The read-only projects view
 reports only that a token deployer is configured.
 
 ## Flow
@@ -110,8 +112,10 @@ reaches the edge through a separate, narrow public handler:
   (production only from `refs/heads/main`), optionally `workflow_ref`. The
   token's `sha` becomes the deployment's recorded commit.
 - **Fallback: a per-project deploy token** for other CI systems or the homelab,
-  stored as a hash, scoped to one project, revocable from the console. It
-  replaces the global `admin.sites_token` for CI use.
+  referenced by `env:` or `file:` and compared through fixed-size SHA-256
+  digests in constant time. Resolved values are never persisted. Rotate the
+  external secret to revoke it; the current console is read-only. It replaces
+  the global `admin.sites_token` for CI use.
 - **Abuse limits:** the existing archive limits (100 MiB compressed, 500 MiB
   extracted, 20 000 entries), a per-project rate limit, one deployment in
   flight per project, and a refusal before reading the body when the token is
@@ -120,6 +124,74 @@ reaches the edge through a separate, narrow public handler:
   repository, ref, commit and a stable refusal code. No token or raw error.
 - **Pure core (maintainer piece):** `DecideDeployer(claims, trust) Decision`,
   table-tested like `Authorize`, never importing `net/http` or the OIDC SDK.
+
+### Endpoint contract
+
+Enable the internal hostname with
+`"pages":{"dir":"/var/lib/switchboard/pages","deploy":{"host":"deploy.example.com","audience":"https://deploy.example.com"}}`.
+It must not overlap an application route or login hostname. Public listeners
+require TLS; plaintext is allowed only on loopback for local acceptance. Include
+the deploy hostname in the TLS certificate configuration. Host/audience settings
+require restart; project trust follows the current routing snapshot on reload.
+
+Both POST and GET require `Authorization: Bearer ...`. GitHub tokens must have
+the configured audience, valid signature/issuer/expiry, positive pinned numeric
+IDs, matching ref and optional workflow, `iat`/`exp` spanning at most ten minutes,
+and a nonempty `jti`. The SQLite replay store consumes each verified `jti` once
+across projects and process restarts, until expiry; request a fresh token for
+GET or retry. Capacity exhaustion fails closed. Per-project authenticated traffic
+is limited to one request/second with a burst of five; only one upload per project
+may run. An independent IP budget protects verification. Authentication, replay,
+limits and required durable intent all precede reading the archive.
+
+GitHub provenance comes from verified claims. Opaque project tokens record the
+project without accepting caller-supplied commit/run claims. Content IDs retain
+the first nonempty provenance when the same artifact is uploaded again. Existing
+archive and entry limits apply. Status reads are scoped to the named project;
+neither endpoint exposes filesystem paths, credentials or raw errors. An upload
+already authenticated uses its captured project trust until it finishes.
+
+The durable contract records `admin.mutation_requested` / `project.deploy`
+before upload execution when the `admin` audit family is enabled, using its
+existing required/best_effort policy. `pages.deployed` and `pages.deploy_refused`
+are live outcome events; an intent is not a claim that a deploy committed.
+
+### Verification and operator handoff
+
+Apply the new immutable migrations explicitly before starting this binary:
+`switchboard migrate up -db /path/to/state.db -backup /path/to/new-backup.db`.
+Migration 010 adds provenance columns; 011 adds persistent replay digests. The
+configured deploy hostname has no port, and consumes requests for that name
+even when the HTTP Host includes an explicit port. The normal admin listener
+and its bearer retain their loopback boundary.
+
+`GOTMPDIR=$HOME/.cache/go-tmp node scripts/pages-008-acceptance.mjs` builds and
+starts an isolated loopback process with disposable state. It generates an
+opaque test token in memory, deploys a tiny artifact through curl, verifies the
+served bytes and reads project status. It cleans up its own process/files.
+Set `SWITCHBOARD_BIN` to reuse a built binary. Go, Node, curl and tar are needed.
+
+The manual workflow `.github/workflows/pages-oidc-acceptance.yml` runs the same
+script with `--github` and job-scoped `id-token: write`. It requests real GitHub
+tokens, uses the current repository/owner/ref/workflow as trust, tests another
+repository/owner/ref and wrong audience, deploys through curl, checks commit/run
+provenance and rejects replay before and after restarting Switchboard. Tokens
+are kept in memory and curl stdin; they are not printed, stored in config, put
+in argv or uploaded as artifacts. This workflow is prepared but has not been
+published or executed; `PAGES-008` stays open until its real-issuer run succeeds.
+
+Responses expose a stable `code`: `deployer.token_invalid` for SDK verification
+failure (including signature, issuer, audience or expiry), more specific
+`deployer.repository` / `owner` / `ref` / `workflow` for verified but untrusted
+claims, and `deployer.replay` for a consumed token (401). Busy/provenance conflicts
+return 409, IP/project budgets 429, compressed-size refusal 413, archive-rule
+refusal 422 with the existing `entry.*` code, and replay/audit/storage availability
+failures 503. Unknown project/deployment is 404; methods other than GET/POST are
+405. The existing admin/sites bearer is not a project deploy credential.
+
+References: [GitHub OIDC claims](https://docs.github.com/en/actions/reference/security/oidc),
+[GitHub issuer metadata](https://token.actions.githubusercontent.com/.well-known/openid-configuration),
+and [go-oidc verifier/key-set API](https://pkg.go.dev/github.com/coreos/go-oidc/v3/oidc).
 
 ## Variables and secrets (`PAGES-004`)
 

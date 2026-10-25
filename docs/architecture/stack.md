@@ -14,7 +14,7 @@ project.
 | Language | Go (minimum `go 1.26`, recommended toolchain `go1.27.3`) | Single static binary, excellent `net/http` and `crypto/*`, the maintainer's chosen learning language |
 | HTTP, TLS, proxy | stdlib `net/http`, `crypto/tls`, `httputil.ReverseProxy` (migrate to `Rewrite`) | Mature and enough; post-quantum hybrid key exchange (X25519MLKEM768) on by default |
 | Public certificates | `golang.org/x/crypto/acme/autocert` today → **own bounded manager on the existing `golang.org/x/crypto/acme` + Cloudflare DNS API via stdlib `net/http`** (`EDGE-007`, revised 2026-10-18) | DNS-01 validates without inbound challenge connections and preserves a publicly trusted origin certificate behind Cloudflare. Initial scope is one name, `preview.octaviosantacruz.com`, with zero new Go modules. Learning and dependency control justify owning the lifecycle only with explicit storage, cleanup, retry and renewal acceptance; see [lifecycle contract](#public-origin-certificate-contract). CertMagic is a fallback if maintaining this bounded implementation proves too costly. |
-| Upstream OIDC login | `coreos/go-oidc` + `golang.org/x/oauth2` | Already in use and well reviewed |
+| Upstream OIDC login and GitHub deployment identity | `coreos/go-oidc` + `golang.org/x/oauth2` | Existing verifier reused for Pages with pinned GitHub issuer/JWKS, RS256, audience and expiry checks; no new dependency |
 | JOSE / JWT | `go-jose/go-jose/v4` | Already a dependency; reused for the OIDC provider |
 | Config | JSON with `DisallowUnknownFields` | Already in use; strict and dependency-free |
 | Logging | stdlib `log/slog` (JSON handler) | Structured logs without a dependency |

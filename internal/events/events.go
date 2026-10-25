@@ -37,10 +37,11 @@ const (
 	ConfigReloaded     Type = "config.reloaded"
 	ConfigReloadFailed Type = "config.reload_failed"
 	// Deployments of static sites (PAGES-002). Host carries the site name.
-	PagesDeployed   Type = "pages.deployed"
-	PagesRolledBack Type = "pages.rolled_back"
-	PagesRefused    Type = "pages.refused"
-	PagesFailed     Type = "pages.failed"
+	PagesDeployed      Type = "pages.deployed"
+	PagesRolledBack    Type = "pages.rolled_back"
+	PagesRefused       Type = "pages.refused"
+	PagesFailed        Type = "pages.failed"
+	PagesDeployRefused Type = "pages.deploy_refused"
 	// A user enrolled a passkey (ID-003). Code is "synced" or "device_bound".
 	PasskeyRegistered Type = "passkey.registered"
 	// A passkey was revoked, by its user from a session (ID-008) or by the
@@ -80,7 +81,16 @@ type Event struct {
 	ConfigSHA256 string
 	// Context is attached to access decision events as evidence, not as a
 	// second policy input or risk score.
-	Context *policycontext.Context `json:"context,omitempty"`
+	Context    *policycontext.Context `json:"context,omitempty"`
+	Deployment *DeploymentSource      `json:"deployment,omitempty"`
+}
+
+// DeploymentSource is reviewed provenance, never credentials or a raw error.
+type DeploymentSource struct {
+	Project      string `json:"project"`
+	RepositoryID int64  `json:"repository_id,omitempty"`
+	Ref          string `json:"ref,omitempty"`
+	CommitSHA    string `json:"commit_sha,omitempty"`
 }
 
 // safeForObservers clears arbitrary error strings before they enter live
@@ -138,6 +148,9 @@ func (s SlogSink) Emit(e Event) {
 	}
 	if e.Context != nil {
 		attrs = append(attrs, slog.Any("context", e.Context))
+	}
+	if e.Deployment != nil {
+		attrs = append(attrs, slog.Any("deployment", e.Deployment))
 	}
 	s.Logger.LogAttrs(context.Background(), slog.LevelInfo, string(e.Type), attrs...)
 }

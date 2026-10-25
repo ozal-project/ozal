@@ -142,6 +142,10 @@ func (s *Store) deploymentDir(site, id string) string { return filepath.Join(s.s
 // followed by one pointer swap. Uploading content that already exists reuses
 // its directory and only switches.
 func (s *Store) Deploy(ctx context.Context, site string, archive io.Reader) (Deployment, error) {
+	return s.deploy(ctx, site, SourceMetadata{}, archive)
+}
+
+func (s *Store) deploy(ctx context.Context, site string, source SourceMetadata, archive io.Reader) (Deployment, error) {
 	if !ValidSiteName(site) {
 		return Deployment{}, ErrBadSiteName
 	}
@@ -185,9 +189,12 @@ func (s *Store) Deploy(ctx context.Context, site string, archive io.Reader) (Dep
 	defer tx.Rollback()
 	// A repeated upload keeps its first created_at but becomes live again.
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO deployments (site, id, created_at, files, bytes) VALUES (?, ?, ?, ?, ?)
-		 ON CONFLICT (site, id) DO NOTHING`,
-		site, id, now.Unix(), len(manifest.Files), manifest.Bytes); err != nil {
+		`INSERT INTO deployments (site, id, created_at, files, bytes, project, commit_sha, run_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT (site, id) DO UPDATE SET
+		 project = COALESCE(deployments.project, excluded.project),
+		 commit_sha = COALESCE(deployments.commit_sha, excluded.commit_sha),
+		 run_url = COALESCE(deployments.run_url, excluded.run_url)`,
+		site, id, now.Unix(), len(manifest.Files), manifest.Bytes, nullableSource(source.Project), nullableSource(source.CommitSHA), nullableSource(source.RunURL)); err != nil {
 		return Deployment{}, fmt.Errorf("record deployment: %w", err)
 	}
 	if err := setLive(ctx, tx, site, id, now); err != nil {
@@ -196,6 +203,9 @@ func (s *Store) Deploy(ctx context.Context, site string, archive io.Reader) (Dep
 	deployment, err := readDeployment(ctx, tx, site, id)
 	if err != nil {
 		return Deployment{}, err
+	}
+	if source.Project != "" && deployment.Project != source.Project {
+		return Deployment{}, ErrProjectConflict
 	}
 	if err := tx.Commit(); err != nil {
 		return Deployment{}, fmt.Errorf("record deployment: %w", err)

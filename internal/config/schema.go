@@ -116,6 +116,10 @@ func JSONSchema() ([]byte, error) {
 	pages := properties["pages"].(map[string]any)["properties"].(map[string]any)
 	pages["keep"].(map[string]any)["minimum"] = 0
 	pages["keep"].(map[string]any)["maximum"] = 100
+	deploy := pages["deploy"].(map[string]any)["properties"].(map[string]any)
+	deploy["host"].(map[string]any)["minLength"] = 1
+	deploy["audience"].(map[string]any)["minLength"] = 1
+	deploy["audience"].(map[string]any)["maxLength"] = 512
 
 	audit := properties["audit"].(map[string]any)["properties"].(map[string]any)
 	audit["dir"].(map[string]any)["minLength"] = 1

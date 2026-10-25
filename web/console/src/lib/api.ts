@@ -53,6 +53,7 @@ export type AccessEvent = {
   error?: string;
   remote?: string;
   context?: PolicyContext;
+  deployment?: { project: string; repository_id?: number; ref?: string; commit_sha?: string };
 };
 
 export type PolicySignal<T> = { value: T | null; source: string; observed_at: string };
