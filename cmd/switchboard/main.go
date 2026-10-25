@@ -44,6 +44,11 @@ const healthCheckInterval = 10 * time.Second
 // gets a context that SIGINT/SIGTERM cancel, so none can outlive a stop signal.
 func subcommands() map[string]func(context.Context, []string, io.Writer) error {
 	return map[string]func(context.Context, []string, io.Writer) error{
+		"audit":        runAudit,
+		"completion":   runCompletion,
+		"db":           runDB,
+		"doctor":       runDoctor,
+		"init":         runInit,
 		"tunnel":       runTunnel,
 		"tunnel-spike": runTunnelSpike,
 		"upgrade":      runUpgrade,
@@ -52,13 +57,21 @@ func subcommands() map[string]func(context.Context, []string, io.Writer) error {
 		"notify":       runNotify,
 		"policy":       runPolicy,
 		"site":         runSite,
+		"schema":       runSchema,
 		"user":         runUser,
 		"validate":     runValidate,
+		"version":      runVersion,
 	}
 }
 
 func main() {
 	if len(os.Args) > 1 {
+		if os.Args[1] == "--version" || os.Args[1] == "-version" {
+			if err := runVersion(context.Background(), nil, os.Stdout); err != nil {
+				log.Fatal(err)
+			}
+			return
+		}
 		if run, ok := subcommands()[os.Args[1]]; ok {
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			err := run(ctx, os.Args[2:], os.Stdout)

@@ -25,7 +25,7 @@ builds:
     # Replaces GoReleaser's default, which stamps the build date
     # (-X main.date): that alone changes the build ID on every run.
     ldflags:
-      - -s -w
+      - -s -w -X main.buildVersion={{ .Version }} -X main.buildCommit={{ .Commit }}
     # The commit time instead of the build time: the same tag rebuilds to
     # the same bytes, so anyone can check a published checksum.
     mod_timestamp: "{{ .CommitTimestamp }}"

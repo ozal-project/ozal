@@ -57,7 +57,7 @@ func TestStartPlainServesOnAFreePort(t *testing.T) {
 // wraps in a signal-aware context.
 func TestSubcommandsAreRegistered(t *testing.T) {
 	registered := subcommands()
-	for _, name := range []string{"tunnel", "tunnel-spike", "connector", "migrate"} {
+	for _, name := range []string{"completion", "db", "doctor", "init", "schema", "version", "tunnel", "tunnel-spike", "connector", "migrate"} {
 		if registered[name] == nil {
 			t.Errorf("subcommand %q is not registered", name)
 		}
