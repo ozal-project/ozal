@@ -4,15 +4,23 @@ import (
 	"bytes"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/octaviosantacruz/switchboard/internal/policycontext"
 )
 
 func TestSlogSinkEmitsOneJSONRecordPerEvent(t *testing.T) {
 	var buf bytes.Buffer
 	sink := SlogSink{Logger: slog.New(slog.NewJSONHandler(&buf, nil))}
 
-	sink.Emit(Event{Type: AccessDenied, Actor: "user-1", Host: "app.localhost", Code: "domain_not_allowed", Reason: "email domain"})
-	sink.Emit(Event{Type: LoginSucceeded, Actor: "user-1", Host: "app.localhost", Count: 3})
+	decisionContext := policycontext.Build(policycontext.Input{
+		ObservedAt: time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC),
+		Route:      policycontext.Known("app.localhost", policycontext.SourceRouteTable),
+	})
+	sink.Emit(Event{Type: AccessDenied, Actor: "user-1", Host: "app.localhost", Code: "domain_not_allowed", Reason: "email domain", Context: &decisionContext})
+	sink.Emit(Event{Type: LoginSucceeded, Actor: "user-1", Host: "app.localhost", Count: 3, Error: "/private/path: secret-token"})
 	sink.Emit(Event{Type: ConfigReloaded, Actor: "signal:SIGHUP", ConfigSHA256: "abc123"})
 
 	lines := bytes.Split(bytes.TrimSpace(buf.Bytes()), []byte("\n"))
@@ -30,6 +38,10 @@ func TestSlogSinkEmitsOneJSONRecordPerEvent(t *testing.T) {
 	if first["msg"] != string(AccessDenied) || first["actor"] != "user-1" || first["code"] != "domain_not_allowed" {
 		t.Fatalf("first record = %v", first)
 	}
+	context, ok := first["context"].(map[string]any)
+	if !ok || context["version"] != float64(policycontext.Version) {
+		t.Fatalf("decision context was not preserved in JSON event: %v", first["context"])
+	}
 	if _, ok := first["time"]; !ok {
 		t.Fatal("record has no time field")
 	}
@@ -42,6 +54,22 @@ func TestSlogSinkEmitsOneJSONRecordPerEvent(t *testing.T) {
 	}
 	if second["count"] != float64(3) {
 		t.Fatalf("second record count = %v, want 3", second["count"])
+	}
+	if _, ok := second["error"]; ok {
+		t.Fatalf("structured event log retained the raw error field: %v", second)
+	}
+	if strings.Contains(buf.String(), "/private/path") || strings.Contains(buf.String(), "secret-token") {
+		t.Fatalf("structured event log exposed an internal error: %s", buf.String())
+	}
+}
+
+func TestMultiClearsRawErrorsBeforeForwarding(t *testing.T) {
+	const raw = "/private/switchboard/state.db: secret-token"
+	var recorder Recorder
+	Multi{&recorder}.Emit(Event{Type: LoginFailed, Code: "session_create_failed", Error: raw})
+	got := recorder.Events()
+	if len(got) != 1 || got[0].Error != "" {
+		t.Fatalf("sink received raw event error: %+v", got)
 	}
 }
 

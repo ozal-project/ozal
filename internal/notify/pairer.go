@@ -117,7 +117,7 @@ func (p *Pairer) Cancel() bool {
 func (p *Pairer) wait(ctx context.Context, cancel context.CancelFunc, code string, onPaired func(int64)) {
 	// Its own cancel: once running is false, p.cancel may be the next one's.
 	defer cancel()
-	chatID, err := p.receive(ctx, code)
+	chatID, failureClass, err := p.receive(ctx, code)
 	p.mu.Lock()
 	switch {
 	case err == nil:
@@ -127,7 +127,7 @@ func (p *Pairer) wait(ctx context.Context, cancel context.CancelFunc, code strin
 		p.status.State = PairingExpired
 	default:
 		p.status.State = PairingFailed
-		p.logger.Warn("chat pairing failed", "error", err)
+		p.logger.Warn("chat pairing failed", "failure_class", failureClass)
 	}
 	p.running = false
 	p.mu.Unlock()
@@ -136,11 +136,11 @@ func (p *Pairer) wait(ctx context.Context, cancel context.CancelFunc, code strin
 	}
 }
 
-func (p *Pairer) receive(ctx context.Context, code string) (int64, error) {
+func (p *Pairer) receive(ctx context.Context, code string) (int64, string, error) {
 	for {
 		messages, err := p.inbox.Receive(ctx)
 		if err != nil {
-			return 0, err
+			return 0, "inbox", err
 		}
 		for _, message := range messages {
 			supplied, ok := PairCommand(message.Text)
@@ -148,9 +148,9 @@ func (p *Pairer) receive(ctx context.Context, code string) (int64, error) {
 				continue
 			}
 			if err := p.chats.Add(message.ChatID); err != nil {
-				return 0, err
+				return 0, "chat_store", err
 			}
-			return message.ChatID, nil
+			return message.ChatID, "", nil
 		}
 	}
 }

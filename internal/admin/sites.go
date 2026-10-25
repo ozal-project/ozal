@@ -114,7 +114,10 @@ func (h *Handler) siteError(w http.ResponseWriter, r *http.Request, site string,
 	case errors.Is(err, pages.ErrNotFound):
 		writeError(w, http.StatusNotFound, err.Error())
 	default:
-		h.emit(events.Event{Type: events.PagesRefused, Actor: actor(r), Host: site, Error: err.Error()})
+		h.emit(events.Event{
+			Type: events.PagesFailed, Actor: actor(r), Host: site,
+			Code: "deployment.failed", Reason: "deployment could not be completed",
+		})
 		writeError(w, http.StatusInternalServerError, "deployment failed")
 	}
 }

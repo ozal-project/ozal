@@ -45,6 +45,7 @@ func NewBroker() *Broker {
 func (b *Broker) Epoch() string { return b.epoch }
 
 func (b *Broker) Emit(e Event) {
+	e = safeForObservers(e)
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.seq++
@@ -102,10 +103,11 @@ func (b *Broker) Dropped() uint64 {
 	return b.dropped
 }
 
-// Multi forwards every event to all sinks, in order.
+// Multi forwards events to all sinks, in order, after clearing raw errors.
 type Multi []Sink
 
 func (m Multi) Emit(e Event) {
+	e = safeForObservers(e)
 	for _, s := range m {
 		s.Emit(e)
 	}

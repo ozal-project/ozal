@@ -28,8 +28,8 @@ var siteNamePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 // ValidSiteName reports whether name is usable as a site.
 func ValidSiteName(name string) bool { return siteNamePattern.MatchString(name) }
 
-// DefaultKeep is how many deployments per site are retained (the live one is
-// always kept in addition).
+// DefaultKeep is the total number of deployments retained per site, including
+// the live deployment. The live deployment is always kept.
 const DefaultKeep = 5
 
 // Deployment is one stored build of a site.
@@ -320,8 +320,8 @@ func (s *Store) swap(site string, l Live) {
 	s.live.Store(&next)
 }
 
-// prune keeps the newest s.keep deployments of a site plus the live one and
-// removes the rest, rows first so a crash never leaves a row without files.
+// prune keeps at most s.keep deployments of a site, including the live one,
+// and removes the rest, rows first so a crash never leaves a row without files.
 // Failures are left for the next deploy: pruning is housekeeping.
 func (s *Store) prune(ctx context.Context, site, live string) {
 	rows, err := s.db.QueryContext(ctx,

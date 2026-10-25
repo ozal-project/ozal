@@ -27,6 +27,33 @@ func TestBrokerReplaysHistoryThenStreams(t *testing.T) {
 	}
 }
 
+func TestBrokerRedactsRawErrorsFromHistoryAndLiveEvents(t *testing.T) {
+	b := NewBroker()
+	_, live, cancel, ok := b.Subscribe(0)
+	if !ok {
+		t.Fatal("subscribe refused")
+	}
+	defer cancel()
+	b.Emit(Event{Type: LoginFailed, Code: "token_exchange_failed", Error: "/private/provider: secret-token"})
+	select {
+	case got := <-live:
+		if got.Error != "" {
+			t.Fatalf("live event contained a raw error: %+v", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no live event")
+	}
+	cancel()
+	history, _, cancelHistory, ok := b.Subscribe(0)
+	if !ok {
+		t.Fatal("history subscribe refused")
+	}
+	defer cancelHistory()
+	if len(history) != 1 || history[0].Error != "" {
+		t.Fatalf("history retained a raw error: %+v", history)
+	}
+}
+
 func TestBrokerSlowSubscriberNeverBlocksEmit(t *testing.T) {
 	b := NewBroker()
 	_, _, cancel, _ := b.Subscribe(0) // never reads

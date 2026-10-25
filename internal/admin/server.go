@@ -261,7 +261,10 @@ func (h *Handler) status(w http.ResponseWriter, _ *http.Request) {
 
 func (h *Handler) reload(w http.ResponseWriter, r *http.Request) {
 	if err := h.manager.Reload(); err != nil {
-		h.emit(events.Event{Type: events.ConfigReloaded, Actor: actor(r), Error: err.Error(), ConfigSHA256: h.manager.ConfigDigest()})
+		h.emit(events.Event{
+			Type: events.ConfigReloadFailed, Actor: actor(r), Code: "config.reload_failed",
+			Reason: "the configuration could not be loaded or validated", ConfigSHA256: h.manager.ConfigDigest(),
+		})
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
@@ -282,7 +285,10 @@ func (h *Handler) addRoute(w http.ResponseWriter, r *http.Request) {
 		} else if errors.Is(err, routemanager.ErrPersistence) {
 			status = http.StatusInternalServerError
 		}
-		h.emit(events.Event{Type: events.RouteCreated, Actor: actor(r), Host: route.Host, Error: err.Error()})
+		h.emit(events.Event{
+			Type: events.RouteCreateFailed, Actor: actor(r), Host: safeRouteEventHost(route.Host),
+			Code: routeMutationFailureCode(err), Reason: "the route could not be created",
+		})
 		writeError(w, status, err.Error())
 		return
 	}
@@ -299,12 +305,36 @@ func (h *Handler) deleteRoute(w http.ResponseWriter, r *http.Request) {
 		} else if errors.Is(err, routemanager.ErrPersistence) {
 			status = http.StatusInternalServerError
 		}
-		h.emit(events.Event{Type: events.RouteDeleted, Actor: actor(r), Host: host, Error: err.Error()})
+		h.emit(events.Event{
+			Type: events.RouteDeleteFailed, Actor: actor(r), Host: safeRouteEventHost(host),
+			Code: routeMutationFailureCode(err), Reason: "the route could not be removed",
+		})
 		writeError(w, status, err.Error())
 		return
 	}
 	h.emit(events.Event{Type: events.RouteDeleted, Actor: actor(r), Host: host})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+func routeMutationFailureCode(err error) string {
+	switch {
+	case errors.Is(err, routemanager.ErrRouteExists):
+		return "route.already_exists"
+	case errors.Is(err, routemanager.ErrRouteNotFound):
+		return "route.not_found"
+	case errors.Is(err, routemanager.ErrPersistence):
+		return "route.persistence_failed"
+	default:
+		return "route.invalid_or_unavailable"
+	}
+}
+
+func safeRouteEventHost(host string) string {
+	normalized, err := config.NormalizeHost(host)
+	if err != nil {
+		return ""
+	}
+	return normalized
 }
 
 // requireBearer admits the admin token only.

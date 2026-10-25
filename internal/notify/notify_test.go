@@ -1,8 +1,10 @@
 package notify
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -202,6 +204,7 @@ type recordingNotifier struct {
 	messages []Message
 	block    chan struct{}
 	started  chan struct{}
+	err      error
 }
 
 func (n *recordingNotifier) SendMessage(ctx context.Context, chatID int64, text string) error {
@@ -218,10 +221,30 @@ func (n *recordingNotifier) SendMessage(ctx context.Context, chatID int64, text 
 			return ctx.Err()
 		}
 	}
+	if n.err != nil {
+		return n.err
+	}
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.messages = append(n.messages, Message{ChatID: chatID, Text: text})
 	return nil
+}
+
+type synchronizedBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (b *synchronizedBuffer) Write(data []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.Write(data)
+}
+
+func (b *synchronizedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.String()
 }
 
 func (n *recordingNotifier) count() int {
@@ -242,25 +265,44 @@ func TestAlertSinkMapsLoginsAndAdminChanges(t *testing.T) {
 
 	sink.Emit(events.Event{Type: events.LoginSucceeded, Actor: "user-1", Host: "app.example.com"})
 	sink.Emit(events.Event{Type: events.RouteCreated, Actor: "admin", Host: "new.example.com"})
+	sink.Emit(events.Event{
+		Type: events.RouteCreateFailed, Actor: "admin", Host: "duplicate.example.com",
+		Code: "route.already_exists", Error: "/private/config.json: secret-token",
+	})
+	sink.Emit(events.Event{Type: events.RouteDeleteFailed, Actor: "admin", Host: "missing.example.com", Code: "route.not_found"})
+	sink.Emit(events.Event{Type: events.ConfigReloadFailed, Actor: "admin", Code: "config.reload_failed", Error: "/private/config.json: secret-token"})
 	sink.Emit(events.Event{Type: events.AccessDenied, Actor: "user-2"}) // not an alert
 	sink.Emit(events.Event{Type: events.AccessRateLimited})
 
 	deadline := time.Now().Add(2 * time.Second)
-	for notifier.count() < 4 && time.Now().Before(deadline) {
+	for notifier.count() < 10 && time.Now().Before(deadline) {
 		time.Sleep(5 * time.Millisecond)
 	}
-	if got := notifier.count(); got != 4 {
-		t.Fatalf("delivered %d messages, want 2 auth/admin events x 2 chats", got)
+	if got := notifier.count(); got != 10 {
+		t.Fatalf("delivered %d messages, want 5 auth/admin events x 2 chats", got)
 	}
 	notifier.mu.Lock()
 	defer notifier.mu.Unlock()
+	var sawRouteCreateFailure, sawRouteDeleteFailure, sawReloadFailure bool
 	for _, message := range notifier.messages {
 		if !strings.Contains(message.Text, "Switchboard:") || strings.Contains(message.Text, "reason") {
 			t.Fatalf("message = %q", message.Text)
 		}
-		if message.Text != "" && strings.Contains(message.Text, "error=") {
-			t.Fatalf("an alert must not leak error text: %q", message.Text)
+		if strings.Contains(message.Text, "route.create_failed") {
+			sawRouteCreateFailure = true
 		}
+		if strings.Contains(message.Text, "route.delete_failed") {
+			sawRouteDeleteFailure = true
+		}
+		if strings.Contains(message.Text, "config.reload_failed") {
+			sawReloadFailure = true
+		}
+		if strings.Contains(message.Text, "error=") || strings.Contains(message.Text, "/private/config.json") || strings.Contains(message.Text, "secret-token") {
+			t.Fatalf("an alert must not leak raw error text: %q", message.Text)
+		}
+	}
+	if !sawRouteCreateFailure || !sawRouteDeleteFailure || !sawReloadFailure {
+		t.Fatalf("failure alerts missing: route-create=%v route-delete=%v reload=%v; messages=%+v", sawRouteCreateFailure, sawRouteDeleteFailure, sawReloadFailure, notifier.messages)
 	}
 }
 
@@ -290,6 +332,28 @@ func TestAlertSinkNeverBlocksTheEmitter(t *testing.T) {
 	}
 	close(blocked)
 	cancel()
+}
+
+func TestAlertSinkRedactsProviderErrorsFromLogs(t *testing.T) {
+	const sentinel = "provider-secret-response"
+	var output synchronizedBuffer
+	notifier := &recordingNotifier{err: errors.New(sentinel)}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sink := NewAlertSink(ctx, notifier, fixedChats{42}, slog.New(slog.NewJSONHandler(&output, nil)))
+	sink.Emit(events.Event{Type: events.LoginFailed, Actor: "user"})
+
+	deadline := time.Now().Add(2 * time.Second)
+	for !strings.Contains(output.String(), "notification could not be delivered") && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	got := output.String()
+	if !strings.Contains(got, `"failure_class":"delivery"`) || !strings.Contains(got, `"chat":42`) {
+		t.Fatalf("notification log lacks stable diagnostics: %s", got)
+	}
+	if strings.Contains(got, sentinel) {
+		t.Fatalf("notification log leaked provider error: %s", got)
+	}
 }
 
 func TestPairingText(t *testing.T) {

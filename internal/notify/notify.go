@@ -85,7 +85,7 @@ func (s *AlertSink) run(ctx context.Context) {
 			return
 		case message := <-s.queue:
 			if err := s.notifier.SendMessage(ctx, message.ChatID, message.Text); err != nil {
-				s.logger.Warn("notification could not be delivered", "chat", message.ChatID, "error", err)
+				s.logger.Warn("notification could not be delivered", "chat", message.ChatID, "failure_class", "delivery")
 			}
 		}
 	}
@@ -97,8 +97,11 @@ func alertText(e events.Event) (string, bool) {
 	case events.LoginSucceeded,
 		events.LoginFailed,
 		events.RouteCreated,
+		events.RouteCreateFailed,
 		events.RouteDeleted,
+		events.RouteDeleteFailed,
 		events.ConfigReloaded,
+		events.ConfigReloadFailed,
 		events.PasskeyRegistered,
 		// Every chat already paired learns that another one now gets alerts.
 		events.NotifyChatPaired:

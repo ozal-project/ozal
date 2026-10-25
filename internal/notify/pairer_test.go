@@ -1,8 +1,11 @@
 package notify
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -15,11 +18,15 @@ type chanInbox struct {
 	messages chan []Incoming
 	readers  atomic.Int32
 	overlap  atomic.Bool
+	err      error
 }
 
 func newChanInbox() *chanInbox { return &chanInbox{messages: make(chan []Incoming)} }
 
 func (in *chanInbox) Receive(ctx context.Context) ([]Incoming, error) {
+	if in.err != nil {
+		return nil, in.err
+	}
 	if in.readers.Add(1) > 1 {
 		in.overlap.Store(true)
 	}
@@ -137,11 +144,32 @@ func TestPairerExpiresUnused(t *testing.T) {
 
 func TestPairerFailsWhenTheChatCannotBeRecorded(t *testing.T) {
 	inbox := newChanInbox()
-	p := NewPairer(context.Background(), inbox, &memoryChats{err: errors.New("disk full")}, nil)
+	const sentinel = "chat-store-private-path"
+	var output bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&output, nil))
+	p := NewPairer(context.Background(), inbox, &memoryChats{err: errors.New(sentinel)}, logger)
 	code, _, err := p.Start(time.Minute, func(int64) { t.Error("a chat that was not recorded must not be reported") })
 	if err != nil {
 		t.Fatal(err)
 	}
 	inbox.messages <- []Incoming{{ChatID: 7, Text: "/pair " + code}}
 	waitState(t, p, PairingFailed)
+	if got := output.String(); !strings.Contains(got, `"failure_class":"chat_store"`) || strings.Contains(got, sentinel) {
+		t.Fatalf("pairing log must report a stable class without raw storage error: %s", got)
+	}
+}
+
+func TestPairerRedactsInboxErrorsFromLogs(t *testing.T) {
+	const sentinel = "provider-secret-response"
+	var output bytes.Buffer
+	inbox := newChanInbox()
+	inbox.err = errors.New(sentinel)
+	p := NewPairer(context.Background(), inbox, &memoryChats{}, slog.New(slog.NewJSONHandler(&output, nil)))
+	if _, _, err := p.Start(time.Minute, nil); err != nil {
+		t.Fatal(err)
+	}
+	waitState(t, p, PairingFailed)
+	if got := output.String(); !strings.Contains(got, `"failure_class":"inbox"`) || strings.Contains(got, sentinel) {
+		t.Fatalf("pairing log must report a stable class without raw inbox error: %s", got)
+	}
 }

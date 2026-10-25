@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+
+	"github.com/octaviosantacruz/switchboard/internal/policycontext"
 )
 
 // Type is a stable event name.
@@ -17,19 +19,25 @@ const (
 	AccessAllowed     Type = "access.allowed"
 	AccessDenied      Type = "access.denied"
 	AccessRateLimited Type = "access.rate_limited"
+	// An operator repaired an incomplete final record in the local audit log.
+	AuditRepaired Type = "audit.repaired"
 	// An allowed visitor was sent to log in again because the route's
 	// max_auth_age had passed (ID-005 step-up).
-	AccessStepUp   Type = "access.step_up"
-	LoginStarted   Type = "login.started"
-	LoginFailed    Type = "login.failed"
-	LoginSucceeded Type = "login.succeeded"
-	RouteCreated   Type = "route.created"
-	RouteDeleted   Type = "route.deleted"
-	ConfigReloaded Type = "config.reloaded"
+	AccessStepUp       Type = "access.step_up"
+	LoginStarted       Type = "login.started"
+	LoginFailed        Type = "login.failed"
+	LoginSucceeded     Type = "login.succeeded"
+	RouteCreated       Type = "route.created"
+	RouteCreateFailed  Type = "route.create_failed"
+	RouteDeleted       Type = "route.deleted"
+	RouteDeleteFailed  Type = "route.delete_failed"
+	ConfigReloaded     Type = "config.reloaded"
+	ConfigReloadFailed Type = "config.reload_failed"
 	// Deployments of static sites (PAGES-002). Host carries the site name.
 	PagesDeployed   Type = "pages.deployed"
 	PagesRolledBack Type = "pages.rolled_back"
 	PagesRefused    Type = "pages.refused"
+	PagesFailed     Type = "pages.failed"
 	// A user enrolled a passkey (ID-003). Code is "synced" or "device_bound".
 	PasskeyRegistered Type = "passkey.registered"
 	// A passkey was revoked, by its user from a session (ID-008) or by the
@@ -58,20 +66,38 @@ type Event struct {
 	Host       string
 	Code       string // stable decision code, e.g. auth.Decision.Code
 	Reason     string
-	Error      string
+	Error      string // in-process diagnostic only; production sinks redact it
 	RemoteAddr string
 	// Count, when > 0, summarises repeated identical events that were
 	// suppressed inside an aggregation window (see originauth denials).
 	Count int
-	// ConfigSHA256 is set on config.reloaded: the digest of the config file
-	// in effect afterwards (the previous one when the reload failed).
+	// ConfigSHA256 is set on config.reloaded or config.reload_failed: the
+	// digest of the config file in effect afterwards (the previous one when
+	// the reload failed).
 	ConfigSHA256 string
+	// Context is attached to access decision events as evidence, not as a
+	// second policy input or risk score.
+	Context *policycontext.Context `json:"context,omitempty"`
+}
+
+// safeForObservers clears arbitrary error strings before they enter live
+// activity, structured logs or an optional sink. Producers should use Code and
+// Reason for stable, reviewed diagnostics instead.
+func safeForObservers(e Event) Event {
+	e.Error = ""
+	return e
 }
 
 // Sink receives events. Emit must not block: callers are on the request path
 // or inside the control plane.
 type Sink interface {
 	Emit(Event)
+}
+
+// AuditAppender synchronously persists a security event. It is separate from
+// Sink because append failure can change whether a protected request proceeds.
+type AuditAppender interface {
+	Append(context.Context, Event) error
 }
 
 // Discard drops every event; it is the neutral default.
@@ -81,7 +107,8 @@ type discardSink struct{}
 
 func (discardSink) Emit(Event) {}
 
-// SlogSink writes each event as one JSON record through log/slog.
+// SlogSink writes each event as one JSON record through log/slog and omits
+// arbitrary error strings.
 type SlogSink struct {
 	Logger *slog.Logger
 }
@@ -90,13 +117,12 @@ func (s SlogSink) Emit(e Event) {
 	if s.Logger == nil {
 		return
 	}
-	attrs := make([]slog.Attr, 0, 7)
+	attrs := make([]slog.Attr, 0, 8)
 	for _, field := range []struct{ key, value string }{
 		{"actor", e.Actor},
 		{"host", e.Host},
 		{"code", e.Code},
 		{"reason", e.Reason},
-		{"error", e.Error},
 		{"remote_addr", e.RemoteAddr},
 		{"config_sha256", e.ConfigSHA256},
 	} {
@@ -106,6 +132,9 @@ func (s SlogSink) Emit(e Event) {
 	}
 	if e.Count > 0 {
 		attrs = append(attrs, slog.Int("count", e.Count))
+	}
+	if e.Context != nil {
+		attrs = append(attrs, slog.Any("context", e.Context))
 	}
 	s.Logger.LogAttrs(context.Background(), slog.LevelInfo, string(e.Type), attrs...)
 }

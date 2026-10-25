@@ -34,6 +34,9 @@ func (f *fakeDeployments) Deploy(_ context.Context, site string, archive io.Read
 	if site == "hostile" {
 		return pages.Deployment{}, &pages.RefusedError{Code: pages.UnsafePath, Reason: "entry name contains a parent-directory component"}
 	}
+	if site == "broken" {
+		return pages.Deployment{}, fmt.Errorf("write /private/switchboard/sites/blog/index.html: %w", os.ErrPermission)
+	}
 	return pages.Deployment{Site: site, ID: strings.Repeat("a", 64), Live: true}, nil
 }
 
@@ -105,6 +108,21 @@ func TestRefusedDeployReturnsItsCode(t *testing.T) {
 	}
 	if e, ok := sink.Find(events.PagesRefused); !ok || e.Code != string(pages.UnsafePath) {
 		t.Fatalf("refusal event = %+v, %v", e, ok)
+	}
+}
+
+func TestStorageFailureDoesNotExposeFilesystemError(t *testing.T) {
+	sink := &events.Recorder{}
+	rec := request(sitesHandler(&fakeDeployments{}, sink), http.MethodPost, "/_/api/sites/broken/deployments", "secret", "archive")
+	if rec.Code != http.StatusInternalServerError || strings.Contains(rec.Body.String(), "/private/switchboard") {
+		t.Fatalf("storage failure response = %d %s, want generic 500", rec.Code, rec.Body)
+	}
+	event, ok := sink.Find(events.PagesFailed)
+	if !ok {
+		t.Fatal("storage failure did not emit pages.failed")
+	}
+	if event.Code != "deployment.failed" || event.Reason != "deployment could not be completed" || event.Error != "" {
+		t.Fatalf("failure event exposed unexpected details: %+v", event)
 	}
 }
 
