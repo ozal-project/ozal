@@ -23,26 +23,28 @@ failure. No production or shared-host fault injection is part of this lab.
 ## Existing repository evidence
 
 These focused tests are regression checks, not a completed operational
-failure drill. On 2026-10-25, a selected offline subset passed with `-race` in
-a temporary read-only source snapshot, a minimal allowlisted environment,
-module/network downloads disabled, and process/file limits: the policy/audit cancellation and
-failure-reporter cases, certificate renewal/fail-closed/restart cases, SQLite
-read-only cases, audit child-process recovery, and the proxy's injected 503 →
-200 recovery test. The full curated script and cases requiring local listener
-binds were not run in that environment.
+failure drill. On 2026-10-25, the full curated script passed from the working
+tree based on `0c46828`, using Go 1.27.3 on Linux/amd64:
+`GOTMPDIR=/home/saint/.cache/go-tmp scripts/lab-002-regressions.sh`. All seven
+`go test -race` invocations passed, including the proxy and tunnel cases that
+bind fixture-only loopback listeners. Coverage included upstream timeout,
+health refusal and 503→200 recovery; tunnel trust, cancellation, restart and
+revocation; certificate renewal/fail-closed/restart; audit failure reporting;
+SQLite read-only behavior; and audit child-process recovery. No host-level or
+production fault was injected, so this result is not evidence of deployment
+recovery.
 
-Run the curated suite with `scripts/lab-002-regressions.sh`. It uses local test
-fixtures and kills only the child created by its audit recovery test; it does
-not perform host-level or production fault injection. The script is a
-repeatable regression gate, not evidence of a live deployment recovery.
+The script uses local test fixtures and kills only the child created by its
+audit recovery test. It is a repeatable regression gate, not a live operational
+drill.
 
 | Failure | Existing regression and its boundary | Remaining evidence |
 |---|---|---|
-| Silent/slow upstream | `go test -race ./internal/proxy -run '^(TestSilentUpstreamTimesOutWith504|TestUpstream5xxDoesNotPreventRecovery)$' -count=1` covers bounded 504 handling, response-address disclosure, preserving an upstream 503, and a succeeding request after it. The new 5xx case passed in the isolated run noted above. | The 5xx regression uses an injected `RoundTripper`, not an actual upstream process outage or recovery timeline. `TestSilentUpstreamTimesOutWith504` still needs execution in a sandbox that permits fixture-only loopback binds. |
-| Unhealthy upstream | `go test -race ./internal/proxy -run '^TestUnhealthyUpstreamReturns503$' -count=1` verifies the proxy refuses to forward when health state is false. | This is a fake health checker, not an actual downstream health-check outage/recovery timeline. |
+| Silent/slow upstream | The full script passed `TestSilentUpstreamTimesOutWith504` and `TestUpstream5xxDoesNotPreventRecovery` with `-race`; these cover bounded 504 handling, response-address disclosure, preserving an upstream 503 and succeeding afterward. | The 5xx regression uses an injected `RoundTripper`, not an actual upstream process outage or recovery timeline. |
+| Unhealthy upstream | The full script passed `TestUnhealthyUpstreamReturns503` with `-race`; it verifies the proxy refuses to forward when health state is false. | This is a fake health checker, not an actual downstream health-check outage/recovery timeline. |
 | Tunnel disconnect/reconnect | `go test -race ./internal/tunnel -run '^(TestTunnelHTTPConcurrencyTrustAndReconnect|TestRequestCancellationClosesOnlyItsStream)$' -count=1` covers stream cancellation and reconnect semantics. `TestConnectorReattachesAfterEdgeRestart` in `internal/tunnel/enrolled_test.go` covers its named restart case. | These are controlled in-process/package fixtures. A disposable service/connector process kill, reconnect timing, and route recovery record remain open. |
 | Certificate expiry and renewal failure | `go test -race ./internal/certs -run '^(TestRenewalDue|TestManagerFailsClosedWithoutCertificate|TestManagerKeepsServingAfterFailedRenewal|TestManagerServesPersistedCertificateAfterRestart)$' -count=1` uses fixed time and simulated storage/issuer. | It does not change wall-clock time or prove a live listener's external renewal and recovery. Use the existing explicit staging acceptance path only with a disposable state directory and separate operator authorization. |
-| Disk-full/read-only | `go test -race ./cmd/switchboard -run '^(TestAuditFailureReporterReturnsFailureAndLogsOnce|TestAuditFailureReporterStatusTracksStorageFailuresOnly)$' -count=1` injects an append error. `go test -race ./internal/proxy -run '^TestRequiredAccessAuditFailureStopsBeforeUpstream$' -count=1` confirms required audit failure blocks forwarding. `go test -race ./internal/store/sqlite -run '^(TestReadOnlyStatusDoesNotCreateMigrationTable|TestOpenReadOnlyAndIntegrityCheck|TestOpenReadOnlyDoesNotCreateMissingFile)$' -count=1` checks read-only behavior. All listed cases passed in the selected isolated run. | Injected errors and a read-only database open are not a physical disk-full event or a live service recovery drill. Exercise quotas only in an isolated VM; confirm required audit fails closed and the service recovers after writable storage returns. |
+| Disk-full/read-only | The full script passed the audit failure reporter, required-access fail-closed, and SQLite read-only cases with `-race`. | Injected errors and a read-only database open are not a physical disk-full event or a live service recovery drill. Exercise quotas only in an isolated VM; confirm required audit fails closed and the service recovers after writable storage returns. |
 | Abrupt process death | `TestProcessKillAfterAppendCanRestartAndVerify` kills its own child after a successful sync. `TestAuditRepairIsExplicitAndRecordsTailTruncation` constructs a torn final JSON suffix and proves preview is read-only, explicit repair records the discarded byte count, and the chain verifies. `TestRepairPreservesACompleteRecordMissingOnlyItsNewline` proves a valid record is kept. | The regression models a persisted torn suffix; it does not kill a process during a physical write or simulate power loss. Host-level recovery remains a separate drill. |
 
 ## Disposable recovery sequence
