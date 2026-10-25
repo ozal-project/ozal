@@ -1,63 +1,69 @@
 @import "tailwindcss";
-@import "@fontsource/ibm-plex-mono/400.css";
-@import "@fontsource/ibm-plex-mono/500.css";
-@import "@fontsource/ibm-plex-mono/600.css";
+@import "@fontsource/geist-sans/400.css";
+@import "@fontsource/geist-sans/500.css";
+@import "@fontsource/geist-sans/600.css";
+@import "@fontsource/geist-mono/400.css";
+@import "@fontsource/geist-mono/500.css";
 
-/* Same identity as the admin console (web/console/src/app.css). */
-@font-face {
-  font-family: "Manrope";
-  src: url("/fonts/manrope.ttf") format("truetype");
-  font-weight: 200 800;
-  font-display: swap;
-}
-
+/* Dark graphite with one violet signal. Green, red and amber mean only
+   allowed, refused and waiting; violet is the brand and the call to act.
+   The console moves to the same tokens (UI-005). */
 @theme {
-  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
-  /* Cool graphite and a neutral primary; amber is only the lamp (brand mark,
-     lit words, jacks, the milestone under way), shared with the console. */
-  --color-ink: oklch(0.95 0.005 260);
-  --color-muted: oklch(0.72 0.012 260);
-  --color-paper: oklch(0.15 0.006 260);
-  --color-panel: oklch(0.195 0.007 260);
-  --color-line: oklch(0.3 0.01 260);
-  --color-amber: oklch(0.83 0.13 75);
-  --color-green: oklch(0.82 0.07 155);
-  --color-red: oklch(0.78 0.11 25);
+  --font-sans: "Geist Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  --color-bg: #0c0c0e;
+  --color-bg-2: #111114;
+  --color-surface: #16161a;
+  --color-raised: #1c1c21;
+  --color-ink: #ededef;
+  --color-ink-2: #b4b4bb;
+  --color-muted: #8b8b95;
+  --color-line: #26262d;
+  --color-line-2: #34343c;
+  --color-brand: #8f7cff;
+  --color-brand-2: #b3a6ff;
+  --color-ok: #3fb68b;
+  --color-no: #f0685c;
+  --color-wait: #e0a84a;
 }
 
 @layer base {
   html { color-scheme: dark; scroll-behavior: smooth; }
-  body { @apply bg-paper text-ink font-sans antialiased; }
-  ::selection { background: var(--color-ink); color: var(--color-paper); }
-  a:focus-visible, button:focus-visible { outline: 2px solid var(--color-ink); outline-offset: 3px; border-radius: 4px; }
+  body {
+    @apply bg-bg text-ink font-sans antialiased;
+    background-image: radial-gradient(1200px 620px at 72% -12%, color-mix(in srgb, var(--color-brand) 15%, transparent), transparent 62%);
+    background-repeat: no-repeat;
+  }
+  ::selection { background: var(--color-brand); color: var(--color-bg); }
+  a:focus-visible, label:focus-within, summary:focus-visible { outline: 2px solid var(--color-brand-2); outline-offset: 3px; border-radius: 6px; }
 }
 
 @layer components {
-  .jack-field {
-    background-image: radial-gradient(oklch(0.33 0.01 260 / 0.55) 1px, transparent 1.2px);
-    background-size: 22px 22px;
-  }
-  .plate { @apply text-muted font-mono text-[0.7rem] font-medium tracking-[0.18em] uppercase; }
-  .plate b { @apply text-amber font-semibold; }
-  .lamp {
-    @apply inline-block size-2.5 shrink-0 rounded-full;
-    background: radial-gradient(circle at 35% 35%, oklch(1 0 0 / 0.75), transparent 45%), var(--lamp, var(--color-muted));
-    box-shadow: 0 0 0 1px oklch(0 0 0 / 0.4), 0 0 12px 1px color-mix(in oklch, var(--lamp, transparent) 70%, transparent);
-  }
-  .lamp-on { --lamp: var(--color-green); }
-  .lamp-off { --lamp: var(--color-red); }
-  .lamp-wait { --lamp: var(--color-amber); }
-  .lamp-idle { --lamp: oklch(0.45 0.01 260); box-shadow: 0 0 0 1px oklch(0 0 0 / 0.4); }
-  .panel {
-    @apply bg-panel border-line relative rounded-xl border;
-    box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.05), 0 1px 2px oklch(0 0 0 / 0.35), 0 18px 40px -22px oklch(0 0 0 / 0.8);
-  }
-  .cord { stroke: oklch(0.62 0.02 260); fill: none; stroke-linecap: round; }
-  .btn { @apply inline-flex items-center gap-2 rounded-lg px-4 py-2.5 font-mono text-[0.8rem] font-medium tracking-wide uppercase transition-colors; }
-  .btn-primary { @apply bg-ink text-paper hover:bg-ink/85; }
-  .btn-ghost { @apply border-line hover:border-ink/60 border; }
-  .code { @apply bg-paper/80 border-line overflow-x-auto rounded-lg border p-4 font-mono text-[0.8rem] leading-relaxed; }
+  .eyebrow { @apply text-muted font-mono text-xs font-medium tracking-wide uppercase; }
+  .h2 { @apply text-3xl font-semibold tracking-[-0.03em] sm:text-[2.6rem] sm:leading-[1.08]; }
+  .lede { @apply text-ink-2 mt-3 max-w-2xl text-base leading-relaxed sm:text-[1.0625rem]; }
+  .card { @apply bg-surface border-line rounded-2xl border; }
+  .pill { @apply border-line-2 bg-surface text-ink-2 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 font-mono text-xs; }
+  .tag { @apply rounded-[5px] px-1.5 py-1 font-mono text-[0.72rem] leading-none font-medium whitespace-nowrap; }
+  .tag-ok { @apply text-ok bg-ok/15; }
+  .tag-no { @apply text-no bg-no/15; }
+  .tag-wait { @apply text-wait bg-wait/15; }
+  .tag-brand { @apply text-brand-2 bg-brand/15; }
+  .tag-plain { @apply text-ink-2 bg-raised border-line border; }
+  .dot { @apply inline-block size-[7px] shrink-0 rounded-full; }
+  .dot-ok { @apply bg-ok; box-shadow: 0 0 8px var(--color-ok); }
+  .dot-no { @apply bg-no; }
+  .dot-wait { @apply bg-wait; }
+  .dot-brand { @apply bg-brand; box-shadow: 0 0 10px var(--color-brand); }
+  .dot-off { @apply bg-line-2; }
+  .btn { @apply border-line-2 bg-raised text-ink inline-flex items-center gap-2 rounded-lg border px-3.5 py-2.5 text-sm font-medium whitespace-nowrap transition-colors hover:border-muted; }
+  .btn-brand { @apply bg-brand border-brand text-bg hover:bg-brand-2 hover:border-brand-2; }
+  .btn-sm { @apply px-2.5 py-1.5 text-[0.8rem]; }
+  .win { @apply border-line-2 bg-bg-2 overflow-hidden rounded-xl border; }
+  .win-bar { @apply border-line flex items-center gap-1.5 border-b px-3 py-2; }
+  .win-bar i { @apply bg-line-2 size-[7px] rounded-full; }
+  .win-bar span { @apply text-muted ml-1.5 truncate font-mono text-[0.7rem]; }
+  .code { @apply bg-bg-2 border-line text-ink-2 overflow-x-auto rounded-xl border p-4 font-mono text-[0.8rem] leading-relaxed; }
 }
 
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation: none !important; transition: none !important; } }

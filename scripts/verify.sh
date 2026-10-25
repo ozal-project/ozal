@@ -64,8 +64,19 @@ if command -v node >/dev/null 2>&1; then
   node scripts/test-passkey-page.mjs
   echo "[6d] console state logic"
   node --test web/console/src/lib/*.test.ts
+  echo "[6e] site: tracker parser"
+  node --test site/src/lib/*.test.ts
 else
-  echo "  node not installed: passkey page script and console logic not exercised"
+  echo "  node not installed: passkey page script, console logic and site parser not exercised"
+fi
+
+# The project page reads the trackers at build time: a tracker edit that the
+# parser or astro check rejects must fail here, not in the site workflow.
+if [[ -d site/node_modules ]]; then
+  echo "[6f] site: type check and build"
+  (cd site && npm run build >/dev/null)
+else
+  echo "  site toolchain not installed (cd site && npm ci); site build not exercised"
 fi
 
 echo "[7/7] git diff --check"

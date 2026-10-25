@@ -1,247 +1,386 @@
 ---
 import Base from "../layouts/Base.astro";
 import Logo from "../components/Logo.astro";
+import { closures, doneIds, openTasks, tracks, type State } from "../lib/tracker";
+import todo from "../../../docs/TO_IMPLEMENT.md?raw";
+import implemented from "../../../docs/IMPLEMENTED.md?raw";
 
 const repo = "https://github.com/octaviosantacruz/switchboard";
 const release = `${repo}/releases/tag/v0.1.0-alpha.1`;
 // Keep repository links hidden while GitHub reports the repository as private.
 const sourcePublic = false;
 
-// Hero patch panel: a grid of jacks, a few patched cords and their lamps.
-const cols = 7, rows = 4, gx = 64, gy = 74, ox = 40, oy = 46;
-const jack = (c: number, r: number) => ({ x: ox + c * gx, y: oy + r * gy });
-const lamps: Record<string, "on" | "off" | "wait"> = { "1,0": "on", "5,1": "on", "2,2": "off", "6,3": "wait", "3,1": "on", "0,3": "off" };
-const cords: [number, number, number, number][] = [[1, 0, 5, 1], [3, 1, 6, 3], [0, 3, 2, 2]];
-const cordPath = ([c1, r1, c2, r2]: [number, number, number, number]) => {
-  const a = jack(c1, r1), b = jack(c2, r2);
-  const sag = 70 + Math.abs(c2 - c1) * 8;
-  return `M${a.x} ${a.y} C ${a.x} ${a.y + sag}, ${b.x} ${b.y + sag}, ${b.x} ${b.y}`;
-};
-const lampColor = { on: "var(--color-green)", off: "var(--color-red)", wait: "var(--color-amber)" };
+// Roadmap and changelog come from docs/TO_IMPLEMENT.md and docs/IMPLEMENTED.md.
+const open = openTasks(todo);
+const done = doneIds(open, implemented);
+const byTrack = tracks(open, done);
+const log = closures(implemented);
+const count = (s: State) => open.filter((t) => t.state === s).length;
+const stats = [
+  { n: done.size, label: "tasks done", dot: "ok" },
+  { n: count("progress"), label: "in progress", dot: "wait" },
+  { n: count("planned") + count("ready"), label: "planned", dot: "off" },
+  { n: count("idea"), label: "ideas", dot: "off" },
+  { n: count("blocked"), label: "blocked, with a reason", dot: "no" },
+];
+const stateDot: Record<State, string> = { progress: "wait", ready: "brand", blocked: "no", planned: "off", idea: "off" };
+const stateWord: Record<State, string> = { progress: "in progress", ready: "ready", blocked: "blocked", planned: "planned", idea: "idea" };
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z]+/g, "-").replace(/^-|-$/g, "");
+const day = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+const firstShown = 6;
+// The track filter is CSS only (no client JavaScript): a checked radio hides
+// the other tracks and highlights its own label.
+const tabIds = ["all", ...byTrack.map((t) => slug(t.name))];
+const tabCss =
+  byTrack.map((t) => `#tab-${slug(t.name)}:checked ~ .tracks .track:not([data-track="${slug(t.name)}"]) { display: none; }`).join("\n") +
+  "\n" + tabIds.map((id) => `#tab-${id}:checked ~ .tabs label[for="tab-${id}"]`).join(", ") +
+  " { background: var(--color-ink); color: var(--color-bg); border-color: var(--color-ink); }" +
+  "\n" + tabIds.map((id) => `#tab-${id}:focus-visible ~ .tabs label[for="tab-${id}"]`).join(", ") +
+  " { outline: 2px solid var(--color-brand-2); outline-offset: 2px; }";
 
 const shipped = [
-  { k: "01", t: "Names, not ports", d: "Routes HTTP services by hostname, with health checks and one config for localhost or a real domain.", evidence: "Automated tests · Linux edge dogfooding" },
-  { k: "02", t: "Automatic HTTPS", d: "ACME TLS-ALPN-01 or Cloudflare DNS-01, including a single-level wildcard and background renewal.", evidence: "Production certificate on the author's VPS · DNS adapter is Cloudflare-specific" },
-  { k: "03", t: "Login per route", d: "Delegates sign-in to an external OIDC provider and checks verified email, domain and group claims.", evidence: "Automated tests · no built-in identity provider" },
-  { k: "04", t: "Explainable decisions", d: "`policy explain` and the console simulator use the same policy engine and return a stable code and reason.", evidence: "Automated tests · CLI and console" },
-  { k: "05", t: "Static site publishing", d: "Deploy immutable builds, switch the live version, roll back, and use the supported subset of `_redirects` and `_headers`.", evidence: "VPS deployment and rollback observed · single host" },
-  { k: "06", t: "Access console", d: "Loopback-only console with an activity feed, route inspection, policy simulation and Pages history.", evidence: "Local admin surface · never expose it publicly" },
-  { k: "07", t: "Secrets by reference", d: "Resolve `env:` and `file:` references at runtime; the control plane does not persist resolved values.", evidence: "Automated tests · one binary, optional embedded SQLite" },
+  { t: "Names, not ports", d: "Routes HTTP services by hostname, with health checks and one config for localhost or a real domain.", evidence: "Automated tests · Linux edge dogfooding" },
+  { t: "Automatic HTTPS", d: "ACME TLS-ALPN-01 or Cloudflare DNS-01, including a single-level wildcard and background renewal.", evidence: "Production certificate on the author's VPS · DNS adapter is Cloudflare-specific" },
+  { t: "Login per route", d: "Delegates sign-in to an external OIDC provider and checks verified email, domain and group claims.", evidence: "Automated tests · no built-in identity provider" },
+  { t: "Explainable decisions", d: "`policy explain` and the console simulator use the same policy engine and return a stable code and reason.", evidence: "Automated tests · CLI and console" },
+  { t: "Static site publishing", d: "Deploy immutable builds, switch the live version, roll back, and use the supported subset of `_redirects` and `_headers`.", evidence: "VPS deployment and rollback observed · single host" },
+  { t: "Access console", d: "Loopback-only console with an activity feed, route inspection, policy simulation and Pages history.", evidence: "Local admin surface · never expose it publicly" },
+  { t: "Secrets by reference", d: "Resolve `env:` and `file:` references at runtime; the control plane does not persist resolved values.", evidence: "Automated tests · one binary, optional embedded SQLite" },
+];
+const sinceAlpha = [
+  { id: "ID-003", t: "Native passkey login", d: "Sign in without a password or an external provider; accepted on a real iPhone." },
+  { id: "PAGES-008", t: "Deploy from CI", d: "GitHub Actions publish a site with an OIDC token; no deploy secret is stored." },
 ];
 
 const pipeline = [
-  { s: "trust", d: "Client IP, trusted proxies, origin certificate", state: "on" },
-  { s: "ratelimit", d: "Per IP and per identity buckets", state: "wait" },
-  { s: "shield", d: "WAF rules and challenges", state: "idle" },
-  { s: "identify", d: "OIDC session in alpha.1", state: "on" },
-  { s: "authorize", d: "Pure policy decision with a code", state: "on" },
-  { s: "route", d: "Host lookup in an atomic snapshot", state: "on" },
-  { s: "forward", d: "HTTP upstream or Pages; tunnel path is experimental", state: "on" },
-] as const;
-
-const roadmap = [
-  { v: "v0.1", n: "Edge", when: "Oct – Dec 2026", now: true, items: ["Alpha.1 published 21 Oct: routing, TLS, external OIDC, policy and Pages", "Limited single-host Linux dogfooding", "The repository and release currently require GitHub access"] },
-  { v: "v0.2", n: "PKI", when: "Jan – Mar 2027", now: false, items: ["Internal CA and ACME server", "mTLS between edge, agent and origin", "SSH CA and workload identity"] },
-  { v: "v0.3", n: "Access", when: "Apr – Jun 2027", now: false, items: ["SSH and databases over tunnels", "Just-in-time access with approvals", "Session recording, WAF with Coraza + CRS"] },
-  { v: "v0.4", n: "Trust", when: "Jul – Sep 2027", now: false, items: ["Transparency log with witnesses", "Risk signals and explanations", "AI-agent / MCP gateway"] },
+  { s: "trust", d: "Client IP, trusted proxies, origin certificate", state: "ok" },
+  { s: "ratelimit", d: "Per IP and per identity buckets — in progress", state: "wait" },
+  { s: "shield", d: "WAF rules and challenges — planned", state: "off" },
+  { s: "identify", d: "OIDC session in alpha.1; passkeys on main", state: "ok" },
+  { s: "authorize", d: "Pure policy decision with a stable code", state: "ok" },
+  { s: "route", d: "Host lookup in an atomic snapshot", state: "ok" },
+  { s: "forward", d: "HTTP upstream or Pages; tunnels are experimental", state: "ok" },
 ];
+
+const trains = [
+  { v: "v0.1", n: "Edge", when: "Oct – Dec 2026", now: true },
+  { v: "v0.2", n: "PKI", when: "Jan – Mar 2027", now: false },
+  { v: "v0.3", n: "Access", when: "Apr – Jun 2027", now: false },
+  { v: "v0.4", n: "Trust", when: "Jul – Sep 2027", now: false },
+];
+const code = (s: string) => s.replace(/`([^`]+)`/g, '<code class="text-ink font-mono text-[0.8em]">$1</code>');
 ---
-<Base title="Switchboard — every connection, decided and explained" description="A self-hostable gateway in one Go binary: host routing, ACME TLS, external OIDC login, claim-based policy and static-site deployments, with each access decision explained.">
-  <div class="jack-field">
-    <a class="sr-only focus:not-sr-only focus:bg-paper focus:text-ink focus:ring-ink fixed top-2 left-2 z-50 rounded px-3 py-2 text-sm focus:ring-2" href="#main-content">Skip to content</a>
-    <header class="border-line/70 bg-paper/80 sticky top-0 z-20 border-b backdrop-blur">
-      <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3.5">
-        <a href="/" class="flex items-center gap-2.5" aria-label="Switchboard home">
-          <Logo size={30} />
-          <span class="font-mono text-[0.95rem] font-semibold tracking-tight">switchboard<span class="text-amber">_</span></span>
-        </a>
-        <nav class="text-muted hidden items-center gap-7 text-sm md:flex" aria-label="Sections">
-          <a href="#today" class="hover:text-ink">Today</a>
-          <a href="#how" class="hover:text-ink">How it works</a>
-          <a href="#console" class="hover:text-ink">Console</a>
-          <a href="#roadmap" class="hover:text-ink">Roadmap</a>
-          <a href="#start" class="hover:text-ink">Get started</a>
+<Base title="Switchboard — every door to your apps, one place that decides" description="A self-hostable gateway in one Go binary: host routing, automatic TLS, login per route, static-site deployments from CI, and a readable reason for every access decision.">
+  <a class="sr-only focus:not-sr-only focus:bg-ink focus:text-bg fixed top-2 left-2 z-50 rounded px-3 py-2 text-sm" href="#main-content">Skip to content</a>
+  <header class="bg-bg/75 border-line/60 sticky top-0 z-20 border-b backdrop-blur">
+    <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3.5">
+      <a href="/" class="flex items-center gap-2.5 font-semibold tracking-tight" aria-label="Switchboard home"><Logo /> switchboard</a>
+      <nav class="text-ink-2 hidden items-center gap-7 text-sm md:flex" aria-label="Sections">
+        <a href="#people" class="hover:text-ink">Product</a>
+        <a href="#today" class="hover:text-ink">What works</a>
+        <a href="#roadmap" class="hover:text-ink">Roadmap</a>
+        <a href="#changelog" class="hover:text-ink">Changelog</a>
+        <a href="#start" class="hover:text-ink">Get started</a>
+        <span class="pill"><span class="dot dot-brand"></span>v0.1.0-alpha.1</span>
+      </nav>
+      <details class="relative md:hidden">
+        <summary class="btn btn-sm cursor-pointer list-none">Menu</summary>
+        <nav class="card absolute right-0 z-30 mt-2 grid min-w-48 gap-1 p-2 text-sm" aria-label="Mobile sections">
+          <a class="hover:bg-raised rounded-lg px-3 py-2" href="#people">Product</a>
+          <a class="hover:bg-raised rounded-lg px-3 py-2" href="#today">What works</a>
+          <a class="hover:bg-raised rounded-lg px-3 py-2" href="#roadmap">Roadmap</a>
+          <a class="hover:bg-raised rounded-lg px-3 py-2" href="#changelog">Changelog</a>
+          <a class="hover:bg-raised rounded-lg px-3 py-2" href="#start">Get started</a>
         </nav>
-        <details class="relative md:hidden">
-          <summary class="btn btn-ghost cursor-pointer !px-3 !py-2">Sections</summary>
-          <nav class="panel absolute right-0 z-30 mt-2 grid min-w-48 gap-1 p-2 text-sm" aria-label="Mobile sections">
-            <a class="rounded px-3 py-2 hover:bg-paper" href="#today">What works</a>
-            <a class="rounded px-3 py-2 hover:bg-paper" href="#how">How it works</a>
-            <a class="rounded px-3 py-2 hover:bg-paper" href="#console">Console</a>
-            <a class="rounded px-3 py-2 hover:bg-paper" href="#roadmap">Roadmap</a>
-            <a class="rounded px-3 py-2 hover:bg-paper" href="#start">Get started</a>
-          </nav>
-        </details>
-        {sourcePublic && <a href={repo} class="btn btn-ghost !px-3 !py-1.5">GitHub</a>}
+      </details>
+    </div>
+  </header>
+
+  <main id="main-content" tabindex="-1">
+    <!-- Hero -->
+    <section class="mx-auto max-w-6xl px-5 pt-16 pb-20 text-center sm:pt-24">
+      <span class="pill"><span class="dot dot-ok"></span>Dogfooded on octaviosantacruz.com · alpha, not production-ready</span>
+      <h1 class="mx-auto mt-7 max-w-4xl text-[2.75rem] leading-[1.02] font-semibold tracking-[-0.04em] sm:text-7xl">
+        Every door to your apps. <span class="from-brand-2 to-brand bg-gradient-to-r bg-clip-text text-transparent">One place that decides.</span>
+      </h1>
+      <p class="text-ink-2 mx-auto mt-6 max-w-2xl text-lg leading-relaxed">
+        Switchboard is a self-hostable gateway in a single Go binary. It routes your apps by name, issues their certificates,
+        puts a login in front of the ones that need it and publishes your static sites — and every yes or no comes with a
+        reason anyone can read.
+      </p>
+      <div class="mt-8 flex flex-wrap justify-center gap-2.5">
+        <a href="#people" class="btn btn-brand">See how it works</a>
+        <a href="#roadmap" class="btn">Roadmap</a>
+        <a href={release} class="btn">Alpha release <span aria-hidden="true">↗</span></a>
       </div>
-    </header>
+      <p class="text-muted mt-5 font-mono text-xs">GitHub access required for the alpha · MIT licensed · one binary · optional embedded SQLite</p>
 
-    <main id="main-content" tabindex="-1">
-      <!-- Hero -->
-      <section class="mx-auto grid max-w-6xl items-center gap-12 px-5 pt-20 pb-24 lg:grid-cols-[1.05fr_1fr]">
-        <div>
-          <p class="border-line bg-panel inline-flex items-center gap-2 rounded-full border px-3 py-1 font-mono text-[0.72rem]">
-            <span class="lamp lamp-wait"></span> v0.1.0-alpha.1 · private release · not production-ready
-          </p>
-          <h1 class="mt-6 text-[2.6rem] leading-[1.05] font-semibold tracking-tight sm:text-6xl">
-            Every connection,<br /><span class="text-amber">decided</span> and <span class="text-amber">explained</span>.
-          </h1>
-          <p class="text-muted mt-6 max-w-xl text-lg leading-relaxed">
-            Switchboard is a self-hostable, identity-aware gateway in a single Go binary. It routes your apps by name,
-            issues their certificates, puts a login in front of the ones that need it — and tells you exactly why each
-            request was let through or refused.
-          </p>
-          <div class="mt-8 flex flex-wrap gap-3">
-            <a href="#today" class="btn btn-primary">See what works</a>
-            <a href={release} class="btn btn-ghost">Open alpha release</a>
-          </div>
-          <p class="text-muted mt-6 font-mono text-xs">GitHub access required for the alpha · MIT licensed · one binary · optional embedded SQLite</p>
-        </div>
+      <figure class="win mx-auto mt-14 max-w-5xl text-left shadow-[0_40px_120px_-40px_color-mix(in_srgb,var(--color-brand)_40%,transparent)]">
+        <div class="win-bar"><i></i><i></i><i></i><span>edge · a request at a time</span></div>
+        <div class="grid md:grid-cols-2">
+          <pre class="border-line text-ink-2 overflow-x-auto p-5 font-mono text-[0.78rem] leading-[1.9] md:border-r sm:p-6"><span class="text-muted">$</span> switchboard -config switchboard.json
+<span class="text-ok">✓</span> grafana.example.com → 127.0.0.1:3000 <span class="text-wait">protected</span>
+<span class="text-ok">✓</span> blog.example.com    → site "blog"     <span class="text-muted">public</span>
+<span class="text-ok">✓</span> certificates: 2 issued (ACME)
 
-        <div class="panel min-w-0 p-5" aria-hidden="true">
-          <div class="mb-3 flex items-center justify-between"><p class="plate"><b>00</b> / patch panel</p><span class="flex gap-1.5"><span class="lamp lamp-on"></span><span class="lamp lamp-wait"></span><span class="lamp lamp-off"></span></span></div>
-          <svg viewBox="0 0 464 320" class="w-full">
-            {Array.from({ length: rows }).map((_, r) => Array.from({ length: cols }).map((_, c) => {
-              const { x, y } = jack(c, r);
-              const l = lamps[`${c},${r}`];
-              return (
-                <g>
-                  <circle cx={x} cy={y - 24} r="4.5" fill={l ? lampColor[l] : "oklch(0.32 0.01 260)"} opacity={l ? 1 : 0.9} />
-                  {l && <circle cx={x} cy={y - 24} r="9" fill={lampColor[l]} opacity="0.18" />}
-                  <circle cx={x} cy={y} r="11" fill="oklch(0.13 0.006 260)" stroke="oklch(0.36 0.012 260)" stroke-width="1.5" />
-                  <circle cx={x} cy={y} r="4" fill="oklch(0.08 0.004 260)" />
-                </g>
-              );
-            }))}
-            {cords.map((c) => <path d={cordPath(c)} class="cord" stroke-width="3.2" opacity="0.92" />)}
-            {cords.map(([c1, r1, c2, r2]) => [jack(c1, r1), jack(c2, r2)].map((p) => <circle cx={p.x} cy={p.y} r="6.5" fill="var(--color-amber)" />))}
-          </svg>
-          <div class="border-line mt-2 grid grid-cols-3 gap-3 border-t pt-4 font-mono text-[0.7rem]">
-            <span class="flex items-center gap-2"><span class="lamp lamp-on"></span>connected</span>
-            <span class="flex items-center gap-2"><span class="lamp lamp-off"></span>refused</span>
-            <span class="flex items-center gap-2"><span class="lamp lamp-wait"></span>awaiting login</span>
+<span class="text-muted"># ana opens grafana from her phone…</span>
+18:02:11 <span class="text-wait">login</span>  ana@example.com
+18:02:14 <span class="text-ok">allow</span>  grafana · group engineering
+18:03:40 <span class="text-no">deny</span>   grafana · bob · missing_required_group</pre>
+          <div class="grid content-start gap-3 p-5 sm:p-6">
+            <div class="card bg-raised p-4"><p class="eyebrow">Access · live</p><p class="mt-2.5 text-[0.95rem]"><span class="tag tag-no">refused</span> bob@example.com → grafana</p><p class="text-ink-2 mt-1.5 text-sm">bob is not in <b class="text-ink font-medium">engineering</b>. The code is stable, the reason is readable.</p></div>
+            <div class="card bg-raised p-4"><p class="eyebrow">Sites · deploy</p><p class="mt-2.5 text-[0.95rem]"><span class="tag tag-ok">live</span> blog from GitHub · main · 631fb79</p><p class="text-ink-2 mt-1.5 text-sm">Immutable builds; going back is one switch.</p></div>
           </div>
         </div>
-      </section>
+        <figcaption class="border-line text-muted border-t px-5 py-2.5 font-mono text-[0.7rem]">Illustration of a running edge. A recorded tour of the real console is on the way.</figcaption>
+      </figure>
+    </section>
 
-      <!-- Today -->
-      <section id="today" class="border-line/70 scroll-mt-20 border-t">
-        <div class="mx-auto max-w-6xl px-5 py-20">
-          <p class="plate"><b>01</b> / included in alpha.1</p>
-          <h2 class="mt-3 max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl">What the release includes, and where it has run.</h2>
-          <p class="text-muted mt-3 max-w-2xl">The alpha has automated test coverage and limited Linux dogfooding by one operator. Each note names the boundary; it is not a production-readiness claim.</p>
-          <div class="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {shipped.map((f) => (
-              <article class="panel p-5">
-                <div class="flex items-center justify-between"><span class="text-ink font-mono text-xs">{f.k}</span><span class="lamp lamp-on"></span></div>
-                <h3 class="mt-4 font-semibold">{f.t}</h3>
-                <p class="text-muted mt-2 text-sm leading-relaxed" set:html={f.d.replace(/`([^`]+)`/g, '<code class="text-ink font-mono text-[0.78rem]">$1</code>')} />
-                <p class="border-line text-muted mt-4 border-t pt-3 font-mono text-xs leading-relaxed">{f.evidence}</p>
-              </article>
-            ))}
-          </div>
-          <div class="border-line mt-8 grid gap-5 border-t pt-6 md:grid-cols-2">
-            <div>
-              <h3 class="font-semibold">Identity boundary</h3>
-              <p class="text-muted mt-2 text-sm leading-relaxed">This release delegates login to an external OIDC provider. It does not include built-in passkey sign-in or user self-service recovery. Account recovery is a host CLI operation over the local admin socket; the bearer-token HTTP API refuses it.</p>
-            </div>
-            <div>
-              <h3 class="font-semibold">Experimental features</h3>
-              <p class="text-muted mt-2 text-sm leading-relaxed">Outbound tunnels, rate limiting and Telegram alerts exist in the codebase but are experimental, off by default, and outside the alpha's release promise. They are not part of the supported deployment path.</p>
+    <!-- Three people -->
+    <section id="people" class="mx-auto max-w-6xl scroll-mt-20 px-5 py-20">
+      <p class="eyebrow">One gateway · three people</p>
+      <h2 class="h2 mt-3">One request. Three people.<br class="hidden sm:block" /> Three different screens.</h2>
+      <p class="lede">The same moment, seen by everyone it concerns. The person at the door never sees config, the operator never needs a terminal, the developer gets code — not a dashboard.</p>
+      <div class="border-line bg-bg-2 mt-9 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border px-4 py-3.5 sm:flex-nowrap">
+        <span class="text-muted font-mono text-[0.8rem]">18:03:40</span>
+        <span class="text-[0.95rem]"><b class="font-semibold">bob@acme.dev</b> opens <span class="font-mono text-sm">grafana.acme.dev</span></span>
+        <span class="from-line-2 to-brand hidden h-px flex-1 bg-gradient-to-r sm:block"></span>
+        <span class="tag tag-no">refused · not in engineering</span>
+      </div>
+      <div class="mt-4 grid gap-4 lg:grid-cols-3">
+        <article class="card flex flex-col overflow-hidden">
+          <div class="win m-3.5 mb-0 min-h-60"><div class="win-bar"><i></i><i></i><i></i><span>grafana.acme.dev</span></div>
+            <div class="px-4 pt-6 pb-4 text-center">
+              <div class="bg-no/15 text-no mx-auto mb-3 grid size-10 place-items-center rounded-full" aria-hidden="true">✕</div>
+              <p class="font-semibold">You can't open Grafana yet</p>
+              <p class="text-ink-2 mx-2 mt-1.5 mb-4 text-[0.8rem]">It is only for the <b class="text-ink font-medium">engineering</b> group.</p>
+              <span class="btn btn-brand btn-sm w-full justify-center">Ask Octavio for access</span>
+              <p class="text-muted mt-2.5 font-mono text-[0.68rem]">ref 7f3a·1c</p>
             </div>
           </div>
-        </div>
-      </section>
+          <div class="grid gap-2 p-5">
+            <div class="flex items-center justify-between gap-3"><h3 class="flex items-center gap-2.5 text-[1.05rem] font-semibold"><span class="tag tag-brand">01</span>Bob, at the door</h3><span class="tag tag-plain">designed</span></div>
+            <p class="text-ink-2 text-sm">A reason in plain words and a way out — not a bare 403.</p>
+            <p class="text-muted text-[0.8rem]">Never sees <b class="text-ink-2 font-medium">policy, other people's groups, config</b></p>
+          </div>
+        </article>
+        <article class="card flex flex-col overflow-hidden">
+          <div class="win m-3.5 mb-0 min-h-60"><div class="win-bar"><i></i><i></i><i></i><span>console · Operate</span></div>
+            <div class="grid gap-2.5 p-4">
+              <div class="text-muted flex justify-between font-mono text-[0.7rem]"><span>REQUESTS FOR ACCESS</span><span class="text-brand-2">1 new</span></div>
+              <div class="border-line bg-surface rounded-lg border p-3">
+                <p class="text-sm"><b class="font-semibold">Bob M.</b> wants <b class="font-semibold">Grafana</b></p>
+                <p class="text-muted mt-0.5 text-xs">needs group engineering · 18:03</p>
+                <div class="mt-3 flex gap-1.5"><span class="btn btn-brand btn-sm">Add to engineering</span><span class="btn btn-sm">Decline</span></div>
+              </div>
+              <p class="text-muted text-xs">One click. The policy itself does not change.</p>
+            </div>
+          </div>
+          <div class="grid gap-2 p-5">
+            <div class="flex items-center justify-between gap-3"><h3 class="flex items-center gap-2.5 text-[1.05rem] font-semibold"><span class="tag tag-brand">02</span>The operator</h3><span class="tag tag-plain">designed</span></div>
+            <p class="text-ink-2 text-sm">Sees who is asking for what, and answers with a button.</p>
+            <p class="text-muted text-[0.8rem]">Never needs <b class="text-ink-2 font-medium">a terminal, JSON or SSH</b></p>
+          </div>
+        </article>
+        <article class="card flex flex-col overflow-hidden">
+          <div class="win m-3.5 mb-0 min-h-60"><div class="win-bar"><i></i><i></i><i></i><span>~ switchboard policy explain</span></div>
+            <pre class="text-ink-2 overflow-x-auto p-4 font-mono text-[0.72rem] leading-[1.8]"><span class="text-muted">$</span> switchboard policy explain \
+  -host grafana.acme.dev \
+  -email bob@acme.dev -verified
+<span class="text-muted">route   </span> grafana.acme.dev <span class="text-wait">protected</span>
+<span class="text-muted">policy  </span> required_groups=[engineering]
+<span class="text-muted">decision</span> <span class="text-no">denied</span>
+<span class="text-muted">code    </span> missing_required_group</pre>
+          </div>
+          <div class="grid gap-2 p-5">
+            <div class="flex items-center justify-between gap-3"><h3 class="flex items-center gap-2.5 text-[1.05rem] font-semibold"><span class="tag tag-brand">03</span>The developer</h3><span class="tag tag-ok">available today</span></div>
+            <p class="text-ink-2 text-sm">The exact rule and a stable code — scriptable and testable.</p>
+            <p class="text-muted text-[0.8rem]">Never has to <b class="text-ink-2 font-medium">click through a dashboard</b></p>
+          </div>
+        </article>
+      </div>
+      <p class="text-muted mt-4 text-[0.8rem]">"Designed" screens are where the console and the visitor pages are going (<a class="text-ink-2 underline decoration-line-2 underline-offset-4" href="#roadmap">roadmap</a>); the decision underneath them is the same one the developer sees today.</p>
+    </section>
 
-      <!-- How it works -->
-      <section id="how" class="border-line/70 scroll-mt-20 border-t">
-        <div class="mx-auto grid max-w-6xl gap-12 px-5 py-20 lg:grid-cols-[1fr_1.1fr]">
-          <div class="min-w-0">
-            <p class="plate"><b>02</b> / how a request flows</p>
-            <h2 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">One pipeline, in one place.</h2>
-            <p class="text-muted mt-4 leading-relaxed">
-              Every request walks the same ordered stages. Security decisions are pure functions that return a decision with a
-              stable code and a human reason, so the proxy, the CLI and the console can never disagree about why.
-            </p>
-            <pre class="code mt-8"><span class="text-muted">$ switchboard policy explain -host app.example.com \
+    <!-- What works -->
+    <section id="today" class="border-line/60 scroll-mt-20 border-t">
+      <div class="mx-auto max-w-6xl px-5 py-20">
+        <p class="eyebrow">Included in alpha.1</p>
+        <h2 class="h2 mt-3">What works, and where it has run.</h2>
+        <p class="lede">The alpha has automated test coverage and limited Linux dogfooding by one operator. Each card names its evidence and its boundary; none of it is a production-readiness claim.</p>
+        <div class="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {shipped.map((f) => (
+            <article class="card flex flex-col p-5">
+              <div class="flex items-center justify-between"><h3 class="font-semibold">{f.t}</h3><span class="dot dot-ok"></span></div>
+              <p class="text-ink-2 mt-2 flex-1 text-sm leading-relaxed" set:html={code(f.d)} />
+              <p class="border-line text-muted mt-4 border-t pt-3 font-mono text-[0.7rem] leading-relaxed">{f.evidence}</p>
+            </article>
+          ))}
+          <article class="border-brand/40 bg-brand/[0.06] flex flex-col rounded-2xl border p-5">
+            <div class="flex items-center justify-between"><h3 class="font-semibold">Since alpha.1, on main</h3><span class="dot dot-brand"></span></div>
+            <ul class="mt-3 grid gap-3 text-sm">
+              {sinceAlpha.map((s) => <li><span class="text-ink font-medium">{s.t}</span> <span class="text-muted font-mono text-[0.7rem]">{s.id}</span><p class="text-ink-2 mt-0.5">{s.d}</p></li>)}
+            </ul>
+          </article>
+        </div>
+        <div class="border-line mt-8 grid gap-6 border-t pt-6 md:grid-cols-2">
+          <div>
+            <h3 class="font-semibold">Identity boundary</h3>
+            <p class="text-ink-2 mt-2 text-sm leading-relaxed">The alpha.1 release delegates login to an external OIDC provider; native passkey sign-in landed on main after it. There is no user self-service recovery: account recovery is a host CLI operation over the local admin socket, and the bearer-token HTTP API refuses it.</p>
+          </div>
+          <div>
+            <h3 class="font-semibold">Experimental features</h3>
+            <p class="text-ink-2 mt-2 text-sm leading-relaxed">Outbound tunnels, rate limiting and Telegram alerts exist in the codebase but are experimental, off by default, and outside the alpha's release promise. They are not part of the supported deployment path.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- How a request flows -->
+    <section id="how" class="border-line/60 scroll-mt-20 border-t">
+      <div class="mx-auto grid max-w-6xl gap-12 px-5 py-20 lg:grid-cols-[1fr_1.1fr]">
+        <div class="min-w-0">
+          <p class="eyebrow">How a request flows</p>
+          <h2 class="h2 mt-3">One pipeline, in one place.</h2>
+          <p class="lede">Every request walks the same ordered stages. Security decisions are pure functions that return a stable code and a human reason, so the proxy, the CLI and the console can never disagree about why.</p>
+          <pre class="code mt-8"><span class="text-muted">$ switchboard policy explain -host app.example.com \
     -email ana@example.com -verified -groups support</span>
 route:     app.example.com (protected)
 policy:    allowed_domains=[example.com] required_groups=[engineering]
-decision:  <span class="text-red">denied</span>
+decision:  <span class="text-no">denied</span>
 code:      missing_required_group
 reason:    account is missing required group engineering
 scope:     authorization only; OIDC, session and transport are not evaluated</pre>
+        </div>
+        <ol class="card divide-line self-start divide-y">
+          {pipeline.map((p, i) => (
+            <li class="flex items-center gap-3 px-4 py-3.5 sm:gap-4 sm:px-5">
+              <span class="text-muted w-6 font-mono text-xs">{String(i + 1).padStart(2, "0")}</span>
+              <span class={`dot dot-${p.state}`}></span>
+              <span class="w-20 shrink-0 font-mono text-sm sm:w-24">{p.s}</span>
+              <span class="text-ink-2 text-sm">{p.d}</span>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+
+    <!-- Roadmap -->
+    <section id="roadmap" class="border-line/60 scroll-mt-20 border-t">
+      <div class="mx-auto max-w-6xl px-5 py-20">
+        <p class="eyebrow">Roadmap · read from the project tracker on every build</p>
+        <h2 class="h2 mt-3">Everything we are building, in the open.</h2>
+        <p class="lede">Not a wishlist: each line is a task with an ID, done criteria and evidence in the tracker. The long-range goal is a transparency log that lets anyone holding a copy check every certificate, policy change and grant — a direction, not a claim.</p>
+
+        <ol class="mt-9 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {trains.map((t) => (
+            <li class={`card p-4 ${t.now ? "border-brand/50" : ""}`}>
+              <div class="flex items-center justify-between font-mono text-sm"><span><span class={t.now ? "text-brand-2" : "text-ink"}>{t.v}</span> · {t.n}</span><span class={`dot ${t.now ? "dot-brand" : "dot-off"}`}></span></div>
+              <p class="text-muted mt-1 font-mono text-xs">{t.now ? "now · " : ""}{t.when}</p>
+            </li>
+          ))}
+        </ol>
+
+        <dl class="border-line mt-4 grid grid-cols-2 overflow-hidden rounded-2xl border sm:grid-cols-5">
+          {stats.map((s) => (
+            <div class="bg-surface border-line border-r border-b p-4 last:border-r-0 sm:border-b-0 sm:p-5">
+              <dt class="text-muted flex items-center gap-2 text-[0.8rem]"><span class={`dot dot-${s.dot}`}></span>{s.label}</dt>
+              <dd class="mt-1 text-3xl font-semibold tracking-[-0.03em]">{s.n}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <style set:html={tabCss} />
+        <div class="mt-7">
+          <input type="radio" name="track" id="tab-all" class="sr-only" checked />
+          {byTrack.map((t) => <input type="radio" name="track" id={`tab-${slug(t.name)}`} class="sr-only" />)}
+          <div class="tabs flex flex-wrap gap-1.5" role="group" aria-label="Filter the roadmap by track">
+            <label for="tab-all" class="border-line-2 text-ink-2 hover:text-ink cursor-pointer rounded-full border px-3 py-1.5 text-[0.85rem]">All tracks</label>
+            {byTrack.map((t) => <label for={`tab-${slug(t.name)}`} class="border-line-2 text-ink-2 hover:text-ink cursor-pointer rounded-full border px-3 py-1.5 text-[0.85rem]">{t.name}</label>)}
           </div>
-          <ol class="panel divide-line divide-y self-start">
-            {pipeline.map((p, i) => (
-              <li class="flex items-center gap-3 px-4 py-3.5 sm:gap-4 sm:px-5">
-                <span class="text-muted w-6 font-mono text-xs">{String(i + 1).padStart(2, "0")}</span>
-                <span class={`lamp lamp-${p.state}`}></span>
-                <span class="w-20 shrink-0 font-mono text-sm sm:w-24">{p.s}</span>
-                <span class="text-muted text-sm">{p.d}{p.state === "idle" ? " — planned" : p.state === "wait" ? " — in progress" : ""}</span>
+          <div class="tracks mt-5 gap-4 md:columns-2 lg:columns-3">
+            {byTrack.map((t) => {
+              const total = t.closed + t.open.length;
+              const busy = t.open.filter((x) => x.state === "progress").length;
+              return (
+                <article class="track card mb-4 break-inside-avoid p-5" data-track={slug(t.name)}>
+                  <div class="flex items-baseline justify-between gap-3"><h3 class="font-semibold">{t.name}</h3><span class="text-muted shrink-0 font-mono text-[0.7rem]">{t.closed} done · {t.open.length} open</span></div>
+                  <p class="text-muted mt-1 text-[0.8rem]">{t.blurb}</p>
+                  <div class="bg-line mt-3 mb-4 flex h-1 overflow-hidden rounded-full" aria-hidden="true">
+                    <span class="bg-ok" style={`width:${(100 * t.closed) / total}%`}></span>
+                    <span class="bg-wait" style={`width:${(100 * busy) / total}%`}></span>
+                  </div>
+                  <ul class="grid gap-2">
+                    {t.open.slice(0, firstShown).map((x) => (
+                      <li class="grid grid-cols-[10px_1fr_auto] items-baseline gap-2.5 text-[0.84rem]"><span class={`dot dot-${stateDot[x.state]}`} title={stateWord[x.state]}></span><span class="text-ink-2">{x.title}<span class="sr-only"> ({stateWord[x.state]})</span></span><span class="text-muted font-mono text-[0.66rem]">{x.id}</span></li>
+                    ))}
+                  </ul>
+                  {t.open.length > firstShown && (
+                    <details class="mt-2">
+                      <summary class="text-muted hover:text-ink cursor-pointer text-[0.8rem]">{t.open.length - firstShown} more</summary>
+                      <ul class="mt-2 grid gap-2">
+                        {t.open.slice(firstShown).map((x) => (
+                          <li class="grid grid-cols-[10px_1fr_auto] items-baseline gap-2.5 text-[0.84rem]"><span class={`dot dot-${stateDot[x.state]}`} title={stateWord[x.state]}></span><span class="text-ink-2">{x.title}<span class="sr-only"> ({stateWord[x.state]})</span></span><span class="text-muted font-mono text-[0.66rem]">{x.id}</span></li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        </div>
+        <p class="text-muted mt-2 flex flex-wrap gap-x-5 gap-y-1 text-[0.8rem]"><span class="flex items-center gap-2"><span class="dot dot-wait"></span>in progress</span><span class="flex items-center gap-2"><span class="dot dot-brand"></span>ready</span><span class="flex items-center gap-2"><span class="dot dot-no"></span>blocked</span><span class="flex items-center gap-2"><span class="dot dot-off"></span>planned or idea</span></p>
+      </div>
+    </section>
+
+    <!-- Changelog -->
+    <section id="changelog" class="border-line/60 scroll-mt-20 border-t">
+      <div class="mx-auto max-w-6xl px-5 py-20">
+        <p class="eyebrow">Changelog · read from IMPLEMENTED.md</p>
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <h2 class="h2 mt-3">Shipped in the open.</h2>
+          <p class="text-muted font-mono text-xs">{log.length} entries since {day(log.at(-1)!.date)} · latest {day(log[0].date)}</p>
+        </div>
+        <ul class="mt-8">
+          {log.slice(0, 10).map((c) => (
+            <li class="border-line grid grid-cols-[4.5rem_1fr] items-baseline gap-x-4 gap-y-1 border-b py-3.5 sm:grid-cols-[4.5rem_6.5rem_1fr]">
+              <span class="text-muted font-mono text-[0.8rem]">{day(c.date)}</span>
+              <span class="text-brand-2 font-mono text-[0.78rem] sm:order-none">{c.id || "—"}</span>
+              <span class="col-span-2 text-[0.95rem] sm:col-span-1">{c.title}</span>
+            </li>
+          ))}
+        </ul>
+        <details class="mt-2">
+          <summary class="text-muted hover:text-ink cursor-pointer py-2 text-sm">All {log.length} entries</summary>
+          <ul>
+            {log.slice(10).map((c) => (
+              <li class="border-line grid grid-cols-[4.5rem_1fr] items-baseline gap-x-4 border-b py-2.5 sm:grid-cols-[4.5rem_6.5rem_1fr]">
+                <span class="text-muted font-mono text-[0.78rem]">{day(c.date)}</span>
+                <span class="text-brand-2 font-mono text-[0.75rem]">{c.id || "—"}</span>
+                <span class="text-ink-2 col-span-2 text-sm sm:col-span-1">{c.title}</span>
               </li>
             ))}
-          </ol>
-        </div>
-      </section>
+          </ul>
+        </details>
+      </div>
+    </section>
 
-      <!-- Console -->
-      <section id="console" class="border-line/70 scroll-mt-20 border-t">
-        <div class="mx-auto max-w-6xl px-5 py-20">
-          <p class="plate"><b>03</b> / the access console</p>
-          <div class="mt-3 flex flex-wrap items-end justify-between gap-4">
-            <h2 class="max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl">Ask the engine why — before anyone gets locked out.</h2>
-            <p class="text-muted max-w-md text-sm">Loopback-only by design. The simulator needs the admin token, because an answer that reveals who is allowed is itself sensitive.</p>
-          </div>
-          <figure class="panel mt-10 overflow-hidden p-2">
-            <img src="/console-simulator.png" alt="The Switchboard console's policy simulator showing a denied request: the account is missing the required group oncall." class="w-full rounded-lg" loading="lazy" width="1440" height="1200" />
-            <figcaption class="text-muted px-3 py-2 font-mono text-xs">Development screenshot of the policy simulator. Its navigation predates alpha.1; use it as an illustration of the decision view, not a current full-console capture.</figcaption>
-          </figure>
+    <!-- Get started -->
+    <section id="start" class="border-line/60 scroll-mt-20 border-t">
+      <div class="mx-auto grid max-w-6xl gap-10 px-5 py-20 lg:grid-cols-[0.9fr_1.1fr]">
+        <div>
+          <p class="eyebrow">Get started</p>
+          <h2 class="h2 mt-3">Try the v0.1.0-alpha.1 release.</h2>
+          <p class="lede">The prerelease has platform archives and a quickstart. The repository is private, so you need GitHub access to download it. Alpha builds can change their interfaces and state format.</p>
+          <ul class="text-ink-2 mt-6 grid gap-2.5 text-sm">
+            <li class="flex gap-2.5"><span class="dot dot-ok mt-1.5"></span>Linux, macOS and Windows archives are attached to alpha.1.</li>
+            <li class="flex gap-2.5"><span class="dot dot-ok mt-1.5"></span><span><code class="text-ink font-mono text-xs">validate</code> checks a config without starting anything.</span></li>
+            <li class="flex gap-2.5"><span class="dot dot-wait mt-1.5"></span>Dogfooding is limited to a single Linux host; not production-ready.</li>
+          </ul>
         </div>
-      </section>
-
-      <!-- Roadmap -->
-      <section id="roadmap" class="border-line/70 scroll-mt-20 border-t">
-        <div class="mx-auto max-w-6xl px-5 py-20">
-          <p class="plate"><b>04</b> / roadmap</p>
-          <h2 class="mt-3 max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl">Toward zero trust you can verify.</h2>
-          <p class="text-muted mt-3 max-w-3xl leading-relaxed">
-            The long-range goal: every certificate issued, policy changed and access granted lands in a transparency log that
-            anyone holding a copy can check — so not even the operator can quietly change who has access. That is a direction,
-            not a claim; each release promises only what its tests and deployments show.
-          </p>
-          <div class="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {roadmap.map((r) => (
-              <article class={`panel p-5 ${r.now ? "ring-amber/50 ring-1" : ""}`}>
-                <div class="flex items-center justify-between">
-                  <span class="font-mono text-sm"><span class={r.now ? "text-amber" : "text-ink"}>{r.v}</span> · {r.n}</span>
-                  <span class={`lamp ${r.now ? "lamp-wait" : "lamp-idle"}`}></span>
-                </div>
-                <p class="plate mt-1">{r.now ? "in progress · " : ""}{r.when}</p>
-                <ul class="text-muted mt-4 space-y-2 text-sm">
-                  {r.items.map((i) => <li class="flex gap-2"><span class="text-muted">›</span>{i}</li>)}
-                </ul>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <!-- Get started -->
-      <section id="start" class="border-line/70 scroll-mt-20 border-t">
-        <div class="mx-auto grid max-w-6xl gap-10 px-5 py-20 lg:grid-cols-[0.9fr_1.1fr]">
-          <div>
-            <p class="plate"><b>05</b> / get started</p>
-            <h2 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Try the v0.1.0-alpha.1 release.</h2>
-            <p class="text-muted mt-4 leading-relaxed">The prerelease has platform archives and a quickstart. The repository is private, so you need GitHub access to download it. Alpha builds can change their interfaces and state format.</p>
-            <ul class="text-muted mt-6 space-y-2 text-sm">
-              <li class="flex gap-2"><span class="lamp lamp-on mt-1.5"></span>Linux, macOS and Windows archives are attached to alpha.1.</li>
-              <li class="flex gap-2"><span class="lamp lamp-on mt-1.5"></span><code class="text-ink font-mono text-xs">validate</code> checks a config without starting anything.</li>
-              <li class="flex gap-2"><span class="lamp lamp-wait mt-1.5"></span>Dogfooding is limited to a single Linux host; not production-ready.</li>
-            </ul>
-          </div>
-          <div class="min-w-0 space-y-4">
-            <pre class="code"><span class="text-muted"># config.json</span>
+        <div class="grid min-w-0 gap-4">
+          <pre class="code"><span class="text-muted"># config.json</span>
 &#123;
   "listen": ":8888",
   "admin": &#123; "listen": "127.0.0.1:9090" &#125;,
@@ -250,24 +389,20 @@ scope:     authorization only; OIDC, session and transport are not evaluated</pr
     &#123; "host": "docs.localhost:8888", "target": "http://localhost:4321" &#125;
   ]
 &#125;</pre>
-            <pre class="code"><span class="text-muted">$</span> git clone {repo}
-<span class="text-muted">$</span> cd switchboard
-<span class="text-muted">$</span> ./switchboard validate -config config.json
+          <pre class="code"><span class="text-muted">$</span> ./switchboard validate -config config.json
 <span class="text-muted">$</span> ./switchboard -config config.json
-<span class="text-muted"># release archive includes QUICKSTART.md</span></pre>
-            <p class="text-muted text-sm">Source checkout steps are for collaborators with repository access. For a binary, use the release link.</p>
-            <a href={release} class="btn btn-primary">Open v0.1.0-alpha.1 <span aria-hidden="true">↗</span></a>
-          </div>
+<span class="text-muted"># the release archive includes QUICKSTART.md</span></pre>
+          <div><a href={release} class="btn btn-brand">Open v0.1.0-alpha.1 <span aria-hidden="true">↗</span></a></div>
         </div>
-      </section>
-    </main>
-
-    <footer class="border-line/70 border-t">
-      <div class="text-muted mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-8 text-sm">
-        <span class="flex items-center gap-2.5"><Logo size={22} /> <span class="font-mono text-xs">switchboard · MIT</span></span>
-        <span>Built in public by <a href="https://octaviosantacruz.com" class="text-ink underline decoration-muted underline-offset-4">Octavio Santacruz</a> — a year-long learning project, Oct 2026 – Sep 2027.</span>
-        {sourcePublic ? <a href={repo} class="hover:text-ink font-mono text-xs">github.com/octaviosantacruz/switchboard</a> : <span class="font-mono text-xs">source: private · alpha access requires GitHub permission</span>}
       </div>
-    </footer>
-  </div>
+    </section>
+  </main>
+
+  <footer class="border-line/60 border-t">
+    <div class="text-muted mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-8 text-sm">
+      <span class="flex items-center gap-2.5"><Logo size={20} /><span class="font-mono text-xs">switchboard · MIT</span></span>
+      <span>Built in public by <a href="https://octaviosantacruz.com" class="text-ink underline decoration-line-2 underline-offset-4">Octavio Santacruz</a> — a year-long project, Oct 2026 – Sep 2027.</span>
+      {sourcePublic ? <a href={repo} class="hover:text-ink font-mono text-xs">github.com/octaviosantacruz/switchboard</a> : <span class="font-mono text-xs">source: private · alpha access requires GitHub permission</span>}
+    </div>
+  </footer>
 </Base>
