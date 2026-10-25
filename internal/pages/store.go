@@ -40,6 +40,12 @@ type Deployment struct {
 	Files     int       `json:"files"`
 	Bytes     int64     `json:"bytes"`
 	Live      bool      `json:"live"`
+	// Source metadata is stored for deployment provenance but is not part of
+	// the unauthenticated local site-list response. A future endpoint can
+	// expose it through an explicit authenticated view.
+	Project   string `json:"-"`
+	CommitSHA string `json:"-"`
+	RunURL    string `json:"-"`
 }
 
 // Site is a site with its retained deployments, newest first.
@@ -247,7 +253,8 @@ func (s *Store) Rollback(ctx context.Context, site, id string) (Deployment, erro
 // within one second are broken by insertion order (rowid), never by id.
 func (s *Store) Sites(ctx context.Context) ([]Site, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT d.site, d.id, d.created_at, d.files, d.bytes, l.deployment_id, l.changed_at
+		`SELECT d.site, d.id, d.created_at, d.files, d.bytes, l.deployment_id, l.changed_at,
+		       d.project, d.commit_sha, d.run_url
 		 FROM deployments d LEFT JOIN site_live l ON l.site = d.site
 		 ORDER BY d.site, d.created_at DESC, d.rowid DESC`)
 	if err != nil {
@@ -260,9 +267,11 @@ func (s *Store) Sites(ctx context.Context) ([]Site, error) {
 		var created int64
 		var live sql.NullString
 		var changed sql.NullInt64
-		if err := rows.Scan(&d.Site, &d.ID, &created, &d.Files, &d.Bytes, &live, &changed); err != nil {
+		var project, commitSHA, runURL sql.NullString
+		if err := rows.Scan(&d.Site, &d.ID, &created, &d.Files, &d.Bytes, &live, &changed, &project, &commitSHA, &runURL); err != nil {
 			return nil, fmt.Errorf("list deployments: %w", err)
 		}
+		d.Project, d.CommitSHA, d.RunURL = project.String, commitSHA.String, runURL.String
 		d.CreatedAt = time.Unix(created, 0).UTC()
 		d.Live = live.Valid && live.String == d.ID
 		if len(sites) == 0 || sites[len(sites)-1].Name != d.Site {
@@ -282,12 +291,14 @@ func (s *Store) Sites(ctx context.Context) ([]Site, error) {
 func readDeployment(ctx context.Context, tx *sql.Tx, site, id string) (Deployment, error) {
 	d := Deployment{Site: site, ID: id, Live: true}
 	var created int64
-	err := tx.QueryRowContext(ctx, `SELECT created_at, files, bytes FROM deployments WHERE site = ? AND id = ?`, site, id).
-		Scan(&created, &d.Files, &d.Bytes)
+	var project, commitSHA, runURL sql.NullString
+	err := tx.QueryRowContext(ctx, `SELECT created_at, files, bytes, project, commit_sha, run_url FROM deployments WHERE site = ? AND id = ?`, site, id).
+		Scan(&created, &d.Files, &d.Bytes, &project, &commitSHA, &runURL)
 	if err != nil {
 		return Deployment{}, fmt.Errorf("read deployment: %w", err)
 	}
 	d.CreatedAt = time.Unix(created, 0).UTC()
+	d.Project, d.CommitSHA, d.RunURL = project.String, commitSHA.String, runURL.String
 	return d, nil
 }
 

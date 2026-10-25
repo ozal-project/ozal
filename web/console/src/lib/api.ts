@@ -144,6 +144,21 @@ export async function explain(token: string, host: string, principal: Report["pr
 // Static-site deployments (PAGES-002).
 export type Deployment = { site: string; id: string; created_at: string; files: number; bytes: number; live: boolean };
 export type Site = { name: string; live: string; changed_at: string; deployments: Deployment[] };
+export type ProjectDeployer =
+  | { type: "github"; github: { repository_id: number; repository_owner_id: number; ref: string; workflow_ref?: string } }
+  | { type: "token"; token_configured: boolean };
+export type Project = { name: string; site: string; hostnames: string[]; deployers: ProjectDeployer[] };
+
+export async function fetchProjects(token: string, signal?: AbortSignal): Promise<Project[]> {
+  const res = await fetch("/_/api/projects", {
+    cache: "no-store",
+    headers: { Authorization: `Bearer ${token}` },
+    signal: boundedSignal(signal),
+  });
+  if (res.status === 401) throw new Error("The admin token was rejected.");
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return ((await res.json()) as { projects: Project[] }).projects ?? [];
+}
 
 export class PagesDisabledError extends Error {}
 

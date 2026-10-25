@@ -36,6 +36,20 @@ func TestJSONSchemaMatchesConfigFieldsAndDeclaresCrossFieldConstraints(t *testin
 	if got := properties["routes"].(map[string]any)["minItems"]; got != float64(1) {
 		t.Fatalf("routes.minItems = %v, want 1", got)
 	}
+	projects := properties["projects"].(map[string]any)
+	projectItem := projects["items"].(map[string]any)
+	projectFields := projectItem["properties"].(map[string]any)
+	if projectFields["hostnames"].(map[string]any)["minItems"] != float64(1) || projectFields["deployers"].(map[string]any)["minItems"] != float64(1) {
+		t.Fatalf("project schema does not require hostnames and deployers: %v", projectFields)
+	}
+	deployer := projectFields["deployers"].(map[string]any)["items"].(map[string]any)
+	if len(deployer["oneOf"].([]any)) != 2 {
+		t.Fatalf("deployer authentication alternatives = %v", deployer["oneOf"])
+	}
+	deployerFields := deployer["properties"].(map[string]any)
+	if deployerFields["token"].(map[string]any)["pattern"] != "^(env:.+|file:.+)$" {
+		t.Fatalf("project token schema allows non-reference secrets: %v", deployerFields["token"])
+	}
 	route := properties["routes"].(map[string]any)["items"].(map[string]any)
 	if got := len(route["oneOf"].([]any)); got != 5 {
 		t.Fatalf("route destination alternatives = %d, want 5", got)

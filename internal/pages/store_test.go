@@ -112,6 +112,38 @@ func TestDeployRollbackAndRestart(t *testing.T) {
 	}
 }
 
+func TestDeploymentProjectMetadataRoundTrips(t *testing.T) {
+	ctx := context.Background()
+	db := migratedDB(t)
+	s := newStore(t, db, t.TempDir(), DefaultKeep)
+	deployed, err := s.Deploy(ctx, "portfolio", site(t, "build"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx,
+		`UPDATE deployments SET project = ?, commit_sha = ?, run_url = ? WHERE site = ? AND id = ?`,
+		"portfolio", "0123456789abcdef", "https://github.com/acme/site/actions/runs/42", deployed.Site, deployed.ID); err != nil {
+		t.Fatalf("write deployment metadata: %v", err)
+	}
+
+	sites, err := s.Sites(ctx)
+	if err != nil || len(sites) != 1 || len(sites[0].Deployments) != 1 {
+		t.Fatalf("Sites = %+v, %v", sites, err)
+	}
+	got := sites[0].Deployments[0]
+	if got.Project != "portfolio" || got.CommitSHA != "0123456789abcdef" || got.RunURL != "https://github.com/acme/site/actions/runs/42" {
+		t.Fatalf("deployment metadata = %+v", got)
+	}
+
+	rolledBack, err := s.Rollback(ctx, deployed.Site, deployed.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rolledBack.Project != got.Project || rolledBack.CommitSHA != got.CommitSHA || rolledBack.RunURL != got.RunURL {
+		t.Fatalf("rollback response metadata = %+v, want %+v", rolledBack, got)
+	}
+}
+
 func TestRedeployingTheSameBuildReusesIt(t *testing.T) {
 	ctx := context.Background()
 	s := newStore(t, migratedDB(t), t.TempDir(), DefaultKeep)

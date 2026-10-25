@@ -67,6 +67,28 @@ func JSONSchema() ([]byte, error) {
 	resourceProperties["risky_actions"].(map[string]any)["items"].(map[string]any)["enum"] = []string{"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "CONNECT", "OPTIONS", "TRACE"}
 	routeProperties["audit_mode"].(map[string]any)["enum"] = []string{"required", "best_effort"}
 
+	projects := properties["projects"].(map[string]any)
+	projects["description"] = "Optional deployment trust declarations. They do not change existing site routes."
+	projects["items"].(map[string]any)["description"] = "One project owns a Pages site and the hostnames routed to it."
+	project := projects["items"].(map[string]any)["properties"].(map[string]any)
+	project["name"].(map[string]any)["minLength"] = 1
+	project["site"].(map[string]any)["minLength"] = 1
+	project["hostnames"].(map[string]any)["minItems"] = 1
+	project["hostnames"].(map[string]any)["uniqueItems"] = true
+	project["hostnames"].(map[string]any)["items"].(map[string]any)["minLength"] = 1
+	project["deployers"].(map[string]any)["minItems"] = 1
+	deployer := project["deployers"].(map[string]any)["items"].(map[string]any)
+	deployer["oneOf"] = []any{
+		map[string]any{"required": []string{"github"}},
+		map[string]any{"required": []string{"token"}},
+	}
+	deployerProperties := deployer["properties"].(map[string]any)
+	deployerProperties["token"].(map[string]any)["pattern"] = "^(env:.+|file:.+)$"
+	github := deployerProperties["github"].(map[string]any)["properties"].(map[string]any)
+	github["repository_id"].(map[string]any)["minimum"] = 1
+	github["repository_owner_id"].(map[string]any)["minimum"] = 1
+	github["ref"].(map[string]any)["pattern"] = "^refs/(heads|tags)/.+$"
+
 	tls := properties["tls"].(map[string]any)
 	tlsRequired := tls["required"].([]string)
 	for i, name := range tlsRequired {

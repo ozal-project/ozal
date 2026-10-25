@@ -4,6 +4,7 @@
     "listen": "127.0.0.1:9090",
     "token": "replace-with-a-random-token"
   },
+  "projects": [],
   "routes": [
     { "host": "magiclink.localhost:8888", "target": "http://localhost:8090" },
     {

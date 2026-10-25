@@ -35,6 +35,20 @@ func TestLoadValidConfig(t *testing.T) {
 	}
 }
 
+func TestExampleConfigLoadsWithoutProjectDeclarations(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "config.example.json"))
+	if err != nil {
+		t.Fatalf("read example config: %v", err)
+	}
+	cfg, err := Parse(data)
+	if err != nil {
+		t.Fatalf("parse example config: %v", err)
+	}
+	if len(cfg.Projects) != 0 || len(cfg.Routes) != 2 {
+		t.Fatalf("example config projects/routes = %d/%d, want 0/2", len(cfg.Projects), len(cfg.Routes))
+	}
+}
+
 func TestParseValidatesDeclaredRouteResource(t *testing.T) {
 	base := `{"listen":":8888","routes":[{"host":"a.localhost","target":"http://localhost:9000","resource":{"owner":"platform","data_class":"account_data","sensitivity":"restricted","risky_actions":["POST","DELETE"]}}]}`
 	cfg, err := Parse([]byte(base))

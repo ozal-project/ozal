@@ -8,7 +8,7 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { Skeleton } from "$lib/components/ui/skeleton";
-  import { fetchSites, fetchStatus, rollback, PagesDisabledError, type Site, type StatusResponse, type Deployment } from "$lib/api";
+  import { fetchSites, fetchProjects, fetchStatus, rollback, PagesDisabledError, type Site, type Project, type StatusResponse, type Deployment } from "$lib/api";
   import { LatestRequest } from "$lib/latestRequest";
   import Freshness from "$lib/Freshness.svelte";
   import ConfirmAction from "$lib/ConfirmAction.svelte";
@@ -22,7 +22,11 @@
   let loading = $state(false);
   let observedAt = $state<number | null>(null);
   let routeStatus = $state<StatusResponse | null>(null);
+  let projects = $state<Project[] | null>(null);
+  let projectsError = $state("");
+  let projectsLoading = $state(false);
   const sitesRequest = new LatestRequest();
+  const projectsRequest = new LatestRequest();
   // The token is shared by the console pages, in this tab's memory only.
   import { admin } from "$lib/adminToken.svelte";
   import { afterLoad } from "$lib/loadState";
@@ -34,7 +38,34 @@
   let notices = $state<Record<string, { text: string; ok: boolean }>>({});
   let tokenInput = $state<HTMLInputElement | null>(null);
 
+  async function loadProjects() {
+    const token = admin.token.trim();
+    if (!token) {
+      projectsRequest.cancel();
+      projects = null;
+      projectsError = "";
+      projectsLoading = false;
+      return;
+    }
+    const run = projectsRequest.start();
+    projectsLoading = true;
+    projectsError = "";
+    try {
+      const result = await fetchProjects(token, run.signal);
+      if (!run.isCurrent()) return;
+      projects = result;
+    } catch (e) {
+      if (!run.isCurrent()) return;
+      projects = null;
+      projectsError = (e as Error).message;
+    } finally {
+      if (run.isCurrent()) projectsLoading = false;
+      run.finish();
+    }
+  }
+
   async function load() {
+    void loadProjects();
     const run = sitesRequest.start();
     loading = true;
     const [siteResult, statusResult] = await Promise.allSettled([fetchSites(run.signal), fetchStatus(run.signal)]);
@@ -51,7 +82,7 @@
     loading = false;
     run.finish();
   }
-  onMount(() => { load(); const t = setInterval(load, 15_000); return () => { clearInterval(t); sitesRequest.cancel(); Object.values(mutations).forEach((controller) => controller.abort()); }; });
+  onMount(() => { load(); const t = setInterval(load, 15_000); return () => { clearInterval(t); sitesRequest.cancel(); projectsRequest.cancel(); Object.values(mutations).forEach((controller) => controller.abort()); }; });
 
   function restore(site: Site, deployment: Deployment) {
     if (!routeStatus) {
@@ -128,6 +159,41 @@
       <Label for="token" class="text-muted-foreground flex items-center gap-1.5 font-mono text-[0.68rem] font-medium tracking-[0.12em] uppercase"><KeyIcon class="size-3.5" /> Admin token</Label>
       <Input id="token" type="password" bind:ref={tokenInput} bind:value={admin.token} placeholder="Bearer token from admin.token" autocomplete="off" spellcheck={false} class="font-mono" />
     </div>
+  </Panel>
+
+  <Panel index="01" label="Deploy policy" title="Projects" sub="Read-only view of which hostnames and publishers belong to each site. Secret references are never returned." class="mb-6">
+    {#if !admin.token.trim()}
+      <p class="text-muted-foreground text-sm">Enter the admin token above and refresh to read project trust settings.</p>
+    {:else if projectsLoading && !projects}
+      <div class="space-y-3" aria-busy="true" aria-label="Loading projects"><Skeleton class="h-20 w-full" /></div>
+    {:else if projectsError}
+      <p class="text-destructive text-sm" role="status">Projects could not be read ({projectsError}). <button class="underline" onclick={loadProjects}>Retry</button></p>
+    {:else if projects?.length === 0}
+      <p class="text-muted-foreground text-sm">No projects are configured. Existing site routes continue to work without project declarations.</p>
+    {:else if projects}
+      <ul class="divide-y">
+        {#each projects as project (project.name)}
+          <li class="py-4 first:pt-0 last:pb-0">
+            <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <h3 class="font-medium">{project.name}</h3>
+              <span class="text-muted-foreground font-mono text-xs">site: {project.site}</span>
+            </div>
+            <p class="text-muted-foreground mt-2 text-xs">Hostnames: {project.hostnames.join(", ") || "none"}</p>
+            <ul class="mt-2 space-y-1 text-xs">
+              {#each project.deployers as deployer, i (`${project.name}:${i}`)}
+                <li class="text-muted-foreground">
+                  {#if deployer.type === "github"}
+                    GitHub repository {deployer.github.repository_id} · owner {deployer.github.repository_owner_id} · <code class="font-mono">{deployer.github.ref}</code>{#if deployer.github.workflow_ref} · <code class="font-mono">{deployer.github.workflow_ref}</code>{/if}
+                  {:else}
+                    Project token configured
+                  {/if}
+                </li>
+              {/each}
+            </ul>
+          </li>
+        {/each}
+      </ul>
+    {/if}
   </Panel>
 
   {#if error && sites}<p class="border-warning/40 bg-warning/[0.06] mb-4 rounded-md border p-3 text-sm" role="status">Showing the last successful read. Refresh failed: {error}</p>{/if}

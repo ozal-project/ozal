@@ -56,6 +56,7 @@ func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 	h.mux.HandleFunc("GET /_/fonts/manrope.ttf", h.consoleFont)
 	h.mux.HandleFunc("GET /_/status", h.status)
 	h.mux.HandleFunc("GET /_/api/status", h.apiStatus)
+	h.mux.HandleFunc("GET /_/api/projects", h.requireBearer(h.listProjects))
 	h.mux.HandleFunc("POST /_/reload", h.requireBearer(h.reload))
 	h.mux.HandleFunc("POST /routes", h.requireBearer(h.addRoute))
 	h.mux.HandleFunc("DELETE /routes/{host}", h.requireBearer(h.deleteRoute))

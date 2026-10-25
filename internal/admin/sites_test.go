@@ -51,6 +51,18 @@ func (f *fakeDeployments) Sites(context.Context) ([]pages.Site, error) {
 	return []pages.Site{{Name: "blog", Live: strings.Repeat("a", 64)}}, nil
 }
 
+type metadataDeployments struct{ fakeDeployments }
+
+func (*metadataDeployments) Sites(context.Context) ([]pages.Site, error) {
+	return []pages.Site{{
+		Name: "blog", Live: strings.Repeat("a", 64),
+		Deployments: []pages.Deployment{{
+			Project: "private-project", CommitSHA: "private-commit",
+			RunURL: "https://github.com/private/repository/actions/runs/42",
+		}},
+	}}, nil
+}
+
 func sitesHandler(store *fakeDeployments, sink events.Sink, extra ...Option) http.Handler {
 	manager := &fakeManager{cfg: config.Config{Admin: config.Admin{Token: "secret"}}}
 	options := append([]Option{WithPages(store)}, extra...)
@@ -107,6 +119,20 @@ func TestDeployAndRollbackEmitEvents(t *testing.T) {
 	for _, event := range audit.events {
 		if event.Type != events.AdminMutationRequested || event.Host != "blog" {
 			t.Errorf("site mutation intent = %+v, want safe blog target", event)
+		}
+	}
+}
+
+func TestSiteListDoesNotExposeDeploymentSourceMetadata(t *testing.T) {
+	manager := &fakeManager{cfg: config.Config{Admin: config.Admin{Token: "secret"}}}
+	handler := New(manager, nil, WithPages(&metadataDeployments{}))
+	rec := request(handler, http.MethodGet, "/_/api/sites", "", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("site list = %d %s, want 200", rec.Code, rec.Body)
+	}
+	for _, value := range []string{"private-project", "private-commit", "private/repository", "actions/runs/42"} {
+		if strings.Contains(rec.Body.String(), value) {
+			t.Errorf("unauthenticated site list exposed deployment metadata %q: %s", value, rec.Body)
 		}
 	}
 }

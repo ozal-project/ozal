@@ -292,6 +292,7 @@ type Config struct {
 	Audit     *AuditConfig `json:"audit,omitempty"`
 	Tunnel    *Tunnel      `json:"tunnel,omitempty"`
 	Pages     *Pages       `json:"pages,omitempty"`
+	Projects  []Project    `json:"projects,omitempty"`
 	// UpstreamTimeoutSeconds is how long an upstream may take to start
 	// answering before the visitor gets a 504. Zero means the default (60);
 	// the response body is never limited.
@@ -697,6 +698,32 @@ func Validate(cfg Config) (*Config, error) {
 		}
 	}
 
+	if len(cfg.Projects) > 0 {
+		for i, project := range cfg.Projects {
+			for j, deployer := range project.Deployers {
+				if deployer.Token == "" {
+					continue
+				}
+				field := fmt.Sprintf("projects[%d].deployers[%d].token", i, j)
+				if err := ValidateSecretReference(field, deployer.Token); err != nil {
+					return nil, fmt.Errorf("config: %w", err)
+				}
+			}
+		}
+		if err := ValidateProjects(cfg.Projects, cfg.Routes); err != nil {
+			return nil, fmt.Errorf("config: %w", err)
+		}
+		for i := range cfg.Projects {
+			for j, rawHost := range cfg.Projects[i].Hostnames {
+				host, err := NormalizeHost(rawHost)
+				if err != nil {
+					return nil, fmt.Errorf("config: projects[%d].hostnames[%d] is invalid: %w", i, j, err)
+				}
+				cfg.Projects[i].Hostnames[j] = host
+			}
+		}
+	}
+
 	return &cfg, nil
 }
 
@@ -1080,6 +1107,25 @@ func Clone(source Config) Config {
 	clone.Routes = make([]Route, len(source.Routes))
 	for i, route := range source.Routes {
 		clone.Routes[i] = CloneRoute(route)
+	}
+	clone.Projects = CloneProjects(source.Projects)
+	return clone
+}
+
+// CloneProjects returns a deep copy of project configuration, including
+// nested GitHub trust records.
+func CloneProjects(projects []Project) []Project {
+	clone := make([]Project, len(projects))
+	for i, project := range projects {
+		clone[i] = project
+		clone[i].Hostnames = slices.Clone(project.Hostnames)
+		clone[i].Deployers = slices.Clone(project.Deployers)
+		for j, deployer := range project.Deployers {
+			if deployer.GitHub != nil {
+				github := *deployer.GitHub
+				clone[i].Deployers[j].GitHub = &github
+			}
+		}
 	}
 	return clone
 }
