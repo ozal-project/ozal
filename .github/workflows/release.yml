@@ -17,11 +17,11 @@ jobs:
       # Creating the draft release and uploading its assets.
       contents: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           # The changelog and {{ .CommitTimestamp }} need the full history.
           fetch-depth: 0
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
       # The same gate as ci.yml: a tag on an unverified commit releases nothing.
@@ -46,7 +46,7 @@ jobs:
           grep " ${archive}\$" "syft_${SYFT_VERSION}_checksums.txt" | sha256sum -c -
           tar -xzf "$archive" syft
           echo "$dir" >> "$GITHUB_PATH"
-      - uses: goreleaser/goreleaser-action@v6
+      - uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
         with:
           distribution: goreleaser
           # The version .goreleaser.yaml was tested with.
