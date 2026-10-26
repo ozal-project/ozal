@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import PageHeader from "$lib/PageHeader.svelte";
   import Panel from "$lib/Panel.svelte";
   import Stat from "$lib/Stat.svelte";
@@ -67,6 +67,7 @@
   }
 
   async function load() {
+    if (!admin.token.trim()) return;
     void loadProjects();
     const run = sitesRequest.start();
     loading = true;
@@ -89,7 +90,13 @@
     loading = false;
     run.finish();
   }
-  onMount(() => { load(); const t = setInterval(load, 15_000); return () => { clearInterval(t); sitesRequest.cancel(); projectsRequest.cancel(); Object.values(mutations).forEach((controller) => controller.abort()); }; });
+  $effect(() => {
+    const token = admin.token.trim();
+    sitesRequest.cancel(); projectsRequest.cancel();
+    sites = null; projects = null; routeStatus = null; error = ""; routeStatusError = ""; projectsError = ""; observedAt = null; disabled = false;
+    if (token) untrack(() => { void load(); });
+  });
+  onMount(() => { const t = setInterval(load, 15_000); return () => { clearInterval(t); sitesRequest.cancel(); projectsRequest.cancel(); Object.values(mutations).forEach((controller) => controller.abort()); }; });
 
   function restore(site: Site, deployment: Deployment) {
     if (!routeStatus || routeStatusError) {
@@ -146,7 +153,12 @@
   </div>
 </PageHeader>
 
-{#if disabled}
+{#if !admin.token.trim()}
+  <Panel label="Sites" title="Sign in to view sites">
+    <p class="text-muted-foreground text-sm">A Sites credential or a session with access to Sites is required.</p>
+    <Button class="mt-4" onclick={askForToken}>Sign in</Button>
+  </Panel>
+{:else if disabled}
   <Panel label="Pages" title="Not enabled on this edge">
     <p class="text-muted-foreground text-sm">Add a <code class="font-mono">pages</code> block (an absolute <code class="font-mono">dir</code>) and start Switchboard with <code class="font-mono">-db</code>. Routes then serve a deployment with <code class="font-mono">"site": "name"</code>.</p>
   </Panel>

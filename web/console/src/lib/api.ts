@@ -1,3 +1,5 @@
+import { admin, endSession } from "$lib/adminToken.svelte";
+
 // Typed views of the loopback admin API. The console never decides access:
 // verdicts always come from the server (auth.Explain).
 
@@ -112,8 +114,17 @@ const boundedSignal = (signal?: AbortSignal) => {
   return signal ? AbortSignal.any([signal, timeout]) : timeout;
 };
 
+// authedGet sends this tab's credential. Reads of the edge's state need one,
+// even on loopback; a 401 means it was revoked or the host changed the token.
+async function authedGet(url: string, signal?: AbortSignal): Promise<Response> {
+  const token = admin.token.trim();
+  const res = await fetch(url, { cache: "no-store", headers: token ? { Authorization: `Bearer ${token}` } : {}, signal: boundedSignal(signal) });
+  if (res.status === 401 && token && admin.token.trim() === token) endSession();
+  return res;
+}
+
 async function getJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
-  const res = await fetch(url, { cache: "no-store", signal: boundedSignal(signal) });
+  const res = await authedGet(url, signal);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json() as Promise<T>;
 }
@@ -164,7 +175,7 @@ export async function fetchProjects(token: string, signal?: AbortSignal): Promis
 export class PagesDisabledError extends Error {}
 
 export async function fetchSites(signal?: AbortSignal): Promise<Site[]> {
-  const res = await fetch("/_/api/sites", { cache: "no-store", signal: boundedSignal(signal) });
+  const res = await authedGet("/_/api/sites", signal);
   if (res.status === 404) throw new PagesDisabledError("Pages are not enabled on this edge.");
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return ((await res.json()) as { sites: Site[] }).sites ?? [];
@@ -193,7 +204,7 @@ export type People = { enabled: boolean; users: Person[]; protected_hosts: strin
 export type Invitation = { email: string; link: string; expires_at: string };
 
 export async function fetchPeople(signal?: AbortSignal): Promise<People> {
-  const res = await fetch("/_/api/people", { cache: "no-store", signal: boundedSignal(signal) });
+  const res = await authedGet("/_/api/people", signal);
   if (res.status === 404) return { enabled: false, users: [], protected_hosts: [] };
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const body = (await res.json()) as People;

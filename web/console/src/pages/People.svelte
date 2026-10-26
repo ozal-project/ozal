@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import GroupCatalog from "$lib/GroupCatalog.svelte";
   import Membership from "$lib/Membership.svelte";
   import PageHeader from "$lib/PageHeader.svelte";
@@ -46,6 +46,7 @@
   let reviewOpen = $state(false);
 
   async function load() {
+    if (!admin.token.trim()) return;
     const run = peopleRequest.start();
     loading = true;
     try {
@@ -64,7 +65,13 @@
       run.finish();
     }
   }
-  onMount(() => { load(); const t = setInterval(load, 15_000); return () => { clearInterval(t); peopleRequest.cancel(); inviteController?.abort(); Object.values(mutations).forEach((controller) => controller.abort()); }; });
+  $effect(() => {
+    const token = admin.token.trim();
+    peopleRequest.cancel();
+    people = null; error = ""; observedAt = null; created = null;
+    if (token) untrack(() => { void load(); });
+  });
+  onMount(() => { const t = setInterval(load, 15_000); return () => { clearInterval(t); peopleRequest.cancel(); inviteController?.abort(); Object.values(mutations).forEach((controller) => controller.abort()); }; });
 
   function needToken(): boolean {
     if (admin.token.trim()) return false;
@@ -201,7 +208,12 @@
   </div>
 </PageHeader>
 
-{#if people && !people.enabled}
+{#if !admin.token.trim()}
+  <Panel label="People" title="Sign in to manage people">
+    <p class="text-muted-foreground text-sm">A session with access to People is required to view invitations, groups and passkeys.</p>
+    <Button class="mt-4" onclick={askForToken}>Sign in</Button>
+  </Panel>
+{:else if people && !people.enabled}
   <Panel label="People" title="Passkeys are not enabled on this edge">
     <p class="text-muted-foreground text-sm">Add <code class="font-mono">auth.passkeys</code> (<code class="font-mono">rp_id</code>, <code class="font-mono">login_url</code>) and start Switchboard with <code class="font-mono">-db</code>.</p>
   </Panel>

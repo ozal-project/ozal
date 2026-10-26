@@ -2,6 +2,7 @@
   import { tick } from "svelte";
   import { route, navigate, type Page } from "$lib/router.svelte";
   import AdminMenu from "$lib/AdminMenu.svelte";
+  import SignIn from "$lib/SignIn.svelte";
   import { admin, can, tools as toolList, type Tool } from "$lib/adminToken.svelte";
   import Connectors from "./pages/Connectors.svelte";
   import Applications from "./pages/Applications.svelte";
@@ -112,7 +113,16 @@
       {/each}
     </nav>
     <main id="main-content" tabindex="-1" class="mx-auto w-full max-w-[1320px] flex-1 px-5 py-10 md:px-10">
-      {#if blocked}
+      {#if !admin.token}
+        {#if admin.ready}
+          <div class="panel mx-auto max-w-lg p-8">
+            <p class="plate">Operators</p>
+            <h1 tabindex="-1" class="mt-2 mb-1 text-xl font-semibold outline-none">Sign in to open the console</h1>
+            <p class="text-muted-foreground mb-5 text-sm">Routes, people, sites and activity are only shown to a signed-in operator, even on this machine. The host chooses what each login may change: pick the tools, run the command on the host and open the one-use link it prints.</p>
+            <SignIn />
+          </div>
+        {/if}
+      {:else if blocked}
         <div class="panel mx-auto max-w-lg p-8 text-center">
           <p class="plate">Not included in this session</p>
           <h1 tabindex="-1" class="mt-2 text-xl font-semibold outline-none">This session cannot open {currentItem.label}</h1>

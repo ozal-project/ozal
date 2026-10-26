@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
+  import { admin, can, endSession } from "$lib/adminToken.svelte";
   import PageHeader from "$lib/PageHeader.svelte";
   import Panel from "$lib/Panel.svelte";
   import Freshness from "$lib/Freshness.svelte";
@@ -8,6 +9,7 @@
   import { accessSummary, attention, changes, headline } from "$lib/overview";
   import { subjectsOf } from "$lib/wording.ts";
   import { emptyFeed, receive } from "$lib/feed";
+  import { openEventStream } from "$lib/eventStream";
   import { LatestRequest } from "$lib/latestRequest";
   import { afterLoad } from "$lib/loadState";
   import { navigate } from "$lib/router.svelte";
@@ -25,7 +27,7 @@
   let subjects = $state(new Map<string, string>());
   let events = $state<AccessEvent[]>([]);
   let feed = $state(emptyFeed());
-  let stream = $state<"connecting" | "live" | "lost">("connecting");
+  let stream = $state<"locked" | "connecting" | "live" | "reconnected" | "lost">("locked");
   const statusRequest = new LatestRequest();
   const sitesRequest = new LatestRequest();
 
@@ -67,6 +69,7 @@
   }
 
   async function loadSites() {
+    if (!can("sites")) return;
     const run = sitesRequest.start();
     try {
       const next = await fetchSites(run.signal);
@@ -87,26 +90,34 @@
     }
   }
 
-  onMount(() => {
-    const loadSubjects = () => fetchPeople().then((p) => (subjects = subjectsOf(p.users))).catch(() => {});
-    loadStatus();
-    loadSites();
-    loadSubjects();
-    const timers = [setInterval(loadStatus, 15_000), setInterval(loadSites, 30_000), setInterval(loadSubjects, 30_000)];
-    const es = new EventSource("/_/events");
-    es.onopen = () => (stream = "live");
-    es.onerror = () => (stream = "lost");
-    es.onmessage = (m) => {
+  const loadSubjects = () => {
+    const token = admin.token.trim();
+    if (!token || !can("people")) return;
+    void fetchPeople().then((p) => { if (admin.token.trim() === token) subjects = subjectsOf(p.users); }).catch(() => {});
+  };
+  $effect(() => {
+    const token = admin.token.trim();
+    sitesRequest.cancel(); sites = null; sitesError = ""; pagesOff = false; subjects = new Map();
+    if (token) untrack(() => { loadSubjects(); void loadSites(); });
+  });
+  $effect(() => {
+    const token = admin.token.trim();
+    events = []; feed = emptyFeed();
+    if (!token) { stream = "locked"; return; }
+    return openEventStream({ token, onDenied: () => endSession(), onState: (state) => (stream = state), onEvent: (message) => {
       try {
-        const e = JSON.parse(m.data) as AccessEvent;
+        const e = JSON.parse(message.data) as AccessEvent;
         if (typeof e.type !== "string" || typeof e.time !== "string") return;
-        const r = receive(feed, e.id ?? m.lastEventId);
+        const r = receive(feed, e.id ?? message.id);
         feed = r.state;
-        if (!r.accept) return;
-        events = [e, ...events].slice(0, MAX);
+        if (r.accept) events = [e, ...events].slice(0, MAX);
       } catch { /* ignore a malformed event */ }
-    };
-    return () => { timers.forEach(clearInterval); es.close(); statusRequest.cancel(); sitesRequest.cancel(); };
+    } });
+  });
+  onMount(() => {
+    loadStatus();
+    const timers = [setInterval(loadStatus, 15_000), setInterval(loadSites, 30_000), setInterval(loadSubjects, 30_000)];
+    return () => { timers.forEach(clearInterval); statusRequest.cancel(); sitesRequest.cancel(); };
   });
 </script>
 
@@ -137,7 +148,7 @@
 <div class="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
   <Panel label="What changed" title="Recent changes" sub="Deploys, reloads, people and connectors, newest first." bodyClass="p-0">
     {#if recent.length === 0}
-      <p class="text-muted-foreground px-5 py-8 text-sm">{stream === "connecting" ? "Connecting to the live stream…" : "No changes since this edge started."}</p>
+      <p class="text-muted-foreground px-5 py-8 text-sm">{stream === "locked" ? "Sign in to see recent changes." : stream === "connecting" ? "Connecting to the live stream…" : stream === "lost" ? "The event stream is unavailable." : "No changes since this edge started."}</p>
     {:else}
       <ul>
         {#each recent as c, i (c.time + c.type + i)}
@@ -187,7 +198,9 @@
     {#if sitesError && sites !== null}
       <p class="border-warning/40 bg-warning/[0.06] border-b px-5 py-3 text-sm" role="status">Showing the last successful site read. Refresh failed: {sitesError}</p>
     {/if}
-    {#if pagesOff}
+    {#if !can("sites")}
+      <p class="text-muted-foreground px-5 py-8 text-sm">This session does not include the Sites tool, so deployments are not listed here.</p>
+    {:else if pagesOff}
       <p class="text-muted-foreground px-5 py-8 text-sm">Static sites are not enabled on this edge.</p>
     {:else if sitesError && sites === null}
       <p class="text-destructive px-5 py-6 text-sm" role="alert">Sites could not be read ({sitesError}). <button class="underline" onclick={loadSites}>Retry</button></p>

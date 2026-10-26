@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
+  import { admin, can, endSession } from "$lib/adminToken.svelte";
   import PageHeader from "$lib/PageHeader.svelte";
   import Panel from "$lib/Panel.svelte";
   import Stat from "$lib/Stat.svelte";
@@ -13,6 +14,7 @@
   import Freshness from "$lib/Freshness.svelte";
   import PolicyEvidence from "$lib/PolicyEvidence.svelte";
   import { emptyFeed, receive } from "$lib/feed";
+  import { openEventStream } from "$lib/eventStream";
   import { shortId, subjectsOf, whoActed as actedBy } from "$lib/wording.ts";
   import PauseIcon from "@lucide/svelte/icons/pause";
   import PlayIcon from "@lucide/svelte/icons/play";
@@ -37,7 +39,7 @@
   let frozen = $state<AccessEvent[] | null>(null);
   let query = $state("");
   let category = $state("all");
-  let stream = $state<"connecting" | "live" | "reconnected" | "lost">("connecting");
+  let stream = $state<"locked" | "connecting" | "live" | "reconnected" | "lost">("locked");
   // Identity and gap bookkeeping, so a reconnect never doubles the table and
   // missed events are said, not hidden (BUG-009).
   let feed = $state(emptyFeed());
@@ -93,34 +95,38 @@
     if (host) navigate("/routes", { host });
   }
 
+  const loadSubjects = () => {
+    const token = admin.token.trim();
+    if (!token || !can("people")) return;
+    void fetchPeople().then((p) => { if (admin.token.trim() === token) subjects = subjectsOf(p.users); }).catch(() => {});
+  };
+  $effect(() => { const token = admin.token.trim(); subjects = new Map(); if (token) untrack(loadSubjects); });
+  $effect(() => {
+    const token = admin.token.trim();
+    events = []; frozen = null; feed = emptyFeed();
+    if (!token) { stream = "locked"; return; }
+    return openEventStream({ token, onDenied: () => endSession(), onState: (state) => (stream = state), onEvent: (message) => {
+      try {
+        const e = JSON.parse(message.data) as AccessEvent;
+        if (typeof e.type !== "string" || typeof e.time !== "string") return;
+        const r = receive(feed, e.id ?? message.id);
+        feed = r.state;
+        if (r.accept) events = [e, ...events].slice(0, MAX);
+      } catch { /* ignore a malformed event */ }
+    } });
+  });
   onMount(() => {
     loadRoutes();
-    const loadSubjects = () => fetchPeople().then((p) => (subjects = subjectsOf(p.users))).catch(() => {});
-    loadSubjects();
     const refresh = setInterval(() => { loadRoutes(); loadSubjects(); }, 30_000);
-    let reconnecting = false;
-    const es = new EventSource("/_/events");
-    es.onopen = () => { stream = reconnecting ? "reconnected" : "live"; reconnecting = true; };
-    es.onerror = () => { stream = "lost"; };
-    es.onmessage = (m) => {
-      try {
-        const e = JSON.parse(m.data) as AccessEvent;
-        if (typeof e.type !== "string" || typeof e.time !== "string") return;
-        const r = receive(feed, e.id ?? m.lastEventId);
-        feed = r.state;
-        if (!r.accept) return;
-        events = [e, ...events].slice(0, MAX);
-      } catch { /* ignore a malformed event */ }
-    };
-    return () => { es.close(); clearInterval(refresh); routesRequest.cancel(); };
+    return () => { clearInterval(refresh); routesRequest.cancel(); };
   });
 
-  const streamText = { connecting: "Connecting…", live: "Live event stream", reconnected: "Live · reconnected", lost: "Connection lost · retrying" };
+  const streamText = { locked: "Sign in to view activity", connecting: "Connecting…", live: "Live event stream", reconnected: "Live · reconnected", lost: "Connection lost · retrying" };
 </script>
 
 <PageHeader eyebrow="Access control" title="Access activity" intro="Every request Switchboard let in or refused, who asked, and why.">
   <span class="border-border bg-card flex items-center gap-2 rounded-full border px-3.5 py-1.5 font-mono text-xs">
-    <span class={["lamp", stream === "lost" ? "lamp-off" : stream === "connecting" ? "lamp-wait" : "lamp-on"]} aria-hidden="true"></span>
+    <span class={["lamp", stream === "lost" ? "lamp-off" : stream === "connecting" || stream === "locked" ? "lamp-wait" : "lamp-on"]} aria-hidden="true"></span>
     {streamText[stream]}
   </span>
 </PageHeader>
@@ -143,7 +149,7 @@
 </div>
 
 <div class="grid grid-cols-[minmax(0,1fr)] gap-6 min-[1500px]:grid-cols-[minmax(0,1fr)_320px]">
-  <Panel label="Decision feed" title={`${filtered.length} shown · ${shown.length} retained`} sub={frozen ? "Paused — new events are held back" : "Newest first, live"} class="min-w-0">
+  <Panel label="Decision feed" title={`${filtered.length} shown · ${shown.length} retained`} sub={stream === "locked" ? "Sign in to load events" : frozen ? "Paused — new events are held back" : stream === "lost" ? "Stream unavailable — retrying" : "Newest first"} class="min-w-0">
     {#snippet actions()}
       <Button variant="outline" size="sm" onclick={() => (frozen = frozen ? null : [...events])} aria-pressed={frozen !== null}>
         {#if frozen}<PlayIcon class="size-3.5" /> Resume{:else}<PauseIcon class="size-3.5" /> Pause{/if}
