@@ -20,6 +20,7 @@
   let statusError = $state("");
   let statusAt = $state<number | null>(null);
   let sites = $state<Site[] | null>(null);
+  let sitesError = $state("");
   let pagesOff = $state(false);
   let subjects = $state(new Map<string, string>());
   let events = $state<AccessEvent[]>([]);
@@ -71,10 +72,16 @@
       const next = await fetchSites(run.signal);
       if (!run.isCurrent()) return;
       sites = next;
+      sitesError = "";
       pagesOff = false;
     } catch (e) {
       if (!run.isCurrent()) return;
-      if (e instanceof PagesDisabledError) pagesOff = true;
+      if (e instanceof PagesDisabledError) {
+        pagesOff = true;
+        sitesError = "";
+      } else {
+        sitesError = (e as Error).message;
+      }
     } finally {
       run.finish();
     }
@@ -177,17 +184,22 @@
 
 <div class="mt-5">
   <Panel label="Sites" title="What is live, and where it came from" bodyClass="p-0">
+    {#if sitesError && sites !== null}
+      <p class="border-warning/40 bg-warning/[0.06] border-b px-5 py-3 text-sm" role="status">Showing the last successful site read. Refresh failed: {sitesError}</p>
+    {/if}
     {#if pagesOff}
       <p class="text-muted-foreground px-5 py-8 text-sm">Static sites are not enabled on this edge.</p>
+    {:else if sitesError && sites === null}
+      <p class="text-destructive px-5 py-6 text-sm" role="alert">Sites could not be read ({sitesError}). <button class="underline" onclick={loadSites}>Retry</button></p>
     {:else if sites === null}
-      <p class="text-muted-foreground px-5 py-8 text-sm">Reading sites…</p>
+      <p class="text-muted-foreground px-5 py-8 text-sm" aria-live="polite">Reading sites…</p>
     {:else if sites.length === 0}
       <p class="text-muted-foreground px-5 py-8 text-sm">No site has been published yet.</p>
     {:else}
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead><tr class="text-muted-foreground border-border border-b text-left font-mono text-xs">
-            <th class="px-5 py-2.5 font-medium">Site</th><th class="px-5 py-2.5 font-medium">Live version</th><th class="px-5 py-2.5 font-medium">Came from</th><th class="px-5 py-2.5 font-medium">Versions</th><th class="px-5 py-2.5"></th>
+            <th class="px-5 py-2.5 font-medium">Site</th><th class="px-5 py-2.5 font-medium">Live version</th><th class="px-5 py-2.5 font-medium">Came from</th><th class="px-5 py-2.5 font-medium">Versions</th><th class="px-5 py-2.5"><span class="sr-only">Actions</span></th>
           </tr></thead>
           <tbody>
             {#each sites as site (site.name)}

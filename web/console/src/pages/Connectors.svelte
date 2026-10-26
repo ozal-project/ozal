@@ -21,7 +21,8 @@
 <PageHeader eyebrow="Operate" title="Connectors" intro="Which private hosts can publish your applications? Enrolment and revocation stay with the host operator.">
   <Button variant="outline" disabled={loading} onclick={load}>{loading ? "Reading…" : "Read connector registry"}</Button>
 </PageHeader>
-{#if error}<p role="alert" class="text-destructive mb-4 text-sm">{error}</p>{/if}
+{#if error && records}<p role="status" class="border-warning/40 bg-warning/[0.06] mb-4 rounded-md border p-3 text-sm">Showing the last successful registry read. Refresh failed: {error}</p>
+{:else if error}<p role="alert" class="text-destructive mb-4 text-sm">{error}</p>{/if}
 {#if readAt}<p class="text-muted-foreground mb-4 text-xs">Snapshot read at {readAt}. Refresh to check connection or certificate changes.</p>{/if}
 <Panel label="Add a private host" title="Prepare, verify, then enrol" class="mb-6">
   <ol class="list-decimal space-y-3 pl-5 text-sm">
@@ -33,7 +34,11 @@
   </ol>
   <p class="text-muted-foreground mt-4 text-sm">This uses the existing private CA/pilot transport. A connector does not install a runtime or database. Schedule renewal with the existing renewal runbook before using its 30-day certificate; arbitrary-host automatic renewal is not configured by this screen.</p>
 </Panel>
-{#if records}
+{#if records === null && loading}
+  <div class="border-y py-5 text-sm text-muted-foreground" aria-busy="true">Reading connector registry…</div>
+{:else if records === null && error}
+  <div class="border-y py-5 text-sm"><p class="text-destructive">Connector registry could not be read.</p><Button class="mt-3" size="sm" variant="outline" onclick={load}>Retry registry read</Button></div>
+{:else if records}
   <div class="divide-y border-y">{#each records as connector (`${connector.name}-${connector.sha256}`)}
     <article class="py-5">
       <h2 class="text-base font-semibold">{connector.name} · {connector.revoked ? "Revoked" : connector.connected ? "Connected" : connector.hosts.length ? "Not connected" : "No app assigned"}</h2>

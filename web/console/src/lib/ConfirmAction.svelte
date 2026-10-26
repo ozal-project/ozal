@@ -17,10 +17,12 @@
   let { open = $bindable(false), title, target, current, requested, consequence, detail = "", confirmLabel, onConfirm }: Props = $props();
   let dialog = $state<HTMLDialogElement | null>(null);
   let cancelButton = $state<HTMLButtonElement | null>(null);
+  let returnFocus: HTMLElement | null = null;
 
   $effect(() => {
     if (!dialog) return;
     if (open && !dialog.open) {
+      returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       dialog.showModal();
       requestAnimationFrame(() => cancelButton?.focus());
     } else if (!open && dialog.open) {
@@ -28,19 +30,44 @@
     }
   });
 
+  function restoreFocus() {
+    requestAnimationFrame(() => {
+      if (returnFocus?.isConnected) returnFocus.focus();
+      returnFocus = null;
+    });
+  }
+
   function close() {
     open = false;
+    restoreFocus();
   }
 
   function confirm() {
     open = false;
+    restoreFocus();
     onConfirm();
+  }
+
+  function containTab(event: KeyboardEvent) {
+    if (event.key !== "Tab" || !dialog) return;
+    const focusable = [...dialog.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')]
+      .filter((element) => element.getClientRects().length > 0);
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 </script>
 
 <dialog bind:this={dialog} aria-labelledby={`${dialogId}-title`} aria-describedby={`${dialogId}-description`}
   class="bg-card text-card-foreground border-border m-auto w-[min(34rem,calc(100vw-2rem))] rounded-xl border p-0 backdrop:bg-black/60"
-  onclose={() => (open = false)} oncancel={close}>
+  onclose={() => (open = false)} oncancel={close} onkeydown={containTab}>
   <div class="space-y-5 p-5 sm:p-6">
     <div>
       <p class="plate mb-2">Review change</p>

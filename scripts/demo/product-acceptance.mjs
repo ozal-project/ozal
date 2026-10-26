@@ -27,6 +27,26 @@ const tabTo = async (href) => {
   }
   throw new Error(`Keyboard tab order did not reach ${href}`);
 };
+const failNextRequest = async (path) => evaluate(`(() => { const original = window.fetch.bind(window); let failed = false; window.fetch = (input, init) => { const url = new URL(typeof input === "string" ? input : input.url, location.href); if (!failed && url.pathname === ${JSON.stringify(path)}) { failed = true; window.__acceptanceFailedPath = url.pathname; window.fetch = original; return Promise.resolve(new Response("", { status: 503 })); } return original(input, init); }; return true; })()`);
+const goPage = async (href, title) => {
+  await ab("set", "viewport", "1440", "1000");
+  await ab("eval", "window.scrollTo(0, 0)");
+  await ab("eval", `document.querySelector('nav[aria-label=\"Console\"] a[href=\"${href}\"]').focus()`);
+  await ab("press", "Enter");
+  await ab("wait", "--fn", `document.querySelector('#main-content h1')?.textContent?.trim() === ${JSON.stringify(title)}`);
+  await ab("eval", "window.scrollTo(0, 0)");
+};
+const auditPage = async (widths = [[1440, 1000], [1024, 900], [390, 844], [320, 800]]) => {
+  for (const [width, height] of widths) {
+    await ab("set", "viewport", String(width), String(height));
+    const overflow = await evaluate("({ viewport: innerWidth, main: document.querySelector('#main-content')?.getBoundingClientRect().right, offenders: [...document.querySelectorAll('body *')].filter((el) => { const r = el.getBoundingClientRect(); const scroller = el.closest('.overflow-x-auto, nav[aria-label=\"Console sections\"]'); return !scroller && (r.right > innerWidth + 1 || r.left < -1); }).slice(0, 12).map((el) => ({ tag: el.tagName, className: String(el.className).slice(0, 120), text: (el.textContent || '').trim().slice(0, 80), left: Math.round(el.getBoundingClientRect().left), right: Math.round(el.getBoundingClientRect().right) })) })");
+    assert(overflow.main <= width && overflow.offenders.length === 0, `overflow at ${width}: ${JSON.stringify(overflow)}`);
+    const result = JSON.parse(await ab("a11y"));
+    const violations = result.data?.violations ?? result.data?.results?.violations;
+    assert(Array.isArray(violations), "axe returned no violation list");
+    assert.equal(violations.length, 0, `axe violations at ${width}: ${JSON.stringify(violations.map((v) => ({ id: v.id, impact: v.impact, help: v.help, nodes: v.nodes?.map((n) => ({ target: n.target, summary: n.failureSummary })) })))}`);
+  }
+};
 const api = async (method, path, body) => {
   const res = await fetch(`${edge.consoleURL}${path}`, { method, headers: { Authorization: `Bearer ${edge.token}`, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
   assert(res.ok, `fixture API ${path}: HTTP ${res.status}`);
@@ -87,33 +107,102 @@ try {
   let people = await api("GET", "/_/api/people");
   assert.deepEqual(people.users.find((p) => p.email === "new-operator-test@example.test").groups, ["ops"], "cancel changed membership");
   await ab("find", "role", "button", "click", "--name", "Review change", "--exact");
+  assert.equal(await evaluate("document.activeElement?.textContent?.trim()"), "Cancel", "consequence dialog did not focus Cancel initially");
+  await ab("press", "Tab");
+  assert.equal(await evaluate("document.activeElement?.textContent?.trim()"), "Save membership", "dialog Tab order did not reach confirmation");
+  await ab("press", "Tab");
+  assert.equal(await evaluate("document.activeElement?.textContent?.trim()"), "Cancel", "dialog focus did not remain contained");
+  await ab("press", "Escape");
+  assert.equal(await evaluate("document.querySelector('dialog[open]') === null"), true, "Escape did not close membership review");
+  await ab("wait", "--fn", "document.activeElement?.textContent?.trim() === 'Review change'");
+  people = await api("GET", "/_/api/people");
+  assert.deepEqual(people.users.find((p) => p.email === "new-operator-test@example.test").groups, ["ops"], "Escape changed membership");
+  await ab("find", "role", "button", "click", "--name", "Review change", "--exact");
   await ab("click", "dialog[open] button:last-child");
   await ab("wait", "--text", "Membership saved.");
   people = await api("GET", "/_/api/people");
   assert.deepEqual(people.users.find((p) => p.email === "new-operator-test@example.test").groups, ["staff"]);
-  step = "GitHub disconnected state";
-  await ab("click", 'a[href="/projects"]');
+  step = "Overview sites error and retry";
+  await goPage("/projects", "CI projects");
+  await failNextRequest("/_/api/sites");
+  await goPage("/overview", "Overview");
+
+  await ab("wait", "--text", "Sites could not be read");
+  await ab("find", "text", "Retry", "click");
+  await ab("wait", "--text", "What is live, and where it came from");
+  await auditPage([[1440, 1000], [390, 844]]);
+
+  step = "Projects initial error, retry and true empty state";
+  await goPage("/applications", "Applications");
+  await failNextRequest("/_/api/projects");
+  await goPage("/projects", "CI projects");
+  await ab("wait", "--fn", "window.__acceptanceFailedPath === '/_/api/projects'");
+  await ab("wait", "--text", "Configured projects could not be read");
+  assert.equal(await evaluate("document.body.innerText.includes('No CI projects configured')"), false, "Projects showed an empty state before a successful read");
+  await ab("find", "text", "Retry", "click");
   await ab("find", "role", "button", "click", "--name", "Read projects & GitHub", "--exact");
   await ab("wait", "--text", "Connect your own GitHub App");
-  step = "connector guide";
-  await ab("click", 'a[href="/connectors"]');
-  await ab("find", "role", "button", "click", "--name", "Read connector registry", "--exact");
+  await ab("wait", "--text", "No CI projects configured");
+  await auditPage([[1440, 1000], [390, 844]]);
+
+  step = "Connector registry error, retry and empty state";
+  await failNextRequest("**/_/api/connectors");
+  await goPage("/connectors", "Connectors");
+  await ab("wait", "--text", "Connector registry could not be read");
+  await ab("find", "role", "button", "click", "--name", "Retry registry read", "--exact");
   await ab("wait", "--text", "No connectors enrolled.");
-  step = "responsive layouts and accessibility";
-  await ab("click", 'a[href="/applications"]');
+  await auditPage([[1440, 1000], [390, 844]]);
+
+  step = "Sites hostname mapping error and recovery";
+  await failNextRequest("**/_/api/status");
+  await goPage("/sites", "Sites & deployments");
+  await ab("wait", "--text", "Hostname mappings could not be refreshed");
+  assert.equal(await evaluate("document.querySelector('dialog[open]') === null"), true);
+  await ab("find", "role", "button", "click", "--name", "Refresh", "--exact");
+  await ab("wait", "Hostname mappings");
+  await auditPage([[1440, 1000], [390, 844]]);
+
+  step = "Sites rollback review cancellation and confirmation";
+  const liveBeforeUI = (await api("GET", "/_/api/sites")).sites.find((s) => s.name === "blog").live;
+  const olderBlog = (await api("GET", "/_/api/sites")).sites.find((s) => s.name === "blog").deployments.find((d) => d.id !== liveBeforeUI);
+  assert(olderBlog, "rollback fixture has no retained deployment");
+  await ab("find", "role", "button", "click", "--name", `Review activation of ${olderBlog.id.slice(0, 12)} for blog`, "--exact");
+  await ab("wait", "--text", "Change the live site build?");
+  await ab("press", "Escape");
+  assert.equal((await api("GET", "/_/api/sites")).sites.find((s) => s.name === "blog").live, liveBeforeUI, "cancel changed live deployment");
+  await ab("find", "role", "button", "click", "--name", `Review activation of ${olderBlog.id.slice(0, 12)} for blog`, "--exact");
+  await ab("click", "dialog[open] button:last-child");
+  await ab("wait", "--text", "blog now serves");
+  assert.equal((await api("GET", "/_/api/sites")).sites.find((s) => s.name === "blog").live, olderBlog.id, "confirmed Sites rollback did not switch the live build");
+
+  step = "Application removal review cancellation and confirmation";
+  const appHost = `extra.demo.localhost:${PORT}`;
+  await goPage("/applications", "Applications");
   await ab("find", "role", "button", "click", "--name", "Refresh configuration", "--exact");
-  await ab("wait", "--text", `extra.demo.localhost:${PORT}`);
-  for (const [width, height] of [[1440, 1000], [1024, 900], [390, 844], [320, 800]]) {
-    await ab("set", "viewport", String(width), String(height));
-    const overflow = await evaluate("({ viewport: innerWidth, document: document.documentElement.scrollWidth, offenders: [...document.querySelectorAll('body *')].filter((el) => { const r = el.getBoundingClientRect(); return r.right > innerWidth + 1 || r.left < -1; }).slice(0, 12).map((el) => ({ tag: el.tagName, className: String(el.className).slice(0, 120), text: (el.textContent || '').trim().slice(0, 80), left: Math.round(el.getBoundingClientRect().left), right: Math.round(el.getBoundingClientRect().right) })) })");
-    assert(overflow.document <= width, `overflow at ${width}: ${JSON.stringify(overflow)}`);
-    const result = JSON.parse(await ab("a11y"));
-    const violations = result.data?.violations ?? result.data?.results?.violations;
-    assert(Array.isArray(violations), "axe returned no violation list");
-    assert.equal(violations.length, 0, `axe violations at ${width}`);
-    if (width === 1440 || width === 390) await ab("screenshot", join(root, `applications-${width}.png`));
+  await ab("wait", "--text", appHost);
+  await ab("find", "role", "button", "click", "--name", "Remove", "--exact");
+  await ab("wait", "--text", "Remove this application hostname?");
+  await ab("press", "Escape");
+  assert((await api("GET", "/_/api/setup")).routes.some((r) => r.host === appHost), "cancelling removal removed the route");
+  await ab("find", "role", "button", "click", "--name", "Remove", "--exact");
+  await ab("click", "dialog[open] button:last-child");
+  await ab("wait", "--text", "Confirm configuration").catch(() => {});
+  await ab("find", "role", "button", "click", "--name", "Refresh configuration", "--exact");
+  await ab("wait", "--text", "extra.demo.localhost").catch(() => {});
+  assert.equal((await api("GET", "/_/api/setup")).routes.some((r) => r.host === appHost), false, "confirmed removal left the route configured");
+
+  step = "responsive layouts and accessibility";
+  const pages = [["/overview", "Overview"], ["/applications", "Applications"], ["/sites", "Sites & deployments"], ["/people", "People & passkeys"], ["/connectors", "Connectors"], ["/activity", "Access activity"], ["/projects", "CI projects"], ["/routes", "Routes & hostnames"], ["/simulator", "Why? Simulator"]];
+  for (const [href, title] of pages) {
+    await goPage(href, title);
+    await auditPage([[1440, 1000], [1024, 900], [390, 844], [320, 800]]);
+    if (href === "/applications") {
+      await ab("screenshot", join(root, "applications-1440.png"));
+      await ab("set", "viewport", "390", "844");
+      await ab("screenshot", join(root, "applications-390.png"));
+    }
   }
-  console.log("Product console: host login, URL cleanup, app review/save, artifact upload/rollback, membership Escape/save, GitHub and connector states, four viewport widths and axe OK");
+  console.log("Product console: host login, URL cleanup, app add/remove review, artifact upload/rollback, membership keyboard/cancel/save, Projects and Connector error recovery, Sites rollback, all console pages at four widths with axe OK");
   console.log(`Screenshots: ${root}`);
 } catch (error) {
   console.error(`Product acceptance failed at ${step}: ${error.message}`);

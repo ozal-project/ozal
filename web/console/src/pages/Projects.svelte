@@ -9,6 +9,7 @@
   import ConfirmAction from "$lib/ConfirmAction.svelte";
   let repositories = $state<Repositories | null>(null);
   let projects = $state<Project[]>([]);
+  let projectsLoaded = $state(false);
   let setup = $state<SetupStatus | null>(null);
   let page = $state(1);
   let busy = $state(false);
@@ -28,6 +29,7 @@
     busy = true; error = "";
     try {
       [repositories, projects, setup] = await Promise.all([githubRepositories(admin.token.trim(), page), fetchProjects(admin.token.trim()), setupStatus(admin.token.trim())]);
+      projectsLoaded = true;
     } catch (e) { error = (e as Error).message; }
     finally { busy = false; }
   }
@@ -82,6 +84,16 @@
   </Panel>
 {/if}
 <Panel label="Configured projects" title="Who may publish">
-  <ul class="divide-y">{#each projects as p (p.name)}<li class="py-4"><div class="flex flex-wrap items-center justify-between gap-3"><h2 class="font-semibold">{p.name} · {p.site}</h2><Button variant="outline" size="sm" disabled={busy} onclick={() => { removing = p; frozen = null; confirm = true; }}>Disconnect publisher</Button></div><p class="text-muted-foreground mt-2 break-all text-sm">{p.hostnames.join(", ")}</p>{#each p.deployers as d}<p class="mt-2 break-all text-sm">{d.type === "github" ? `Repository ${d.github.repository_id} · ${d.github.ref} · ${d.github.workflow_ref}` : "Project-scoped token configured"}</p>{/each}</li>{:else}<li class="py-4 text-sm">No CI projects configured. Manual static uploads can still work.</li>{/each}</ul>
+  {#if !projectsLoaded && busy}
+    <p class="text-muted-foreground text-sm" aria-busy="true">Reading configured projects…</p>
+  {:else if error && !projectsLoaded}
+    <p class="text-destructive text-sm" role="alert">Configured projects could not be read ({error}). <button class="underline" onclick={load}>Retry</button></p>
+  {:else if !projectsLoaded}
+    <p class="text-muted-foreground text-sm">Read projects to verify publisher access.</p>
+  {:else if projects.length === 0}
+    <p class="text-muted-foreground text-sm">No CI projects configured. Manual static uploads can still work.</p>
+  {:else}
+    <ul class="divide-y">{#each projects as p (p.name)}<li class="py-4"><div class="flex flex-wrap items-center justify-between gap-3"><h2 class="font-semibold">{p.name} · {p.site}</h2><Button variant="outline" size="sm" disabled={busy} onclick={() => { removing = p; frozen = null; confirm = true; }}>Disconnect publisher</Button></div><p class="text-muted-foreground mt-2 break-all text-sm">{p.hostnames.join(", ")}</p>{#each p.deployers as d}<p class="mt-2 break-all text-sm">{d.type === "github" ? `Repository ${d.github.repository_id} · ${d.github.ref} · ${d.github.workflow_ref}` : "Project-scoped token configured"}</p>{/each}</li>{/each}</ul>
+  {/if}
 </Panel>
 <ConfirmAction bind:open={confirm} title={removing ? "Disconnect this publisher?" : "Change publisher trust?"} target={removing?.name ?? frozen?.name ?? ""} current={removing ? "Configured deploy trust" : "Current project trust, if any"} requested={removing ? "No deploy trust for this project" : `${frozen?.ref} · ${frozen?.workflow}`} consequence={removing ? "Future deploy authentication for this project stops. Content remains. An already authenticated upload may finish." : "Only the selected repository, owner, ref and workflow will be trusted for this project. Previous token deployers will be removed."} detail="This does not change visitor access, uninstall the GitHub App or change any repository file." confirmLabel={removing ? "Disconnect publisher" : "Save publisher trust"} onConfirm={() => void save()} />

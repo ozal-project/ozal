@@ -25,6 +25,7 @@
   let projects = $state<Project[] | null>(null);
   let projectsError = $state("");
   let projectsLoading = $state(false);
+  let routeStatusError = $state("");
   const sitesRequest = new LatestRequest();
   const projectsRequest = new LatestRequest();
   // The token is shared by the console pages, in this tab's memory only.
@@ -69,7 +70,12 @@
     loading = true;
     const [siteResult, statusResult] = await Promise.allSettled([fetchSites(run.signal), fetchStatus(run.signal)]);
     if (!run.isCurrent()) return;
-    routeStatus = statusResult.status === "fulfilled" ? statusResult.value : null;
+    if (statusResult.status === "fulfilled") {
+      routeStatus = statusResult.value;
+      routeStatusError = "";
+    } else {
+      routeStatusError = (statusResult.reason as Error).message;
+    }
     if (siteResult.status === "fulfilled") {
       sites = siteResult.value;
       ({ disabled, error } = afterLoad({ ok: true }));
@@ -84,7 +90,7 @@
   onMount(() => { load(); const t = setInterval(load, 15_000); return () => { clearInterval(t); sitesRequest.cancel(); projectsRequest.cancel(); Object.values(mutations).forEach((controller) => controller.abort()); }; });
 
   function restore(site: Site, deployment: Deployment) {
-    if (!routeStatus) {
+    if (!routeStatus || routeStatusError) {
       notices = { ...notices, [site.name]: { text: "Route mappings could not be refreshed; retry before changing the live build so the affected hostnames are clear.", ok: false } };
       return;
     }
@@ -153,11 +159,19 @@
   </div>
 
   <Panel label="Deploy policy" title="Projects" sub="Read-only view of which hostnames and publishers belong to each site. Secret references are never returned." class="mb-6">
+    {#if projectsError && projects !== null}
+      <p class="border-warning/40 bg-warning/[0.06] mb-4 rounded-md border p-3 text-sm" role="status">Showing the last successful project read. Refresh failed: {projectsError}</p>
+    {/if}
+    {#if routeStatusError}
+      <p class="border-warning/40 bg-warning/[0.06] mb-4 rounded-md border p-3 text-sm" role="status">Hostname mappings could not be refreshed ({routeStatusError}). Rollback review stays unavailable until route status is current.</p>
+    {:else if !routeStatus}
+      <p class="text-muted-foreground mb-4 text-sm" aria-busy="true">Reading hostname mappings…</p>
+    {/if}
     {#if !admin.token.trim()}
       <p class="text-muted-foreground text-sm">Unlock changes (top right) to see which repositories may publish each site.</p>
     {:else if projectsLoading && !projects}
       <div class="space-y-3" aria-busy="true" aria-label="Loading projects"><Skeleton class="h-20 w-full" /></div>
-    {:else if projectsError}
+    {:else if projectsError && projects === null}
       <p class="text-destructive text-sm" role="status">Projects could not be read ({projectsError}). <button class="underline" onclick={loadProjects}>Retry</button></p>
     {:else if projects?.length === 0}
       <p class="text-muted-foreground text-sm">No projects are configured. Existing site routes continue to work without project declarations.</p>
