@@ -23,7 +23,8 @@ test("an unhealthy route is attention; an unknown one is not an alarm", () => {
   const items = attention(status([route({ host: "sigea.example.com", state_class: "unhealthy", last_error: "connection refused", last_transition: "2026-10-25T18:31:00Z" }), route({ host: "new.example.com", state_class: "unknown" })]));
   assert.equal(items.length, 1);
   assert.equal(items[0].title, "sigea.example.com is not answering");
-  assert.match(items[0].detail, /connection refused/);
+  assert.match(items[0].detail, /nothing is listening at 127\.0\.0\.1:3000|down: /);
+  assert.equal(items[0].raw, "connection refused", "the exact error stays available");
   assert.equal(items[0].action?.page, "/routes");
 });
 
@@ -50,7 +51,9 @@ test("a deploy from CI says where it came from; a manual one says who", () => {
   assert.equal(ci.source, "GitHub Actions · main · 631fb79abcde");
   assert.equal(ci.undo?.site, "portfolio");
   const [hand] = changes([event("pages.deployed", { host: "custodia-site", actor: "admin" })]);
-  assert.equal(hand.source, "uploaded by hand (admin)");
+  assert.equal(hand.source, "uploaded via the admin token");
+  const api = changes([event("pages.deployed", { host: "docs", actor: "127.0.0.1:56198" })])[0];
+  assert.equal(api.source, "uploaded via the admin API", "a throwaway client port is never shown");
 });
 
 test("a failed deploy is shown as a failure and carries no undo", () => {
@@ -78,4 +81,13 @@ test("the access summary counts decisions and ranks refusal reasons", () => {
 test("an unknown refusal code is shown as is, never dropped", () => {
   const sum = accessSummary([event("access.denied", { code: "something_new" })]);
   assert.deepEqual(sum.reasons, [{ code: "something_new", text: "something_new", count: 1 }]);
+});
+
+test("a new passkey names the person, never the login page it was created on", () => {
+  const people = new Map([["sb:850d", "ana@acme.dev"]]);
+  const [named] = changes([event("passkey.registered", { host: "auth.example.com", actor: "sb:850d", code: "device_bound" })], people);
+  assert.equal(named.title, "ana@acme.dev added a passkey");
+  assert.equal(named.detail, "A passkey that stays on one device.");
+  const [unknown] = changes([event("passkey.registered", { host: "auth.example.com", actor: "sb:other", code: "synced" })], people);
+  assert.equal(unknown.title, "Someone added a passkey", "an id that maps to nobody is not shown as if it were a name");
 });

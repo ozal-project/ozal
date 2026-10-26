@@ -13,7 +13,7 @@
   import { Separator } from "$lib/components/ui/separator";
   import { explain, fetchOverview, type Report, type RouteOverview } from "$lib/api";
   import { freshness, inputKey, type Inputs } from "$lib/simulation";
-  import { admin } from "$lib/adminToken.svelte";
+  import { admin, askForToken } from "$lib/adminToken.svelte";
   import { route } from "$lib/router.svelte";
   import { LatestRequest } from "$lib/latestRequest";
   import Freshness from "$lib/Freshness.svelte";
@@ -80,7 +80,7 @@
     e.preventDefault();
     error = "";
     if (!host) return (error = "Choose a route.");
-    if (!admin.token.trim()) return (error = "Paste the admin token to ask the engine.");
+    if (!admin.token.trim()) { askForToken(); return (error = "Unlock changes first (top right): answers reveal who is allowed."); }
     let principal: Report["principal"] | null = null;
     if (mode === "user") {
       if (!email.trim()) return (error = "Enter an email, or choose “No session”.");
@@ -151,10 +151,10 @@
 </PageHeader>
 
 <div class="grid gap-6 xl:grid-cols-[minmax(340px,420px)_1fr]">
-  <Panel index="01" label="Caller" title="Request to simulate" sub="Describe a visitor for one hostname.">
+  <Panel label="Visitor" title="Request to simulate" sub="Describe a visitor for one hostname.">
     <form class="space-y-5" onsubmit={run} novalidate>
       <div class="space-y-2">
-        <Label for="route" class="text-muted-foreground font-mono text-[0.68rem] font-medium tracking-[0.12em] uppercase">Line</Label>
+        <Label for="route" class="text-muted-foreground font-mono text-[0.68rem] font-medium tracking-[0.12em] uppercase">Hostname</Label>
         <Select.Root type="single" bind:value={host}>
           <Select.Trigger id="route" class="w-full font-mono text-[0.8rem]">{host || (routesError ? "Routes unavailable" : "Choose a route")}</Select.Trigger>
           <Select.Content>
@@ -211,8 +211,6 @@
               </div>
             {/if}
           </div>
-          <div class="space-y-2"><Label for="groups" class="text-muted-foreground font-mono text-[0.68rem] font-medium tracking-[0.12em] uppercase">Groups</Label><Input id="groups" bind:value={groups} placeholder="engineering, oncall" autocomplete="off" spellcheck={false} class="font-mono text-[0.85rem]" />
-            <p class="text-muted-foreground text-xs">Comma-separated. Names are case-sensitive.</p></div>
           <div class="space-y-2">
             <Label for="request-method" class="text-muted-foreground font-mono text-[0.68rem] font-medium tracking-[0.12em] uppercase">HTTP method</Label>
             <select id="request-method" bind:value={requestMethod} class="border-input bg-background focus-visible:ring-ring h-9 w-full rounded-md border px-3 font-mono text-sm focus-visible:ring-2 focus-visible:outline-none">
@@ -226,28 +224,22 @@
         </div>
       {/if}
 
-      <Separator />
-      <div class="space-y-2">
-        <Label for="token" class="text-muted-foreground font-mono text-[0.68rem] font-medium tracking-[0.12em] uppercase flex items-center gap-1.5"><KeyIcon class="size-3.5" /> Admin token</Label>
-        <Input id="token" type="password" bind:value={admin.token} placeholder="Bearer token from admin.token" autocomplete="off" spellcheck={false} class="font-mono" />
-        <p class="text-muted-foreground text-xs">Kept in this tab’s memory only. Required because answers reveal who is allowed.</p>
-      </div>
       {#if error}<Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>{/if}
       <div class="flex flex-wrap gap-2">
-        <Button type="submit" class="h-10 min-w-0 flex-1 font-mono tracking-wide uppercase" disabled={busy}>{busy ? "Asking the engine…" : "Test access"}</Button>
+        <Button type="submit" class="h-10 min-w-0 flex-1" disabled={busy}>{busy ? "Asking the engine…" : "Test access"}</Button>
         {#if busy}<Button type="button" variant="outline" class="h-10" onclick={stopWaiting}>Stop waiting</Button>{/if}
       </div>
     </form>
   </Panel>
 
   <div class="min-w-0 space-y-6">
-    <Panel index="02" label="Decision" title={report ? `${fresh === "previous" ? "Previous answer" : "Answer"} for ${report.route}` : "Waiting for a caller"} sub={report ? stage[report.scope] : "Run a simulation to see the verdict."}>
+    <Panel label="Decision" title={report ? `${fresh === "previous" ? "Previous answer" : "Answer"} for ${report.route}` : "Waiting for a test"} sub={report ? stage[report.scope] : "Run a simulation to see the verdict."}>
       <div aria-live="polite">
         {#if !report}
           <div class="border-border flex flex-col items-center gap-3 rounded-lg border border-dashed px-6 py-16 text-center">
             <Logo size={48} class="opacity-80" />
-            <p class="font-medium">No call on the line yet</p>
-            <p class="text-muted-foreground max-w-sm text-sm">Pick a line, describe a caller and press <span class="text-foreground font-mono text-xs uppercase">Patch it through</span>.</p>
+            <p class="font-medium">Nothing tested yet</p>
+            <p class="text-muted-foreground max-w-sm text-sm">Pick a hostname, describe a visitor and press <span class="text-foreground font-medium">Test access</span>.</p>
           </div>
         {:else}
           {@const ok = report.decision.allowed}
@@ -259,7 +251,7 @@
           <div class={["flex items-center gap-5 rounded-xl border p-6", !live ? "border-border bg-muted/20 opacity-70" : ok ? "border-success/40 bg-success/[0.06]" : stepUp ? "border-warning/40 bg-warning/[0.06]" : "border-destructive/40 bg-destructive/[0.06]"]}>
             <span class={["lamp size-12", !live ? "" : ok ? "lamp-on" : stepUp ? "lamp-wait" : "lamp-off"]} aria-hidden="true"></span>
             <div class="min-w-0">
-              <p class="plate">{!live ? "Previous answer" : ok ? "Line connected" : stepUp ? "Proof required" : "Line refused"}</p>
+              <p class="plate">{!live ? "Previous answer" : ok ? "Let in" : stepUp ? "Sign-in needed" : "Refused"}</p>
               <p class={["mt-1 text-3xl font-semibold tracking-tight", !live ? "text-muted-foreground" : ok ? "text-success" : stepUp ? "text-warning" : "text-destructive"]}>{!live ? (stepUp ? "Was step-up" : ok ? "Was allowed" : "Was denied") : stepUp ? "Step-up" : ok ? "Allowed" : "Denied"}</p>
               <code class="text-muted-foreground font-mono text-sm">{report.decision.code}</code>
             </div>
@@ -267,12 +259,12 @@
           {#if report.decision.reason !== report.decision.code}<p class="mt-5 text-[1.05rem]">{report.decision.reason}</p>{/if}
           <dl class="mt-5 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-[auto_1fr]">
             <dt class="plate pt-0.5">Evaluated</dt><dd class="text-muted-foreground font-mono text-xs">{evaluatedAt ? new Date(evaluatedAt).toLocaleString() : "—"} · route configuration observed {routesObservedAt ? new Date(routesObservedAt).toLocaleTimeString() : "not loaded"}</dd>
-            <dt class="plate pt-0.5">Line</dt><dd class="font-mono text-[0.85rem]">{report.route} <span class="text-muted-foreground font-sans">({report.protected ? "protected" : "public"})</span></dd>
+            <dt class="plate pt-0.5">Hostname</dt><dd class="font-mono text-[0.85rem]">{report.route} <span class="text-muted-foreground font-sans">({report.protected ? "protected" : "public"})</span></dd>
             <dt class="plate pt-0.5">Decided by</dt><dd>{stage[report.scope]}</dd>
             <dt class="plate pt-0.5">Scope</dt><dd class="text-muted-foreground flex gap-1.5"><InfoIcon class="mt-0.5 size-3.5 shrink-0" />{scope[report.scope]}</dd>
           </dl>
           <div class="mt-6 grid gap-4 md:grid-cols-2">
-            {#each [{ t: "Line policy", items: policyItems(report) }, { t: "Caller", items: callerItems(report) }] as col (col.t)}
+            {#each [{ t: "Policy", items: policyItems(report) }, { t: "Visitor", items: callerItems(report) }] as col (col.t)}
               <div>
                 <p class="plate mb-2">{col.t}</p>
                 <ul class="border-border divide-border divide-y rounded-lg border">
@@ -290,8 +282,8 @@
     </Panel>
 
     <div class="grid gap-6 md:grid-cols-2">
-      <Panel index="03" label="Call log" sub="This session, newest first">
-        {#if history.length === 0}<p class="text-muted-foreground text-sm">No calls yet.</p>
+      <Panel label="Recent tests" sub="This session, newest first">
+        {#if history.length === 0}<p class="text-muted-foreground text-sm">No tests yet.</p>
         {:else}
           <ul class="space-y-2.5">
             {#each history as h, i (i)}
@@ -307,7 +299,7 @@
         <p class="plate mb-2">What this proves</p>
         <p class="mb-2 font-semibold">The decision, not the journey.</p>
         <div class="text-muted-foreground space-y-2 text-sm leading-relaxed">
-          <p>It runs the same authorization function the proxy uses, with the line’s live policy and the session evidence you supplied.</p>
+          <p>It runs the same authorization function the proxy uses, with the hostname’s live policy and the session evidence you supplied.</p>
           <p>Session facts are hypothetical. It does not test the OIDC login, cookies, TLS, rate limits or the upstream app.</p>
           <p>Same answer from a terminal: <code class="text-foreground font-mono text-xs">switchboard policy explain</code>.</p>
         </div>

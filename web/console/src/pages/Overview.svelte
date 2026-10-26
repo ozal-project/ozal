@@ -4,8 +4,9 @@
   import Panel from "$lib/Panel.svelte";
   import Freshness from "$lib/Freshness.svelte";
   import { Button } from "$lib/components/ui/button";
-  import { fetchSites, fetchStatus, PagesDisabledError, type AccessEvent, type Site, type StatusResponse } from "$lib/api";
+  import { fetchPeople, fetchSites, fetchStatus, PagesDisabledError, type AccessEvent, type Site, type StatusResponse } from "$lib/api";
   import { accessSummary, attention, changes, headline } from "$lib/overview";
+  import { subjectsOf } from "$lib/wording.ts";
   import { emptyFeed, receive } from "$lib/feed";
   import { LatestRequest } from "$lib/latestRequest";
   import { afterLoad } from "$lib/loadState";
@@ -20,6 +21,7 @@
   let statusAt = $state<number | null>(null);
   let sites = $state<Site[] | null>(null);
   let pagesOff = $state(false);
+  let subjects = $state(new Map<string, string>());
   let events = $state<AccessEvent[]>([]);
   let feed = $state(emptyFeed());
   let stream = $state<"connecting" | "live" | "lost">("connecting");
@@ -28,7 +30,7 @@
 
   const needs = $derived(attention(status));
   const summary = $derived(accessSummary(events));
-  const recent = $derived(changes(events).slice(0, 8));
+  const recent = $derived(changes(events, subjects).slice(0, 8));
   const oldest = $derived(events.length ? new Date(events[events.length - 1].time) : null);
   const decisions = $derived(summary.allowed + summary.refused);
   // The last deploy event of each site, newest first in `events`: where the live version came from.
@@ -79,9 +81,11 @@
   }
 
   onMount(() => {
+    const loadSubjects = () => fetchPeople().then((p) => (subjects = subjectsOf(p.users))).catch(() => {});
     loadStatus();
     loadSites();
-    const timers = [setInterval(loadStatus, 15_000), setInterval(loadSites, 30_000)];
+    loadSubjects();
+    const timers = [setInterval(loadStatus, 15_000), setInterval(loadSites, 30_000), setInterval(loadSubjects, 30_000)];
     const es = new EventSource("/_/events");
     es.onopen = () => (stream = "live");
     es.onerror = () => (stream = "lost");
@@ -113,7 +117,7 @@
       <TriangleAlertIcon class="text-destructive size-5 shrink-0" aria-hidden="true" />
       <div class="min-w-0 flex-1">
         <p class="font-semibold">{item.title}</p>
-        <p class="text-muted-foreground text-sm">{item.detail}</p>
+        <p class="text-muted-foreground text-sm" title={item.raw}>{item.detail}</p>
       </div>
       {#if item.action}<Button variant="outline" size="sm" onclick={() => navigate(item.action!.page, { host: item.action!.host })}>{item.action.label}</Button>{/if}
     </div>
@@ -138,7 +142,7 @@
               {#if c.source}<p class="text-muted-foreground mt-0.5 font-mono text-xs break-words">{c.source}</p>{/if}
               {#if c.detail}<p class="text-muted-foreground mt-0.5 text-xs break-words">{c.detail}</p>{/if}
             </div>
-            {#if c.undo}<Button variant="outline" size="sm" onclick={() => navigate("/sites")} aria-label={`Review the versions of ${c.undo.site} in Sites`}>Versions</Button>{/if}
+            {#if c.undo}<Button variant="outline" size="sm" onclick={() => navigate("/sites")} aria-label={`Review the versions of ${c.undo.site} in Sites`}>Review versions</Button>{/if}
           </li>
         {/each}
       </ul>
@@ -147,7 +151,7 @@
 
   <Panel label="Access" title="Who got in" sub={oldest ? `Since ${clock(oldest.toISOString())} · last ${events.length} events held in memory.` : "Waiting for the first events."} bodyClass="p-0">
     <div class="border-border grid grid-cols-3 border-b">
-      {#each [{ n: summary.allowed, label: "let in", lamp: "on" }, { n: summary.refused, label: "refused", lamp: "off" }, { n: summary.loginsStarted, label: "asked to sign in", lamp: "wait" }] as s (s.label)}
+      {#each [{ n: summary.allowed, label: "requests let in", lamp: "on" }, { n: summary.refused, label: "requests refused", lamp: "off" }, { n: summary.loginsStarted, label: "sign-ins started", lamp: "wait" }] as s (s.label)}
         <div class="border-border border-r px-5 py-4 last:border-r-0">
           <p class="text-[1.7rem] leading-none font-semibold tracking-tight tabular-nums">{s.n}</p>
           <p class="text-muted-foreground mt-2 flex items-center gap-1.5 text-xs"><span class={["lamp", `lamp-${s.lamp}`]} aria-hidden="true"></span>{s.label}</p>
@@ -191,7 +195,7 @@
               <tr class="border-border border-b last:border-b-0">
                 <td class="px-5 py-3.5 font-medium">{site.name}</td>
                 <td class="px-5 py-3.5"><span class="bg-success/15 text-success rounded-md px-1.5 py-1 font-mono text-xs">{site.live ? site.live.slice(0, 7) : "none"}</span> <span class="text-muted-foreground ml-1 text-xs">{site.changed_at ? since(site.changed_at) : ""}</span></td>
-                <td class="text-muted-foreground px-5 py-3.5 text-xs">{#if deploy}{changes([deploy])[0].source}{:else}<span title="Only deploys since this edge started are remembered here">earlier than this session</span>{/if}</td>
+                <td class="text-muted-foreground px-5 py-3.5 text-xs">{#if deploy}{changes([deploy], subjects)[0].source}{:else}<span title="Only deploys since this edge started are remembered here">earlier than this session</span>{/if}</td>
                 <td class="text-muted-foreground px-5 py-3.5 font-mono text-xs">{site.deployments.length}</td>
                 <td class="px-5 py-3.5 text-right"><Button variant="outline" size="sm" onclick={() => navigate("/sites")}>Open</Button></td>
               </tr>

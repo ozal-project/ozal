@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { friendlyHealth } from "$lib/wording.ts";
   import { onMount } from "svelte";
   import PageHeader from "$lib/PageHeader.svelte";
   import Panel from "$lib/Panel.svelte";
@@ -94,7 +95,7 @@
 
 {#if data?.certificate}
   {@const c = data.certificate}
-  <Panel index="00" label="Origin certificate" title={c.host} sub={`${c.mode} · ${c.valid ? `valid until ${c.not_after}` : "not valid"}${c.pending ? ` · ${c.pending} pending` : ""}`} class="mb-6">
+  <Panel label="Origin certificate" title={c.host} sub={`${c.mode} · ${c.valid ? `valid until ${c.not_after}` : "not valid"}${c.pending ? ` · ${c.pending} pending` : ""}`} class="mb-6">
     {#snippet actions()}<span class="flex items-center gap-2 font-mono text-xs"><CertIcon class="size-4" /><span class={["lamp", c.valid ? "lamp-on" : "lamp-off"]}></span>{c.valid ? "valid" : "invalid"}</span>{/snippet}
     {#if c.last_error}<p class="text-destructive text-sm">{c.last_error}</p>{:else}<p class="text-muted-foreground text-sm">Last outcome: {c.last_outcome || "—"} · next attempt {c.next_attempt || "—"}</p>{/if}
   </Panel>
@@ -119,7 +120,7 @@
             <dt class="text-muted-foreground">Access</dt><dd>{r.access} · {r.policy}</dd>
             <dt class="text-muted-foreground">Health</dt><dd class="flex items-center gap-2"><span class={["lamp", lampFor[r.state_class] ?? "lamp-idle"]} aria-hidden="true"></span>{r.state} · {r.latency}</dd>
           </dl>
-          <details class="mt-3 text-xs"><summary class="text-muted-foreground cursor-pointer">Transport details</summary><dl class="mt-2 grid gap-1"><dt class="text-muted-foreground">Upstream</dt><dd class="break-all font-mono">{r.target}</dd><dt class="text-muted-foreground">Probe</dt><dd class="break-all font-mono">{r.health_path}</dd>{#if r.last_error}<dt class="text-destructive">Last error</dt><dd class="break-all">{r.last_error}</dd>{/if}</dl></details>
+          <details class="mt-3 text-xs"><summary class="text-muted-foreground cursor-pointer">Transport details</summary><dl class="mt-2 grid gap-1"><dt class="text-muted-foreground">Upstream</dt><dd class="break-all font-mono">{r.target}</dd><dt class="text-muted-foreground">Probe</dt><dd class="break-all font-mono">{r.health_path}</dd>{#if r.last_error}<dt class="text-destructive">Last error</dt><dd class="break-all">{friendlyHealth(r.last_error)}<span class="text-muted-foreground block font-mono">{r.last_error}</span></dd>{/if}</dl></details>
         </li>
       {/each}
     </ul>
@@ -142,7 +143,7 @@
               <Table.Cell class="max-w-56 align-top"><div class="text-muted-foreground font-mono text-xs break-all">{r.target}</div><div class="text-muted-foreground text-xs">probe {r.health_path}</div></Table.Cell>
               <Table.Cell class="max-w-72 align-top whitespace-normal">
                 <span class="flex items-center gap-2 text-sm"><span class={["lamp", lampFor[r.state_class] ?? "lamp-idle"]} aria-hidden="true"></span>{r.state}</span>
-                {#if r.last_error}<div class="text-destructive mt-1 line-clamp-2 font-mono text-[0.7rem] break-all" title={r.last_error}>{r.last_error}</div>{/if}
+                {#if r.last_error}<div class="text-destructive mt-1 text-xs" title={r.last_error}>{friendlyHealth(r.last_error)}</div>{/if}
                 {#if r.last_check !== "-"}<div class="text-muted-foreground mt-1 font-mono text-[0.7rem]">checked {new Date(r.last_check).toLocaleTimeString()}</div>{/if}
               </Table.Cell>
               <Table.Cell class="pr-3 text-right align-top font-mono text-xs tabular-nums">{r.latency}</Table.Cell>
@@ -156,13 +157,13 @@
 </Panel>
 
 {#if selected}
-  <Panel index="02" label="Route inspector" title={selected.host} sub="Current status projection. Detailed allowlists remain behind the policy API." class="mt-6">
+  <Panel label="Route inspector" title={selected.host} sub="Current status projection. Detailed allowlists remain behind the policy API." class="mt-6">
     <dl class="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-[9rem_1fr]">
       <dt class="text-muted-foreground">Access</dt><dd>{selected.access} · {selected.policy}</dd>
       <dt class="text-muted-foreground">Transport</dt><dd>{selected.kind}{selected.is_tunnel ? ` · ${selected.target}` : ""}</dd>
       <dt class="text-muted-foreground">Upstream</dt><dd class="font-mono break-all">{selected.target}</dd>
       <dt class="text-muted-foreground">Observed signal</dt><dd>{selected.state}{selected.last_check !== "-" ? ` · checked ${new Date(selected.last_check).toLocaleString()}` : ""}</dd>
-      {#if selected.last_error}<dt class="text-muted-foreground">Last probe error</dt><dd class="text-destructive break-all">{selected.last_error}</dd>{/if}
+      {#if selected.last_error}<dt class="text-muted-foreground">Last probe error</dt><dd class="text-destructive break-all">{friendlyHealth(selected.last_error)}<span class="text-muted-foreground block font-mono">{selected.last_error}</span></dd>{/if}
     </dl>
     <div class="mt-5 flex flex-wrap items-center gap-3">
       <Button onclick={() => navigate("/simulator", { host: selected.host })}>Test this route <ArrowRightIcon class="size-4" /></Button>

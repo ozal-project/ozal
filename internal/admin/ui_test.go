@@ -39,7 +39,7 @@ func TestOverviewProjectsAccessRulesWithoutConfigSecrets(t *testing.T) {
 	if len(view.Routes) != 3 || view.Routes[0].Protected || !view.Routes[1].Protected || !view.Routes[2].Protected {
 		t.Fatalf("wrong access rules: %+v", view)
 	}
-	if view.Routes[0].Kind != "Static files" || view.Routes[1].Policy != "1 emails / 0 domains / 1 required groups" {
+	if view.Routes[0].Kind != "Static files" || view.Routes[1].Policy != "Allowlist: 1 email · needs 1 group" {
 		t.Fatalf("wrong projection: %+v", view)
 	}
 	for _, private := range []string{"hidden-admin-token", "hidden-client-secret", "/private/site-path", "private-upstream", "private@example.test", "private-group"} {
@@ -184,7 +184,7 @@ func TestAPIStatusMatchesDebugViewWithoutSecrets(t *testing.T) {
 			t.Fatalf("api status exposed %q", private)
 		}
 	}
-	for _, want := range []string{`"host":"app.localhost"`, `"access":"Protected"`, `"state":"Unchecked"`, `"policy":"1 emails / 0 domains / 1 required groups"`, `"config_sha256":"digest-of-"`} {
+	for _, want := range []string{`"host":"app.localhost"`, `"access":"Protected"`, `"state":"Unchecked"`, `"policy":"Allowlist: 1 email · needs 1 group"`, `"config_sha256":"digest-of-"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("api status missing %s: %s", want, body)
 		}
@@ -241,4 +241,32 @@ func mustGlob(t *testing.T, pattern string) []string {
 		t.Fatalf("no embedded files match %s: %v", pattern, err)
 	}
 	return files
+}
+
+func TestPolicyLabelIsAPlainLineThatNamesNobody(t *testing.T) {
+	for name, tc := range map[string]struct {
+		route config.Route
+		want  string
+	}{
+		"public":          {config.Route{Host: "a"}, "No login required"},
+		"any account":     {config.Route{Host: "a", AuthRequired: true}, "Any signed-in account"},
+		"one domain":      {config.Route{Host: "a", Access: &config.AccessPolicy{AllowedDomains: []string{"secret.example"}}}, "Allowlist: 1 domain"},
+		"mixed":           {config.Route{Host: "a", Access: &config.AccessPolicy{AllowedEmails: []string{"a@x", "b@x"}, AllowedDomains: []string{"x"}}}, "Allowlist: 2 emails, 1 domain"},
+		"group only":      {config.Route{Host: "a", Access: &config.AccessPolicy{RequiredGroups: []string{"ops", "eng"}}}, "Any signed-in account · needs 2 groups"},
+		"login freshness": {config.Route{Host: "a", Access: &config.AccessPolicy{AllowedDomains: []string{"x"}, MaxAuthAgeMinutes: 15}}, "Allowlist: 1 domain · login within 15 min"},
+		"bound passkey":   {config.Route{Host: "a", Access: &config.AccessPolicy{AllowedEmails: []string{"a@x"}, RequireDeviceBound: true, Methods: []string{"passkey"}}}, "Allowlist: 1 email · login by passkey · passkey bound to the device"},
+		"context rule":    {config.Route{Host: "a", Access: &config.AccessPolicy{AllowedEmails: []string{"a@x"}, ContextRule: &config.ContextRule{}}}, "Allowlist: 1 email · context rule"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := policyLabel(tc.route)
+			if got != tc.want {
+				t.Fatalf("policyLabel = %q, want %q", got, tc.want)
+			}
+			for _, secret := range []string{"secret.example", "a@x", "ops", "eng"} {
+				if strings.Contains(got, secret) {
+					t.Fatalf("the label names %q: %q", secret, got)
+				}
+			}
+		})
+	}
 }

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { route, navigate, type Page } from "$lib/router.svelte";
-  import { admin } from "$lib/adminToken.svelte";
+  import AdminToken from "$lib/AdminToken.svelte";
   import Overview from "./pages/Overview.svelte";
   import Activity from "./pages/Activity.svelte";
   import Routes from "./pages/Routes.svelte";
@@ -86,7 +86,7 @@
       <div class="md:hidden"><Wordmark /></div>
       <p class="plate hidden md:block">Local console</p>
       <div class="flex items-center gap-3">
-        {#if admin.token}<button type="button" class="text-muted-foreground hover:text-foreground focus-visible:outline-ring rounded px-2 py-1 text-xs underline underline-offset-4 focus-visible:outline-2" onclick={() => (admin.token = "")}>Clear admin token</button>{/if}
+        <AdminToken />
         <span class="border-border bg-card flex items-center gap-2 rounded-full border px-3 py-1 font-mono text-[0.7rem]">
           <span class="lamp lamp-on" aria-hidden="true"></span>loopback only
         </span>

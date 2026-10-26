@@ -7,7 +7,7 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { Skeleton } from "$lib/components/ui/skeleton";
-  import { admin } from "$lib/adminToken.svelte";
+  import { admin, askForToken } from "$lib/adminToken.svelte";
   import { fetchPeople, invitePerson, setDisabled, revokePasskey, type People, type Invitation } from "$lib/api";
   import { LatestRequest } from "$lib/latestRequest";
   import Freshness from "$lib/Freshness.svelte";
@@ -23,7 +23,6 @@
   let loading = $state(false);
   let observedAt = $state<number | null>(null);
   const peopleRequest = new LatestRequest();
-  let tokenInput = $state<HTMLInputElement | null>(null);
 
   // Invitation form.
   let email = $state("");
@@ -67,8 +66,7 @@
 
   function needToken(): boolean {
     if (admin.token.trim()) return false;
-    tokenInput?.scrollIntoView({ behavior: "smooth", block: "center" });
-    tokenInput?.focus({ preventScroll: true });
+    askForToken();
     return true;
   }
 
@@ -77,7 +75,7 @@
     inviteError = "";
     created = null;
     copied = false;
-    if (needToken()) { inviteError = "Paste the admin token first."; return; }
+    if (needToken()) { inviteError = "Unlock changes first (top right)."; return; }
     inviting = true;
     const controller = new AbortController();
     inviteController = controller;
@@ -123,7 +121,7 @@
 
   async function act(key: string, personEmail: string, run: (signal: AbortSignal) => Promise<unknown>, done: string) {
     const noticeKey = key.startsWith("passkey:") ? key : `person:${personEmail}`;
-    if (needToken()) { notices = { ...notices, [noticeKey]: { text: "Paste the admin token above first.", ok: false } }; return; }
+    if (needToken()) { notices = { ...notices, [noticeKey]: { text: "Unlock changes first (top right).", ok: false } }; return; }
     const controller = new AbortController();
     mutations = { ...mutations, [key]: controller };
     const cleared = { ...notices };
@@ -153,7 +151,7 @@
       current: p.disabled ? "Disabled; sign-in is blocked" : "Enabled; sign-in follows route policy",
       requested: nextDisabled ? "Disabled" : "Enabled",
       consequence: nextDisabled ? "They will not be able to sign in, and their active sessions will end." : "They will be able to sign in again; existing sessions are not restored.",
-      detail: p.groups.length ? `Groups remain unchanged: ${p.groups.join(", ")}` : "No groups are assigned.",
+      detail: "Their other settings stay as they are.",
       label: nextDisabled ? "Disable person" : "Enable person",
       commit: () => void act(key, p.email, (signal) => setDisabled(admin.token.trim(), p.email, nextDisabled, signal), nextDisabled ? `${p.email} is disabled; their sessions ended.` : `${p.email} can sign in again.`),
     };
@@ -194,7 +192,7 @@
   const expires = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 </script>
 
-<PageHeader eyebrow="Identity" title="People & passkeys" intro="Who can sign in through Switchboard and with which passkeys. Invite someone, see their devices, and cut access at once: everything the switchboard user command does, from here.">
+<PageHeader eyebrow="Identity" title="People & passkeys" intro="Who can sign in, and from which devices. Invite someone, see their passkeys, or cut their access at once.">
   <div class="flex flex-col items-start gap-2 sm:items-end">
     <Button variant="outline" size="sm" onclick={load} disabled={loading}><RefreshIcon class={["size-3.5", loading && "animate-spin"]} /> Refresh</Button>
     <Freshness observedAt={observedAt} refreshing={loading && people !== null} error={error} />
@@ -215,22 +213,14 @@
     <Stat label="Disabled" value={people ? disabledCount : "—"} note="Cannot sign in; sessions ended" lamp={disabledCount ? "wait" : "idle"} />
   </div>
 
-  <Panel index="00" label="Changes" title="Admin token" sub="Needed to invite, disable or revoke. Kept in this tab's memory for every page, never stored." class="mb-6">
-    <div class="flex max-w-xl flex-col gap-2">
-      <Label for="token" class="text-muted-foreground flex items-center gap-1.5 font-mono text-[0.68rem] font-medium tracking-[0.12em] uppercase"><KeyIcon class="size-3.5" /> Admin token</Label>
-      <Input id="token" type="password" bind:ref={tokenInput} bind:value={admin.token} placeholder="Bearer token from admin.token" autocomplete="off" spellcheck={false} class="font-mono" />
-    </div>
-  </Panel>
-
-  <Panel index="01" label="Invite" title="Invite someone" sub="They get a one-time link to create their passkey on their own device. It works once and expires in 15 minutes." class="mb-6">
+  <Panel label="Invite" title="Invite someone" sub="They get a one-time link to create their passkey on their own device. It works once and expires in 15 minutes." class="mb-6">
     <form class="grid max-w-3xl gap-4 sm:grid-cols-2" onsubmit={invite}>
       <div class="flex flex-col gap-2"><Label for="inv-email">Email</Label><Input id="inv-email" type="email" required bind:value={email} placeholder="ana@example.com" autocomplete="off" /></div>
       <div class="flex flex-col gap-2"><Label for="inv-name">Name (optional)</Label><Input id="inv-name" bind:value={name} placeholder="Ana" autocomplete="off" /></div>
-      <div class="flex flex-col gap-2"><Label for="inv-groups">Groups</Label><Input id="inv-groups" bind:value={groups} placeholder="owner, ops" autocomplete="off" /><p class="text-muted-foreground text-xs">Comma separated; access policies match them.</p></div>
       <div class="flex flex-col gap-2">
         <Label for="inv-dest">After the passkey, open</Label>
         <select id="inv-dest" bind:value={destination} class="border-input bg-background h-9 rounded-md border px-3 text-sm">
-          <option value="">Their list of sites</option>
+          <option value="">Their apps page</option>
           {#each people?.protected_hosts ?? [] as host (host)}<option value={host}>{host}</option>{/each}
         </select>
       </div>
@@ -263,9 +253,9 @@
     <Panel label="People" title="Nobody invited yet"><p class="text-muted-foreground text-sm">Create the first invitation above.</p></Panel>
   {:else}
     <div class="space-y-6">
-      {#each people.users as p, i (p.email)}
-        <Panel index={String(i + 2).padStart(2, "0")} label={p.disabled ? "Disabled" : "Person"} title={p.name ? `${p.name} · ${p.email}` : p.email}
-          sub={`Invited ${day(p.created)} · ${p.groups.length ? "groups " + p.groups.join(", ") : "no groups"} · ${active(p).length} active passkey${active(p).length === 1 ? "" : "s"}`} bodyClass="p-0">
+      {#each people.users as p (p.email)}
+        <Panel label={p.disabled ? "Disabled" : active(p).length === 0 ? "Waiting to join" : "Signed up"} title={p.name ? `${p.name} · ${p.email}` : p.email}
+          sub={`Invited ${day(p.created)} · ${active(p).length} passkey${active(p).length === 1 ? "" : "s"}`} bodyClass="p-0">
           {#snippet actions()}
             {@const toggleKey = `person:${p.email}:${p.disabled ? "enable" : "disable"}`}
             <Button variant="outline" size="sm" disabled={busyForPerson(p.email)} onclick={() => reviewToggle(p)}>{mutations[toggleKey] ? "Waiting…" : p.disabled ? "Enable" : "Disable"}</Button>
@@ -275,7 +265,7 @@
             <p class={["border-b px-5 py-3 text-sm", notices[`person:${p.email}`].ok ? "text-foreground" : "text-destructive"]} role="status">{notices[`person:${p.email}`].text}</p>
           {/if}
           {#if p.passkeys.length === 0}
-            <p class="text-muted-foreground px-5 py-4 text-sm">No passkey yet: the invitation has not been used.</p>
+            <p class="text-muted-foreground px-5 py-4 text-sm">They have not used the invitation yet. Invite them again if the link expired.</p>
           {:else}
             <ul class="divide-border divide-y">
               {#each p.passkeys as k (k.id)}

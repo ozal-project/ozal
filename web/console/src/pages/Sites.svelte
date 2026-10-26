@@ -28,7 +28,7 @@
   const sitesRequest = new LatestRequest();
   const projectsRequest = new LatestRequest();
   // The token is shared by the console pages, in this tab's memory only.
-  import { admin } from "$lib/adminToken.svelte";
+  import { admin, askForToken } from "$lib/adminToken.svelte";
   import { afterLoad } from "$lib/loadState";
   let mutations = $state<Record<string, AbortController>>({});
   let review = $state<{ site: string; deployment: Deployment; current: Deployment | undefined; hosts: string[] } | null>(null);
@@ -36,7 +36,6 @@
   // Feedback belongs next to the button that caused it: a message at the top
   // of the page is out of sight when the click happened further down.
   let notices = $state<Record<string, { text: string; ok: boolean }>>({});
-  let tokenInput = $state<HTMLInputElement | null>(null);
 
   async function loadProjects() {
     const token = admin.token.trim();
@@ -99,9 +98,8 @@
     if (!action) return;
     reviewOpen = false;
     if (!admin.token.trim()) {
-      notices = { ...notices, [action.site]: { text: "Paste the admin token above first; it is needed to change the live build.", ok: false } };
-      tokenInput?.scrollIntoView({ behavior: "smooth", block: "center" });
-      tokenInput?.focus({ preventScroll: true });
+      notices = { ...notices, [action.site]: { text: "Unlock changes first (top right); it is needed to change the live build.", ok: false } };
+      askForToken();
       return;
     }
     const key = `${action.site}:${action.deployment.id}`;
@@ -154,16 +152,9 @@
     <Stat label="Deploy from a terminal" value="CLI" note="switchboard site deploy -site NAME ./dist" lamp="wait" />
   </div>
 
-  <Panel index="00" label="Rollback" title="Admin token" sub="Needed only to change which build is live. Kept in this tab's memory for every page, never stored." class="mb-6">
-    <div class="flex max-w-xl flex-col gap-2">
-      <Label for="token" class="text-muted-foreground flex items-center gap-1.5 font-mono text-[0.68rem] font-medium tracking-[0.12em] uppercase"><KeyIcon class="size-3.5" /> Admin token</Label>
-      <Input id="token" type="password" bind:ref={tokenInput} bind:value={admin.token} placeholder="Bearer token from admin.token" autocomplete="off" spellcheck={false} class="font-mono" />
-    </div>
-  </Panel>
-
-  <Panel index="01" label="Deploy policy" title="Projects" sub="Read-only view of which hostnames and publishers belong to each site. Secret references are never returned." class="mb-6">
+  <Panel label="Deploy policy" title="Projects" sub="Read-only view of which hostnames and publishers belong to each site. Secret references are never returned." class="mb-6">
     {#if !admin.token.trim()}
-      <p class="text-muted-foreground text-sm">Enter the admin token above and refresh to read project trust settings.</p>
+      <p class="text-muted-foreground text-sm">Unlock changes (top right) to see which repositories may publish each site.</p>
     {:else if projectsLoading && !projects}
       <div class="space-y-3" aria-busy="true" aria-label="Loading projects"><Skeleton class="h-20 w-full" /></div>
     {:else if projectsError}
@@ -208,7 +199,7 @@
   {:else}
     <div class="space-y-6">
       {#each sites as site, i (site.name)}
-        <Panel index={String(i + 1).padStart(2, "0")} label="Site" title={site.name} sub={`live since ${when(site.changed_at)}`} bodyClass="p-0">
+        <Panel label="Site" title={site.name} sub={`live since ${when(site.changed_at)}`} bodyClass="p-0">
           {#if notices[site.name]}
             <p class={["border-b px-5 py-3 text-sm", notices[site.name].ok ? "text-foreground" : "text-destructive"]} role="status">{notices[site.name].text}</p>
           {/if}

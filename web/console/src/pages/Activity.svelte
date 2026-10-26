@@ -7,12 +7,13 @@
   import * as Select from "$lib/components/ui/select";
   import { Input } from "$lib/components/ui/input";
   import { Button } from "$lib/components/ui/button";
-  import { fetchOverview, type AccessEvent, type RouteOverview } from "$lib/api";
+  import { fetchOverview, fetchPeople, type AccessEvent, type RouteOverview } from "$lib/api";
   import { navigate } from "$lib/router.svelte";
   import { LatestRequest } from "$lib/latestRequest";
   import Freshness from "$lib/Freshness.svelte";
   import PolicyEvidence from "$lib/PolicyEvidence.svelte";
   import { emptyFeed, receive } from "$lib/feed";
+  import { shortId, subjectsOf, whoActed as actedBy } from "$lib/wording.ts";
   import PauseIcon from "@lucide/svelte/icons/pause";
   import PlayIcon from "@lucide/svelte/icons/play";
   import SearchIcon from "@lucide/svelte/icons/search";
@@ -51,6 +52,11 @@
   const group = (e: AccessEvent) =>
     e.type.startsWith("access.") || e.type.startsWith("origin.") ? "access" : e.type.startsWith("login.") ? "login" : e.type.startsWith("tunnel.") || e.type.startsWith("connector.") ? "tunnel" : e.type.startsWith("pages.") ? "pages" : "changes";
 
+  // A deployment's reason is its 64-character content hash: the first 12 tell builds apart.
+  const reasonText = (e: AccessEvent) => (e.reason && /^[0-9a-f]{40,}$/.test(e.reason) ? shortId(e.reason) : e.reason);
+  // Passkey sessions leave an opaque id in events; the people list says whose it is.
+  let subjects = $state(new Map<string, string>());
+  const whoActed = (actor?: string) => actedBy(actor, subjects);
   const shown = $derived(frozen ?? events);
   const deploymentSource = (e: AccessEvent) => e.deployment ? [e.deployment.project, e.deployment.repository_id ? `repository ${e.deployment.repository_id}` : "", e.deployment.ref, e.deployment.commit_sha?.slice(0, 12)].filter(Boolean).join(" · ") : "";
   const filtered = $derived(
@@ -89,7 +95,9 @@
 
   onMount(() => {
     loadRoutes();
-    const refresh = setInterval(loadRoutes, 30_000);
+    const loadSubjects = () => fetchPeople().then((p) => (subjects = subjectsOf(p.users))).catch(() => {});
+    loadSubjects();
+    const refresh = setInterval(() => { loadRoutes(); loadSubjects(); }, 30_000);
     let reconnecting = false;
     const es = new EventSource("/_/events");
     es.onopen = () => { stream = reconnecting ? "reconnected" : "live"; reconnecting = true; };
@@ -110,7 +118,7 @@
   const streamText = { connecting: "Connecting…", live: "Live event stream", reconnected: "Live · reconnected", lost: "Connection lost · retrying" };
 </script>
 
-<PageHeader eyebrow="Access control" title="Access activity" intro="Every line Switchboard connected or refused, who asked, and why.">
+<PageHeader eyebrow="Access control" title="Access activity" intro="Every request Switchboard let in or refused, who asked, and why.">
   <span class="border-border bg-card flex items-center gap-2 rounded-full border px-3.5 py-1.5 font-mono text-xs">
     <span class={["lamp", stream === "lost" ? "lamp-off" : stream === "connecting" ? "lamp-wait" : "lamp-on"]} aria-hidden="true"></span>
     {streamText[stream]}
@@ -134,8 +142,8 @@
     note={routes ? `${protectedCount} of ${routes.length} configured routes` : routesError ? "Route configuration unavailable" : "Reading routing configuration…"} />
 </div>
 
-<div class="grid gap-6 lg:grid-cols-[1fr_320px]">
-  <Panel index="01" label="Decision feed" title={`${filtered.length} shown · ${shown.length} retained`} sub={frozen ? "Paused — new events are held back" : "Newest first, live"} class="min-w-0">
+<div class="grid gap-6 min-[1500px]:grid-cols-[1fr_320px]">
+  <Panel label="Decision feed" title={`${filtered.length} shown · ${shown.length} retained`} sub={frozen ? "Paused — new events are held back" : "Newest first, live"} class="min-w-0">
     {#snippet actions()}
       <Button variant="outline" size="sm" onclick={() => (frozen = frozen ? null : [...events])} aria-pressed={frozen !== null}>
         {#if frozen}<PlayIcon class="size-3.5" /> Resume{:else}<PauseIcon class="size-3.5" /> Pause{/if}
@@ -170,9 +178,9 @@
               <div class="flex min-w-0 items-center gap-2 font-medium"><span class={["lamp shrink-0", o === "allow" ? "lamp-on" : o === "deny" ? "lamp-off" : "lamp-idle"]} aria-hidden="true"></span><span class="break-words">{labels[e.type] ?? e.type}</span></div>
               <time class="text-muted-foreground shrink-0 font-mono text-xs" datetime={e.time} title={e.time}>{t.t}</time>
             </div>
-            <div class="mt-2 pl-5 text-sm">{e.actor ?? "No actor recorded"}</div>
+            <div class="mt-2 pl-5 text-sm">{whoActed(e.actor) || "No actor recorded"}</div>
             {#if e.host}<a href={`/routes?host=${encodeURIComponent(e.host)}`} onclick={(event) => { event.preventDefault(); inspect(e.host); }} class="text-muted-foreground mt-0.5 ml-5 block break-all font-mono text-xs underline underline-offset-4">{e.host}</a>{/if}
-            {#if e.code || e.reason || e.error}<p class="text-muted-foreground mt-2 text-xs"><span class="font-mono">{e.code}</span>{e.code && (e.reason || e.error) ? " · " : ""}{[e.reason, e.error].filter(Boolean).join(" · ")}</p>{/if}
+            {#if e.code || e.reason || e.error}<p class="text-muted-foreground mt-2 text-xs"><span class="font-mono">{e.code}</span>{e.code && (e.reason || e.error) ? " · " : ""}{[reasonText(e), e.error].filter(Boolean).join(" · ")}</p>{/if}
             {#if e.remote}<p class="text-muted-foreground mt-1 text-xs">Peer <span class="font-mono">{e.remote}</span></p>{/if}
             {#if e.deployment}<p class="text-muted-foreground mt-2 break-all font-mono text-xs">{deploymentSource(e)}</p>{/if}
             <PolicyEvidence context={e.context} />
@@ -182,7 +190,7 @@
       <!-- svelte-ignore a11y_no_noninteractive_tabindex (keyboard users need to scroll this table region) -->
       <div class="hidden overflow-x-auto md:block" role="region" tabindex="0" aria-label="Access activity events">
         <Table.Root>
-          <Table.Header><Table.Row><Table.Head class="plate">Decision / event</Table.Head><Table.Head class="plate">Caller / line</Table.Head><Table.Head class="plate text-right">Time</Table.Head></Table.Row></Table.Header>
+          <Table.Header><Table.Row><Table.Head class="plate">Decision / event</Table.Head><Table.Head class="plate">Who / where</Table.Head><Table.Head class="plate text-right">Time</Table.Head></Table.Row></Table.Header>
           <Table.Body>
             {#each filtered as e, i (e.time + e.type + i)}
               {@const o = outcome(e)}
@@ -193,12 +201,12 @@
                     <span class={["lamp", o === "allow" ? "lamp-on" : o === "deny" ? "lamp-off" : "lamp-idle"]} aria-hidden="true"></span>
                     {labels[e.type] ?? e.type}
                   </div>
-                  {#if e.code || e.reason || e.error}<div class="text-muted-foreground mt-1 pl-5 text-xs"><span class="font-mono">{e.code}</span>{e.code && (e.reason || e.error) ? " · " : ""}{[e.reason, e.error].filter(Boolean).join(" · ")}</div>{/if}
+                  {#if e.code || e.reason || e.error}<div class="text-muted-foreground mt-1 pl-5 text-xs"><span class="font-mono">{e.code}</span>{e.code && (e.reason || e.error) ? " · " : ""}{[reasonText(e), e.error].filter(Boolean).join(" · ")}</div>{/if}
                   {#if e.deployment}<p class="text-muted-foreground mt-2 break-all pl-5 font-mono text-xs">{deploymentSource(e)}</p>{/if}
                   <PolicyEvidence context={e.context} />
                 </Table.Cell>
                 <Table.Cell class="align-top">
-                  <div class="text-sm">{e.actor ?? "No actor recorded"}</div>
+                  <div class="text-sm">{whoActed(e.actor) || "No actor recorded"}</div>
                   {#if e.host}
                     <a class="text-muted-foreground hover:text-foreground focus-visible:outline-ring font-mono text-xs underline underline-offset-4 focus-visible:outline-2" href={`/routes?host=${encodeURIComponent(e.host)}`} onclick={(event) => { event.preventDefault(); inspect(e.host); }}>{e.host}</a>
                   {:else}<div class="text-muted-foreground font-mono text-xs">No route recorded</div>{/if}
@@ -214,7 +222,7 @@
   </Panel>
 
   <div class="space-y-6">
-    <Panel index="02" label="Line access" sub="Current login requirements">
+    <Panel label="Access by hostname" sub="Who each hostname lets in">
       <div class="mb-3"><Freshness observedAt={routesObservedAt} refreshing={routesRefreshing} error={routesError ? "Route configuration could not be refreshed" : ""} /></div>
       {#if !routes}
         {#if routesError}<p class="text-destructive text-sm">Routes could not be read. <button class="underline" onclick={loadRoutes}>Retry</button></p>

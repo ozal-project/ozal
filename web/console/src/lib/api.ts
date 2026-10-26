@@ -188,7 +188,7 @@ export async function rollback(token: string, site: string, id: string, signal?:
 
 // People and passkeys (operator side of ID-003/ID-008).
 export type PersonPasskey = { id: string; provider: string; synced: boolean; created: string; last_used?: string; revoked?: string };
-export type Person = { email: string; name?: string; groups: string[]; created: string; disabled?: string; passkeys: PersonPasskey[] };
+export type Person = { email: string; subject?: string; name?: string; groups: string[]; created: string; disabled?: string; passkeys: PersonPasskey[] };
 export type People = { enabled: boolean; users: Person[]; protected_hosts: string[] };
 export type Invitation = { email: string; link: string; expires_at: string };
 

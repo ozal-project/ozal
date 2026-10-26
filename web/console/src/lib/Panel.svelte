@@ -9,7 +9,7 @@
 <section class={["panel", className]}>
   <header class="panel-head">
     <div class="min-w-0">
-      <p class="plate">{#if index}<b>{index}</b><span class="mx-1.5 opacity-60">/</span>{/if}{label}</p>
+      <p class="plate">{label}</p>
       {#if title}<h2 class="mt-1 text-base font-semibold tracking-tight">{title}</h2>{/if}
       {#if sub}<p class="text-muted-foreground text-sm">{sub}</p>{/if}
     </div>

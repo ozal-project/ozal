@@ -2,11 +2,14 @@
 // reads (status, live events). Wording lives here, not in the page, so it is
 // tested and the page only lays it out. Nothing here decides access.
 import type { AccessEvent, StatusResponse } from "./api";
+import { friendlyHealth, whoActed } from "./wording.ts";
 
 export type Attention = {
   kind: "route" | "certificate" | "audit";
   title: string;
   detail: string;
+  // The error as the edge reported it, for whoever needs the exact words.
+  raw?: string;
   action?: { label: string; page: "/routes" | "/sites"; host?: string };
 };
 
@@ -49,7 +52,8 @@ export function attention(status: StatusResponse | null): Attention[] {
     items.push({
       kind: "route",
       title: `${r.host} is not answering`,
-      detail: `Visitors see an error page${since ? ` (${since.trim()})` : ""}. ${r.last_error ? `The app behind it said: ${r.last_error}.` : "The app behind it is not responding to its health check."}`,
+      detail: `Visitors see an error page${since ? ` (${since.trim()})` : ""}. The app behind it is down: ${friendlyHealth(r.last_error)}.`,
+      raw: r.last_error || undefined,
       action: { label: "Inspect route", page: "/routes", host: r.host },
     });
   }
@@ -102,16 +106,16 @@ export function accessSummary(events: AccessEvent[]): AccessSummary {
 
 const isChange = (type: string) => !type.startsWith("access.") && !type.startsWith("login.") && !type.startsWith("origin.") && type !== "admin.mutation_requested";
 
-function deploySource(e: AccessEvent): string {
+function deploySource(e: AccessEvent, subjects?: Map<string, string>): string {
   const d = e.deployment;
   if (d) {
     const ref = d.ref?.replace(/^refs\/(heads|tags)\//, "");
     return ["GitHub Actions", ref, d.commit_sha?.slice(0, 12)].filter(Boolean).join(" · ");
   }
-  return `uploaded by hand${e.actor ? ` (${e.actor})` : ""}`;
+  return e.actor ? `uploaded via ${whoActed(e.actor, subjects)}` : "uploaded by hand";
 }
 
-export function changes(events: AccessEvent[]): Change[] {
+export function changes(events: AccessEvent[], subjects?: Map<string, string>): Change[] {
   const out: Change[] = [];
   for (const e of events) {
     if (!isChange(e.type)) continue;
@@ -119,10 +123,10 @@ export function changes(events: AccessEvent[]): Change[] {
     const host = e.host ?? "";
     switch (e.type) {
       case "pages.deployed":
-        out.push({ ...base, title: `${host || e.deployment?.project || "A site"} was updated`, detail: "", source: deploySource(e), tone: "good", undo: host ? { site: host } : undefined });
+        out.push({ ...base, title: `${host || e.deployment?.project || "A site"} was updated`, detail: "", source: deploySource(e, subjects), tone: "good", undo: host ? { site: host } : undefined });
         break;
       case "pages.rolled_back":
-        out.push({ ...base, title: `${host || "A site"} went back to a previous version`, detail: e.actor ? `By ${e.actor}.` : "", tone: "neutral" });
+        out.push({ ...base, title: `${host || "A site"} went back to a previous version`, detail: e.actor ? `By ${whoActed(e.actor, subjects)}.` : "", tone: "neutral" });
         break;
       case "pages.deploy_refused":
       case "pages.refused":
@@ -132,20 +136,23 @@ export function changes(events: AccessEvent[]): Change[] {
         break;
       }
       case "config.reloaded":
-        out.push({ ...base, title: "Configuration reloaded", detail: e.actor ? `Triggered by ${e.actor}.` : "", tone: "neutral" });
+        out.push({ ...base, title: "Configuration reloaded", detail: e.actor ? `Triggered by ${whoActed(e.actor, subjects)}.` : "", tone: "neutral" });
         break;
       case "config.reload_failed":
         out.push({ ...base, title: "A configuration reload failed", detail: "The previous configuration is still in use.", tone: "bad" });
         break;
       case "route.created": case "route.deleted":
-        out.push({ ...base, title: `${host || "A route"} was ${e.type === "route.created" ? "added" : "removed"}`, detail: e.actor ? `By ${e.actor}.` : "", tone: "neutral" });
+        out.push({ ...base, title: `${host || "A route"} was ${e.type === "route.created" ? "added" : "removed"}`, detail: e.actor ? `By ${whoActed(e.actor, subjects)}.` : "", tone: "neutral" });
         break;
       case "user.invited": case "user.disabled": case "user.enabled":
-        out.push({ ...base, title: `${host || "A person"} was ${e.type.slice(5)}`, detail: e.actor ? `By ${e.actor}.` : "", tone: "neutral" });
+        out.push({ ...base, title: `${host || "A person"} was ${e.type.slice(5)}`, detail: e.actor ? `By ${whoActed(e.actor, subjects)}.` : "", tone: "neutral" });
         break;
-      case "passkey.registered":
-        out.push({ ...base, title: `${host || e.actor || "Someone"} added a passkey`, detail: e.code === "device_bound" ? "Bound to one device." : "", tone: "neutral" });
+      case "passkey.registered": {
+        // The event's host is the login page, not the person: only the actor says who.
+        const who = whoActed(e.actor, subjects);
+        out.push({ ...base, title: `${who && !who.startsWith("sb:") ? who : "Someone"} added a passkey`, detail: e.code === "device_bound" ? "A passkey that stays on one device." : "A passkey that can sync across devices.", tone: "neutral" });
         break;
+      }
       case "passkey.revoked":
         out.push({ ...base, title: `A passkey was revoked${host ? ` for ${host}` : ""}`, detail: e.reason ?? "", tone: "neutral" });
         break;
