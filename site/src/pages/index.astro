@@ -129,12 +129,17 @@ reason    account's email domain
         <h2 id="tour-title">See it work, step by step.</h2>
         <p>One story, five screens: an invitation, an allowed visit, a refusal and the log that explains both. Screens from a real edge with demo accounts.</p>
       </div>
-      <ol class="steps">{steps.map((st, i) => (
-        <li class="step">
-          <div class="step-copy"><span class="step-n" aria-hidden="true">{i + 1}</span><h3>{st.t}</h3><p>{st.d}</p></div>
-          <figure class={`step-shot ${st.narrow ? "step-narrow" : ""}`}><img src={`/shots/${st.img}.jpg`} width={st.w} height={st.h} loading="lazy" alt={st.alt} /></figure>
-        </li>
-      ))}</ol>
+      <div class="tour">
+        <nav class="tour-rail" aria-label="Tour steps">{steps.map((st, i) => (
+          <a href={`#step-${i + 1}`}><span aria-hidden="true">{i + 1}</span>{st.t}</a>
+        ))}</nav>
+        <ol class="steps" data-tour>{steps.map((st, i) => (
+          <li class={`step${i === 0 ? " is-active" : ""}`} id={`step-${i + 1}`}>
+            <div class="step-copy"><span class="step-n" aria-hidden="true">{i + 1}</span><h3>{st.t}</h3><p>{st.d}</p></div>
+            <figure class={`step-shot ${st.narrow ? "step-narrow" : ""}`}><img src={`/shots/${st.img}.jpg`} width={st.w} height={st.h} loading="lazy" alt={st.alt} /></figure>
+          </li>
+        ))}</ol>
+      </div>
       <details class="disclosure tour-log">
         <summary>Read the access decisions from this tour</summary>
         <div class="disclosure-body">

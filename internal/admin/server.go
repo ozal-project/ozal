@@ -315,7 +315,7 @@ func (h *Handler) status(w http.ResponseWriter, _ *http.Request) {
 	view := h.buildStatusView()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'self'; font-src 'self'; base-uri 'none'; frame-ancestors 'none'")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'self'; font-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	if err := dashboardTemplate.Execute(w, view); err != nil {
 		log.Printf("render admin status: %v", err)

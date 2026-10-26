@@ -13,25 +13,37 @@
   import People from "./pages/People.svelte";
   import Wordmark from "$lib/brand/Wordmark.svelte";
   import BugIcon from "@lucide/svelte/icons/bug";
+  import LayoutDashboardIcon from "@lucide/svelte/icons/layout-dashboard";
+  import AppWindowIcon from "@lucide/svelte/icons/app-window";
+  import GlobeIcon from "@lucide/svelte/icons/globe";
+  import UsersIcon from "@lucide/svelte/icons/users";
+  import PlugIcon from "@lucide/svelte/icons/plug";
+  import ScrollTextIcon from "@lucide/svelte/icons/scroll-text";
+  import GitBranchIcon from "@lucide/svelte/icons/git-branch";
+  import RouteIcon from "@lucide/svelte/icons/route";
+  import FlaskIcon from "@lucide/svelte/icons/flask-conical";
+  import type { Component } from "svelte";
 
   // Operate is for whoever runs the edge day to day; Build is for the person
   // who writes its configuration and policy (UI-005). Same pages, plain names.
-  const groups: { name: string; items: { path: Page; label: string }[] }[] = [
+  const groups: { name: string; items: { path: Page; label: string; icon: Component<{ class?: string }> }[] }[] = [
     { name: "Operate", items: [
-      { path: "/overview", label: "Overview" },
-      { path: "/applications", label: "Applications" },
-      { path: "/sites", label: "Sites" },
-      { path: "/people", label: "People" },
-      { path: "/connectors", label: "Connectors" },
-      { path: "/activity", label: "Access log" },
+      { path: "/overview", label: "Overview", icon: LayoutDashboardIcon },
+      { path: "/applications", label: "Applications", icon: AppWindowIcon },
+      { path: "/sites", label: "Sites", icon: GlobeIcon },
+      { path: "/people", label: "People", icon: UsersIcon },
+      { path: "/connectors", label: "Connectors", icon: PlugIcon },
+      { path: "/activity", label: "Access log", icon: ScrollTextIcon },
     ] },
     { name: "Build", items: [
-      { path: "/projects", label: "CI projects" },
-      { path: "/routes", label: "Routes & policy" },
-      { path: "/simulator", label: "Why? Simulator" },
+      { path: "/projects", label: "CI projects", icon: GitBranchIcon },
+      { path: "/routes", label: "Routes & policy", icon: RouteIcon },
+      { path: "/simulator", label: "Why? Simulator", icon: FlaskIcon },
     ] },
   ];
   const nav = groups.flatMap((g) => g.items);
+  const current = $derived(groups.find((g) => g.items.some((i) => i.path === route.path)) ?? groups[0]);
+  const currentItem = $derived(nav.find((i) => i.path === route.path) ?? nav[0]);
 
   const go = (e: MouseEvent, path: Page) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
@@ -57,13 +69,13 @@
 <div class="flex min-h-screen">
   <a href="#main-content" class="sr-only focus:not-sr-only focus:bg-background focus:text-foreground focus:ring-ring fixed top-2 left-2 z-50 rounded-md px-3 py-2 text-sm focus:ring-2">Skip to content</a>
   <div class="bg-sidebar border-sidebar-border hidden w-[17rem] shrink-0 border-r md:block">
-  <aside class="sticky top-0 flex h-screen flex-col">
-    <a href="/overview" onclick={(e) => go(e, "/overview")} class="px-5 pt-6 pb-6" aria-label="Switchboard console home"><Wordmark /></a>
+  <aside class="sticky top-0 flex h-screen flex-col overflow-y-auto">
+    <a href="/overview" onclick={(e) => go(e, "/overview")} class="border-sidebar-border mb-4 flex h-16 shrink-0 items-center border-b px-5" aria-label="Switchboard console home"><Wordmark /></a>
 
-    <nav class="flex flex-col gap-5 px-3" aria-label="Console">
+    <nav class="flex flex-col gap-6 px-3" aria-label="Console">
       {#each groups as group (group.name)}
         <div>
-          <p class="plate px-3 pb-1.5">{group.name}</p>
+          <p class="plate px-3 pb-2 text-[0.66rem] opacity-80">{group.name}</p>
           <div class="flex flex-col gap-0.5">
             {#each group.items as item (item.path)}
               {@const active = route.path === item.path}
@@ -71,26 +83,28 @@
                 href={item.path}
                 onclick={(e) => go(e, item.path)}
                 aria-current={active ? "page" : undefined}
-                class={["flex items-center rounded-lg px-3 py-2 text-sm transition-colors",
-                  active ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-[inset_2px_0_0_var(--primary)]" : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground"]}
-              >{item.label}</a>
+                class={["group flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                  active ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground"]}
+              ><item.icon class={`size-4 shrink-0 transition-colors ${active ? "text-primary" : "opacity-70 group-hover:opacity-100"}`} />{item.label}</a>
             {/each}
           </div>
         </div>
       {/each}
     </nav>
 
-    <div class="mt-auto space-y-4 p-5">
+    <div class="mt-auto space-y-3 p-4 pt-8">
       <a href="/_/status" class="text-muted-foreground hover:text-foreground flex items-center gap-2 text-xs"><BugIcon class="size-3.5" /> Route debug · works without JavaScript</a>
-      <p class="text-muted-foreground border-sidebar-border border-t pt-3 text-xs leading-relaxed">Who gets in, and why. Processes and backups live in Server Ops.</p>
+      <p class="text-muted-foreground bg-card border-sidebar-border rounded-xl border p-3 text-xs leading-relaxed">Who gets in, and why. Processes and backups live in Server Ops.</p>
     </div>
   </aside>
   </div>
 
   <div class="flex min-w-0 flex-1 flex-col">
-    <header class="bg-background/80 border-border sticky top-0 z-10 flex flex-wrap items-center justify-between gap-4 border-b px-5 py-3 backdrop-blur md:px-10">
+    <header class="bg-background/80 border-border sticky top-0 z-10 flex min-h-16 flex-wrap items-center justify-between gap-4 border-b px-5 py-3 backdrop-blur md:px-10">
       <div class="md:hidden"><Wordmark /></div>
-      <p class="plate hidden md:block">Local console</p>
+      <p class="hidden items-center gap-2 text-sm md:flex" aria-label="Current page">
+        <span class="text-muted-foreground">{current.name}</span><span class="text-muted-foreground/50" aria-hidden="true">/</span><span class="font-medium">{currentItem.label}</span>
+      </p>
       <div class="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-3">
         <AdminToken />
         <span class="border-border bg-card flex items-center gap-2 rounded-full border px-3 py-1 font-mono text-[0.7rem]">

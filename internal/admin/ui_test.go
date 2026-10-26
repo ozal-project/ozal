@@ -270,3 +270,17 @@ func TestPolicyLabelIsAPlainLineThatNamesNobody(t *testing.T) {
 		})
 	}
 }
+
+// The console shares the site's favicon: the page links it, and it is served
+// as an image under the console's strict CSP.
+func TestConsoleServesTheSharedFavicon(t *testing.T) {
+	broker := events.NewBroker()
+	handler := New(&fakeManager{}, broker, WithEvents(broker))
+	if page := request(handler, http.MethodGet, "/overview", "", ""); !strings.Contains(page.Body.String(), `rel="icon" href="/favicon.svg"`) {
+		t.Fatal("the console page does not link its favicon")
+	}
+	rec := request(handler, http.MethodGet, "/favicon.svg", "", "")
+	if rec.Code != 200 || rec.Header().Get("Content-Type") != "image/svg+xml" || !strings.Contains(rec.Body.String(), "<svg") {
+		t.Fatalf("favicon: %d %v", rec.Code, rec.Header())
+	}
+}
