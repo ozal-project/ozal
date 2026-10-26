@@ -43,6 +43,13 @@ archives:
       - QUICKSTART.md
       - config.example.json
       - config.quickstart.json
+      - scripts/release/install.sh
+      - docs/operations/download-install.md
+      - docs/operations/first-application.md
+      - docs/operations/github-repositories.md
+      - docs/operations/connector-onboarding.md
+      - docs/operations/systemd.md
+      - docs/operations/switchboard.service
 
 checksum:
   name_template: checksums.txt

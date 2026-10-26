@@ -19,6 +19,10 @@ func WriteAtomic(path string, cfg Config) (err error) {
 		return fmt.Errorf("encode config: %w", err)
 	}
 	data = append(data, '\n')
+	return writeBytesAtomic(path, data)
+}
+
+func writeBytesAtomic(path string, data []byte) (err error) {
 
 	// Replace the symlink's target, not the link itself: an operator's config
 	// path may be a symlink (e.g. to a versioned file) and must stay one.

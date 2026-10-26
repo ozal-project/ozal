@@ -33,6 +33,8 @@ type routeManager interface {
 
 // Handler serves the administrative dashboard and authenticated mutations.
 type Handler struct {
+	github                 repositoryReader
+	operators              *operatorSessions
 	manager                routeManager
 	sink                   events.Sink
 	broker                 *events.Broker
@@ -51,11 +53,20 @@ func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 	if sink == nil {
 		sink = events.Discard
 	}
-	h := &Handler{manager: manager, sink: sink, mux: http.NewServeMux()}
+	h := &Handler{operators: newOperatorSessions(), manager: manager, sink: sink, mux: http.NewServeMux()}
+	h.registerOperators()
 	h.mux.HandleFunc("GET /_/console.css", h.consoleCSS)
 	h.mux.HandleFunc("GET /_/fonts/manrope.ttf", h.consoleFont)
 	h.mux.HandleFunc("GET /_/status", h.status)
 	h.mux.HandleFunc("GET /_/api/status", h.apiStatus)
+	h.mux.HandleFunc("GET /_/api/setup", h.requireBearer(h.setupStatus))
+	h.mux.HandleFunc("POST /_/api/apps/plan", h.requireBearer(h.planApplication))
+	h.mux.HandleFunc("DELETE /_/api/apps/{host}", h.requireBearer(h.removeApplication))
+	h.mux.HandleFunc("POST /_/api/apps", h.requireBearer(h.saveApplication))
+	h.mux.HandleFunc("PUT /_/api/github", h.requireLocal(h.configureGitHub))
+	h.mux.HandleFunc("GET /_/api/github/repositories", h.requireBearer(h.githubRepositories))
+	h.mux.HandleFunc("POST /_/api/projects", h.requireBearer(h.saveGitHubProject))
+	h.mux.HandleFunc("DELETE /_/api/projects/{name}", h.requireBearer(h.removeProject))
 	h.mux.HandleFunc("GET /_/api/projects", h.requireBearer(h.listProjects))
 	h.mux.HandleFunc("POST /_/reload", h.requireBearer(h.reload))
 	h.mux.HandleFunc("POST /routes", h.requireBearer(h.addRoute))
@@ -333,6 +344,9 @@ func (h *Handler) addRoute(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if !h.allowOperatorRoot(w, r, route, false) {
+		return
+	}
 	if !h.recordMutationIntent(w, r, "route.create", safeRouteEventHost(route.Host)) {
 		return
 	}
@@ -418,6 +432,10 @@ func (h *Handler) bearer(next http.HandlerFunc, sites bool) http.HandlerFunc {
 			next(w, r)
 			return
 		}
+		if operatorRequest, ok := h.withOperator(r); ok {
+			next(w, operatorRequest)
+			return
+		}
 		cfg := h.manager.Config().Admin
 		token, err := config.ResolveSecret(cfg.Token)
 		if err != nil {
@@ -492,6 +510,9 @@ func writeError(w http.ResponseWriter, status int, message string) {
 }
 
 func actor(r *http.Request) string {
+	if operator, ok := r.Context().Value(operatorKey{}).(operatorGrant); ok {
+		return "operator:" + operator.Name
+	}
 	if isLocal(r) {
 		return "local"
 	}

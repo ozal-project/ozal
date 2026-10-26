@@ -17,6 +17,7 @@ import (
 // session-checking and login-cookie parts that don't need a live provider.
 func newTestGate() *Gate {
 	return &Gate{
+		issuer: "https://idp.example.com",
 		oauthConfig: oauth2.Config{
 			ClientID:    "test-client",
 			RedirectURL: "http://app.localhost/_/auth/callback",
@@ -30,7 +31,7 @@ func newTestGate() *Gate {
 
 func TestMiddlewareAllowsValidSession(t *testing.T) {
 	g := newTestGate()
-	want := Principal{Email: "user@example.com", Subject: "sub"}
+	want := Principal{Email: "user@example.com", Subject: OIDCSubject("https://idp.example.com", "sub"), Method: MethodOIDC}
 	id, _ := g.sessions.Create(context.Background(), want)
 
 	called := false
@@ -93,7 +94,7 @@ func TestMiddlewareRedirectsWithInvalidSessionCookie(t *testing.T) {
 
 func TestHandleLogoutClearsSession(t *testing.T) {
 	g := newTestGate()
-	id, _ := g.sessions.Create(context.Background(), Principal{Email: "user@example.com", Subject: "sub"})
+	id, _ := g.sessions.Create(context.Background(), Principal{Email: "user@example.com", Subject: OIDCSubject("https://idp.example.com", "sub"), Method: MethodOIDC})
 
 	req := httptest.NewRequest(http.MethodGet, "/_/auth/logout", nil)
 	req.AddCookie(&http.Cookie{Name: SessionCookieName, Value: id})
@@ -331,5 +332,25 @@ func TestSafeReturnToRejectsUnsafeSchemesAndUserinfo(t *testing.T) {
 				t.Fatalf("safeReturnTo(%q) = %q, want /", returnTo, got)
 			}
 		})
+	}
+}
+
+func TestOIDCGateRejectsLegacyNativeAndOtherIssuerSessions(t *testing.T) {
+	g := newTestGate()
+	for _, p := range []Principal{
+		{Subject: "sub", Method: MethodOIDC},
+		{Subject: "sb:local-user", Method: MethodOIDC},
+		{Subject: OIDCSubject("https://another.example", "sub"), Method: MethodOIDC},
+		{Subject: OIDCSubject("https://idp.example.com", "sub"), Method: MethodPasskey},
+	} {
+		id, err := g.sessions.Create(context.Background(), p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest(http.MethodGet, "https://app.example.com/", nil)
+		req.AddCookie(&http.Cookie{Name: SessionCookieName, Value: id})
+		if _, ok := g.Authenticate(req); ok {
+			t.Fatalf("wrong session accepted: %+v", p)
+		}
 	}
 }

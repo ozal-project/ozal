@@ -54,6 +54,9 @@ func (r *Registry) Current(ctx context.Context, name string) (Fingerprint, error
 // Rotate atomically retires exactly expected and enrols replacement. A stale
 // renewal/rollback must never undo another rotation or an operator revocation.
 func (r *Registry) Rotate(ctx context.Context, name string, expected, replacement Fingerprint) error {
+	return r.RotateWithExpiry(ctx, name, expected, replacement, time.Time{})
+}
+func (r *Registry) RotateWithExpiry(ctx context.Context, name string, expected, replacement Fingerprint, expiry time.Time) error {
 	if config.ValidateConnectorName(name) != nil {
 		return ErrInvalidName
 	}
@@ -77,7 +80,7 @@ func (r *Registry) Rotate(ctx context.Context, name string, expected, replacemen
 	if changed != 1 {
 		return ErrEnrolmentChanged
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO connectors (name, cert_sha256, created_at) VALUES (?, ?, ?)`, name, replacement[:], now)
+	_, err = tx.ExecContext(ctx, `INSERT INTO connectors (name, cert_sha256, created_at, cert_not_after) VALUES (?, ?, ?, ?)`, name, replacement[:], now, optionalExpiry(expiry))
 	if isConstraint(err) {
 		return ErrAlreadyActive
 	}
@@ -93,17 +96,21 @@ func NewRegistry(db *sql.DB) *Registry { return &Registry{db: db, now: time.Now}
 type Record struct {
 	Name        string
 	Fingerprint Fingerprint
+	NotAfter    time.Time
 	CreatedAt   time.Time
 	RevokedAt   time.Time // zero when active
 }
 
 func (r *Registry) Enroll(ctx context.Context, name string, fp Fingerprint) error {
+	return r.EnrollWithExpiry(ctx, name, fp, time.Time{})
+}
+func (r *Registry) EnrollWithExpiry(ctx context.Context, name string, fp Fingerprint, expiry time.Time) error {
 	if config.ValidateConnectorName(name) != nil {
 		return ErrInvalidName
 	}
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO connectors (name, cert_sha256, created_at) VALUES (?, ?, ?)`,
-		name, fp[:], r.now().Unix())
+		`INSERT INTO connectors (name, cert_sha256, created_at, cert_not_after) VALUES (?, ?, ?, ?)`,
+		name, fp[:], r.now().Unix(), optionalExpiry(expiry))
 	if err != nil {
 		// The two partial unique indexes are the only constraints a valid
 		// insert can violate.
@@ -145,7 +152,7 @@ func (r *Registry) Lookup(ctx context.Context, fp Fingerprint) (string, bool, er
 
 func (r *Registry) List(ctx context.Context) ([]Record, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT name, cert_sha256, created_at, revoked_at FROM connectors ORDER BY id`)
+		`SELECT name, cert_sha256, created_at, revoked_at, cert_not_after FROM connectors ORDER BY id`)
 	if err != nil {
 		return nil, fmt.Errorf("list connectors: %w", err)
 	}
@@ -157,16 +164,27 @@ func (r *Registry) List(ctx context.Context) ([]Record, error) {
 			raw     []byte
 			created int64
 			revoked sql.NullInt64
+			expiry  sql.NullInt64
 		)
-		if err := rows.Scan(&rec.Name, &raw, &created, &revoked); err != nil {
+		if err := rows.Scan(&rec.Name, &raw, &created, &revoked, &expiry); err != nil {
 			return nil, err
 		}
 		copy(rec.Fingerprint[:], raw)
 		rec.CreatedAt = time.Unix(created, 0)
+		if expiry.Valid {
+			rec.NotAfter = time.Unix(expiry.Int64, 0)
+		}
 		if revoked.Valid {
 			rec.RevokedAt = time.Unix(revoked.Int64, 0)
 		}
 		out = append(out, rec)
 	}
 	return out, rows.Err()
+}
+
+func optionalExpiry(expiry time.Time) any {
+	if expiry.IsZero() {
+		return nil
+	}
+	return expiry.Unix()
 }

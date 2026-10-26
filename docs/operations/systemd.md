@@ -24,6 +24,31 @@ a tunnel connector. A sudo password would then guard nothing.
 
 The example unit is [`switchboard.service`](switchboard.service).
 
+## Operational changes from the console
+
+Since the 2026-10-26 product-experience implementation, set
+`"runtime_file": "/var/lib/switchboard/runtime.json"` in the root-owned config
+to allow route/project edits from the console without making host config
+writable. The service owns this operational file under its private state dir.
+It can contain only routes, projects and the optional GitHub App reference;
+listeners, auth, admin credentials and TLS settings stay in the host config.
+Initialize it explicitly before the first start, as the service account:
+`sudo -u switchboard /usr/local/lib/switchboard/switchboard runtime init -config /etc/switchboard/config.json`.
+The command copies the root's operational projection into a **new** file and
+refuses to overwrite an existing one. Thereafter missing or invalid state fails
+closed; it never silently falls back to potentially older, more permissive
+root policy. `setup` creates this file as part of a new local trial.
+`/_/api/status`'s `config_sha256` then covers the exact root bytes, a fixed
+separator, and the operational file bytes. Console mutations compare this
+combined digest before writing, then re-read and compare the effective config
+before installing a snapshot; an external edit is rejected as stale rather
+than overwritten. Manual route changes belong in the operational file or
+through the API, not an overridden copy of the routes in the root seed.
+Include this file in backups. Invalid operational state fails startup/reload
+closed; a failed reload retains the previous snapshot. Older configurations
+without `runtime_file` keep their existing single-file behavior and need write
+permission there for mutations. Enabling/changing `runtime_file` needs restart.
+
 ## Install
 
 ```sh

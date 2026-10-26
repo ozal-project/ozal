@@ -49,9 +49,10 @@ const (
 	PasskeyRevoked Type = "passkey.revoked"
 	// Operator changes to people from the console. Host carries the user's
 	// email; an invitation's token is never part of an event.
-	UserInvited  Type = "user.invited"
-	UserDisabled Type = "user.disabled"
-	UserEnabled  Type = "user.enabled"
+	UserGroupsChanged Type = "user.groups_changed"
+	UserInvited       Type = "user.invited"
+	UserDisabled      Type = "user.disabled"
+	UserEnabled       Type = "user.enabled"
 	// Operator changes to the tunnel connector registry (CLI-001). Host
 	// carries the connector name, Reason the certificate's short SHA-256.
 	ConnectorEnrolled Type = "connector.enrolled"

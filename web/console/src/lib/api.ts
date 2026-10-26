@@ -220,3 +220,52 @@ export const setDisabled = (token: string, email: string, disabled: boolean, sig
   adminPost(token, `/_/api/people/${encodeURIComponent(email)}/${disabled ? "disable" : "enable"}`, undefined, signal);
 export const revokePasskey = (token: string, email: string, id: string, signal?: AbortSignal) =>
   adminPost(token, `/_/api/people/${encodeURIComponent(email)}/passkeys/${encodeURIComponent(id)}/revoke`, undefined, signal);
+
+export type Group = { name: string; source: "local"; members: string[]; hosts: string[] };
+export async function fetchGroups(token: string, signal?: AbortSignal): Promise<Group[]> {
+  const res = await fetch("/_/api/groups", { cache: "no-store", headers: { Authorization: `Bearer ${token}` }, signal: boundedSignal(signal) });
+  if (!res.ok) throw new Error(`Groups could not be read (HTTP ${res.status}).`);
+  return ((await res.json()) as { groups: Group[] }).groups;
+}
+export async function setGroups(token: string, email: string, expected: string[], groups: string[], signal?: AbortSignal): Promise<void> {
+  const res = await fetch(`/_/api/people/${encodeURIComponent(email)}/groups`, {
+    method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ expected, groups }), signal: boundedSignal(signal),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ?? `Membership change failed (HTTP ${res.status}).`);
+}
+
+export type ApplicationRoute = { host: string; target?: string; upstreams?: string[]; connector?: string; site?: string; root?: string; spa?: boolean; health_path?: string; auth_required?: boolean; access?: Record<string, unknown>; resource?: Record<string, unknown>; audit_mode?: string };
+export type SetupStatus = { config_sha256: string; methods: string[]; pages_enabled: boolean; tls_enabled: boolean; login_url: string; admin_socket_configured: boolean; routes: ApplicationRoute[] };
+export type ApplicationDraft = { route: ApplicationRoute; expected: string; access_mode: "private" | "public" };
+export type ApplicationPlan = ApplicationDraft & { url: string; dns: string; tls: string; checks: string[] };
+export async function setupStatus(token: string, signal?: AbortSignal): Promise<SetupStatus> {
+  const res = await fetch("/_/api/setup", { cache: "no-store", headers: { Authorization: `Bearer ${token}` }, signal: boundedSignal(signal) });
+  if (!res.ok) throw new Error(`Unlock changes to read setup (HTTP ${res.status}).`);
+  return res.json();
+}
+export const planApplication = (token: string, draft: ApplicationDraft, signal?: AbortSignal) => adminPost<ApplicationPlan>(token, "/_/api/apps/plan", draft, signal);
+export const saveApplication = (token: string, draft: ApplicationDraft, signal?: AbortSignal) => adminPost(token, "/_/api/apps", draft, signal);
+
+export type Repository = { id: number; owner: { id: number }; full_name: string; default_branch: string; private: boolean };
+export type Repositories = { configured: boolean; repositories: Repository[]; page?: number; more?: boolean };
+export async function githubRepositories(token: string, page = 1): Promise<Repositories> {
+  const res = await fetch(`/_/api/github/repositories?page=${page}`, { cache: "no-store", headers: { Authorization: `Bearer ${token}` }, signal: boundedSignal() });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ?? `GitHub unavailable (HTTP ${res.status}).`);
+  return body;
+}
+export const bindGitHubProject = (token: string, project: { name: string; site: string; repository_id: number; page: number; ref: string; workflow: string; expected: string }) => adminPost<{ workflow_ref: string; deploy_host_configured: boolean }>(token, "/_/api/projects", project);
+export async function disconnectProject(token: string, name: string, expected: string): Promise<void> {
+  const res = await fetch(`/_/api/projects/${encodeURIComponent(name)}`, { method: "DELETE", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ expected }), signal: boundedSignal() });
+  if (!res.ok) throw new Error("Project disconnect could not be confirmed. Refresh and reconcile before retrying.");
+}
+
+export type Connector = { name: string; sha256: string; created: string; revoked?: string; not_after?: string; hosts: string[]; connected: boolean };
+export async function fetchConnectors(token: string, signal?: AbortSignal): Promise<Connector[]> {
+  const res = await fetch("/_/api/connectors", { cache: "no-store", headers: { Authorization: `Bearer ${token}` }, signal: boundedSignal(signal) });
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error(`Connector registry could not be read (HTTP ${res.status}).`);
+  return ((await res.json()) as { connectors: Connector[] }).connectors;
+}

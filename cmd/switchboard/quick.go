@@ -158,7 +158,7 @@ var completionScripts = map[string]string{
 	"bash": `# Add to ~/.bashrc: eval "$(switchboard completion bash)"
 _switchboard_complete() {
   local current="${COMP_WORDS[COMP_CWORD]}"
-  local commands="audit completion db doctor init migrate notify policy schema site tunnel tunnel-spike upgrade user validate version connector"
+  local commands="audit completion console db doctor github init migrate notify policy runtime schema setup site tunnel tunnel-spike upgrade user validate version connector"
   if (( COMP_CWORD == 1 )); then
     COMPREPLY=( $(compgen -W "$commands" -- "$current") )
     return
@@ -166,6 +166,10 @@ _switchboard_complete() {
   if (( COMP_CWORD == 2 )); then
     case "${COMP_WORDS[1]}" in
       audit) COMPREPLY=( $(compgen -W "keygen checkpoint repair verify" -- "$current") ) ;;
+      console) COMPREPLY=( $(compgen -W "login list revoke" -- "$current") ) ;;
+      connector) COMPREPLY=( $(compgen -W "prepare sign check enroll rotate current revoke list" -- "$current") ) ;;
+      github) COMPREPLY=( $(compgen -W "connect disconnect" -- "$current") ) ;;
+      runtime) COMPREPLY=( $(compgen -W "init" -- "$current") ) ;;
       db) COMPREPLY=( $(compgen -W "backup restore" -- "$current") ) ;;
       migrate) COMPREPLY=( $(compgen -W "up status" -- "$current") ) ;;
       policy) COMPREPLY=( $(compgen -W "explain replay who-can review" -- "$current") ) ;;
@@ -184,13 +188,17 @@ _switchboard() {
   commands=(
     'audit:durable audit commands'
     'completion:print shell completion'
+    'console:host-issued private operator sessions'
+    'github:configure optional repository discovery'
     'db:backup and restore state'
     'doctor:check config and state'
     'init:create a starter config'
     'migrate:inspect or apply database migrations'
     'notify:notification commands'
     'policy:policy commands'
+    'runtime:initialize operational policy'
     'schema:print JSON Schema'
+    'setup:create a protected local installation'
     'site:site deployment commands'
     'tunnel:tunnel commands'
     'tunnel-spike:local tunnel experiment'
@@ -203,8 +211,12 @@ _switchboard() {
   _describe 'switchboard command' commands
   case "$words[2]" in
     audit) _values 'audit action' keygen checkpoint repair verify ;;
+    console) _values 'console action' login list revoke ;;
+    connector) _values 'connector action' prepare sign check enroll rotate current revoke list ;;
+    github) _values 'github action' connect disconnect ;;
     db) _values 'db action' backup restore ;;
     migrate) _values 'migration action' up status ;;
+    runtime) _values 'runtime action' init ;;
     site) _values 'site action' deploy list rollback ;;
     tunnel) _values 'tunnel action' edge connect renew ;;
     tunnel-spike) _values 'tunnel-spike action' init edge connect ;;
@@ -214,7 +226,11 @@ _switchboard() {
 compdef _switchboard switchboard
 `,
 	"fish": `# Save as ~/.config/fish/completions/switchboard.fish:
-complete -c switchboard -f -n '__fish_use_subcommand' -a 'audit completion db doctor init migrate notify policy schema site tunnel tunnel-spike upgrade user validate version connector'
+complete -c switchboard -f -n '__fish_use_subcommand' -a 'audit completion console db doctor github init migrate notify policy runtime schema setup site tunnel tunnel-spike upgrade user validate version connector'
+complete -c switchboard -f -n '__fish_seen_subcommand_from console' -a 'login list revoke'
+complete -c switchboard -f -n '__fish_seen_subcommand_from github' -a 'connect disconnect'
+complete -c switchboard -f -n '__fish_seen_subcommand_from runtime' -a 'init'
+complete -c switchboard -f -n '__fish_seen_subcommand_from connector' -a 'prepare sign check enroll rotate current revoke list'
 complete -c switchboard -f -n '__fish_seen_subcommand_from audit' -a 'keygen checkpoint repair verify'
 complete -c switchboard -f -n '__fish_seen_subcommand_from db' -a 'backup restore'
 complete -c switchboard -f -n '__fish_seen_subcommand_from migrate' -a 'up status'
@@ -226,13 +242,17 @@ complete -c switchboard -f -n '__fish_seen_subcommand_from tunnel-spike' -a 'ini
 	"powershell": `# Add to $PROFILE:
 Register-ArgumentCompleter -Native -CommandName switchboard -ScriptBlock {
   param($wordToComplete, $commandAst, $cursorPosition)
-  $words = @('audit','completion','db','doctor','init','migrate','notify','policy','schema','site','tunnel','tunnel-spike','upgrade','user','validate','version','connector')
+  $words = @('audit','completion','console','db','doctor','github','init','migrate','notify','policy','runtime','schema','setup','site','tunnel','tunnel-spike','upgrade','user','validate','version','connector')
   $tokens = $commandAst.CommandElements | ForEach-Object { $_.ToString() }
   if ($tokens.Count -gt 1) {
     switch ($tokens[1]) {
       'audit' { $words = @('keygen','checkpoint','repair','verify') }
+      'console' { $words = @('login','list','revoke') }
+      'github' { $words = @('connect','disconnect') }
       'db' { $words = @('backup','restore') }
       'migrate' { $words = @('up','status') }
+      'runtime' { $words = @('init') }
+      'connector' { $words = @('prepare','sign','check','enroll','rotate','current','revoke','list') }
       'policy' { $words = @('explain','replay','who-can','review') }
       'site' { $words = @('deploy','list','rollback') }
       'tunnel' { $words = @('edge','connect','renew') }

@@ -142,19 +142,25 @@ func (g *Gate) Authenticate(r *http.Request) (auth.Principal, bool) {
 	if !ok {
 		return auth.Principal{}, false
 	}
-	id, ok := strings.CutPrefix(session.Principal.Subject, SubjectPrefix)
-	if !ok {
-		// Not a passkey user: valid only as a session of the upstream
-		// provider this gate offers. A session from an earlier OIDC-only
-		// configuration has no method and logs in again.
-		if g.oidc != nil && session.Principal.Method == auth.MethodOIDC {
+	if session.Principal.Method == auth.MethodOIDC {
+		if g.oidc != nil && g.oidc.AcceptsPrincipal(session.Principal) {
 			return session.Principal, true
 		}
 		return auth.Principal{}, false
 	}
-	if _, err := g.dir.ActiveUser(r.Context(), id); err != nil {
+	id, native := strings.CutPrefix(session.Principal.Subject, SubjectPrefix)
+	if !native || session.Principal.Method != auth.MethodPasskey {
 		return auth.Principal{}, false
 	}
+	user, err := g.dir.ActiveUser(r.Context(), id)
+	if err != nil {
+		return auth.Principal{}, false
+	}
+	// Membership is authoritative on every request, including a login racing
+	// a membership update. The session's cached groups never grant stale access.
+	session.Principal.Groups = user.Groups
+	session.Principal.Email = user.Email
+
 	return session.Principal, true
 }
 
@@ -204,6 +210,7 @@ func (g *Gate) RedirectToStepUp(w http.ResponseWriter, r *http.Request, code aut
 // (ID-007). auth.Gate satisfies it; the interface keeps this package from
 // depending on how that login works.
 type OIDCLogin interface {
+	AcceptsPrincipal(auth.Principal) bool
 	HandleLogin(w http.ResponseWriter, r *http.Request)
 	HandleCallback(w http.ResponseWriter, r *http.Request)
 }
@@ -240,6 +247,10 @@ func (g *Gate) ServeAuthEndpoint(w http.ResponseWriter, r *http.Request) bool {
 		g.serveDevicesPage(w, r)
 	case portalPath:
 		g.serveMePage(w, r)
+	case portalPath + "/sessions":
+		g.api(w, r, g.sessionsList)
+	case portalPath + "/sessions/revoke":
+		g.api(w, r, g.sessionsRevoke)
 	case portalPath + "/data":
 		g.api(w, r, g.meData)
 	case "/_/auth/devices/list":

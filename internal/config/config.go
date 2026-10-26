@@ -278,10 +278,12 @@ type RateLimit struct {
 }
 
 type Config struct {
-	Listen string `json:"listen"`
-	TLS    TLS    `json:"tls,omitempty"`
-	Auth   Auth   `json:"auth,omitempty"`
-	Admin  Admin  `json:"admin,omitempty"`
+	RuntimeFile string     `json:"runtime_file,omitempty"`
+	GitHub      *GitHubApp `json:"github,omitempty"`
+	Listen      string     `json:"listen"`
+	TLS         TLS        `json:"tls,omitempty"`
+	Auth        Auth       `json:"auth,omitempty"`
+	Admin       Admin      `json:"admin,omitempty"`
 	// TrustedProxies opts specific TCP peer IPs or CIDRs into CF-Connecting-IP.
 	// Empty means no forwarding peer is trusted.
 	TrustedProxies []string `json:"trusted_proxies,omitempty"`
@@ -338,7 +340,7 @@ func LoadWithDigest(path string) (*Config, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	return cfg, Digest(data), nil
+	return loadOperating(cfg, data)
 }
 
 // Digest names a configuration document by the hex SHA-256 of its bytes, so
@@ -376,6 +378,12 @@ func Parse(data []byte) (*Config, error) {
 // Validate returns a normalized copy of cfg or an error.
 func Validate(cfg Config) (*Config, error) {
 	cfg = Clone(cfg)
+	if cfg.RuntimeFile != "" && (!filepath.IsAbs(cfg.RuntimeFile) || filepath.Clean(cfg.RuntimeFile) != cfg.RuntimeFile) {
+		return nil, fmt.Errorf("config: runtime_file must be an absolute, clean path")
+	}
+	if err := cfg.GitHub.Validate(); err != nil {
+		return nil, err
+	}
 	if cfg.Listen == "" {
 		return nil, fmt.Errorf("config: listen address is required")
 	}
@@ -1069,6 +1077,10 @@ func hostOf(rawURL string) (string, error) {
 // Clone returns a deep copy suitable for independent mutation.
 func Clone(source Config) Config {
 	clone := source
+	if source.GitHub != nil {
+		github := *source.GitHub
+		clone.GitHub = &github
+	}
 	clone.TLS.Domains = slices.Clone(source.TLS.Domains)
 	if source.Tunnel != nil {
 		tunnel := *source.Tunnel

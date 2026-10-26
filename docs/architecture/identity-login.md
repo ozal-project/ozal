@@ -71,7 +71,8 @@ session context or decision events. The enrolment session records the new
 credential as first-seen, while later sessions record false.
 
 - **Subject.** A passkey user is `sb:<user id>`. Upstream providers keep their
-  own namespaces (`oidc:<issuer>|<sub>`, later `atproto:<did>`), so a policy
+  own namespaces (`oidc:<base64url(issuer)>.<base64url(sub)>` since 2026-10-26;
+  later `atproto:<did>`), so a policy
   can never confuse two people with the same email at different providers.
 - **Email** is asserted by the operator at invitation time and marked
   verified on that basis; existing `allowed_emails` policies keep working.
@@ -79,6 +80,15 @@ credential as first-seen, while later sessions record false.
   `octaviosantacruz.com`, so one passkey works on every protected subdomain.
   The login pages live on one host, `auth.octaviosantacruz.com`, and the
   session cookie uses the existing `cookie_domain`.
+
+Migration 012 ends legacy OIDC sessions, which held only raw `sub`, rather
+than guessing their issuer. It preserves native credentials and sessions that record the passkey method;
+legacy sessions without a method also require another login.
+Both gates check the login method; OIDC sessions must match the configured
+issuer-qualified namespace. Accounts are never linked by matching email.
+Native membership changes end previous sessions transactionally, and the gate
+refreshes authoritative membership on every request. See the current
+[operator/visitor guide](../operations/first-application.md).
 
 ## Flow 1 — first enrolment (and recovery)
 

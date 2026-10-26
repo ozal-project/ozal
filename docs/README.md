@@ -9,6 +9,10 @@
 
 ## Direction
 
+- [Experiencia completa del producto](architecture/product-experience.md)
+  — revisión en español: instalación, primera app y migración de una web
+  existente, servidores, consola self-hosted, GitHub, identidad y grupos;
+  distingue código actual de propuestas pendientes.
 - [Vision](../VISION.md) — north star, pillars, Cloudflare feature map,
   integration map, year plan.
 - [Product, code and UX review — 2026-10-21](reviews/2026-10-21-product-code-ux.md)
@@ -37,6 +41,16 @@
   edge decision, naming, ingress rules and the publish workflow.
 
 ## Operations
+
+- [Primera aplicación y web existente](operations/first-application.md) — setup
+  protegido, sesión privada del operador, alta/configuración, dominio y reversión;
+  grupos y sesiones propias.
+- [Descarga e instalación](operations/download-install.md) — versiones,
+  checksum, helper Linux sin sobrescritura y límites del canal privado.
+- [Repositorios GitHub](operations/github-repositories.md) — App propia,
+  repositorios seleccionados y confianza de publicación por proyecto.
+- [Incorporar un conector](operations/connector-onboarding.md) — clave en su
+  host, CSR público, firma, verificación y enrolamiento autorizado.
 
 - [Running under systemd](operations/systemd.md) — the root-owned layout, the
   example unit, install, and `switchboard upgrade` with its rollback.

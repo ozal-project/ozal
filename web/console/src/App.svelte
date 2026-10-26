@@ -2,6 +2,9 @@
   import { tick } from "svelte";
   import { route, navigate, type Page } from "$lib/router.svelte";
   import AdminToken from "$lib/AdminToken.svelte";
+  import Connectors from "./pages/Connectors.svelte";
+  import Projects from "./pages/Projects.svelte";
+  import Applications from "./pages/Applications.svelte";
   import Overview from "./pages/Overview.svelte";
   import Activity from "./pages/Activity.svelte";
   import Routes from "./pages/Routes.svelte";
@@ -16,11 +19,14 @@
   const groups: { name: string; items: { path: Page; label: string }[] }[] = [
     { name: "Operate", items: [
       { path: "/overview", label: "Overview" },
+      { path: "/applications", label: "Applications" },
       { path: "/sites", label: "Sites" },
       { path: "/people", label: "People" },
+      { path: "/connectors", label: "Connectors" },
       { path: "/activity", label: "Access log" },
     ] },
     { name: "Build", items: [
+      { path: "/projects", label: "CI projects" },
       { path: "/routes", label: "Routes & policy" },
       { path: "/simulator", label: "Why? Simulator" },
     ] },
@@ -100,6 +106,9 @@
     </nav>
     <main id="main-content" tabindex="-1" class="mx-auto w-full max-w-[1320px] flex-1 px-5 py-10 md:px-10">
       {#if route.path === "/overview"}<Overview />
+      {:else if route.path === "/applications"}<Applications />
+      {:else if route.path === "/projects"}<Projects />
+      {:else if route.path === "/connectors"}<Connectors />
       {:else if route.path === "/activity"}<Activity />
       {:else if route.path === "/routes"}<Routes />
       {:else if route.path === "/people"}<People />

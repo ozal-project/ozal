@@ -28,6 +28,9 @@ func runConnector(ctx context.Context, args []string, out io.Writer) error {
 	if len(args) == 0 {
 		return errors.New("usage: switchboard connector enroll|rotate|current|revoke|list [flags]")
 	}
+	if args[0] == "prepare" || args[0] == "sign" || args[0] == "check" {
+		return runConnectorSetup(ctx, args, out)
+	}
 	sub, rest := args[0], args[1:]
 	fs := flag.NewFlagSet("connector "+sub, flag.ContinueOnError)
 	fs.SetOutput(out)

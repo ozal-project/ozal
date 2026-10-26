@@ -383,6 +383,35 @@ function setupMe() {
       : "No app is open to you yet. Ask the person who runs this to give you access.";
   }
 
+  async function loadSessions() {
+    const list = document.getElementById("sessions");
+    if (!list) return;
+    const data = await post("/_/auth/me/sessions", {});
+    list.replaceChildren(...data.sessions.map((session) => {
+      const li = document.createElement("li");
+      const text = document.createElement("p");
+      text.textContent = `${session.current ? "This session" : "Other session"} · ${session.method} · last used ${new Date(session.last_seen).toLocaleString()} · expires ${new Date(session.expires).toLocaleString()}`;
+      const button = document.createElement("button");
+      button.type = "button"; button.className = "link-button"; button.textContent = "End session";
+      button.addEventListener("click", async () => {
+        if (!confirm(session.current ? "End this session and sign out?" : "End this other session?")) return;
+        button.disabled = true;
+        try {
+          const result = await post("/_/auth/me/sessions/revoke", { id: session.id });
+          if (result.signed_out) location.assign("/_/auth/login");
+          else await loadSessions();
+        } catch (error) { show(error.message, "error"); button.disabled = false; }
+      });
+      li.append(text, button); return li;
+    }));
+  }
+  document.getElementById("signout-all")?.addEventListener("click", async () => {
+    if (!confirm("Sign out all your sessions, including this one? Your passkeys stay registered.")) return;
+    try { await post("/_/auth/me/sessions/revoke", { all: true }); location.assign("/_/auth/login"); }
+    catch (error) { show(error.message, "error"); }
+  });
+  loadSessions().catch((error) => show(error.message, "error"));
+
   document.getElementById("signout").addEventListener("click", async () => {
     await fetch("/_/auth/logout", { method: "POST", credentials: "same-origin" }).catch(() => {});
     location.assign("/_/auth/login");

@@ -335,7 +335,7 @@ func TestAddAndDeleteRoutePersistAndInstallTogether(t *testing.T) {
 	}
 }
 
-func TestPersistenceFailureKeepsActiveSnapshot(t *testing.T) {
+func TestMissingConfigSourceKeepsActiveSnapshot(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "active")
 	}))
@@ -343,18 +343,21 @@ func TestPersistenceFailureKeepsActiveSnapshot(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	manager, err := New(ctx, writeConfig(t, routeConfig(upstream.URL)), time.Hour)
+	configPath := writeConfig(t, routeConfig(upstream.URL))
+	manager, err := New(ctx, configPath, time.Hour)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	manager.configPath = filepath.Join(t.TempDir(), "missing", "config.json")
+	if err := os.Remove(configPath); err != nil {
+		t.Fatalf("remove source config: %v", err)
+	}
 
 	err = manager.AddRoute(config.Route{Host: "new.localhost", Target: upstream.URL})
-	if !errors.Is(err, ErrPersistence) {
-		t.Fatalf("AddRoute error = %v, want ErrPersistence", err)
+	if !errors.Is(err, ErrConfigChanged) {
+		t.Fatalf("AddRoute error = %v, want ErrConfigChanged", err)
 	}
 	if routes := manager.Config().Routes; len(routes) != 1 || routes[0].Host != "app.localhost" {
-		t.Fatalf("active routes changed after persistence failure: %+v", routes)
+		t.Fatalf("active routes changed after source disappeared: %+v", routes)
 	}
 }
 
@@ -630,7 +633,7 @@ func TestSessionsSurviveGateRebuildWhenProtectedHostsChange(t *testing.T) {
 	if manager.sessions == nil {
 		t.Fatal("expected a session store after building the gate")
 	}
-	id, err := manager.sessions.Create(ctx, auth.Principal{Subject: "user-1", Email: "ana@example.com", EmailVerified: true})
+	id, err := manager.sessions.Create(ctx, auth.Principal{Subject: auth.OIDCSubject(cfg.Auth.Issuer, "user-1"), Method: auth.MethodOIDC, Email: "ana@example.com", EmailVerified: true})
 	if err != nil {
 		t.Fatalf("Create session: %v", err)
 	}

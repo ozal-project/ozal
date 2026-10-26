@@ -1,5 +1,16 @@
 # Switchboard
 
+For the complete operator and visitor journey, see
+[Experiencia de producto (español)](docs/architecture/product-experience.md):
+what exists, what setup still requires, how an existing website fits,
+and the implementation status of identity, groups, GitHub and the console.
+
+To try a protected application with persistent local state, run
+`switchboard setup -dir ./my-edge -target http://127.0.0.1:3000` from a build of
+this checkout. Follow [Primera aplicación](docs/operations/first-application.md)
+and [download/install](docs/operations/download-install.md); these main-only
+features are not retroactively part of alpha.1.
+
 A small reverse proxy, written in Go, that routes incoming requests to local
 services by hostname — like an old telephone switchboard connecting each
 call to the right line.
@@ -25,8 +36,8 @@ experience, the *same* config from a laptop to a real VPS, OIDC without
 standing up five separate services, and configuration that stays legible
 enough to actually explain. See [TO_IMPLEMENT.md](docs/TO_IMPLEMENT.md) for the
 full reasoning and roadmap, including what's explicitly *not* planned here
-(a full identity provider with passwords and account recovery stays its own
-separate project; a narrow passwordless identity layer is planned — see
+(a general-purpose identity provider remains outside the current offering;
+native passkey login for the gateway exists on main — see
 [VISION.md](VISION.md)).
 
 ## Where it's going

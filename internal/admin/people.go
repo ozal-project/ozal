@@ -22,6 +22,7 @@ type people interface {
 	Invite(ctx context.Context, email, name string, groups []string, recoverAccess bool, ttl time.Duration) (sqlite.Invitation, error)
 	RevokePasskey(ctx context.Context, email, prefix string) error
 	SetDisabled(ctx context.Context, email string, disabled bool) error
+	SetGroups(ctx context.Context, email string, expected, groups []string) error
 }
 
 // WithPeople enables the people endpoints (ID-003 operations in the console).
@@ -31,6 +32,8 @@ func WithPeople(store people) Option {
 
 func (h *Handler) registerPeople() {
 	h.mux.HandleFunc("GET /_/api/people", h.listPeople)
+	h.mux.HandleFunc("GET /_/api/groups", h.requireBearer(h.listGroups))
+	h.mux.HandleFunc("PUT /_/api/people/{email}/groups", h.requireBearer(h.setPersonGroups))
 	h.mux.HandleFunc("POST /_/api/people/invite", h.requireBearer(h.invitePerson))
 	h.mux.HandleFunc("POST /_/api/people/{email}/disable", h.requireBearer(h.setPersonDisabled(true)))
 	h.mux.HandleFunc("POST /_/api/people/{email}/enable", h.requireBearer(h.setPersonDisabled(false)))

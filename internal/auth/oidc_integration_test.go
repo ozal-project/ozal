@@ -208,7 +208,7 @@ func TestFullLoginCallbackFlow(t *testing.T) {
 	}
 
 	success, ok := recorder.Find(events.LoginSucceeded)
-	if !ok || success.Actor != provider.sub || success.Host != "app.localhost" {
+	if !ok || success.Actor != OIDCSubject(provider.server.URL, provider.sub) || success.Host != "app.localhost" {
 		t.Fatalf("login.succeeded event = %+v, %v", success, ok)
 	}
 	if !recorder.Has(events.LoginStarted) {
@@ -217,7 +217,7 @@ func TestFullLoginCallbackFlow(t *testing.T) {
 
 	sess, _ := gate.sessions.Get(context.Background(), sessionCookie.Value)
 	p := sess.Principal
-	if p.Email != provider.email || p.Subject != provider.sub {
+	if p.Email != provider.email || p.Subject != OIDCSubject(provider.server.URL, provider.sub) {
 		t.Errorf("principal = %+v, want email=%q subject=%q", p, provider.email, provider.sub)
 	}
 	if !p.EmailVerified {

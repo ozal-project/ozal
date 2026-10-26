@@ -57,7 +57,7 @@ function archive(dir, files) {
   return new Uint8Array(execFileSync("tar", ["-czf", "-", "-C", dir, "."], { maxBuffer: 1 << 24 }));
 }
 
-export async function startDemoEdge({ binary, dir = join(homedir(), ".cache", "switchboard-demo") } = {}) {
+export async function startDemoEdge({ binary, dir = join(homedir(), ".cache", "switchboard-demo"), adminSocket = false } = {}) {
   if (!binary || !existsSync(binary)) throw new Error("pass the switchboard binary (--binary)");
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(join(dir, "sites"), { recursive: true });
@@ -66,7 +66,7 @@ export async function startDemoEdge({ binary, dir = join(homedir(), ".cache", "s
 
   const config = {
     listen: `127.0.0.1:${PORT}`,
-    admin: { listen: `127.0.0.1:${ADMIN_PORT}`, token: "env:SB_DEMO_TOKEN" },
+    admin: { listen: `127.0.0.1:${ADMIN_PORT}`, token: "env:SB_DEMO_TOKEN", ...(adminSocket ? { socket: join(dir, "admin.sock") } : {}) },
     auth: { cookie_domain: DOMAIN, passkeys: { rp_id: DOMAIN, login_url: LOGIN, display_name: "Acme" } },
     pages: { dir: join(dir, "sites"), keep: 10 },
     routes: [

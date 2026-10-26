@@ -3,6 +3,7 @@ package routemanager
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -96,7 +97,7 @@ type RouteStatus struct {
 // fields stay private so a request observes one complete routing generation.
 type Snapshot struct {
 	cfg config.Config
-	// digest is config.Digest of the file this generation came from.
+	// digest is config.Digest of the root and operational sources for this generation.
 	digest        string
 	handler       http.Handler
 	checker       *healthcheck.Checker
@@ -193,8 +194,8 @@ func (m *Manager) Reload() error {
 	return nil
 }
 
-// ConfigDigest is config.Digest of the file behind the installed
-// generation: after a failed reload it still names the previous file.
+// ConfigDigest is config.Digest of the root and operational sources behind the
+// installed generation; after a failed reload it still names the prior sources.
 func (m *Manager) ConfigDigest() string {
 	if snapshot := m.current.Load(); snapshot != nil {
 		return snapshot.digest
@@ -321,19 +322,32 @@ func (m *Manager) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Manager) persistAndInstall(cfg config.Config) error {
+	// Editors outside this process do not hold reloadMu. Refuse a stale
+	// root/operational source before writing anything on their behalf.
+	_, sourceDigest, sourceErr := config.LoadWithDigest(m.configPath)
+	current := m.current.Load()
+	if sourceErr != nil || current == nil || sourceDigest != current.digest {
+		return ErrConfigChanged
+	}
 	candidate, err := m.build(cfg)
 	if err != nil {
 		return err
 	}
-	if err := config.WriteAtomic(m.configPath, candidate.cfg); err != nil {
+	if err := config.PersistOperating(m.configPath, candidate.cfg); err != nil {
 		m.discard(candidate)
 		return fmt.Errorf("%w: %v", ErrPersistence, err)
 	}
-	// reloadMu is held, so the file is still the one just written.
-	digest, err := config.FileDigest(m.configPath)
+	// Re-read both sources: an external root edit may have raced the write.
+	diskConfig, digest, err := config.LoadWithDigest(m.configPath)
 	if err != nil {
 		m.discard(candidate)
 		return fmt.Errorf("%w: %v", ErrPersistence, err)
+	}
+	expectedJSON, expectedErr := json.Marshal(candidate.cfg)
+	installedJSON, installedErr := json.Marshal(diskConfig)
+	if expectedErr != nil || installedErr != nil || string(expectedJSON) != string(installedJSON) {
+		m.discard(candidate)
+		return ErrConfigChanged
 	}
 	candidate.digest = digest
 	m.install(candidate)
@@ -701,7 +715,7 @@ func protectedRouteHosts(routes []config.Route) []string {
 }
 
 func sameServerConfig(a, b config.Config) bool {
-	return a.Listen == b.Listen &&
+	return a.RuntimeFile == b.RuntimeFile && a.Listen == b.Listen &&
 		a.Admin.Listen == b.Admin.Listen &&
 		a.TLS.Enabled == b.TLS.Enabled &&
 		a.TLS.CacheDir == b.TLS.CacheDir &&

@@ -2,7 +2,9 @@ package admin
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/hex"
+	"encoding/pem"
 	"errors"
 	"net/http"
 	"time"
@@ -38,10 +40,13 @@ func (h *Handler) registerConnectors() {
 }
 
 type connectorView struct {
-	Name    string    `json:"name"`
-	SHA256  string    `json:"sha256"`
-	Created time.Time `json:"created"`
-	Revoked time.Time `json:"revoked,omitzero"`
+	Name      string    `json:"name"`
+	SHA256    string    `json:"sha256"`
+	NotAfter  time.Time `json:"not_after,omitzero"`
+	Hosts     []string  `json:"hosts"`
+	Connected bool      `json:"connected"`
+	Created   time.Time `json:"created"`
+	Revoked   time.Time `json:"revoked,omitzero"`
 }
 
 func (h *Handler) listConnectors(w http.ResponseWriter, r *http.Request) {
@@ -52,7 +57,14 @@ func (h *Handler) listConnectors(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]connectorView, 0, len(records))
 	for _, rec := range records {
-		out = append(out, connectorView{Name: rec.Name, SHA256: hex.EncodeToString(rec.Fingerprint[:]), Created: rec.CreatedAt.UTC(), Revoked: rec.RevokedAt.UTC()})
+		view := connectorView{Name: rec.Name, SHA256: hex.EncodeToString(rec.Fingerprint[:]), Created: rec.CreatedAt.UTC(), Revoked: rec.RevokedAt.UTC(), NotAfter: rec.NotAfter, Hosts: []string{}}
+		for _, status := range h.manager.RouteStatuses() {
+			if status.Route.Connector == rec.Name {
+				view.Hosts = append(view.Hosts, status.Route.Host)
+				view.Connected = view.Connected || status.ConnectorConnected
+			}
+		}
+		out = append(out, view)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"connectors": out})
 }
@@ -88,7 +100,15 @@ func (h *Handler) enrollConnector(w http.ResponseWriter, r *http.Request) {
 	if !h.recordMutationIntent(w, r, "connector.enroll", req.Name) {
 		return
 	}
-	if err := h.connectors.Enroll(r.Context(), req.Name, fp); err != nil {
+	var enrollErr error
+	if detailed, ok := h.connectors.(interface {
+		EnrollWithExpiry(context.Context, string, tunnel.Fingerprint, time.Time) error
+	}); ok {
+		enrollErr = detailed.EnrollWithExpiry(r.Context(), req.Name, fp, certificateExpiry(req.CertificatePEM))
+	} else {
+		enrollErr = h.connectors.Enroll(r.Context(), req.Name, fp)
+	}
+	if err := enrollErr; err != nil {
 		h.connectorError(w, err)
 		return
 	}
@@ -125,7 +145,15 @@ func (h *Handler) rotateConnector(w http.ResponseWriter, r *http.Request) {
 	if !h.recordMutationIntent(w, r, "connector.rotate", name) {
 		return
 	}
-	if err := h.connectors.Rotate(r.Context(), name, expected, next); err != nil {
+	var rotateErr error
+	if detailed, ok := h.connectors.(interface {
+		RotateWithExpiry(context.Context, string, tunnel.Fingerprint, tunnel.Fingerprint, time.Time) error
+	}); ok {
+		rotateErr = detailed.RotateWithExpiry(r.Context(), name, expected, next, certificateExpiry(req.CertificatePEM))
+	} else {
+		rotateErr = h.connectors.Rotate(r.Context(), name, expected, next)
+	}
+	if err := rotateErr; err != nil {
 		h.connectorError(w, err)
 		return
 	}
@@ -161,4 +189,17 @@ func (h *Handler) connectorError(w http.ResponseWriter, err error) {
 
 func shortFingerprint(fp tunnel.Fingerprint) string {
 	return "sha256:" + hex.EncodeToString(fp[:8])
+}
+
+// The public PEM has already passed FingerprintFromPEM validation.
+func certificateExpiry(value string) time.Time {
+	block, _ := pem.Decode([]byte(value))
+	if block == nil {
+		return time.Time{}
+	}
+	certificate, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return time.Time{}
+	}
+	return certificate.NotAfter
 }

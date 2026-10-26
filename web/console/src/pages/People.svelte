@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import GroupCatalog from "$lib/GroupCatalog.svelte";
+  import Membership from "$lib/Membership.svelte";
   import PageHeader from "$lib/PageHeader.svelte";
   import Panel from "$lib/Panel.svelte";
   import Stat from "$lib/Stat.svelte";
@@ -213,6 +215,7 @@
     <Stat label="Disabled" value={people ? disabledCount : "—"} note="Cannot sign in; sessions ended" lamp={disabledCount ? "wait" : "idle"} />
   </div>
 
+  <GroupCatalog refreshedAt={observedAt} />
   <Panel label="Invite" title="Invite someone" sub="They get a one-time link to create their passkey on their own device. It works once and expires in 15 minutes." class="mb-6">
     <form class="grid max-w-3xl gap-4 sm:grid-cols-2" onsubmit={invite}>
       <div class="flex flex-col gap-2"><Label for="inv-email">Email</Label><Input id="inv-email" type="email" required bind:value={email} placeholder="ana@example.com" autocomplete="off" /></div>
@@ -224,6 +227,7 @@
           {#each people?.protected_hosts ?? [] as host (host)}<option value={host}>{host}</option>{/each}
         </select>
       </div>
+      <div class="flex flex-col gap-2"><Label for="inv-groups">Local groups (comma-separated)</Label><Input id="inv-groups" bind:value={groups} placeholder="ops, staff" /></div>
       <p class="text-muted-foreground text-xs sm:col-span-2">Someone who lost every passkey is recovered on the host, not here: <code class="font-mono">switchboard user invite -recover</code>.</p>
       <div class="flex flex-wrap items-center gap-3 sm:col-span-2">
         <Button type="submit" disabled={inviting}><UserPlusIcon class="size-4" /> {inviting ? "Creating…" : "Create invitation"}</Button>
@@ -261,6 +265,7 @@
             <Button variant="outline" size="sm" disabled={busyForPerson(p.email)} onclick={() => reviewToggle(p)}>{mutations[toggleKey] ? "Waiting…" : p.disabled ? "Enable" : "Disable"}</Button>
             {#if mutations[toggleKey]}<Button variant="ghost" size="sm" onclick={() => stopMutation(toggleKey)}>Stop waiting</Button>{/if}
           {/snippet}
+          <Membership person={p} refreshed={load} />
           {#if notices[`person:${p.email}`]}
             <p class={["border-b px-5 py-3 text-sm", notices[`person:${p.email}`].ok ? "text-foreground" : "text-destructive"]} role="status">{notices[`person:${p.email}`].text}</p>
           {/if}

@@ -163,3 +163,40 @@ func TestPendingJournalSurvivesUnavailableVPS(t *testing.T) {
 		t.Fatal("completed journal still exists")
 	}
 }
+
+func TestConnectorPreparationKeepsTheKeyOnItsOriginatingHost(t *testing.T) {
+	home := t.TempDir()
+	ca := testCA(t, home, 365*day)
+	destination := filepath.Join(home, "destination")
+	if err := PrepareConnector(destination); err != nil {
+		t.Fatal(err)
+	}
+	keyBefore, err := os.ReadFile(filepath.Join(destination, "connector.key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicCSR := filepath.Join(home, "public.csr")
+	raw, err := os.ReadFile(filepath.Join(destination, "connector.csr"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(publicCSR, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := SignConnector(ca, publicCSR, filepath.Join(destination, "connector.crt")); err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckConnector(destination, filepath.Join(ca, "ca.crt")); err != nil {
+		t.Fatal(err)
+	}
+	if err := PrepareConnector(destination); err == nil {
+		t.Fatal("overwrote a connector identity")
+	}
+	keyAfter, _ := os.ReadFile(filepath.Join(destination, "connector.key"))
+	if string(keyBefore) != string(keyAfter) {
+		t.Fatal("preparation replaced an existing key")
+	}
+	if err := SignConnector(ca, publicCSR, filepath.Join(destination, "connector.crt")); err == nil {
+		t.Fatal("overwrote a signed certificate")
+	}
+}

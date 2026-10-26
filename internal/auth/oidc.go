@@ -69,6 +69,7 @@ func SessionCookie(id, domain string, secure bool, l Lifetime) *http.Cookie {
 // verifies the ID token the provider returns, and trusts that identity
 // for the session's lifetime.
 type Gate struct {
+	issuer       string
 	oauthConfig  oauth2.Config
 	verifier     *oidc.IDTokenVerifier
 	cookieDomain string
@@ -119,6 +120,7 @@ func NewGate(ctx context.Context, cfg config.Auth, allowedHosts []string, sessio
 	}
 
 	return &Gate{
+		issuer: cfg.Issuer,
 		oauthConfig: oauth2.Config{
 			ClientID:     cfg.ClientID,
 			ClientSecret: cfg.ClientSecret,
@@ -144,7 +146,7 @@ func (g *Gate) Authenticate(r *http.Request) (Principal, bool) {
 		return Principal{}, false
 	}
 	session, ok := g.sessions.Get(r.Context(), cookie.Value)
-	if !ok {
+	if !ok || !g.AcceptsPrincipal(session.Principal) {
 		return Principal{}, false
 	}
 	return session.Principal, true
@@ -284,7 +286,7 @@ func (g *Gate) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	principal := Principal{
-		Subject:       idToken.Subject,
+		Subject:       OIDCSubject(idToken.Issuer, idToken.Subject),
 		Email:         claims.Email,
 		EmailVerified: claims.EmailVerified,
 		Groups:        claims.Groups,
@@ -461,4 +463,9 @@ func (g *Gate) ServeAuthEndpoint(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	return true
+}
+
+// AcceptsPrincipal binds a session to this gate's current issuer and method.
+func (g *Gate) AcceptsPrincipal(p Principal) bool {
+	return p.Method == MethodOIDC && IsOIDCSubject(g.issuer, p.Subject)
 }

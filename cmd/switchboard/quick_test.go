@@ -120,7 +120,10 @@ func TestSchemaAndCompletionCommands(t *testing.T) {
 		if !strings.Contains(out.String(), "switchboard") || !strings.Contains(out.String(), "doctor") ||
 			!strings.Contains(out.String(), "audit") || !strings.Contains(out.String(), "keygen") || !strings.Contains(out.String(), "repair") ||
 			!strings.Contains(out.String(), "checkpoint") || !strings.Contains(out.String(), "verify") ||
-			!strings.Contains(out.String(), "who-can") || !strings.Contains(out.String(), "review") {
+			!strings.Contains(out.String(), "who-can") || !strings.Contains(out.String(), "review") ||
+			!strings.Contains(out.String(), "runtime") || !strings.Contains(out.String(), "prepare") ||
+			!strings.Contains(out.String(), "sign") || !strings.Contains(out.String(), "check") ||
+			!strings.Contains(out.String(), "login") || !strings.Contains(out.String(), "disconnect") {
 			t.Errorf("completion %s is incomplete: %q", shell, out.String())
 		}
 	}

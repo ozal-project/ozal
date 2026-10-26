@@ -29,6 +29,7 @@ import (
 	"github.com/octaviosantacruz/switchboard/internal/certs"
 	"github.com/octaviosantacruz/switchboard/internal/config"
 	"github.com/octaviosantacruz/switchboard/internal/events"
+	"github.com/octaviosantacruz/switchboard/internal/githubapp"
 	"github.com/octaviosantacruz/switchboard/internal/notify"
 	"github.com/octaviosantacruz/switchboard/internal/notify/telegram"
 	"github.com/octaviosantacruz/switchboard/internal/originauth"
@@ -47,9 +48,11 @@ func subcommands() map[string]func(context.Context, []string, io.Writer) error {
 	return map[string]func(context.Context, []string, io.Writer) error{
 		"audit":        runAudit,
 		"completion":   runCompletion,
+		"console":      runConsole,
 		"db":           runDB,
 		"doctor":       runDoctor,
 		"init":         runInit,
+		"github":       runGitHub,
 		"tunnel":       runTunnel,
 		"tunnel-spike": runTunnelSpike,
 		"upgrade":      runUpgrade,
@@ -59,6 +62,8 @@ func subcommands() map[string]func(context.Context, []string, io.Writer) error {
 		"policy":       runPolicy,
 		"site":         runSite,
 		"schema":       runSchema,
+		"setup":        runSetup,
+		"runtime":      runRuntime,
 		"user":         runUser,
 		"validate":     runValidate,
 		"version":      runVersion,
@@ -159,7 +164,7 @@ func main() {
 	if loaded.Pages != nil && *dbPath == "" {
 		log.Fatal("pages configuration requires -db pointing at migrated state")
 	}
-	var adminOpts []admin.Option
+	adminOpts := []admin.Option{admin.WithGitHubRepositories(githubapp.New())}
 	if loaded.Audit != nil && loaded.Audit.Includes("admin") {
 		adminOpts = append(adminOpts, admin.WithAdminMutationAudit(auditAppender, loaded.Audit.AdminRequired()))
 	}

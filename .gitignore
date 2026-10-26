@@ -15,3 +15,4 @@ config.json
 
 # Release output (goreleaser)
 /dist/
+.commandcode/

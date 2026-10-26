@@ -4,8 +4,10 @@
 in GitHub Actions and Switchboard receives finished artifacts) and the
 recommendations for decisions D1–D7 the same day. Project configuration and
 read-only views are implemented as `PAGES-007` (`1e1bb3e`); the deploy endpoint
-is in progress. Tracker: `PAGES-004`, `PAGES-005`,
-`PAGES-008`–`PAGES-009` in [TO_IMPLEMENT](../TO_IMPLEMENT.md); workspace
+`PAGES-008` is closed, with acceptance recorded below and in
+[IMPLEMENTED](../IMPLEMENTED.md). Workflow/product acceptance, previews and
+domains remain in `PAGES-004`, `PAGES-005` and `PAGES-009` in
+[TO_IMPLEMENT](../TO_IMPLEMENT.md); workspace
 `CROSS-011`.
 
 ## Problem

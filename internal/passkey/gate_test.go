@@ -545,7 +545,7 @@ func (s *stubOIDC) HandleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *stubOIDC) HandleCallback(w http.ResponseWriter, r *http.Request) {
-	id, _ := s.sessions.Create(r.Context(), auth.Principal{Subject: "google-123", Email: "ana@example.com", EmailVerified: true, AuthTime: time.Now(), Method: auth.MethodOIDC})
+	id, _ := s.sessions.Create(r.Context(), auth.Principal{Subject: auth.OIDCSubject("https://idp.example", "google-123"), Email: "ana@example.com", EmailVerified: true, AuthTime: time.Now(), Method: auth.MethodOIDC})
 	http.SetCookie(w, &http.Cookie{Name: auth.SessionCookieName, Value: id})
 }
 
@@ -555,7 +555,7 @@ func (s *stubOIDC) HandleCallback(w http.ResponseWriter, r *http.Request) {
 func TestPasskeyGateWithOIDC(t *testing.T) {
 	h := newHarness(t)
 	sessions := sqlite.NewSessions(h.db, auth.Lifetime{Absolute: time.Hour})
-	oidcSession, _ := sessions.Create(context.Background(), auth.Principal{Subject: "google-123", AuthTime: time.Now(), Method: auth.MethodOIDC})
+	oidcSession, _ := sessions.Create(context.Background(), auth.Principal{Subject: auth.OIDCSubject("https://idp.example", "google-123"), AuthTime: time.Now(), Method: auth.MethodOIDC})
 	request := func(method, path string) (*httptest.ResponseRecorder, bool) {
 		req := httptest.NewRequest(method, loginOrigin+path, nil)
 		rec := httptest.NewRecorder()
@@ -589,7 +589,7 @@ func TestPasskeyGateWithOIDC(t *testing.T) {
 	if !authenticated() {
 		t.Fatal("an OIDC session was refused with the provider configured")
 	}
-	legacy, _ := sessions.Create(context.Background(), auth.Principal{Subject: "google-123", AuthTime: time.Now()})
+	legacy, _ := sessions.Create(context.Background(), auth.Principal{Subject: auth.OIDCSubject("https://idp.example", "google-123"), AuthTime: time.Now()})
 	req := httptest.NewRequest(http.MethodGet, "https://"+appHost+"/", nil)
 	req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: legacy})
 	if _, ok := h.gate.Authenticate(req); ok {
@@ -806,5 +806,39 @@ func TestProviderIconsAreServed(t *testing.T) {
 	}
 	if rec := get("/_/auth/iconsx/apple.svg"); rec.Code != 0 {
 		t.Errorf("a path outside /_/auth/icons/ was handled: %d", rec.Code)
+	}
+}
+
+func (s *stubOIDC) AcceptsPrincipal(p auth.Principal) bool {
+	return p.Method == auth.MethodOIDC && auth.IsOIDCSubject("https://idp.example", p.Subject)
+}
+
+// A concurrent login may have read membership just before a removal. Its new
+// cookie must not keep that membership, even after the update deleted old rows.
+func TestNativeSessionRefreshesAuthoritativeGroupsAndRejectsMethodConfusion(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	invited, err := h.identity.Invite(ctx, "ana@example.test", "", []string{"staff"}, false, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessions := sqlite.NewSessions(h.db, auth.Lifetime{Absolute: time.Hour})
+	for _, method := range []string{auth.MethodPasskey, auth.MethodOIDC, ""} {
+		id, err := sessions.Create(ctx, auth.Principal{Subject: invited.User.Subject(), Groups: []string{"owner"}, Method: method})
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest(http.MethodGet, loginOrigin+"/", nil)
+		req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: id})
+		principal, ok := h.gate.Authenticate(req)
+		if method != auth.MethodPasskey {
+			if ok {
+				t.Fatalf("native subject with %q accepted", method)
+			}
+			continue
+		}
+		if !ok || len(principal.Groups) != 1 || principal.Groups[0] != "staff" {
+			t.Fatalf("stale groups: %+v %v", principal, ok)
+		}
 	}
 }

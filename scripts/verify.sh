@@ -83,6 +83,9 @@ else
   echo "  site toolchain not installed (cd site && npm ci); site build not exercised"
 fi
 
+echo "[6g] Linux release installer"
+if [[ "$(uname -s)" == Linux ]]; then scripts/release/test-install.sh; fi
+
 echo "[7/7] git diff --check"
 git diff --check
 
