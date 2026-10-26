@@ -16,6 +16,9 @@ import (
 	"github.com/octaviosantacruz/switchboard/internal/routemanager"
 )
 
+// readToken is the admin token of tests whose config does not set its own.
+const readToken = "read-token"
+
 type fakeManager struct {
 	mu        sync.Mutex
 	cfg       config.Config
@@ -83,7 +86,8 @@ func TestStatusDashboardShowsOperationalDetailsWithoutSecrets(t *testing.T) {
 		}},
 	}
 
-	rec := request(New(manager, nil), http.MethodGet, "/_/status", "", "")
+	manager.cfg.Admin.Token = readToken
+	rec := request(New(manager, nil), http.MethodGet, "/_/status", readToken, "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
@@ -131,7 +135,7 @@ func TestAdminSecurityHeaders(t *testing.T) {
 	manager := &fakeManager{cfg: config.Config{Admin: config.Admin{Token: "secret"}}}
 	handler := New(manager, nil)
 
-	rec := request(handler, http.MethodGet, "/_/status", "", "")
+	rec := request(handler, http.MethodGet, "/_/status", "secret", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}

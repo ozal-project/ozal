@@ -63,7 +63,7 @@ func runUpgrade(ctx context.Context, args []string, out io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("locate this binary: %w", err)
 	}
-	sys, err := newUpgradeSystem(*unit, *account, "http://"+cfg.Admin.Listen+"/_/status", out)
+	sys, err := newUpgradeSystem(*unit, *account, "http://"+cfg.Admin.Listen+"/_/healthz", out)
 	if err != nil {
 		return err
 	}

@@ -26,7 +26,7 @@ func TestOverviewProjectsAccessRulesWithoutConfigSecrets(t *testing.T) {
 	}}
 	broker := events.NewBroker()
 	handler := New(manager, broker, WithEvents(broker))
-	rec := request(handler, http.MethodGet, "/_/overview", "", "")
+	rec := request(handler, http.MethodGet, "/_/overview", "hidden-admin-token", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d", rec.Code)
 	}
@@ -56,8 +56,8 @@ func TestOverviewProjectsAccessRulesWithoutConfigSecrets(t *testing.T) {
 
 func TestAuditStatusAppearsInHTMLAndJSONWithoutRawIOError(t *testing.T) {
 	status := AuditStatus{Available: false, FailureCount: 3, LastFailureAt: "2026-10-25T12:00:00Z"}
-	handler := New(&fakeManager{}, nil, WithAuditStatus(func() AuditStatus { return status }))
-	api := request(handler, http.MethodGet, "/_/api/status", "", "")
+	handler := New(&fakeManager{cfg: config.Config{Admin: config.Admin{Token: readToken}}}, nil, WithAuditStatus(func() AuditStatus { return status }))
+	api := request(handler, http.MethodGet, "/_/api/status", readToken, "")
 	if api.Code != http.StatusOK {
 		t.Fatalf("api status = %d", api.Code)
 	}
@@ -70,7 +70,7 @@ func TestAuditStatusAppearsInHTMLAndJSONWithoutRawIOError(t *testing.T) {
 	if body.Audit == nil || body.Audit.Available || body.Audit.FailureCount != 3 || body.Audit.LastFailureAt != status.LastFailureAt {
 		t.Fatalf("audit status = %+v", body.Audit)
 	}
-	page := request(handler, http.MethodGet, "/_/status", "", "")
+	page := request(handler, http.MethodGet, "/_/status", readToken, "")
 	for _, want := range []string{"Durable audit", "Selected event families", "Unavailable", "3", status.LastFailureAt, "Required operations fail closed"} {
 		if !strings.Contains(page.Body.String(), want) {
 			t.Errorf("status page did not show %q", want)
@@ -83,7 +83,7 @@ func TestAuditStatusAppearsInHTMLAndJSONWithoutRawIOError(t *testing.T) {
 
 func TestConsoleHomeAndAssets(t *testing.T) {
 	broker := events.NewBroker()
-	handler := New(&fakeManager{}, broker, WithEvents(broker))
+	handler := New(&fakeManager{cfg: config.Config{Admin: config.Admin{Token: readToken}}}, broker, WithEvents(broker))
 
 	// Every client route gets the app shell with the strict CSP.
 	for _, path := range []string{"/", "/overview", "/activity", "/routes", "/simulator"} {
@@ -156,7 +156,7 @@ func TestConsoleHomeAndAssets(t *testing.T) {
 	}
 
 	// The route debug page still works without JavaScript.
-	status := request(handler, http.MethodGet, "/_/status", "", "")
+	status := request(handler, http.MethodGet, "/_/status", readToken, "")
 	if !strings.Contains(status.Body.String(), "/_/console.css") || !strings.Contains(status.Header().Get("Content-Security-Policy"), "style-src 'self'") {
 		t.Fatal("route debug page lost its stylesheet or CSP")
 	}
@@ -174,7 +174,7 @@ func TestAPIStatusMatchesDebugViewWithoutSecrets(t *testing.T) {
 		statuses: []routemanager.RouteStatus{{Route: config.Route{Host: "app.localhost", Target: "http://localhost:9000",
 			Access: &config.AccessPolicy{AllowedEmails: []string{"private@example.test"}, RequiredGroups: []string{"private-group"}}}}},
 	}
-	rec := request(New(manager, nil), http.MethodGet, "/_/api/status", "", "")
+	rec := request(New(manager, nil), http.MethodGet, "/_/api/status", "hidden-admin-token", "")
 	if rec.Code != 200 || !strings.HasPrefix(rec.Header().Get("Content-Type"), "application/json") {
 		t.Fatalf("api status: %d %v", rec.Code, rec.Header())
 	}
@@ -193,7 +193,7 @@ func TestAPIStatusMatchesDebugViewWithoutSecrets(t *testing.T) {
 
 func TestStatusShowsHealthForEachPoolTarget(t *testing.T) {
 	checkedAt := time.Date(2026, 10, 25, 10, 0, 0, 0, time.UTC)
-	manager := &fakeManager{statuses: []routemanager.RouteStatus{{
+	manager := &fakeManager{cfg: config.Config{Admin: config.Admin{Token: readToken}}, statuses: []routemanager.RouteStatus{{
 		Route: config.Route{
 			Host:      "app.localhost",
 			Upstreams: []string{"http://one.local", "http://two.local"},
@@ -205,7 +205,7 @@ func TestStatusShowsHealthForEachPoolTarget(t *testing.T) {
 		},
 	}}}
 	handler := New(manager, nil)
-	page := request(handler, http.MethodGet, "/_/status", "", "")
+	page := request(handler, http.MethodGet, "/_/status", readToken, "")
 	if page.Code != http.StatusOK {
 		t.Fatalf("status page = %d, want 200", page.Code)
 	}
@@ -215,15 +215,15 @@ func TestStatusShowsHealthForEachPoolTarget(t *testing.T) {
 		}
 	}
 
-	api := request(handler, http.MethodGet, "/_/api/status", "", "")
+	api := request(handler, http.MethodGet, "/_/api/status", readToken, "")
 	if api.Code != http.StatusOK || !strings.Contains(api.Body.String(), `"state":"Unhealthy"`) || !strings.Contains(api.Body.String(), `"target":"http://two.local"`) {
 		t.Fatalf("API status does not include per-target health: %d %s", api.Code, api.Body.String())
 	}
 }
 
 func TestStaticRouteShowsAccessAndNoProbe(t *testing.T) {
-	manager := &fakeManager{statuses: []routemanager.RouteStatus{{Route: config.Route{Host: "site.localhost", Root: "/tmp/site"}}}}
-	rec := request(New(manager, nil), http.MethodGet, "/_/status", "", "")
+	manager := &fakeManager{cfg: config.Config{Admin: config.Admin{Token: readToken}}, statuses: []routemanager.RouteStatus{{Route: config.Route{Host: "site.localhost", Root: "/tmp/site"}}}}
+	rec := request(New(manager, nil), http.MethodGet, "/_/status", readToken, "")
 	for _, want := range []string{"Public", "No login required", "Static files", "Not probed"} {
 		if !strings.Contains(rec.Body.String(), want) {
 			t.Errorf("missing %q", want)
@@ -282,5 +282,52 @@ func TestConsoleServesTheSharedFavicon(t *testing.T) {
 	rec := request(handler, http.MethodGet, "/favicon.svg", "", "")
 	if rec.Code != 200 || rec.Header().Get("Content-Type") != "image/svg+xml" || !strings.Contains(rec.Body.String(), "<svg") {
 		t.Fatalf("favicon: %d %v", rec.Code, rec.Header())
+	}
+}
+
+// Route, certificate and audit projections describe the edge; being on
+// loopback is not a credential (a tunnel or another local user also is).
+func TestRouteStatusReadsNeedACredential(t *testing.T) {
+	broker := events.NewBroker()
+	manager := &fakeManager{cfg: config.Config{Admin: config.Admin{Token: readToken}, Routes: []config.Route{{Host: "private.localhost", Target: "http://private-upstream:1234"}}}}
+	handler := New(manager, broker, WithEvents(broker))
+	for _, path := range []string{"/_/status", "/_/api/status", "/_/overview"} {
+		for _, token := range []string{"", "wrong"} {
+			rec := request(handler, http.MethodGet, path, token, "")
+			if rec.Code != http.StatusUnauthorized || strings.Contains(rec.Body.String(), "private") {
+				t.Errorf("%s with token %q = %d %q, want 401 and no route data", path, token, rec.Code, rec.Body.String())
+			}
+			if rec.Header().Get("Cache-Control") != "no-store" {
+				t.Errorf("%s answer is cacheable", path)
+			}
+		}
+		if rec := request(handler, http.MethodGet, path, readToken, ""); rec.Code != http.StatusOK {
+			t.Errorf("%s with the admin token = %d, want 200", path, rec.Code)
+		}
+	}
+}
+
+func TestOperatorSessionReadsRouteStatusWithoutATool(t *testing.T) {
+	broker := events.NewBroker()
+	handler := New(&fakeManager{cfg: config.Config{Admin: config.Admin{Token: readToken}}}, broker, WithEvents(broker))
+	token, _, err := handler.operators.issue("Ana", false, "people")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/_/status", "/_/api/status", "/_/overview"} {
+		if rec := request(handler, http.MethodGet, path, token, ""); rec.Code != http.StatusOK {
+			t.Errorf("%s with a people-only session = %d, want 200", path, rec.Code)
+		}
+	}
+}
+
+func TestHealthzIsReadinessOnly(t *testing.T) {
+	manager := &fakeManager{cfg: config.Config{Admin: config.Admin{Token: readToken}, Routes: []config.Route{{Host: "private.localhost", Target: "http://private-upstream:1234"}}}}
+	rec := request(New(manager, nil), http.MethodGet, "/_/healthz", "", "")
+	if rec.Code != http.StatusOK || rec.Body.String() != "ok\n" {
+		t.Fatalf("healthz = %d %q", rec.Code, rec.Body.String())
+	}
+	if rebound := requestWithHost(New(manager, nil), "evil.example", http.MethodGet, "/_/healthz", "", ""); rebound.Code != http.StatusMisdirectedRequest {
+		t.Fatalf("healthz accepted a rebound host: %d", rebound.Code)
 	}
 }

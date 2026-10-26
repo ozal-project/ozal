@@ -59,7 +59,7 @@ func TestIntegratedTunnelRoutesReloadAndPreserveVisitorIP(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer integrated.Close()
-	cfg := config.Config{Listen: "127.0.0.1:0", Tunnel: tunnelConfig, TrustedProxies: []string{"127.0.0.1/32"}, Routes: []config.Route{{Host: "app.localhost", Connector: "portfolio"}}}
+	cfg := config.Config{Listen: "127.0.0.1:0", Admin: config.Admin{Token: "console-read-token"}, Tunnel: tunnelConfig, TrustedProxies: []string{"127.0.0.1/32"}, Routes: []config.Route{{Host: "app.localhost", Connector: "portfolio"}}}
 	configPath := filepath.Join(directory, "routing.json")
 	write := func() {
 		t.Helper()
@@ -187,6 +187,7 @@ func TestIntegratedTunnelRoutesReloadAndPreserveVisitorIP(t *testing.T) {
 	control := admin.New(manager, sink, admin.WithEvents(broker))
 	status := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/_/status", nil)
+	request.Header.Set("Authorization", "Bearer console-read-token")
 	control.ServeHTTP(status, request)
 	if !strings.Contains(status.Body.String(), "Connector connected") || strings.Contains(status.Body.String(), "upstream responses are healthy") {
 		t.Fatal("console lacks connector state")
@@ -194,7 +195,12 @@ func TestIntegratedTunnelRoutesReloadAndPreserveVisitorIP(t *testing.T) {
 	adminServer := httptest.NewServer(control)
 	defer adminServer.Close()
 	streamClient := &http.Client{Timeout: 2 * time.Second}
-	stream, err := streamClient.Get(adminServer.URL + "/_/events")
+	streamRequest, err := http.NewRequest(http.MethodGet, adminServer.URL+"/_/events", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	streamRequest.Header.Set("Authorization", "Bearer console-read-token")
+	stream, err := streamClient.Do(streamRequest)
 	if err != nil {
 		t.Fatal(err)
 	}

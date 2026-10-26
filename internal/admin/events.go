@@ -2,6 +2,7 @@ package admin
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/octaviosantacruz/switchboard/internal/config"
 	"github.com/octaviosantacruz/switchboard/internal/events"
 	"github.com/octaviosantacruz/switchboard/internal/policycontext"
 )
@@ -87,6 +89,24 @@ func safeMutationTarget(value string) string {
 
 const heartbeat = 15 * time.Second
 
+// streamAuthorized rechecks authority while a stream remains open. A revoked
+// or expired operator cannot keep reading events on an existing connection.
+func (h *Handler) streamAuthorized(r *http.Request) bool {
+	if isLocal(r) {
+		return true
+	}
+	_, token, ok := strings.Cut(r.Header.Get("Authorization"), " ")
+	if !ok {
+		return false
+	}
+	if grant, ok := r.Context().Value(operatorKey{}).(operatorGrant); ok {
+		current, valid := h.operators.authenticate(token)
+		return valid && current.ID == grant.ID
+	}
+	adminToken, err := config.ResolveSecret(h.manager.Config().Admin.Token)
+	return err == nil && adminToken != "" && matchesAny(token, []string{adminToken})
+}
+
 type eventView struct {
 	ID         string                   `json:"id"`
 	Time       string                   `json:"time"`
@@ -157,6 +177,9 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request) {
 	hdr.Set("X-Content-Type-Options", "nosniff")
 
 	send := func(e events.Stamped) error {
+		if !h.streamAuthorized(r) {
+			return errors.New("event stream authority expired or revoked")
+		}
 		id := eventID(epoch, e.Seq)
 		data, err := json.Marshal(toView(id, e.Event))
 		if err != nil {
@@ -186,6 +209,9 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case <-tick.C:
+			if !h.streamAuthorized(r) {
+				return
+			}
 			// A comment line keeps proxies and the browser from timing out
 			// and surfaces a dead client as a write error.
 			if _, err := fmt.Fprint(w, ": ping\n\n"); err != nil {

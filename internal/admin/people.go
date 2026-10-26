@@ -31,7 +31,7 @@ func WithPeople(store people) Option {
 }
 
 func (h *Handler) registerPeople() {
-	h.mux.HandleFunc("GET /_/api/people", h.listPeople)
+	h.mux.HandleFunc("GET /_/api/people", h.requireTool("people", h.listPeople))
 	h.mux.HandleFunc("GET /_/api/groups", h.requireTool("people", h.listGroups))
 	h.mux.HandleFunc("PUT /_/api/people/{email}/groups", h.requireTool("people", h.setPersonGroups))
 	h.mux.HandleFunc("POST /_/api/people/invite", h.requireTool("people", h.invitePerson))
@@ -59,8 +59,7 @@ type person struct {
 	Passkeys []personPasskey `json:"passkeys"`
 }
 
-// listPeople reads like the rest of the console: the admin listener is
-// loopback-only, and the activity feed already shows these identities.
+// listPeople is protected by the people tool, including on loopback.
 func (h *Handler) listPeople(w http.ResponseWriter, r *http.Request) {
 	cfg := h.manager.Config()
 	users, err := h.people.Users(r.Context())

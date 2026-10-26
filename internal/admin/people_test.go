@@ -45,6 +45,39 @@ func peopleHandler(t *testing.T, extra ...Option) (http.Handler, *sqlite.Identit
 	return New(manager, recorder, options...), identity, recorder
 }
 
+func TestPeopleListingRequiresPeopleAuthority(t *testing.T) {
+	handler, _, _ := peopleHandler(t)
+	h := handler.(*Handler)
+	peopleToken, _, err := h.operators.issue("People operator", false, "people")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sitesToken, _, err := h.operators.issue("Sites operator", false, "sites")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name  string
+		token string
+		want  int
+	}{
+		{"anonymous", "", http.StatusUnauthorized},
+		{"wrong scope", sitesToken, http.StatusForbidden},
+		{"people scope", peopleToken, http.StatusOK},
+		{"admin", "secret", http.StatusOK},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := request(h, http.MethodGet, "/_/api/people", tc.token, "")
+			if rec.Code != tc.want {
+				t.Fatalf("status = %d, want %d", rec.Code, tc.want)
+			}
+			if got := rec.Header().Get("Cache-Control"); got != "no-store" {
+				t.Errorf("Cache-Control = %q, want no-store", got)
+			}
+		})
+	}
+}
+
 // The console does what `switchboard user` does: invite with a link that
 // only the admin token can obtain, list, disable and enable.
 func TestPeopleInviteListDisable(t *testing.T) {
@@ -88,7 +121,10 @@ func TestPeopleInviteListDisable(t *testing.T) {
 		t.Fatalf("a refused invitation created a user: %d users", len(users))
 	}
 
-	rec = request(handler, http.MethodGet, "/_/api/people", "", "")
+	if denied := request(handler, http.MethodGet, "/_/api/people", "", ""); denied.Code != http.StatusUnauthorized {
+		t.Fatalf("people listing without a credential = %d", denied.Code)
+	}
+	rec = request(handler, http.MethodGet, "/_/api/people", "secret", "")
 	var listing struct {
 		Enabled bool `json:"enabled"`
 		Users   []struct {

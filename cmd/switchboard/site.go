@@ -48,10 +48,14 @@ func runSite(ctx context.Context, args []string, out io.Writer) error {
 
 	switch sub {
 	case "list":
+		token, err := config.ResolveSecret(*tokenRef)
+		if err != nil || token == "" {
+			return fmt.Errorf("admin token: set %s or pass -token file:/path", *tokenRef)
+		}
 		var listed struct {
 			Sites []pages.Site `json:"sites"`
 		}
-		if err := call(ctx, client, http.MethodGet, base+"/_/api/sites", "", "", nil, &listed); err != nil {
+		if err := call(ctx, client, http.MethodGet, base+"/_/api/sites", token, "", nil, &listed); err != nil {
 			return err
 		}
 		for _, s := range listed.Sites {

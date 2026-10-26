@@ -67,7 +67,8 @@ so no new public surface is added.
   raw filesystem error.
 - CLI: `switchboard site deploy -site NAME ./dist` (packs the directory,
   refusing symlinks in the source), `switchboard site list`, and
-  `switchboard site rollback -site NAME -to ID`.
+  `switchboard site rollback -site NAME -to ID`. All three require an admin
+  or sites token, including listing deployment history.
 - Retention: `pages.keep` is the total retained deployments per site
   (default 5), including the live one; older directories are removed after a
   successful deploy.

@@ -198,11 +198,24 @@ try {
     await goPage(href, title);
     await auditPage([[1440, 1000], [1024, 900], [390, 844], [320, 800]]);
     if (href === "/applications") {
+      await ab("set", "viewport", "1440", "1000");
       await ab("screenshot", join(root, "applications-1440.png"));
       await ab("set", "viewport", "390", "844");
       await ab("screenshot", join(root, "applications-390.png"));
     }
   }
+  step = "locking hides protected people and sites";
+  await goPage("/people", "People & passkeys");
+  await ab("wait", "--text", "new-operator-test@example.test");
+  await ab("find", "role", "button", "click", "--name", "Acceptance operator", "--exact");
+  await ab("find", "role", "button", "click", "--name", "Lock this tab", "--exact");
+  await ab("wait", "--text", "Sign in to open the console");
+  assert.equal(await evaluate("document.body.innerText.includes('new-operator-test@example.test')"), false, "locking kept the people list visible");
+  assert.equal(await evaluate("(async () => (await fetch('/_/api/people')).status)()"), 401, "anonymous people listing remained available");
+  assert.equal(await evaluate("(async () => (await fetch('/_/api/sites')).status)()"), 401, "anonymous site listing remained available");
+  assert.equal(await evaluate("(async () => (await fetch('/_/events')).status)()"), 401, "anonymous event stream remained available");
+  for (const path of ["/_/status", "/_/api/status", "/_/overview"]) assert.equal(await evaluate(`(async () => (await fetch(${JSON.stringify(path)})).status)()`), 401, `anonymous ${path} remained available`);
+  assert.equal(await evaluate("(async () => (await fetch('/_/healthz')).status)()"), 200, "readiness probe unavailable");
   console.log("Product console: host login, URL cleanup, app add/remove review, artifact upload/rollback, membership keyboard/cancel/save, Projects and Connector error recovery, Sites rollback, all console pages at four widths with axe OK");
   console.log(`Screenshots: ${root}`);
 } catch (error) {

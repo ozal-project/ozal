@@ -90,7 +90,10 @@ def main():
             with socket.socket() as reserved:
                 reserved.bind(("127.0.0.1", 0))
                 admin_bind = "127.0.0.1:" + str(reserved.getsockname()[1])
-            config = {"listen": "127.0.0.1:0", "admin": {"listen": admin_bind},
+            token_file = root / "admin.token"
+            token_file.write_text("smoke-admin-token\n")
+            token_file.chmod(0o600)
+            config = {"listen": "127.0.0.1:0", "admin": {"listen": admin_bind, "token": "file:" + str(token_file)},
                       "trusted_proxies": ["127.0.0.1/32"],
                       "tunnel": {"listen": "127.0.0.1:0", "cert_file": str(pki / "edge.crt"),
                                  "key_file": str(pki / "edge.key"), "ca_file": str(pki / "ca.crt")},
@@ -126,8 +129,8 @@ def main():
                                  "-edge", transport, "-server-name", "edge.localhost",
                                  "-upstream", "http://127.0.0.1:" + str(origin.server_port))
 
-            def fetch(address, path="/", host="app.localhost"):
-                request = urllib.request.Request("http://" + address + path, headers={"Host": host,
+            def fetch(address, path="/", host="app.localhost", extra=None):
+                request = urllib.request.Request("http://" + address + path, headers={**(extra or {}), "Host": host,
                     "CF-Connecting-IP": "203.0.113.47", "X-Switchboard-Visitor-IP": "6.6.6.6",
                     "X-Auth-Request-Email": "forged@example.test", "Cookie": "sb_session=forged; harmless=kept"})
                 try:
@@ -165,9 +168,12 @@ def main():
             admin = wait_until(lambda: address(output, "switchboard admin listening on "))
             wait_until(lambda: fetch(public)[0] == 200)
             assert connector.poll() is None and connector.pid == connector_pid
-            status, body = fetch(admin, "/_/overview", "127.0.0.1")
+            # Route state needs the admin credential even on loopback.
+            status, _ = fetch(admin, "/_/overview", "127.0.0.1")
+            assert status == 401
+            status, body = fetch(admin, "/_/overview", "127.0.0.1", {"Authorization": "Bearer smoke-admin-token"})
             assert status == 200 and json.loads(body)["routes"][0]["connection"] == "Connector connected"
-            status, body = fetch(admin, "/_/status", "127.0.0.1")
+            status, body = fetch(admin, "/_/status", "127.0.0.1", {"Authorization": "Bearer smoke-admin-token"})
             assert status == 200 and b"Connector connected" in body
             if args.ready_file:
                 args.ready_file.write_text(json.dumps({"admin": "http://" + admin, "public": "http://" + public}))

@@ -134,7 +134,7 @@ systemctl daemon-reload
 systemctl enable --now switchboard
 
 for _ in $(seq 1 30); do
-  if curl -fsS -o /dev/null http://127.0.0.1:9090/_/status 2>/dev/null; then ready=1; break; fi
+  if curl -fsS -o /dev/null http://127.0.0.1:9090/_/healthz 2>/dev/null; then ready=1; break; fi
   sleep 1
 done
 if [[ -z "${ready:-}" ]]; then

@@ -57,8 +57,11 @@ func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 	h.registerOperators()
 	h.mux.HandleFunc("GET /_/console.css", h.consoleCSS)
 	h.mux.HandleFunc("GET /_/fonts/manrope.ttf", h.consoleFont)
-	h.mux.HandleFunc("GET /_/status", h.status)
-	h.mux.HandleFunc("GET /_/api/status", h.apiStatus)
+	// Readiness says only that the process answers. Everything that describes
+	// routes, certificates or audit state needs a credential, even on loopback.
+	h.mux.HandleFunc("GET /_/healthz", h.healthz)
+	h.mux.HandleFunc("GET /_/status", h.requireBearer(h.status))
+	h.mux.HandleFunc("GET /_/api/status", h.requireBearer(h.apiStatus))
 	h.mux.HandleFunc("GET /_/api/setup", h.requireTool("applications", h.setupStatus))
 	h.mux.HandleFunc("POST /_/api/apps/plan", h.requireTool("applications", h.planApplication))
 	h.mux.HandleFunc("DELETE /_/api/apps/{host}", h.requireTool("applications", h.removeApplication))
@@ -88,8 +91,8 @@ func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 		h.registerPairing()
 	}
 	if h.broker != nil {
-		h.mux.HandleFunc("GET /_/overview", h.overview)
-		h.mux.HandleFunc("GET /_/events", h.stream)
+		h.mux.HandleFunc("GET /_/overview", h.requireBearer(h.overview))
+		h.mux.HandleFunc("GET /_/events", h.requireBearer(h.stream))
 		// The old server-rendered pages moved into the console app.
 		h.mux.Handle("GET /_/activity", http.RedirectHandler("/activity", http.StatusMovedPermanently))
 		h.mux.Handle("GET /_/simulator", http.RedirectHandler("/simulator", http.StatusMovedPermanently))
@@ -311,6 +314,15 @@ func upstreamViews(statuses []healthcheck.TargetStatus) []upstreamView {
 	return views
 }
 
+// healthz is the unauthenticated readiness probe for service managers,
+// installers and tunnels. It reveals nothing about the configuration.
+func (h *Handler) healthz(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	_, _ = io.WriteString(w, "ok\n")
+}
+
 func (h *Handler) status(w http.ResponseWriter, _ *http.Request) {
 	view := h.buildStatusView()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -412,9 +424,9 @@ func safeRouteEventHost(host string) string {
 	return normalized
 }
 
-// requireBearer admits the admin token only.
-// Any operator session or the admin token passes; use requireTool for anything
-// that changes or reveals a console area.
+// requireBearer admits the host socket, the admin token or any operator
+// session. Use requireTool for anything that changes or reveals one console
+// area.
 func (h *Handler) requireBearer(next http.HandlerFunc) http.HandlerFunc {
 	return h.bearer(next, false, "")
 }
@@ -436,6 +448,7 @@ func (h *Handler) requireSitesBearer(next http.HandlerFunc) http.HandlerFunc {
 
 func (h *Handler) bearer(next http.HandlerFunc, sites bool, tool string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
 		// The unix socket is already the host operator's credential.
 		if isLocal(r) {
 			next(w, r)

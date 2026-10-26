@@ -98,6 +98,9 @@ func TestSiteDeployListRollbackEndToEnd(t *testing.T) {
 
 	// A wrong token never reaches the store.
 	t.Setenv("SWITCHBOARD_ADMIN_TOKEN", "wrong")
+	if _, err := run("list"); err == nil || !strings.Contains(err.Error(), "401") {
+		t.Fatalf("list with a wrong token: %v", err)
+	}
 	if _, err := run("deploy", "-site", "blog", v1); err == nil || !strings.Contains(err.Error(), "401") {
 		t.Fatalf("deploy with a wrong token: %v", err)
 	}

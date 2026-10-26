@@ -86,7 +86,7 @@ export async function startDemoEdge({ binary, dir = join(homedir(), ".cache", "s
   child.stdout.on("data", (d) => (log += d));
   child.stderr.on("data", (d) => (log += d));
   for (let i = 0; ; i++) {
-    try { if ((await fetch(`http://127.0.0.1:${ADMIN_PORT}/_/status`)).ok) break; } catch { /* not up yet */ }
+    try { if ((await fetch(`http://127.0.0.1:${ADMIN_PORT}/_/healthz`)).ok) break; } catch { /* not up yet */ }
     if (i > 100 || child.exitCode !== null) throw new Error("the edge did not start:\n" + log.slice(-800));
     await new Promise((r) => setTimeout(r, 100));
   }

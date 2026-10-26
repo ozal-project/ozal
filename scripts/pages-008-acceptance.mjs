@@ -84,7 +84,7 @@ try {
     child = spawn(binary, ["-config", configPath, "-db", database], { cwd: root, env: { ...process.env, SWITCHBOARD_LAB_DEPLOY_TOKEN: secret }, stdio: ["ignore", "ignore", "ignore"] });
     for (let attempt = 0; attempt < 100; attempt++) {
       if (child.exitCode !== null) throw new Error("acceptance server exited during startup");
-      try { const response = await fetch(`http://127.0.0.1:${adminPort}/_/api/status`, { signal: AbortSignal.timeout(300) }); if (response.ok) return; } catch {}
+      try { const response = await fetch(`http://127.0.0.1:${adminPort}/_/healthz`, { signal: AbortSignal.timeout(300) }); if (response.ok) return; } catch {}
       await delay(50);
     }
     throw new Error("acceptance server did not become ready");

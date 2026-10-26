@@ -206,10 +206,10 @@ async function main() {
 // The access log rows on the project page are this run's own events, with the
 // opaque passkey id replaced by the person's email like the console does.
 async function exportAccessSample(edge) {
-  const people = await (await fetch(`${edge.consoleURL}/_/api/people`)).json();
+  const people = await (await fetch(`${edge.consoleURL}/_/api/people`, { headers: { Authorization: `Bearer ${edge.token}` } })).json();
   const subjects = new Map((people.users ?? []).map((u) => [u.subject, u.email]));
   const controller = new AbortController();
-  const response = await fetch(`${edge.consoleURL}/_/events`, { signal: controller.signal });
+  const response = await fetch(`${edge.consoleURL}/_/events`, { headers: { Authorization: `Bearer ${edge.token}` }, signal: controller.signal });
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let text = "";

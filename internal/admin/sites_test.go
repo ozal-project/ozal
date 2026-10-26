@@ -82,6 +82,39 @@ func TestDeployRequiresTheAdminToken(t *testing.T) {
 	}
 }
 
+func TestSiteListingRequiresSitesAuthority(t *testing.T) {
+	manager := &fakeManager{cfg: config.Config{Admin: config.Admin{Token: "secret", SitesToken: "publisher"}}}
+	h := New(manager, nil, WithPages(&fakeDeployments{}))
+	peopleToken, _, err := h.operators.issue("People operator", false, "people")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sitesToken, _, err := h.operators.issue("Sites operator", false, "sites")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, token string
+		want        int
+	}{
+		{"anonymous", "", http.StatusUnauthorized},
+		{"wrong scope", peopleToken, http.StatusForbidden},
+		{"sites scope", sitesToken, http.StatusOK},
+		{"publisher", "publisher", http.StatusOK},
+		{"admin", "secret", http.StatusOK},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := request(h, http.MethodGet, "/_/api/sites", tc.token, "")
+			if rec.Code != tc.want {
+				t.Fatalf("status = %d, want %d", rec.Code, tc.want)
+			}
+			if got := rec.Header().Get("Cache-Control"); got != "no-store" {
+				t.Errorf("Cache-Control = %q, want no-store", got)
+			}
+		})
+	}
+}
+
 func TestDeployAndRollbackEmitEvents(t *testing.T) {
 	store := &fakeDeployments{}
 	sink := &events.Recorder{}
@@ -104,7 +137,7 @@ func TestDeployAndRollbackEmitEvents(t *testing.T) {
 		t.Fatalf("rollback to an unknown deployment: %d, want 404", rec.Code)
 	}
 
-	rec = request(handler, http.MethodGet, "/_/api/sites", "", "")
+	rec = request(handler, http.MethodGet, "/_/api/sites", "secret", "")
 	var listed struct {
 		Sites []pages.Site `json:"sites"`
 	}
@@ -126,7 +159,7 @@ func TestDeployAndRollbackEmitEvents(t *testing.T) {
 func TestSiteListDoesNotExposeDeploymentSourceMetadata(t *testing.T) {
 	manager := &fakeManager{cfg: config.Config{Admin: config.Admin{Token: "secret"}}}
 	handler := New(manager, nil, WithPages(&metadataDeployments{}))
-	rec := request(handler, http.MethodGet, "/_/api/sites", "", "")
+	rec := request(handler, http.MethodGet, "/_/api/sites", "secret", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("site list = %d %s, want 200", rec.Code, rec.Body)
 	}

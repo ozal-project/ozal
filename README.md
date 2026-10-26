@@ -295,8 +295,9 @@ with recent events replayed from memory. The page shows access decisions,
 logins and control-plane changes; it does not control host processes. It stays
 on the loopback admin listener. History is bounded and not durable; reconnects
 can replay events, and slow subscribers can miss events. The console includes category/search filters, pause/resume, and a route-access
-overview. `/` opens the activity page; `/_/status` is a read-only route-debug
-snapshot with expandable probe details. Static sites have no HTTP probe. Full
+overview. `/` opens the console, which asks for an operator sign-in before it shows
+anything; `/_/status` is a read-only route-debug
+snapshot that needs the same credential with expandable probe details. Static sites have no HTTP probe. Full
 protected-route acceptance remains tracked in `UI-001`; tunnel CLI events are
 not integrated into this normal-process feed yet.
 
@@ -379,7 +380,9 @@ for "this file is live".
 
 Switchboard starts a separate administrative listener on `127.0.0.1:9090` by
 default. Its status dashboard is available at `http://127.0.0.1:9090/_/status`
-and shows health, latency, the latest check, the latest state transition, and the
+(with `Authorization: Bearer` of the admin token or an operator session, or
+through the host socket; `/_/healthz` is the only unauthenticated read and
+answers `ok` without describing anything) and shows health, latency, the latest check, the latest state transition, and the
 last probe error for every route. The admin listener is restricted to loopback
 IPs by configuration validation.
 

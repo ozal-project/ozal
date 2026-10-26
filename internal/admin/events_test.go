@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/octaviosantacruz/switchboard/internal/config"
 	"github.com/octaviosantacruz/switchboard/internal/events"
 	"github.com/octaviosantacruz/switchboard/internal/policycontext"
 )
@@ -55,9 +56,68 @@ func TestEventViewOmitsRawError(t *testing.T) {
 
 func newStreamServer(t *testing.T, broker *events.Broker) *httptest.Server {
 	t.Helper()
-	srv := httptest.NewServer(New(&fakeManager{}, broker, WithEvents(broker)))
+	srv := httptest.NewServer(New(&fakeManager{cfg: config.Config{Admin: config.Admin{Token: "stream-secret"}}}, broker, WithEvents(broker)))
 	t.Cleanup(srv.Close)
 	return srv
+}
+
+func TestEventStreamRequiresAuthentication(t *testing.T) {
+	broker := events.NewBroker()
+	h := New(&fakeManager{cfg: config.Config{Admin: config.Admin{Token: "stream-secret"}}}, broker, WithEvents(broker))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	req := httptest.NewRequest(http.MethodGet, "http://localhost/_/events", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous event stream status = %d, want 401", rec.Code)
+	}
+}
+
+func TestRevokedOperatorCannotContinueReadingAnOpenStream(t *testing.T) {
+	broker := events.NewBroker()
+	broker.Emit(events.Event{Type: events.LoginStarted})
+	h := New(&fakeManager{cfg: config.Config{Admin: config.Admin{Token: "stream-secret"}}}, broker, WithEvents(broker))
+	token, grant, err := h.operators.issue("Ana", false, "people")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/_/events", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("stream status = %d", resp.StatusCode)
+	}
+	lines := bufio.NewScanner(resp.Body)
+	for lines.Scan() {
+		if strings.HasPrefix(lines.Text(), "data: ") {
+			break
+		}
+	}
+	if err := lines.Err(); err != nil {
+		t.Fatal(err)
+	}
+	h.operators.revoke(grant.ID)
+	broker.Emit(events.Event{Type: events.AccessDenied, Host: "after-revocation"})
+	for lines.Scan() {
+		if strings.Contains(lines.Text(), "after-revocation") {
+			t.Fatal("revoked session received an event")
+		}
+	}
+	if err := lines.Err(); err != nil {
+		t.Fatalf("stream did not close after revocation: %v", err)
+	}
 }
 
 func TestEventStreamReplaysAndStreams(t *testing.T) {
@@ -68,6 +128,7 @@ func TestEventStreamReplaysAndStreams(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	req, _ := http.NewRequestWithContext(ctx, "GET", srv.URL+"/_/events", nil)
+	req.Header.Set("Authorization", "Bearer stream-secret")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -104,6 +165,7 @@ func TestEventStreamEndsWhenClientLeaves(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	req, _ := http.NewRequestWithContext(ctx, "GET", srv.URL+"/_/events", nil)
+	req.Header.Set("Authorization", "Bearer stream-secret")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -167,6 +229,7 @@ func readEvents(t *testing.T, url, lastID string, n int) [][2]string {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	req, _ := http.NewRequestWithContext(ctx, "GET", url+"/_/events", nil)
+	req.Header.Set("Authorization", "Bearer stream-secret")
 	if lastID != "" {
 		req.Header.Set("Last-Event-ID", lastID)
 	}
