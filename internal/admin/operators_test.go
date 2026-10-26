@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -194,6 +195,46 @@ func TestHostLoginRejectsUnknownTools(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("unknown tool at login: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestOperatorSessionReportsOnlyVerifiedCredentialScope(t *testing.T) {
+	h := New(&fakeManager{cfg: config.Config{Admin: config.Admin{Token: "admin-secret", SitesToken: "sites-secret"}}}, nil)
+	operator, _, err := h.operators.issue("Ana", false, "people")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		token string
+		code  int
+		kind  string
+		tools []string
+	}{
+		{"admin-secret", http.StatusOK, "admin", operatorTools},
+		{"sites-secret", http.StatusOK, "sites", []string{"sites"}},
+		{operator, http.StatusOK, "operator", []string{"people"}},
+		{"invalid", http.StatusUnauthorized, "", nil},
+	} {
+		rec := request(h, http.MethodGet, "/_/api/operators/session", tc.token, "")
+		if rec.Code != tc.code {
+			t.Fatalf("status = %d, want %d", rec.Code, tc.code)
+		}
+		if tc.code != http.StatusOK {
+			continue
+		}
+		var got struct {
+			Kind  string   `json:"kind"`
+			Tools []string `json:"tools"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatal(err)
+		}
+		if got.Kind != tc.kind || !slices.Equal(got.Tools, tc.tools) {
+			t.Errorf("session = %+v, want %s %v", got, tc.kind, tc.tools)
+		}
+		if rec.Header().Get("Cache-Control") != "no-store" {
+			t.Error("credential scope is cacheable")
+		}
 	}
 }
 

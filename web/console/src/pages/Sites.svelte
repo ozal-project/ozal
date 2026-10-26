@@ -10,6 +10,7 @@
   import { Skeleton } from "$lib/components/ui/skeleton";
   import { fetchSites, fetchProjects, fetchStatus, rollback, PagesDisabledError, type Site, type Project, type StatusResponse, type Deployment } from "$lib/api";
   import { LatestRequest } from "$lib/latestRequest";
+  import { navigate } from "$lib/router.svelte";
   import Freshness from "$lib/Freshness.svelte";
   import Projects from "./Projects.svelte";
   import ConfirmAction from "$lib/ConfirmAction.svelte";
@@ -151,22 +152,24 @@
   </Panel>
 {:else}
   <div class="mb-5 flex flex-wrap gap-x-4 gap-y-1 rounded-lg border px-3 py-2 text-sm sm:hidden" aria-label="Sites summary">
-    <span>{sites ? sites.length : "—"} sites</span><span>{total} retained builds</span><span>Deploy with the CLI</span>
+    <span>{sites ? sites.length : "—"} sites</span><span>{total} retained builds</span><span>Upload from Applications</span>
   </div>
   <div class="mb-6 hidden gap-4 sm:grid sm:grid-cols-3">
     <Stat label="Sites" value={sites ? sites.length : "—"} note="With at least one deployment" lamp={sites ? "on" : "idle"} />
     <Stat label="Retained builds" value={sites ? total : "—"} note="Ready for an instant rollback" lamp={total ? "on" : "idle"} />
-    <Stat label="Deploy from a terminal" value="CLI" note="switchboard site deploy -site NAME ./dist" lamp="wait" />
+    <Stat label="Upload a build" value="Applications" note="Select a static site and upload its artifact" lamp="idle" />
   </div>
 
   {#if error && sites}<p class="border-warning/40 bg-warning/[0.06] mb-4 rounded-md border p-3 text-sm" role="status">Showing the last successful read. Refresh failed: {error}</p>{/if}
+  {#if routeStatusError}<p class="text-destructive mb-4 text-sm" role="alert">Hostname mappings could not be refreshed. Retry before changing a live build. <button class="underline" onclick={load}>Retry</button></p>{/if}
   {#if error && !sites}
     <p class="text-destructive text-sm">Deployments could not be read ({error}). <button class="underline" onclick={load}>Retry</button></p>
   {:else if !sites}
     <div class="space-y-3" aria-busy="true" aria-label="Loading deployments">{#each [1, 2] as i (i)}<Skeleton class="h-24 w-full" />{/each}</div>
   {:else if sites.length === 0}
     <Panel label="Sites" title="Nothing deployed yet">
-      <p class="text-muted-foreground text-sm">Upload a build with <code class="font-mono">switchboard site deploy -site NAME ./dist</code>; it appears here with its history.</p>
+      <p class="text-muted-foreground text-sm">Add a static site in Applications and upload its build archive there. Its deployment history appears here.</p>
+      <Button class="mt-4" variant="outline" onclick={() => navigate("/applications")}>Go to Applications</Button>
     </Panel>
   {:else}
     <div class="space-y-6">
@@ -206,7 +209,7 @@
                       {#if d.live}
                         <span class="inline-flex items-center gap-2 font-mono text-xs"><span class="lamp lamp-on" aria-hidden="true"></span>live</span>
                       {:else}
-                        <Button variant="outline" size="sm" disabled={siteBusy(site.name)} onclick={() => restore(site, d)}>
+                        <Button variant="outline" size="sm" disabled={siteBusy(site.name)} onclick={() => restore(site, d)} aria-label={`Review activation of ${d.id.slice(0, 12)} for ${site.name}`}>
                           <UndoIcon class="size-3.5" /> {mutations[key] ? "Waiting…" : "Review activation"}
                         </Button>
                         {#if mutations[key]}<Button variant="ghost" size="sm" onclick={() => stopRestore(key)}>Stop waiting</Button>{/if}

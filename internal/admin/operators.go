@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/octaviosantacruz/switchboard/internal/config"
 	"github.com/octaviosantacruz/switchboard/internal/events"
 )
 
@@ -137,9 +138,30 @@ func (s *operatorSessions) revoke(id string) {
 func (h *Handler) registerOperators() {
 	h.mux.HandleFunc("POST /_/api/operators", h.requireLocal(h.issueOperator))
 	h.mux.HandleFunc("POST /_/api/operators/exchange", h.exchangeOperator)
+	h.mux.HandleFunc("GET /_/api/operators/session", h.bearer(h.operatorSession, true, ""))
 	h.mux.HandleFunc("GET /_/api/operators", h.requireLocal(h.listOperators))
 	h.mux.HandleFunc("DELETE /_/api/operators/{id}", h.requireLocal(h.revokeOperator))
 	h.mux.HandleFunc("POST /_/api/operators/logout", h.requireBearer(h.logoutOperator))
+}
+
+// operatorSession describes only the credential presented by this request.
+// The sites credential is intentionally not an administrative session.
+func (h *Handler) operatorSession(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	if g, ok := r.Context().Value(operatorKey{}).(operatorGrant); ok {
+		writeJSON(w, http.StatusOK, map[string]any{"name": g.Name, "expires": g.Expires, "tools": g.Tools, "kind": "operator"})
+		return
+	}
+	if !isLocal(r) {
+		_, provided, _ := strings.Cut(r.Header.Get("Authorization"), " ")
+		cfg := h.manager.Config().Admin
+		adminToken, err := config.ResolveSecret(cfg.Token)
+		if err != nil || adminToken == "" || !matchesAny(provided, []string{adminToken}) {
+			writeJSON(w, http.StatusOK, map[string]any{"tools": []string{"sites"}, "kind": "sites"})
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"tools": operatorTools, "kind": "admin"})
 }
 func (h *Handler) issueOperator(w http.ResponseWriter, r *http.Request) {
 	var req struct {

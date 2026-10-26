@@ -142,7 +142,7 @@
     note={routes ? `${protectedCount} of ${routes.length} configured routes` : routesError ? "Route configuration unavailable" : "Reading routing configuration…"} />
 </div>
 
-<div class="grid gap-6 min-[1500px]:grid-cols-[1fr_320px]">
+<div class="grid grid-cols-[minmax(0,1fr)] gap-6 min-[1500px]:grid-cols-[minmax(0,1fr)_320px]">
   <Panel label="Decision feed" title={`${filtered.length} shown · ${shown.length} retained`} sub={frozen ? "Paused — new events are held back" : "Newest first, live"} class="min-w-0">
     {#snippet actions()}
       <Button variant="outline" size="sm" onclick={() => (frozen = frozen ? null : [...events])} aria-pressed={frozen !== null}>
@@ -150,7 +150,7 @@
       </Button>
     {/snippet}
     <div class="mb-4 flex flex-wrap gap-3">
-      <div class="relative min-w-56 flex-1">
+      <div class="relative min-w-0 flex-[1_1_14rem]">
         <SearchIcon class="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
         <Input bind:value={query} placeholder="Search actor, host or detail" class="pl-8" aria-label="Search events" />
       </div>

@@ -10,11 +10,12 @@
   import MinusIcon from "@lucide/svelte/icons/minus";
   import ChevronIcon from "@lucide/svelte/icons/chevron-down";
 
-  // The one place an operator signs in. A host login (one-use link) carries
-  // the tools the host chose; pasting the admin token is the full-access path.
+  // The host login carries its granted tools. Pasted credentials are checked
+  // by the server before the menu describes their scope.
   let loginError = $state("");
   let open = $state(false);
   let draft = $state("");
+  let checking = $state(false);
   let root = $state<HTMLElement | null>(null);
   let trigger = $state<HTMLButtonElement | null>(null);
   let paste = $state<HTMLInputElement | null>(null);
@@ -45,11 +46,20 @@
   function outside(e: MouseEvent) { if (open && root && !root.contains(e.target as Node)) close(); }
   function keys(e: KeyboardEvent) { if (open && e.key === "Escape") { e.preventDefault(); close(true); } }
 
-  function unlock(e: SubmitEvent) {
+  async function unlock(e: SubmitEvent) {
     e.preventDefault();
-    if (!draft.trim()) return;
-    admin.token = draft.trim(); admin.name = ""; admin.expires = ""; admin.tools = [...allTools]; loginError = "";
-    draft = ""; close();
+    const token = draft.trim();
+    if (!token || checking) return;
+    checking = true; loginError = "";
+    try {
+      const response = await fetch("/_/api/operators/session", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: AbortSignal.timeout(10_000) });
+      if (!response.ok) throw new Error("This credential could not be verified. Check it and try again.");
+      const session: { kind: string; name?: string; expires?: string; tools: string[] } = await response.json();
+      admin.token = token; admin.name = session.name || (session.kind === "sites" ? "Sites token" : "");
+      admin.expires = session.expires || ""; admin.tools = session.tools;
+      draft = ""; close();
+    } catch (e) { loginError = (e as Error).message; }
+    finally { checking = false; }
   }
   async function lock() {
     const token = admin.token;
@@ -77,7 +87,7 @@
       {#if admin.token}
         <p class="plate">Signed in</p>
         <h2 class="mt-1 text-base font-semibold">{admin.name || "Admin token"}</h2>
-        <p class="text-muted-foreground text-xs">{until ? `This session ends at ${until}.` : "Full access until you lock this tab."} It exists only in this tab.</p>
+        <p class="text-muted-foreground text-xs">{until ? `This session ends at ${until}.` : "Available until you lock this tab."} It exists only in this tab.</p>
         <ul class="mt-4 divide-y rounded-lg border" aria-label="Tools this session may change">
           {#each tools as t (t.id)}
             {@const has = admin.tools.includes(t.id)}
@@ -102,12 +112,12 @@
         </fieldset>
         <div class="mt-4"><CopyCommand {command} label="Copy login command" /></div>
         <details class="mt-4 text-sm">
-          <summary class="text-muted-foreground hover:text-foreground cursor-pointer">Use the admin token instead (full access)</summary>
+          <summary class="text-muted-foreground hover:text-foreground cursor-pointer">Use an admin or Sites token instead</summary>
           <form class="mt-3 flex items-center gap-2" onsubmit={unlock}>
             <label class="sr-only" for="admin-token">Admin token</label>
             <input id="admin-token" bind:this={paste} bind:value={draft} type="password" autocomplete="off" spellcheck="false" placeholder="Paste the admin token"
               class="border-input bg-background focus-visible:ring-ring h-9 min-w-0 flex-1 rounded-md border px-2.5 font-mono text-xs focus-visible:ring-2 focus-visible:outline-none" />
-            <Button type="submit" size="sm" disabled={!draft.trim()}>Unlock</Button>
+            <Button type="submit" size="sm" disabled={!draft.trim() || checking}>{checking ? "Checking…" : "Unlock"}</Button>
           </form>
         </details>
       {/if}

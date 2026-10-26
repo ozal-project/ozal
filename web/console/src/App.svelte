@@ -71,7 +71,7 @@
     <nav class="flex flex-col gap-6 px-3" aria-label="Console">
       {#each groups as group (group.name)}
         <div>
-          <p class="plate px-3 pb-2 text-[0.66rem] opacity-80">{group.name}</p>
+          <p class="plate px-3 pb-2 text-xs">{group.name}</p>
           <div class="flex flex-col gap-0.5">
             {#each group.items as item (item.path)}
               {@const active = route.path === item.path}

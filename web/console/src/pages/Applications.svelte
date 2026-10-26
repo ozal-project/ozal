@@ -127,6 +127,8 @@
         </div>
         <div class="mt-4 flex flex-wrap gap-2 border-t pt-4">
           <Button size="sm" variant="outline" onclick={() => edit(app)}>Configure</Button>
+          {#if isPrivate}<Button size="sm" variant="ghost" onclick={() => navigate("/people")}>People &amp; groups</Button>{/if}
+          {#if app.connector}<Button size="sm" variant="ghost" onclick={() => navigate("/connectors")}>Connection</Button>{/if}
           <Button size="sm" variant="ghost" onclick={() => navigate("/activity")}>Access log</Button>
           {#if app.site}<Button size="sm" variant="ghost" onclick={() => navigate("/sites")}>Versions &amp; rollback</Button>{/if}
           <span class="ml-auto"><ApplicationRemove host={app.host} version={status.config_sha256} refreshed={load} /></span>

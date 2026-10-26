@@ -65,10 +65,12 @@ try {
   step = "keyboard navigation and add existing application";
   await tabTo("/applications");
   await ab("press", "Enter");
+  step = "open Applications";
   await ab("wait", "--text", "Applications");
   assert.equal(await evaluate("document.activeElement?.textContent?.trim()"), "Applications", "keyboard navigation did not focus the page heading");
   await ab("find", "role", "button", "click", "--name", "Refresh configuration", "--exact");
-  await ab("wait", "--text", "Identity:");
+  step = "refresh Applications configuration";
+  await ab("wait", "--fn", "document.querySelector('#main-content')?.textContent?.includes('Static publishing')");
   await ab("find", "role", "button", "click", "--name", "Add existing website", "--exact");
   await ab("fill", "#app-host", `extra.demo.localhost:${PORT}`);
   await ab("fill", "#app-target", "http://127.0.0.1:19101");
@@ -123,7 +125,7 @@ try {
   people = await api("GET", "/_/api/people");
   assert.deepEqual(people.users.find((p) => p.email === "new-operator-test@example.test").groups, ["staff"]);
   step = "Overview sites error and retry";
-  await goPage("/projects", "CI projects");
+  await goPage("/sites", "Sites & deployments");
   await failNextRequest("/_/api/sites");
   await goPage("/overview", "Overview");
 
@@ -132,34 +134,35 @@ try {
   await ab("wait", "--text", "What is live, and where it came from");
   await auditPage([[1440, 1000], [390, 844]]);
 
-  step = "Projects initial error, retry and true empty state";
+  step = "CI publishing error and retry";
   await goPage("/applications", "Applications");
+  await goPage("/sites", "Sites & deployments");
+  await ab("wait", "--text", "Who may publish from CI");
   await failNextRequest("/_/api/projects");
-  await goPage("/projects", "CI projects");
+  await ab("find", "role", "button", "click", "--name", "Read projects & GitHub", "--exact");
   await ab("wait", "--fn", "window.__acceptanceFailedPath === '/_/api/projects'");
-  await ab("wait", "--text", "Configured projects could not be read");
-  assert.equal(await evaluate("document.body.innerText.includes('No CI projects configured')"), false, "Projects showed an empty state before a successful read");
-  await ab("find", "text", "Retry", "click");
+  await ab("wait", "--text", "HTTP 503");
   await ab("find", "role", "button", "click", "--name", "Read projects & GitHub", "--exact");
   await ab("wait", "--text", "Connect your own GitHub App");
   await ab("wait", "--text", "No CI projects configured");
   await auditPage([[1440, 1000], [390, 844]]);
 
   step = "Connector registry error, retry and empty state";
-  await failNextRequest("**/_/api/connectors");
+  await failNextRequest("/_/api/connectors");
   await goPage("/connectors", "Connectors");
   await ab("wait", "--text", "Connector registry could not be read");
   await ab("find", "role", "button", "click", "--name", "Retry registry read", "--exact");
-  await ab("wait", "--text", "No connectors enrolled.");
+  await ab("wait", "--text", "No private hosts connected");
   await auditPage([[1440, 1000], [390, 844]]);
 
   step = "Sites hostname mapping error and recovery";
-  await failNextRequest("**/_/api/status");
   await goPage("/sites", "Sites & deployments");
+  await failNextRequest("/_/api/status");
+  await ab("find", "role", "button", "click", "--name", "Refresh", "--exact");
   await ab("wait", "--text", "Hostname mappings could not be refreshed");
   assert.equal(await evaluate("document.querySelector('dialog[open]') === null"), true);
   await ab("find", "role", "button", "click", "--name", "Refresh", "--exact");
-  await ab("wait", "Hostname mappings");
+  await ab("wait", "--fn", "!document.body.innerText.includes('Hostname mappings could not be refreshed')");
   await auditPage([[1440, 1000], [390, 844]]);
 
   step = "Sites rollback review cancellation and confirmation";
@@ -180,19 +183,17 @@ try {
   await goPage("/applications", "Applications");
   await ab("find", "role", "button", "click", "--name", "Refresh configuration", "--exact");
   await ab("wait", "--text", appHost);
-  await ab("find", "role", "button", "click", "--name", "Remove", "--exact");
+  await ab("find", "role", "button", "click", "--name", `Remove ${appHost}`, "--exact");
   await ab("wait", "--text", "Remove this application hostname?");
   await ab("press", "Escape");
   assert((await api("GET", "/_/api/setup")).routes.some((r) => r.host === appHost), "cancelling removal removed the route");
-  await ab("find", "role", "button", "click", "--name", "Remove", "--exact");
+  await ab("find", "role", "button", "click", "--name", `Remove ${appHost}`, "--exact");
   await ab("click", "dialog[open] button:last-child");
-  await ab("wait", "--text", "Confirm configuration").catch(() => {});
-  await ab("find", "role", "button", "click", "--name", "Refresh configuration", "--exact");
-  await ab("wait", "--text", "extra.demo.localhost").catch(() => {});
+  await ab("wait", "--fn", `![...document.querySelectorAll('#main-content h2')].some((el) => el.textContent.trim() === ${JSON.stringify(appHost)})`);
   assert.equal((await api("GET", "/_/api/setup")).routes.some((r) => r.host === appHost), false, "confirmed removal left the route configured");
 
   step = "responsive layouts and accessibility";
-  const pages = [["/overview", "Overview"], ["/applications", "Applications"], ["/sites", "Sites & deployments"], ["/people", "People & passkeys"], ["/connectors", "Connectors"], ["/activity", "Access activity"], ["/projects", "CI projects"], ["/routes", "Routes & hostnames"], ["/simulator", "Why? Simulator"]];
+  const pages = [["/overview", "Overview"], ["/applications", "Applications"], ["/sites", "Sites & deployments"], ["/people", "People & passkeys"], ["/connectors", "Connectors"], ["/activity", "Access activity"], ["/routes", "Routes & hostnames"]];
   for (const [href, title] of pages) {
     await goPage(href, title);
     await auditPage([[1440, 1000], [1024, 900], [390, 844], [320, 800]]);
