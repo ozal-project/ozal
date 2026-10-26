@@ -76,7 +76,7 @@
 {#if notice}<p class="mb-4 text-sm" role="status">{notice}</p>{/if}
 {#if !status}
   <Panel title="Start with this installation" label="Setup">
-    <p class="text-muted-foreground mb-4 text-sm">Unlock changes with your private console credential, then read the configuration. No visitor account becomes an administrator.</p>
+    <p class="text-muted-foreground mb-4 text-sm">Sign in as admin (top right), then read the configuration. No visitor account becomes an administrator.</p>
     <Button onclick={load} disabled={loading}>{loading ? "Reading…" : "Read installation"}</Button>
     <p class="text-muted-foreground mt-3 text-sm">For a fresh local installation, run <code>switchboard setup -dir ./my-edge</code> on its host. The generated guide covers identity, invitations, restart and recovery.</p>
   </Panel>

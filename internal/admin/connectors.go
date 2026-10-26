@@ -32,8 +32,8 @@ func WithConnectors(registry connectors) Option {
 // only. Whoever enrols a certificate decides which machine may serve a
 // protected host, so no bearer that travels to other machines may do it.
 func (h *Handler) registerConnectors() {
-	h.mux.HandleFunc("GET /_/api/connectors", h.requireBearer(h.listConnectors))
-	h.mux.HandleFunc("GET /_/api/connectors/{name}", h.requireBearer(h.currentConnector))
+	h.mux.HandleFunc("GET /_/api/connectors", h.requireTool("connectors", h.listConnectors))
+	h.mux.HandleFunc("GET /_/api/connectors/{name}", h.requireTool("connectors", h.currentConnector))
 	h.mux.HandleFunc("POST /_/api/connectors", h.requireLocal(h.enrollConnector))
 	h.mux.HandleFunc("POST /_/api/connectors/{name}/rotate", h.requireLocal(h.rotateConnector))
 	h.mux.HandleFunc("POST /_/api/connectors/{name}/revoke", h.requireLocal(h.revokeConnector))

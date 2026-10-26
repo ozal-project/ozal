@@ -30,7 +30,7 @@
   const sitesRequest = new LatestRequest();
   const projectsRequest = new LatestRequest();
   // The token is shared by the console pages, in this tab's memory only.
-  import { admin, askForToken } from "$lib/adminToken.svelte";
+  import { admin, askForToken, can } from "$lib/adminToken.svelte";
   import { afterLoad } from "$lib/loadState";
   let mutations = $state<Record<string, AbortController>>({});
   let review = $state<{ site: string; deployment: Deployment; current: Deployment | undefined; hosts: string[] } | null>(null);
@@ -105,7 +105,7 @@
     if (!action) return;
     reviewOpen = false;
     if (!admin.token.trim()) {
-      notices = { ...notices, [action.site]: { text: "Unlock changes first (top right); it is needed to change the live build.", ok: false } };
+      notices = { ...notices, [action.site]: { text: "Sign in as admin first (top right); it is needed to change the live build.", ok: false } };
       askForToken();
       return;
     }
@@ -221,7 +221,10 @@
       {/each}
     </div>
   {/if}
-  <div class="mt-12 border-t pt-8"><Projects embedded /></div>
+  <div class="mt-12 border-t pt-8">
+    {#if !admin.token || can("publishing")}<Projects embedded />
+    {:else}<p class="text-muted-foreground text-sm">CI publishing needs the CI publishing tool, which this session does not include.</p>{/if}
+  </div>
 {/if}
 
 <ConfirmAction

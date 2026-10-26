@@ -32,12 +32,12 @@ func WithPeople(store people) Option {
 
 func (h *Handler) registerPeople() {
 	h.mux.HandleFunc("GET /_/api/people", h.listPeople)
-	h.mux.HandleFunc("GET /_/api/groups", h.requireBearer(h.listGroups))
-	h.mux.HandleFunc("PUT /_/api/people/{email}/groups", h.requireBearer(h.setPersonGroups))
-	h.mux.HandleFunc("POST /_/api/people/invite", h.requireBearer(h.invitePerson))
-	h.mux.HandleFunc("POST /_/api/people/{email}/disable", h.requireBearer(h.setPersonDisabled(true)))
-	h.mux.HandleFunc("POST /_/api/people/{email}/enable", h.requireBearer(h.setPersonDisabled(false)))
-	h.mux.HandleFunc("POST /_/api/people/{email}/passkeys/{id}/revoke", h.requireBearer(h.revokePersonPasskey))
+	h.mux.HandleFunc("GET /_/api/groups", h.requireTool("people", h.listGroups))
+	h.mux.HandleFunc("PUT /_/api/people/{email}/groups", h.requireTool("people", h.setPersonGroups))
+	h.mux.HandleFunc("POST /_/api/people/invite", h.requireTool("people", h.invitePerson))
+	h.mux.HandleFunc("POST /_/api/people/{email}/disable", h.requireTool("people", h.setPersonDisabled(true)))
+	h.mux.HandleFunc("POST /_/api/people/{email}/enable", h.requireTool("people", h.setPersonDisabled(false)))
+	h.mux.HandleFunc("POST /_/api/people/{email}/passkeys/{id}/revoke", h.requireTool("people", h.revokePersonPasskey))
 }
 
 type personPasskey struct {

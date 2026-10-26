@@ -77,7 +77,7 @@
     inviteError = "";
     created = null;
     copied = false;
-    if (needToken()) { inviteError = "Unlock changes first (top right)."; return; }
+    if (needToken()) { inviteError = "Sign in as admin first (top right)."; return; }
     inviting = true;
     const controller = new AbortController();
     inviteController = controller;
@@ -123,7 +123,7 @@
 
   async function act(key: string, personEmail: string, run: (signal: AbortSignal) => Promise<unknown>, done: string) {
     const noticeKey = key.startsWith("passkey:") ? key : `person:${personEmail}`;
-    if (needToken()) { notices = { ...notices, [noticeKey]: { text: "Unlock changes first (top right).", ok: false } }; return; }
+    if (needToken()) { notices = { ...notices, [noticeKey]: { text: "Sign in as admin first (top right).", ok: false } }; return; }
     const controller = new AbortController();
     mutations = { ...mutations, [key]: controller };
     const cleared = { ...notices };

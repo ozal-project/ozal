@@ -249,7 +249,6 @@
       <p class="plate mb-2">About this view</p>
       <div class="text-muted-foreground space-y-2 text-sm leading-relaxed">
         <p>The feed replays recent in-memory events. A restart clears history; slow clients may miss events.</p>
-        <p>Host processes, backups and service controls belong in Server Ops.</p>
       </div>
     </div>
   </div>

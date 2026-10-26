@@ -1,7 +1,8 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { route, navigate, type Page } from "$lib/router.svelte";
-  import AdminToken from "$lib/AdminToken.svelte";
+  import AdminMenu from "$lib/AdminMenu.svelte";
+  import { admin, can, tools as toolList, type Tool } from "$lib/adminToken.svelte";
   import Connectors from "./pages/Connectors.svelte";
   import Applications from "./pages/Applications.svelte";
   import Overview from "./pages/Overview.svelte";
@@ -10,7 +11,6 @@
   import Sites from "./pages/Sites.svelte";
   import People from "./pages/People.svelte";
   import Wordmark from "$lib/brand/Wordmark.svelte";
-  import BugIcon from "@lucide/svelte/icons/bug";
   import LayoutDashboardIcon from "@lucide/svelte/icons/layout-dashboard";
   import AppWindowIcon from "@lucide/svelte/icons/app-window";
   import GlobeIcon from "@lucide/svelte/icons/globe";
@@ -22,13 +22,13 @@
 
   // Operate is for whoever runs the edge day to day; Build is for the person
   // who writes its configuration and policy (UI-005). Same pages, plain names.
-  const groups: { name: string; items: { path: Page; label: string; icon: Component<{ class?: string }> }[] }[] = [
+  const groups: { name: string; items: { path: Page; label: string; icon: Component<{ class?: string }>; tool?: Tool }[] }[] = [
     { name: "Operate", items: [
       { path: "/overview", label: "Overview", icon: LayoutDashboardIcon },
-      { path: "/applications", label: "Applications", icon: AppWindowIcon },
+      { path: "/applications", label: "Applications", icon: AppWindowIcon, tool: "applications" },
       { path: "/sites", label: "Sites", icon: GlobeIcon },
-      { path: "/people", label: "People", icon: UsersIcon },
-      { path: "/connectors", label: "Connectors", icon: PlugIcon },
+      { path: "/people", label: "People", icon: UsersIcon, tool: "people" },
+      { path: "/connectors", label: "Connectors", icon: PlugIcon, tool: "connectors" },
       { path: "/activity", label: "Access log", icon: ScrollTextIcon },
     ] },
     { name: "Build", items: [
@@ -38,6 +38,8 @@
   const nav = groups.flatMap((g) => g.items);
   const current = $derived(groups.find((g) => g.items.some((i) => i.path === route.path)) ?? groups[0]);
   const currentItem = $derived(nav.find((i) => i.path === route.path) ?? nav[0]);
+  // A signed-in session without the page's tool sees why, not a page of 403s.
+  const blocked = $derived(!!admin.token && !!currentItem.tool && !can(currentItem.tool));
 
   const go = (e: MouseEvent, path: Page) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
@@ -86,10 +88,7 @@
       {/each}
     </nav>
 
-    <div class="mt-auto space-y-3 p-4 pt-8">
-      <a href="/_/status" class="text-muted-foreground hover:text-foreground flex items-center gap-2 text-xs"><BugIcon class="size-3.5" /> Route debug · works without JavaScript</a>
-      <p class="text-muted-foreground bg-card border-sidebar-border rounded-xl border p-3 text-xs leading-relaxed">Who gets in, and why. Processes and backups live in Server Ops.</p>
-    </div>
+    <p class="text-muted-foreground mt-auto p-5 text-xs leading-relaxed">Who gets in, and why.</p>
   </aside>
   </div>
 
@@ -100,7 +99,7 @@
         <span class="text-muted-foreground">{current.name}</span><span class="text-muted-foreground/50" aria-hidden="true">/</span><span class="font-medium">{currentItem.label}</span>
       </p>
       <div class="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-3">
-        <AdminToken />
+        <AdminMenu />
         <span class="border-border bg-card flex items-center gap-2 rounded-full border px-3 py-1 font-mono text-[0.7rem]">
           <span class="lamp lamp-on" aria-hidden="true"></span>loopback only
         </span>
@@ -113,7 +112,13 @@
       {/each}
     </nav>
     <main id="main-content" tabindex="-1" class="mx-auto w-full max-w-[1320px] flex-1 px-5 py-10 md:px-10">
-      {#if route.path === "/overview"}<Overview />
+      {#if blocked}
+        <div class="panel mx-auto max-w-lg p-8 text-center">
+          <p class="plate">Not included in this session</p>
+          <h1 tabindex="-1" class="mt-2 text-xl font-semibold outline-none">This session cannot open {currentItem.label}</h1>
+          <p class="text-muted-foreground mt-2 text-sm">You are signed in as {admin.name || "an operator"} without the {toolList.find((t) => t.id === currentItem.tool)?.label} tool. Open Admin in the header to see what it may change, then ask the host for a login that includes it.</p>
+        </div>
+      {:else if route.path === "/overview"}<Overview />
       {:else if route.path === "/applications"}<Applications />
       {:else if route.path === "/connectors"}<Connectors />
       {:else if route.path === "/activity"}<Activity />

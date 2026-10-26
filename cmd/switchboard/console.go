@@ -20,6 +20,7 @@ func runConsole(ctx context.Context, args []string, out io.Writer) error {
 	fs.SetOutput(out)
 	af := addAdminFlags(fs)
 	name := fs.String("name", "", "operator name asserted by host authority")
+	tools := fs.String("tools", "", "comma-separated tools this login may change (default: all): applications, connectors, people, publishing, sites")
 	id := fs.String("id", "", "session id to revoke")
 	origin := fs.String("url", "http://127.0.0.1:9090", "private browser URL (use the locally forwarded port for a remote edge)")
 	if err := fs.Parse(args[1:]); err != nil {
@@ -48,7 +49,7 @@ func runConsole(ctx context.Context, args []string, out io.Writer) error {
 			Token   string    `json:"token"`
 			Expires time.Time `json:"expires"`
 		}
-		if err := c.do(ctx, http.MethodPost, "/_/api/operators", map[string]string{"name": *name}, &answer); err != nil {
+		if err := c.do(ctx, http.MethodPost, "/_/api/operators", map[string]any{"name": *name, "tools": splitTools(*tools)}, &answer); err != nil {
 			return err
 		}
 		fmt.Fprintf(out, "Open once within five minutes on the private console (do not share this link):\n%s/overview#operator=%s\n", base, url.QueryEscape(answer.Token))
@@ -78,4 +79,15 @@ func runConsole(ctx context.Context, args []string, out io.Writer) error {
 		return errors.New("unknown console command")
 	}
 	return nil
+}
+
+// splitTools turns "people, sites" into a list; the edge validates the names.
+func splitTools(v string) []string {
+	out := []string{}
+	for _, t := range strings.Split(v, ",") {
+		if t = strings.TrimSpace(t); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
 }

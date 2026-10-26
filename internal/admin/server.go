@@ -59,19 +59,19 @@ func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 	h.mux.HandleFunc("GET /_/fonts/manrope.ttf", h.consoleFont)
 	h.mux.HandleFunc("GET /_/status", h.status)
 	h.mux.HandleFunc("GET /_/api/status", h.apiStatus)
-	h.mux.HandleFunc("GET /_/api/setup", h.requireBearer(h.setupStatus))
-	h.mux.HandleFunc("POST /_/api/apps/plan", h.requireBearer(h.planApplication))
-	h.mux.HandleFunc("DELETE /_/api/apps/{host}", h.requireBearer(h.removeApplication))
-	h.mux.HandleFunc("POST /_/api/apps", h.requireBearer(h.saveApplication))
+	h.mux.HandleFunc("GET /_/api/setup", h.requireTool("applications", h.setupStatus))
+	h.mux.HandleFunc("POST /_/api/apps/plan", h.requireTool("applications", h.planApplication))
+	h.mux.HandleFunc("DELETE /_/api/apps/{host}", h.requireTool("applications", h.removeApplication))
+	h.mux.HandleFunc("POST /_/api/apps", h.requireTool("applications", h.saveApplication))
 	h.mux.HandleFunc("PUT /_/api/github", h.requireLocal(h.configureGitHub))
-	h.mux.HandleFunc("GET /_/api/github/repositories", h.requireBearer(h.githubRepositories))
-	h.mux.HandleFunc("POST /_/api/projects", h.requireBearer(h.saveGitHubProject))
-	h.mux.HandleFunc("DELETE /_/api/projects/{name}", h.requireBearer(h.removeProject))
-	h.mux.HandleFunc("GET /_/api/projects", h.requireBearer(h.listProjects))
-	h.mux.HandleFunc("POST /_/reload", h.requireBearer(h.reload))
-	h.mux.HandleFunc("POST /routes", h.requireBearer(h.addRoute))
-	h.mux.HandleFunc("DELETE /routes/{host}", h.requireBearer(h.deleteRoute))
-	h.mux.HandleFunc("POST /_/api/policy/explain", h.requireBearer(h.explainPolicy))
+	h.mux.HandleFunc("GET /_/api/github/repositories", h.requireTool("publishing", h.githubRepositories))
+	h.mux.HandleFunc("POST /_/api/projects", h.requireTool("publishing", h.saveGitHubProject))
+	h.mux.HandleFunc("DELETE /_/api/projects/{name}", h.requireTool("publishing", h.removeProject))
+	h.mux.HandleFunc("GET /_/api/projects", h.requireTool("publishing", h.listProjects))
+	h.mux.HandleFunc("POST /_/reload", h.requireTool("applications", h.reload))
+	h.mux.HandleFunc("POST /routes", h.requireTool("applications", h.addRoute))
+	h.mux.HandleFunc("DELETE /routes/{host}", h.requireTool("applications", h.deleteRoute))
+	h.mux.HandleFunc("POST /_/api/policy/explain", h.requireTool("applications", h.explainPolicy))
 	for _, opt := range opts {
 		opt(h)
 	}
@@ -413,8 +413,17 @@ func safeRouteEventHost(host string) string {
 }
 
 // requireBearer admits the admin token only.
+// Any operator session or the admin token passes; use requireTool for anything
+// that changes or reveals a console area.
 func (h *Handler) requireBearer(next http.HandlerFunc) http.HandlerFunc {
-	return h.bearer(next, false)
+	return h.bearer(next, false, "")
+}
+
+// requireTool admits the admin token, the host socket, or an operator session
+// whose host login granted this tool. A session without it gets 403, so a
+// login for one area never reaches another.
+func (h *Handler) requireTool(tool string, next http.HandlerFunc) http.HandlerFunc {
+	return h.bearer(next, false, tool)
 }
 
 // requireSitesBearer admits the admin token or admin.sites_token. The sites
@@ -422,10 +431,10 @@ func (h *Handler) requireBearer(next http.HandlerFunc) http.HandlerFunc {
 // back a site and nothing else, so losing one of those machines does not
 // hand over people, routes or policy.
 func (h *Handler) requireSitesBearer(next http.HandlerFunc) http.HandlerFunc {
-	return h.bearer(next, true)
+	return h.bearer(next, true, "sites")
 }
 
-func (h *Handler) bearer(next http.HandlerFunc, sites bool) http.HandlerFunc {
+func (h *Handler) bearer(next http.HandlerFunc, sites bool, tool string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// The unix socket is already the host operator's credential.
 		if isLocal(r) {
@@ -433,6 +442,10 @@ func (h *Handler) bearer(next http.HandlerFunc, sites bool) http.HandlerFunc {
 			return
 		}
 		if operatorRequest, ok := h.withOperator(r); ok {
+			if grant, _ := operatorRequest.Context().Value(operatorKey{}).(operatorGrant); tool != "" && !grant.allows(tool) {
+				writeError(w, http.StatusForbidden, "this operator session does not include the "+tool+" tool; ask the host for a login that does")
+				return
+			}
 			next(w, operatorRequest)
 			return
 		}

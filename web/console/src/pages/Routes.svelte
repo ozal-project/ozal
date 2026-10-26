@@ -172,4 +172,4 @@
   </Panel>
 {/if}
 
-<p class="text-muted-foreground mt-4 font-mono text-[0.7rem]">{data ? `generated ${new Date(data.generated_at).toLocaleTimeString()} · ` : ""}service lifecycle and host health live in Server Ops</p>
+<p class="text-muted-foreground mt-4 font-mono text-[0.7rem]">{data ? `generated ${new Date(data.generated_at).toLocaleTimeString()} · ` : ""}access routing only</p>

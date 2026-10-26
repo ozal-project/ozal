@@ -1,6 +1,6 @@
 // Consume a one-use host-issued fragment immediately. It is never put in
 // storage, cookies, a query string, or outbound navigation.
-export async function exchangeHostLogin(): Promise<{ token: string; name: string; expires: string } | null> {
+export async function exchangeHostLogin(): Promise<{ token: string; name: string; expires: string; tools: string[] } | null> {
   const fragment = new URLSearchParams(location.hash.slice(1));
   const token = fragment.get("operator");
   if (!token) return null;

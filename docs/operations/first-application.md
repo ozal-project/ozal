@@ -53,6 +53,15 @@ La instalación de servicio descrita en este repositorio es Linux/systemd.
 civil ni crea una cuenta de visitante. La autoridad sigue siendo quien puede
 acceder al socket administrativo del host.
 
+**Permisos por herramienta.** El host decide qué puede cambiar cada sesión con
+`-tools` (lista separada por comas de `applications`, `people`, `sites`,
+`publishing`, `connectors`; sin `-tools` concede todas). Por ejemplo,
+`console login -name Ana -tools people` abre una sesión que invita y edita
+grupos pero recibe 403 al cambiar aplicaciones o sitios. Un nombre desconocido
+se rechaza. La consola muestra en **Admin** qué incluye la sesión y explica una
+página que no puede abrir. El token de admin y el socket del host siguen siendo
+la credencial completa del host y no se limitan.
+
 - El enlace sirve una vez durante cinco minutos. Su fragmento se elimina de
   la URL al abrirlo y se intercambia por una credencial de quince minutos.
 - La credencial activa vive solo en la memoria de esa pestaña. Recargarla,

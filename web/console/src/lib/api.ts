@@ -242,7 +242,7 @@ export type ApplicationDraft = { route: ApplicationRoute; expected: string; acce
 export type ApplicationPlan = ApplicationDraft & { url: string; dns: string; tls: string; checks: string[] };
 export async function setupStatus(token: string, signal?: AbortSignal): Promise<SetupStatus> {
   const res = await fetch("/_/api/setup", { cache: "no-store", headers: { Authorization: `Bearer ${token}` }, signal: boundedSignal(signal) });
-  if (!res.ok) throw new Error(`Unlock changes to read setup (HTTP ${res.status}).`);
+  if (!res.ok) throw new Error(`Sign in as admin to read setup (HTTP ${res.status}).`);
   return res.json();
 }
 export const planApplication = (token: string, draft: ApplicationDraft, signal?: AbortSignal) => adminPost<ApplicationPlan>(token, "/_/api/apps/plan", draft, signal);
