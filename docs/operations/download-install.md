@@ -39,6 +39,28 @@ Para un servicio existente usa [upgrade](systemd.md), no elimines el binario
 actual para forzar al instalador. El helper necesita Bash, tar y sha256sum
 (o shasum). El servicio no necesita esas herramientas para ejecutar el gateway.
 
+## Linux: instalar el servicio de una vez
+
+`scripts/release/install-service.sh` hace la instalación documentada en
+[systemd](systemd.md) en un solo paso: crea la cuenta `switchboard`, instala el
+binario y la config como `root`, genera un token de administración aleatorio
+(legible solo por root y la cuenta del servicio), migra el estado, inicializa
+el archivo operativo, habilita el servicio y espera a que la consola responda.
+Todo queda en loopback; no toca DNS, firewall ni TLS público, y se niega a
+sobrescribir una instalación existente (para eso está `upgrade`).
+
+```sh
+sudo scripts/release/install-service.sh --dry-run --binary ./switchboard   # leer el plan
+sudo scripts/release/install-service.sh --binary ./switchboard --target http://127.0.0.1:3000
+# o, con una descarga y su checksum de un canal confiable:
+sudo scripts/release/install-service.sh --archive ./switchboard_VERSION_linux_amd64.tar.gz --sha256 SHA256_ESPERADO
+```
+
+Al terminar imprime los pasos siguientes: túnel SSH a la consola, enlace de un
+solo uso (`console login`) y alta de la primera aplicación en la consola.
+`scripts/release/test-install-service.sh` lo prueba con el binario real en un
+directorio de staging, sin root.
+
 ## macOS y Windows
 
 En macOS, verifica el tar.gz con `shasum -a 256`, extrae el binario de la release

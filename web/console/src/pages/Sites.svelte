@@ -11,6 +11,7 @@
   import { fetchSites, fetchProjects, fetchStatus, rollback, PagesDisabledError, type Site, type Project, type StatusResponse, type Deployment } from "$lib/api";
   import { LatestRequest } from "$lib/latestRequest";
   import Freshness from "$lib/Freshness.svelte";
+  import Projects from "./Projects.svelte";
   import ConfirmAction from "$lib/ConfirmAction.svelte";
   import RefreshIcon from "@lucide/svelte/icons/refresh-cw";
   import KeyIcon from "@lucide/svelte/icons/key-round";
@@ -158,49 +159,6 @@
     <Stat label="Deploy from a terminal" value="CLI" note="switchboard site deploy -site NAME ./dist" lamp="wait" />
   </div>
 
-  <Panel label="Deploy policy" title="Projects" sub="Read-only view of which hostnames and publishers belong to each site. Secret references are never returned." class="mb-6">
-    {#if projectsError && projects !== null}
-      <p class="border-warning/40 bg-warning/[0.06] mb-4 rounded-md border p-3 text-sm" role="status">Showing the last successful project read. Refresh failed: {projectsError}</p>
-    {/if}
-    {#if routeStatusError}
-      <p class="border-warning/40 bg-warning/[0.06] mb-4 rounded-md border p-3 text-sm" role="status">Hostname mappings could not be refreshed ({routeStatusError}). Rollback review stays unavailable until route status is current.</p>
-    {:else if !routeStatus}
-      <p class="text-muted-foreground mb-4 text-sm" aria-busy="true">Reading hostname mappings…</p>
-    {/if}
-    {#if !admin.token.trim()}
-      <p class="text-muted-foreground text-sm">Unlock changes (top right) to see which repositories may publish each site.</p>
-    {:else if projectsLoading && !projects}
-      <div class="space-y-3" aria-busy="true" aria-label="Loading projects"><Skeleton class="h-20 w-full" /></div>
-    {:else if projectsError && projects === null}
-      <p class="text-destructive text-sm" role="status">Projects could not be read ({projectsError}). <button class="underline" onclick={loadProjects}>Retry</button></p>
-    {:else if projects?.length === 0}
-      <p class="text-muted-foreground text-sm">No projects are configured. Existing site routes continue to work without project declarations.</p>
-    {:else if projects}
-      <ul class="divide-y">
-        {#each projects as project (project.name)}
-          <li class="py-4 first:pt-0 last:pb-0">
-            <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-              <h3 class="font-medium">{project.name}</h3>
-              <span class="text-muted-foreground font-mono text-xs">site: {project.site}</span>
-            </div>
-            <p class="text-muted-foreground mt-2 text-xs">Hostnames: {project.hostnames.join(", ") || "none"}</p>
-            <ul class="mt-2 space-y-1 text-xs">
-              {#each project.deployers as deployer, i (`${project.name}:${i}`)}
-                <li class="text-muted-foreground">
-                  {#if deployer.type === "github"}
-                    GitHub repository {deployer.github.repository_id} · owner {deployer.github.repository_owner_id} · <code class="font-mono">{deployer.github.ref}</code>{#if deployer.github.workflow_ref} · <code class="font-mono">{deployer.github.workflow_ref}</code>{/if}
-                  {:else}
-                    Project token configured
-                  {/if}
-                </li>
-              {/each}
-            </ul>
-          </li>
-        {/each}
-      </ul>
-    {/if}
-  </Panel>
-
   {#if error && sites}<p class="border-warning/40 bg-warning/[0.06] mb-4 rounded-md border p-3 text-sm" role="status">Showing the last successful read. Refresh failed: {error}</p>{/if}
   {#if error && !sites}
     <p class="text-destructive text-sm">Deployments could not be read ({error}). <button class="underline" onclick={load}>Retry</button></p>
@@ -263,6 +221,7 @@
       {/each}
     </div>
   {/if}
+  <div class="mt-12 border-t pt-8"><Projects embedded /></div>
 {/if}
 
 <ConfirmAction

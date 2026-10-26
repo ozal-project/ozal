@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import PageHeader from "$lib/PageHeader.svelte";
   import Panel from "$lib/Panel.svelte";
+  import Stat from "$lib/Stat.svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { admin, askForToken } from "$lib/adminToken.svelte";
@@ -80,10 +81,10 @@
     <p class="text-muted-foreground mt-3 text-sm">For a fresh local installation, run <code>switchboard setup -dir ./my-edge</code> on its host. The generated guide covers identity, invitations, restart and recovery.</p>
   </Panel>
 {:else}
-  <div class="mb-6 flex flex-wrap gap-x-6 gap-y-2 border-b pb-4 text-sm">
-    <p>Identity: {status.methods.length ? status.methods.join(" / ") : "Not configured"}</p>
-    <p>Static publishing: {status.pages_enabled ? "Enabled" : "Not configured"}</p>
-    <p>Console: private · {status.admin_socket_configured ? "host socket configured" : "host socket not configured"}</p>
+  <div class="mb-6 grid gap-4 sm:grid-cols-3">
+    <Stat label="Applications" value={status.routes.length} note={`${status.routes.filter((r) => r.access || r.auth_required).length} private`} lamp={status.routes.length ? "on" : "idle"} />
+    <Stat label="Identity" value={status.methods.length ? status.methods.length : "None"} note={status.methods.length ? status.methods.join(" / ") : "Configure passkeys or OIDC before going private"} lamp={status.methods.length ? "on" : "wait"} />
+    <Stat label="Static publishing" value={status.pages_enabled ? "On" : "Off"} note={status.admin_socket_configured ? "Host socket configured" : "Host socket not configured"} lamp={status.pages_enabled ? "on" : "idle"} />
   </div>
   {#if editing}
     <Panel title={base ? `Edit ${base.host}` : "Add an existing website"} label="Prepare before cutover" class="mb-6">
@@ -113,14 +114,32 @@
       {/if}
     </Panel>
   {/if}
-  <div class="divide-y border-y">
+  <div class="grid gap-4 xl:grid-cols-2">
     {#each status.routes as app (app.host)}
-      <article class="flex flex-wrap items-center justify-between gap-4 py-4">
-        <div class="min-w-0"><h2 class="break-all text-base font-semibold">{app.host}</h2><p class="text-muted-foreground mt-1 break-all text-sm">{app.site ? `Static site · ${app.site}` : app.connector ? `Connector · ${app.connector}` : app.target ?? app.root ?? "Multiple upstreams"} · {app.access || app.auth_required ? "Private access policy" : "Public"}</p></div>
-        <div class="flex flex-wrap gap-2"><Button size="sm" variant="outline" onclick={() => edit(app)}>Configure</Button><ApplicationRemove host={app.host} version={status.config_sha256} refreshed={load} /><Button size="sm" variant="ghost" onclick={() => navigate("/simulator", { host: app.host })}>Check access</Button>{#if app.site}<Button size="sm" variant="ghost" onclick={() => navigate("/sites")}>Versions & rollback</Button>{/if}</div>
+      {@const isPrivate = !!(app.access || app.auth_required)}
+      <article class="panel flex flex-col p-5">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <h2 class="text-base font-semibold break-all">{app.host}</h2>
+            <p class="text-muted-foreground mt-1 text-sm break-all">{app.site ? `Static site · ${app.site}` : app.connector ? `Through connector · ${app.connector}` : app.target ?? app.root ?? "Several upstreams"}</p>
+          </div>
+          <span class={["inline-flex shrink-0 items-center gap-2 rounded-full border px-2.5 py-1 font-mono text-[0.68rem]", isPrivate ? "text-foreground" : "text-warning border-warning/40"]}><span class={["lamp", isPrivate ? "lamp-on" : "lamp-wait"]} aria-hidden="true"></span>{isPrivate ? "Private" : "Public"}</span>
+        </div>
+        <div class="mt-4 flex flex-wrap gap-2 border-t pt-4">
+          <Button size="sm" variant="outline" onclick={() => edit(app)}>Configure</Button>
+          <Button size="sm" variant="ghost" onclick={() => navigate("/activity")}>Access log</Button>
+          {#if app.site}<Button size="sm" variant="ghost" onclick={() => navigate("/sites")}>Versions &amp; rollback</Button>{/if}
+          <span class="ml-auto"><ApplicationRemove host={app.host} version={status.config_sha256} refreshed={load} /></span>
+        </div>
+        {#if app.site}<div class="mt-4"><ArtifactUpload site={app.site} /></div>{/if}
       </article>
-      {#if app.site}<ArtifactUpload site={app.site} />{/if}
-    {:else}<p class="py-6 text-sm">No applications yet. Add an existing website to start.</p>{/each}
+    {:else}
+      <div class="panel p-10 text-center xl:col-span-2">
+        <p class="font-medium">No applications yet</p>
+        <p class="text-muted-foreground mx-auto mt-1 max-w-md text-sm">Bring an existing website: pick who may open it, test it on a trial hostname, then move your domain.</p>
+        <Button class="mt-4" onclick={() => edit(null)}>Add existing website</Button>
+      </div>
+    {/each}
   </div>
 {/if}
 <ConfirmAction bind:open={review} title="Save this application?" target={draft?.route.host ?? ""} current={base ? "Existing application" : "Not configured"} requested={draft?.access_mode === "public" ? "Public application" : "Private application"} consequence="The routing configuration will change immediately. DNS and the previous hosting are not changed." detail="Test the allowed and refused cases on the trial hostname. To undo a newly added route, remove it from Applications; project domains must retain at least one hostname." confirmLabel="Save application" onConfirm={() => void save()} />

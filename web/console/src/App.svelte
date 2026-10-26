@@ -3,12 +3,10 @@
   import { route, navigate, type Page } from "$lib/router.svelte";
   import AdminToken from "$lib/AdminToken.svelte";
   import Connectors from "./pages/Connectors.svelte";
-  import Projects from "./pages/Projects.svelte";
   import Applications from "./pages/Applications.svelte";
   import Overview from "./pages/Overview.svelte";
   import Activity from "./pages/Activity.svelte";
   import Routes from "./pages/Routes.svelte";
-  import Simulator from "./pages/Simulator.svelte";
   import Sites from "./pages/Sites.svelte";
   import People from "./pages/People.svelte";
   import Wordmark from "$lib/brand/Wordmark.svelte";
@@ -19,9 +17,7 @@
   import UsersIcon from "@lucide/svelte/icons/users";
   import PlugIcon from "@lucide/svelte/icons/plug";
   import ScrollTextIcon from "@lucide/svelte/icons/scroll-text";
-  import GitBranchIcon from "@lucide/svelte/icons/git-branch";
   import RouteIcon from "@lucide/svelte/icons/route";
-  import FlaskIcon from "@lucide/svelte/icons/flask-conical";
   import type { Component } from "svelte";
 
   // Operate is for whoever runs the edge day to day; Build is for the person
@@ -36,9 +32,7 @@
       { path: "/activity", label: "Access log", icon: ScrollTextIcon },
     ] },
     { name: "Build", items: [
-      { path: "/projects", label: "CI projects", icon: GitBranchIcon },
       { path: "/routes", label: "Routes & policy", icon: RouteIcon },
-      { path: "/simulator", label: "Why? Simulator", icon: FlaskIcon },
     ] },
   ];
   const nav = groups.flatMap((g) => g.items);
@@ -121,13 +115,12 @@
     <main id="main-content" tabindex="-1" class="mx-auto w-full max-w-[1320px] flex-1 px-5 py-10 md:px-10">
       {#if route.path === "/overview"}<Overview />
       {:else if route.path === "/applications"}<Applications />
-      {:else if route.path === "/projects"}<Projects />
       {:else if route.path === "/connectors"}<Connectors />
       {:else if route.path === "/activity"}<Activity />
       {:else if route.path === "/routes"}<Routes />
       {:else if route.path === "/people"}<People />
       {:else if route.path === "/sites"}<Sites />
-      {:else}<Simulator />{/if}
+      {:else}<Overview />{/if}
     </main>
   </div>
 </div>

@@ -7,6 +7,7 @@
   import { admin, askForToken } from "$lib/adminToken.svelte";
   import { githubRepositories, fetchProjects, setupStatus, bindGitHubProject, disconnectProject, type Repository, type Repositories, type Project, type SetupStatus } from "$lib/api";
   import ConfirmAction from "$lib/ConfirmAction.svelte";
+  let { embedded = false }: { embedded?: boolean } = $props();
   let repositories = $state<Repositories | null>(null);
   let projects = $state<Project[]>([]);
   let projectsLoaded = $state(false);
@@ -53,9 +54,16 @@
     finally { busy = false; }
   }
 </script>
+{#if embedded}
+  <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
+    <div><p class="plate">Publishing</p><h2 class="mt-1 text-lg font-semibold tracking-tight">Who may publish from CI</h2><p class="text-muted-foreground text-sm">Choose which repository may publish each static site. Publishing and visitor access are separate permissions.</p></div>
+    <Button variant="outline" disabled={busy} onclick={load}>{busy ? "Reading…" : "Read projects & GitHub"}</Button>
+  </div>
+{:else}
 <PageHeader eyebrow="Build" title="CI projects" intro="Choose which repository may publish each static site. Publishing and visitor access are separate permissions.">
   <Button variant="outline" disabled={busy} onclick={load}>{busy ? "Reading…" : "Read projects & GitHub"}</Button>
 </PageHeader>
+{/if}
 {#if error}<p class="text-destructive mb-4 text-sm" role="alert">{error}</p>{/if}
 {#if notice}<p class="mb-4 text-sm" role="status">{notice}</p>{/if}
 {#if repositories && !repositories.configured}

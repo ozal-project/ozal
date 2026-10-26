@@ -166,8 +166,8 @@
       {#if selected.last_error}<dt class="text-muted-foreground">Last probe error</dt><dd class="text-destructive break-all">{friendlyHealth(selected.last_error)}<span class="text-muted-foreground block font-mono">{selected.last_error}</span></dd>{/if}
     </dl>
     <div class="mt-5 flex flex-wrap items-center gap-3">
-      <Button onclick={() => navigate("/simulator", { host: selected.host })}>Test this route <ArrowRightIcon class="size-4" /></Button>
-      <span class="text-muted-foreground text-xs">The simulator checks policy only. It does not open a session or contact this upstream.</span>
+      <Button onclick={() => navigate("/activity")}>See its access decisions <ArrowRightIcon class="size-4" /></Button>
+      <span class="text-muted-foreground text-xs">To ask why someone would be refused, run <code class="font-mono">switchboard policy explain -host {selected.host} -email person@example.com</code> on the host.</span>
     </div>
   </Panel>
 {/if}

@@ -1,15 +1,18 @@
 // A tiny History API router: a few fixed pages do not need a routing library.
 // The Go handler serves index.html for each of these paths.
-export const pages = ["/connectors", "/projects", "/applications", "/overview", "/activity", "/routes", "/people", "/sites", "/simulator"] as const;
+export const pages = ["/connectors", "/applications", "/overview", "/activity", "/routes", "/people", "/sites"] as const;
 export type Page = (typeof pages)[number];
 
-const normalize = (p: string): Page => ((pages as readonly string[]).includes(p) ? (p as Page) : "/overview");
+// Old bookmarks: CI projects live inside Sites, and the policy simulator moved
+// to the project page (it runs the same engine in the browser).
+const moved: Record<string, Page> = { "/projects": "/sites", "/simulator": "/activity" };
+const normalize = (p: string): Page => moved[p] ?? ((pages as readonly string[]).includes(p) ? (p as Page) : "/overview");
 
 export const route = $state({ path: normalize(location.pathname), search: location.search });
 
 export function navigate(to: Page, context?: { host?: string }) {
   const safe = new URLSearchParams();
-  const source = context ?? (to === "/routes" || to === "/simulator" ? Object.fromEntries(new URLSearchParams(location.search)) : {});
+  const source = context ?? (to === "/routes" ? Object.fromEntries(new URLSearchParams(location.search)) : {});
   const host = source.host;
   if (typeof host === "string" && host.trim()) safe.set("host", host.trim());
   const search = safe.size ? `?${safe.toString()}` : "";
