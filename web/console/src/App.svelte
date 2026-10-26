@@ -88,10 +88,10 @@
   </div>
 
   <div class="flex min-w-0 flex-1 flex-col">
-    <header class="bg-background/80 border-border sticky top-0 z-10 flex items-center justify-between gap-4 border-b px-5 py-3 backdrop-blur md:px-10">
+    <header class="bg-background/80 border-border sticky top-0 z-10 flex flex-wrap items-center justify-between gap-4 border-b px-5 py-3 backdrop-blur md:px-10">
       <div class="md:hidden"><Wordmark /></div>
       <p class="plate hidden md:block">Local console</p>
-      <div class="flex items-center gap-3">
+      <div class="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-3">
         <AdminToken />
         <span class="border-border bg-card flex items-center gap-2 rounded-full border px-3 py-1 font-mono text-[0.7rem]">
           <span class="lamp lamp-on" aria-hidden="true"></span>loopback only

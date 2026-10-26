@@ -11,13 +11,13 @@ y criterios de cierre viven únicamente en [TO_IMPLEMENT](../TO_IMPLEMENT.md).
 
 | Área | Implementado en este checkout | Aceptación que no se presume |
 |---|---|---|
-| Primer recorrido | `setup` crea una prueba protegida persistente; Applications revisa, configura, retira y publica artefactos de sitios existentes | Persona externa, hostname final y migración pública |
-| Identidad y grupos | Editor y catálogo nativos, conflicto de membresía, baja de sesiones, grupos vigentes por petición; sujetos OIDC por emisor y migración 012 | Proveedor real y dispositivo físico; email/SCIM no se añadieron |
+| Primer recorrido | `setup` crea una prueba protegida persistente; Applications revisa, configura, retira y publica artefactos de sitios existentes. Acceptance local 2026-10-26 pasó bootstrap de operador, limpieza del fragmento, alta de aplicación, upload y rollback; teclado, cuatro viewports y axe 0 violaciones. Capturas 1440/390 revisadas. | Persona externa, hostname final y migración pública |
+| Identidad y grupos | Editor y catálogo nativos, conflicto de membresía, baja de sesiones, grupos vigentes por petición; sujetos OIDC por emisor y migración 012. El browser acceptance local pasó cancelación y guardado de la membresía de la persona de fixture. | Proveedor real y dispositivo físico; email/SCIM no se añadieron |
 | Sesiones del visitante | Listado propio, cierre de una o de todas, sin IDs bearer ni datos ajenos | Teléfono real y paridad del gate solo OIDC |
-| Consola | Bootstrap del host de un solo uso y sesiones temporales identificadas por operador; escucha privada y autoridad host-only conservadas | No hay SaaS ni autenticación civil del nombre afirmado por el host |
-| Sitios/dominios | Ficha operativa, carga de tar.gz, edición de destino/acceso, digest contra ediciones obsoletas y asociación atómica de dominios del proyecto | DNS manual y certificado servido requieren prueba externa |
-| GitHub | App propia opcional, metadatos paginados, selección de repo y confianza comprobada por IDs/ref/workflow; desconexión explícita | Configurar una App real y ejecutar el primer workflow público |
-| Conectores | Preparar CSR/clave local, firma con CA existente, verificación, ficha de confianza y caducidad/alcance | Segundo host real y rotación/renovación en ese host |
+| Consola | Bootstrap del host de un solo uso y sesiones temporales identificadas por operador; escucha privada y autoridad host-only conservadas. Acceptance local pasó bootstrap y eliminación del fragmento de credencial. | No hay SaaS ni autenticación civil del nombre afirmado por el host |
+| Sitios/dominios | Ficha operativa, carga de tar.gz, edición de destino/acceso, digest contra ediciones obsoletas y asociación atómica de dominios del proyecto. Revisión visual local en 1440/390 y axe sin violaciones. | DNS manual y certificado servido requieren prueba externa |
+| GitHub | App propia opcional, metadatos paginados, selección de repo y confianza comprobada por IDs/ref/workflow; desconexión explícita. Estado desconectado revisado en browser local. | Configurar una App real y ejecutar el primer workflow público |
+| Conectores | Preparar CSR/clave local, firma con CA existente, verificación, ficha de confianza y caducidad/alcance. Estado vacío revisado en browser local. | Segundo host real y rotación/renovación en ese host |
 | Distribución | Instalador Linux verificado sin sobrescritura, guías por sistema y archivos de operación incluidos en releases | Publicación de una versión y acceso de una persona sin permiso al repo |
 
 Guías actuales: [primera aplicación](../operations/first-application.md),

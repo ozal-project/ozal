@@ -19,6 +19,14 @@ const ab = async (...args) => {
   catch (error) { let detail = String(error.stderr ?? ""); try { detail += JSON.stringify(JSON.parse(error.stdout).error); } catch {} const safe = detail.replace(/operator=[^\s"<>]+/g, "operator=[redacted]").slice(0, 2000); throw new Error(`Browser ${args[0]} ${args[0] === "click" ? args[1] : ""} failed during ${step}: ${safe}`); }
 };
 const evaluate = async (source) => JSON.parse(await ab("eval", source)).data?.result;
+const tabTo = async (href) => {
+  await ab("eval", 'document.querySelector(\'a[href="#main-content"]\').focus()');
+  for (let i = 0; i < 30; i++) {
+    await ab("press", "Tab");
+    if (await evaluate("document.activeElement?.getAttribute('href')") === href) return;
+  }
+  throw new Error(`Keyboard tab order did not reach ${href}`);
+};
 const api = async (method, path, body) => {
   const res = await fetch(`${edge.consoleURL}${path}`, { method, headers: { Authorization: `Bearer ${edge.token}`, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
   assert(res.ok, `fixture API ${path}: HTTP ${res.status}`);
@@ -34,8 +42,11 @@ try {
   await ab("open", url);
   await ab("wait", "--text", "Acceptance operator");
   assert.equal(await evaluate("location.hash"), "", "one-use credential remained in the URL");
-  step = "add existing application";
-  await ab("click", 'a[href="/applications"]');
+  step = "keyboard navigation and add existing application";
+  await tabTo("/applications");
+  await ab("press", "Enter");
+  await ab("wait", "--text", "Applications");
+  assert.equal(await evaluate("document.activeElement?.textContent?.trim()"), "Applications", "keyboard navigation did not focus the page heading");
   await ab("find", "role", "button", "click", "--name", "Refresh configuration", "--exact");
   await ab("wait", "--text", "Identity:");
   await ab("find", "role", "button", "click", "--name", "Add existing website", "--exact");
@@ -94,7 +105,8 @@ try {
   await ab("wait", "--text", `extra.demo.localhost:${PORT}`);
   for (const [width, height] of [[1440, 1000], [1024, 900], [390, 844], [320, 800]]) {
     await ab("set", "viewport", String(width), String(height));
-    assert.equal(await evaluate("document.documentElement.scrollWidth <= innerWidth"), true, `overflow at ${width}`);
+    const overflow = await evaluate("({ viewport: innerWidth, document: document.documentElement.scrollWidth, offenders: [...document.querySelectorAll('body *')].filter((el) => { const r = el.getBoundingClientRect(); return r.right > innerWidth + 1 || r.left < -1; }).slice(0, 12).map((el) => ({ tag: el.tagName, className: String(el.className).slice(0, 120), text: (el.textContent || '').trim().slice(0, 80), left: Math.round(el.getBoundingClientRect().left), right: Math.round(el.getBoundingClientRect().right) })) })");
+    assert(overflow.document <= width, `overflow at ${width}: ${JSON.stringify(overflow)}`);
     const result = JSON.parse(await ab("a11y"));
     const violations = result.data?.violations ?? result.data?.results?.violations;
     assert(Array.isArray(violations), "axe returned no violation list");
