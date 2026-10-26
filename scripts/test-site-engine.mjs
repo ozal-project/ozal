@@ -17,14 +17,14 @@ go.run(instance); // returns when main exits; main blocks, so this only starts i
 await new Promise((resolve) => setTimeout(resolve, 50));
 
 const explain = (input) => JSON.parse(sandbox.switchboardExplain(JSON.stringify(input)));
-const route = { host: "wiki.acme.dev", auth_required: true, access: { required_groups: ["engineering"] } };
-const person = (groups) => ({ email: "ana@acme.dev", email_verified: true, groups });
+const route = { host: "wiki.acme.dev", auth_required: true, access: { allowed_domains: ["acme.dev"] } };
+const person = (email) => ({ email, email_verified: true, groups: [] });
 
 assert.equal(typeof sandbox.switchboardEngine, "string", "the page can say which engine it runs");
 assert.equal(explain({ route }).decision.code, "authentication_required");
-assert.equal(explain({ route, principal: person(["support"]) }).decision.code, "missing_required_group");
+assert.equal(explain({ route, principal: person("bob@other.org") }).decision.code, "domain_not_allowed");
 assert.deepEqual(
-  (({ allowed, code }) => ({ allowed, code }))(explain({ route, principal: person(["engineering"]) }).decision),
+  (({ allowed, code }) => ({ allowed, code }))(explain({ route, principal: person("ana@acme.dev") }).decision),
   { allowed: true, code: "allowed" },
 );
 assert.match(explain({ route: { host: "" } }).error, /host/, "bad input answers with a reason, never throws");
