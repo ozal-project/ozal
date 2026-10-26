@@ -116,9 +116,11 @@ export function setup(root: HTMLElement) {
     say("Loading the engine (about 2 MB)…");
     try {
       await ensureEngine();
-    } catch (e) {
+    } catch {
       start.disabled = false;
-      say(`The engine did not load (${(e as Error).message}). The example above is the same decision, pre-recorded.`);
+      start.hidden = false;
+      start.textContent = "Retry the engine";
+      say("The live engine could not load. You can retry; the recorded example remains available.");
       return;
     }
     fallback.hidden = true;

@@ -23,8 +23,6 @@ const canonical = new URL(Astro.url.pathname, Astro.site).toString();
     <meta property="og:image:alt" content="Switchboard: every door to your apps, one place that decides." />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="theme-color" content="#0c0c0e" />
-    <!-- The motion layer hides nothing unless this script ran. -->
-    <script is:inline>document.documentElement.classList.add("js")</script>
   </head>
   <body><slot /></body>
 </html>

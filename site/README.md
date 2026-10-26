@@ -12,7 +12,9 @@ Publishing is CI: a push to `main` that touches `site/`, a tracker or
 `scripts/pages/` runs `.github/workflows/site.yml`, which builds, refuses secrets
 in `dist/`, uploads through the deploy endpoint with a GitHub OIDC token (project
 `switchboard-site`), checks the public page and rolls back to the last good build
-if that check fails. The page needs no client JavaScript; the roadmap filter is CSS.
+if that check fails. The explanation, product-view choices and roadmap work without JavaScript.
+Only the optional live engine and progressive entrance motion use client scripts;
+all content is visible if those scripts fail.
 
 ```bash
 npm ci
@@ -30,3 +32,21 @@ compiles `cmd/policywasm` to `public/engine.wasm` (about 7 MB, 2 MB compressed, 
 section comes into view) and copies the matching `wasm_exec.js`. Both are build outputs and are not
 committed. `internal/policydemo` is the only code in between; it adds input checks, not policy, and a
 test compares its answer with `auth.NewReport`. The page states what it does not simulate.
+
+The first screen explains the gateway and runs the real policy demo. The product
+views use native radio controls with CSS, the tour waits for a visitor to press
+play, and private downloads have no public CTA while `sourcePublic` is false.
+
+Browser regression checks reuse the tour's existing Playwright dependency:
+
+```bash
+# From the repository root, after building site/ and serving site/dist on loopback:
+npm --prefix scripts/demo ci
+node scripts/demo/site-check.mjs --url http://127.0.0.1:4321 --chrome /path/to/chrome --out /tmp/switchboard-site-check
+```
+
+The check covers 1440/1024/768/390/320 px, horizontal overflow, visible navigation,
+keyboard product choices, live policy decisions, a failed WASM download and
+retry, Save-Data, and the page with JavaScript disabled. It does not publish the
+site or exercise a production sign-in. `scripts/verify.sh` remains the full gate;
+the browser check is separate because it requires an installed Chrome/Chromium.
