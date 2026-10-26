@@ -34,8 +34,7 @@ committed. `internal/policydemo` is the only code in between; it adds input chec
 test compares its answer with `auth.NewReport`. The page states what it does not simulate.
 
 The first screen explains the gateway and runs the real policy demo. The product
-views use native radio controls with CSS, the tour waits for a visitor to press
-play, and private downloads have no public CTA while `sourcePublic` is false.
+views use native radio controls with CSS, the walkthrough is five real screens in order (no video; the recorder still produces the stills), the roadmap lives at `/roadmap/` and is read from the trackers, and private downloads have no public CTA while `sourcePublic` is false.
 
 Browser regression checks reuse the tour's existing Playwright dependency:
 

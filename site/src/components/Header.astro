@@ -1,0 +1,16 @@
+---
+import Logo from "./Logo.astro";
+// On the home page the links are in-page anchors; elsewhere they point back to it.
+const { here = "home" } = Astro.props;
+---
+<a class="skip-link" href="#main-content">Skip to content</a>
+<header class="topbar frame">
+  <a href="/" class="mark" aria-label="Switchboard home"><Logo size={28} /><span>switchboard</span></a>
+  <nav aria-label="Sections">
+    <a href="/#views">Product</a>
+    <a href="/#tour">Tour</a>
+    <a href="/roadmap/" aria-current={here === "roadmap" ? "page" : undefined}>Roadmap</a>
+    <a href="/#start">Availability</a>
+  </nav>
+  {here === "home" ? <a class="button button-brand header-action" href="#engine">Try the demo</a> : <a class="button header-action" href="/#engine">Try the demo</a>}
+</header>

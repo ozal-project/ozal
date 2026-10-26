@@ -147,8 +147,13 @@ async function main() {
   // 4 · Bob, from another company, signs up with his own invitation.
   await go(`http://auth.${DOMAIN}:${PORT}/_/auth/me`, "Back to her apps. She signs out.");
   await pause(1200);
+  // The virtual authenticator holds Ana's passkey, so a real sign-in page would sign her straight
+  // back in and race Bob's invitation. Sign out for real, but let the sign-in page stay blank.
+  const signIn = /\/_\/auth\/login(\?|$)/;
+  await page.route(signIn, (route) => route.fulfill({ contentType: "text/html", body: "<!doctype html><title>Signed out</title>" }));
   await click(page.getByRole("button", { name: "Sign out" }));
-  await page.waitForURL(/\/_\/auth\/login/);
+  await page.waitForURL(signIn);
+  await page.unroute(signIn);
   await go(edge.invites.bob, "Bob, from another company, creates his passkey.");
   await pause(1500);
   await click(page.locator("#action"));

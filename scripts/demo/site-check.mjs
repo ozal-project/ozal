@@ -42,7 +42,6 @@ try {
       }),
       brokenAnchors: [...document.querySelectorAll('a[href^="#"]')].filter((link) => !document.getElementById(link.hash.slice(1))).map((link) => link.hash),
       privateDownloads: document.querySelectorAll('a[href*="github.com/octaviosantacruz/switchboard"]').length,
-      autoplay: [...document.querySelectorAll("video")].some((video) => !video.paused),
     }));
     assert.ok(geometry.overflow <= 0, `${width}px horizontal overflow: ${geometry.overflow}`);
     assert.ok(geometry.titleOverflow <= 1, `${width}px clipped heading`);
@@ -50,7 +49,6 @@ try {
     assert.ok(geometry.navigation, `${width}px navigation must remain visible and fit`);
     assert.deepEqual(geometry.brokenAnchors, []);
     assert.equal(geometry.privateDownloads, 0, "private releases must not be advertised as a public download");
-    assert.equal(geometry.autoplay, false, "the tour must wait for the visitor to play it");
     await decision(page, "allowed");
     await choose(page, "who", "bob"); await decision(page, "domain_not_allowed");
     await choose(page, "who", "ana"); await decision(page, "allowed");
@@ -72,15 +70,13 @@ try {
     assert.equal(await page.locator(".developer-view").isVisible(), true);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${width}px developer view overflows`);
     await page.locator('label:has(#view-operator)').click();
-    await page.locator('.bars details > summary').first().focus();
-    await page.keyboard.press("Enter");
-    assert.equal(await page.locator('.bars details').first().getAttribute("open"), "");
-    await page.locator('.bars details > summary').first().click();
+    assert.equal(await page.locator(".step").count(), 5, "the walkthrough lists five steps");
+    assert.equal(await page.locator("video").count(), 0, "the page carries no video");
     await choose(page, "who", "ana");
     await page.evaluate(() => scrollTo(0, 0));
     if (output && [1440, 768, 390].includes(width)) await page.screenshot({ path: join(output, `${width}.png`), fullPage: true });
     await context.close();
-    console.log(`PASS ${width}px: geometry, navigation, keyboard views, roadmap, and eight engine decisions`);
+    console.log(`PASS ${width}px: geometry, navigation, keyboard views, walkthrough, and eight engine decisions`);
   }
 
   const plain = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 390, height: 844 } });
@@ -90,10 +86,18 @@ try {
   assert.equal(await staticPage.locator("h1").isVisible(), true);
   await staticPage.locator("label:has(#view-person)").click();
   assert.equal(await staticPage.locator(".person-view").isVisible(), true);
-  await staticPage.locator('.bars summary').first().click();
-  assert.equal(await staticPage.locator('.bars details[open] > div').isVisible(), true);
+  assert.equal(await staticPage.locator('a[href="/roadmap/"]').first().isVisible(), true);
   await plain.close();
-  console.log("PASS JavaScript disabled: explanation, recorded answer, product choices and roadmap");
+  console.log("PASS JavaScript disabled: explanation, recorded answer, product choices and walkthrough");
+
+  const roadmap = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const road = await roadmap.newPage(); checkPage(road);
+  await road.goto(`${url}/roadmap/`);
+  assert.ok((await road.locator(".module").count()) >= 5, "the roadmap lists its modules");
+  assert.ok((await road.locator(".shipped-month li").count()) > 10, "the roadmap lists the changelog");
+  assert.ok(await road.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "the roadmap overflows a phone");
+  await roadmap.close();
+  console.log("PASS roadmap page: modules, changelog, phone width");
 
   const failing = await browser.newContext();
   const retry = await failing.newPage(); checkPage(retry);

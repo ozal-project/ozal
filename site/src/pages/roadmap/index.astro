@@ -1,0 +1,84 @@
+---
+import Base from "../../layouts/Base.astro";
+import Header from "../../components/Header.astro";
+import Footer from "../../components/Footer.astro";
+import { PLAIN } from "../../lib/plain";
+import { trains } from "../../data/trains";
+import { closures, doneIds, openTasks, tracks, type State } from "../../lib/tracker";
+import todo from "../../../../docs/TO_IMPLEMENT.md?raw";
+import implemented from "../../../../docs/IMPLEMENTED.md?raw";
+
+const open = openTasks(todo);
+const done = doneIds(open, implemented);
+const byTrack = tracks(open, done);
+const log = closures(implemented);
+const count = (s: State) => open.filter((t) => t.state === s).length;
+const reviewed = todo.match(/\*\*Last review:\*\*\s*(\d{4}-\d\d-\d\d)/)?.[1];
+const long = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
+const day = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+const month = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+const name = (t: { id: string; title: string }) => PLAIN[t.id] ?? t.title;
+const word: Record<State, string> = { progress: "In progress", ready: "Ready", blocked: "Blocked", planned: "Planned", idea: "Idea" };
+const lamp: Record<State, string> = { progress: "lamp-wait", ready: "lamp-brand", blocked: "lamp-no", planned: "", idea: "" };
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const total = done.size + open.length;
+const percent = (a: number, b: number) => (b === 0 ? 0 : Math.round((a / b) * 100));
+
+const months: { label: string; items: typeof log }[] = [];
+for (const c of log) {
+  const label = month(c.date);
+  const last = months[months.length - 1];
+  if (last?.label === label) last.items.push(c); else months.push({ label, items: [c] });
+}
+---
+<Base title="Roadmap — Switchboard" description="What Switchboard does today, what is being built and what comes next, read from the project's own trackers.">
+  <Header here="roadmap" />
+  <main id="main-content" tabindex="-1">
+    <section class="page-head frame" aria-labelledby="roadmap-title">
+      <p class="eyebrow">Roadmap</p>
+      <h1 id="roadmap-title">What is built, and what comes next.</h1>
+      <p class="page-lead">A year-long project, October 2026 to September 2027. This page is generated from the trackers in the repository{reviewed ? `, last reviewed ${long(reviewed)}` : ""}. Partial work stays open.</p>
+      <dl class="progress-counts">
+        <div><dt>tasks done</dt><dd>{done.size}</dd></div>
+        <div><dt>in progress</dt><dd>{count("progress")}</dd></div>
+        <div><dt>planned</dt><dd>{count("planned") + count("ready") + count("blocked") + count("idea")}</dd></div>
+      </dl>
+      <div class="meter" role="img" aria-label={`${percent(done.size, total)} percent of ${total} tracked tasks are done`}><span style={`width:${percent(done.size, total)}%`}></span></div>
+    </section>
+
+    <section class="section frame" aria-labelledby="trains-title">
+      <h2 id="trains-title" class="sub-title">Four releases</h2>
+      <ol class="trains">{trains.map((t) => (
+        <li class={t.now ? "current" : ""}><span class="small quiet">{t.now ? "Current" : "Planned"} · {t.when}</span><h3>{t.v} · {t.n}</h3><p>{t.line}</p></li>
+      ))}</ol>
+      <p class="roadmap-note">Future releases are direction; they are not capabilities of today's alpha.</p>
+    </section>
+
+    <section class="section frame" aria-labelledby="modules-title">
+      <h2 id="modules-title" class="sub-title">By module</h2>
+      <nav class="module-index" aria-label="Modules">{byTrack.map((t) => <a href={`#${slug(t.name)}`}>{t.name}</a>)}<a href="#shipped">Recently shipped</a></nav>
+      <div class="modules">{byTrack.map((t) => (
+        <article id={slug(t.name)} class="module" aria-labelledby={`${slug(t.name)}-h`}>
+          <div class="module-head">
+            <h3 id={`${slug(t.name)}-h`}>{t.name}</h3>
+            <p class="soft">{t.blurb}</p>
+            <div class="meter meter-sm" role="img" aria-label={`${t.closed} of ${t.closed + t.open.length} done`}><span style={`width:${percent(t.closed, t.closed + t.open.length)}%`}></span></div>
+            <p class="small quiet">{t.closed} done · {t.open.length} open</p>
+          </div>
+          <ul class="task-list">{t.open.map((x) => (
+            <li><span class={`lamp ${lamp[x.state]}`} aria-hidden="true"></span><span class="task-name">{name(x)}</span><span class="small quiet task-state">{word[x.state]}</span></li>
+          ))}{t.open.length === 0 && <li class="quiet">Nothing open.</li>}</ul>
+        </article>
+      ))}</div>
+    </section>
+
+    <section id="shipped" class="section frame" aria-labelledby="shipped-title">
+      <h2 id="shipped-title" class="sub-title">Recently shipped</h2>
+      <p class="roadmap-note">The implementation log, newest first. {log.length} entries.</p>
+      <div class="shipped">{months.map((m) => (
+        <div class="shipped-month"><h3>{m.label}</h3><ul>{m.items.map((c) => <li><time datetime={c.date}>{day(c.date)}</time><span>{c.title}</span></li>)}</ul></div>
+      ))}</div>
+    </section>
+  </main>
+  <Footer />
+</Base>

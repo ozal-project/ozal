@@ -1,11 +1,12 @@
 ---
 import Base from "../layouts/Base.astro";
-import Logo from "../components/Logo.astro";
+import Header from "../components/Header.astro";
+import Footer from "../components/Footer.astro";
+import { trains } from "../data/trains";
 import Engine from "../components/Engine.astro";
-import { PLAIN } from "../lib/plain";
 import { rows } from "../lib/board";
 import sample from "../data/access-sample.json";
-import { closures, doneIds, openTasks, tracks, type State } from "../lib/tracker";
+import { doneIds, openTasks, type State } from "../lib/tracker";
 import todo from "../../../docs/TO_IMPLEMENT.md?raw";
 import implemented from "../../../docs/IMPLEMENTED.md?raw";
 
@@ -17,18 +18,12 @@ const sourcePublic = false;
 // Roadmap and changelog come from docs/TO_IMPLEMENT.md and docs/IMPLEMENTED.md.
 const open = openTasks(todo);
 const done = doneIds(open, implemented);
-const byTrack = tracks(open, done);
-const log = closures(implemented);
 const count = (s: State) => open.filter((t) => t.state === s).length;
 const stats = [
   { n: done.size, label: "tasks done" },
   { n: count("progress"), label: "in progress" },
   { n: count("planned") + count("ready"), label: "planned" },
 ];
-const lamp: Record<State, string> = { progress: "lamp-wait", ready: "lamp-brand", blocked: "lamp-no", planned: "", idea: "" };
-const word: Record<State, string> = { progress: "in progress", ready: "ready", blocked: "blocked", planned: "planned", idea: "idea" };
-const name = (t: { id: string; title: string }) => PLAIN[t.id] ?? t.title;
-const day = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 const board = rows(sample);
 
 const works = [
@@ -52,34 +47,17 @@ const pipeline = [
 ] as const;
 const stateWord = { built: "Built", building: "In progress", planned: "Planned" } as const;
 
-const trains = [
-  { v: "v0.1", n: "Edge", when: "Oct – Dec 2026", now: true, line: "Routing, certificates, passkeys, sites." },
-  { v: "v0.2", n: "PKI", when: "Jan – Mar 2027", now: false, line: "A private CA and mTLS between parts." },
-  { v: "v0.3", n: "Access", when: "Apr – Jun 2027", now: false, line: "SSH and databases, approvals, a WAF." },
-  { v: "v0.4", n: "Trust", when: "Jul – Sep 2027", now: false, line: "A transparency log and an AI-agent gateway." },
-];
 
-const chapters = [
-  ["The operator opens the console", "One thing needs attention: an app that does not answer."],
-  ["Inviting Ana", "A one-time link. No password to share."],
-  ["Ana creates a passkey", "On her own device, in one tap."],
-  ["Her page lists only her apps", "Grafana, Billing, the wiki. Nothing else."],
-  ["Bob, from another company", "His page is empty. Grafana says no, says why, and offers a way back."],
-  ["Back in the console", "Who got in, and why Bob was refused."],
+const steps = [
+  { t: "The operator sees what needs attention", d: "One thing is wrong: an app that does not answer. Recent changes and who got in sit below it.", img: "overview", w: 2560, h: 1600, alt: "The console Overview with an app that is not answering, recent changes and access decisions." },
+  { t: "Inviting Ana", d: "The operator invites her by email. She gets a one-time link and creates a passkey on her own device. No password to share.", img: "people", w: 2560, h: 1600, alt: "The People page with an invitation form and the list of invited people." },
+  { t: "Ana sees only her apps", d: "Grafana, Billing and the wiki. Nothing else is listed, and a sensitive app can ask her to sign in again.", img: "portal", w: 840, h: 860, narrow: true, alt: "Ana's page lists the apps her account may open." },
+  { t: "Bob, from another company, is refused", d: "He gets a clear answer with the reason and a way back to his own apps, not a bare error.", img: "refused", w: 840, h: 702, narrow: true, alt: "Bob's refusal page names the reason and links back to his apps." },
+  { t: "The log explains both", d: "Every decision with its reason: why Ana got in and why Bob did not.", img: "access-log", w: 2560, h: 1600, alt: "The access log listing allowed and refused requests with their reasons." },
 ];
 ---
 <Base title="Switchboard — your apps, your access rules" description="Control who can open your apps, with a reason for every decision. A self-hosted access gateway in one Go binary. Try the real policy engine in your browser.">
-  <a class="skip-link" href="#main-content">Skip to content</a>
-  <header class="topbar frame">
-    <a href="/" class="mark" aria-label="Switchboard home"><Logo size={28} /><span>switchboard</span></a>
-    <nav aria-label="Sections">
-      <a href="#views">Product</a>
-      <a href="#tour">Tour</a>
-      <a href="#roadmap">Roadmap</a>
-      <a href="#start">Availability</a>
-    </nav>
-    <a class="button button-brand header-action" href="#engine">Try the demo</a>
-  </header>
+  <Header here="home" />
 
   <main id="main-content" tabindex="-1">
     <section class="hero frame" aria-labelledby="hero-title">
@@ -148,19 +126,15 @@ reason    account's email domain
 
     <section id="tour" class="section frame" aria-labelledby="tour-title">
       <div class="section-intro">
-        <h2 id="tour-title">Watch it work.</h2>
-        <p>From an invitation to a passkey, an allowed visit and a refusal. Recorded on a real edge with demo accounts; only the captions are added.</p>
+        <h2 id="tour-title">See it work, step by step.</h2>
+        <p>One story, five screens: an invitation, an allowed visit, a refusal and the log that explains both. Screens from a real edge with demo accounts.</p>
       </div>
-      <div class="tour-layout">
-        <figure class="tour-video">
-          <video controls preload="none" poster="/shots/overview.jpg" width="1280" height="800" aria-label="Switchboard product tour with captions">
-            <source src="/tour/tour.webm" type="video/webm" />
-            Your browser cannot play this video. Read the same walk-through beside it.
-          </video>
-          <figcaption>A real console and sign-in flow, recorded with demo data.</figcaption>
-        </figure>
-        <div class="tour-chapters"><h3>The walkthrough</h3><ol>{chapters.map(([t, d]) => <li><strong>{t}</strong><p>{d}</p></li>)}</ol></div>
-      </div>
+      <ol class="steps">{steps.map((st, i) => (
+        <li class="step">
+          <div class="step-copy"><span class="step-n" aria-hidden="true">{i + 1}</span><h3>{st.t}</h3><p>{st.d}</p></div>
+          <figure class={`step-shot ${st.narrow ? "step-narrow" : ""}`}><img src={`/shots/${st.img}.jpg`} width={st.w} height={st.h} loading="lazy" alt={st.alt} /></figure>
+        </li>
+      ))}</ol>
       <details class="disclosure tour-log">
         <summary>Read the access decisions from this tour</summary>
         <div class="disclosure-body">
@@ -188,15 +162,10 @@ reason    account's email domain
     </section>
 
     <section id="roadmap" class="section frame" aria-labelledby="roadmap-title">
-      <div class="section-intro"><h2 id="roadmap-title">Where it goes next.</h2><p>A year-long project, October 2026 to September 2027. Progress below is read from the project's trackers at build time. Partial work stays open.</p></div>
+      <div class="section-intro"><h2 id="roadmap-title">Where it goes next.</h2><p>A year-long project, October 2026 to September 2027. The full roadmap, module by module, is read from the project's trackers.</p></div>
       <dl class="progress-counts">{stats.map((s) => <div><dt>{s.label}</dt><dd>{s.n}</dd></div>)}</dl>
       <ol class="release-plan">{trains.map((t) => <li class={t.now ? "current" : ""}><h3>{t.v} · {t.n}</h3><p class="small quiet">{t.now ? "Current · " : "Planned · "}{t.when}</p><p>{t.line}</p></li>)}</ol>
-      <p class="roadmap-note">The long-range goal includes a verifiable transparency log. Future releases are direction; they are not capabilities of today's alpha.</p>
-      <div class="bars">{byTrack.map((t) => (
-        <details name="track"><summary><span>{t.name}</span><span class="track-count small quiet">{t.closed} done · {t.open.length} open</span></summary><div><p class="soft">{t.blurb}</p><ul>{t.open.map((x) => <li><span class={`lamp ${lamp[x.state]}`} aria-hidden="true"></span><span>{name(x)}<small class="quiet">{word[x.state]}</small></span></li>)}</ul></div></details>
-      ))}
-        <details name="track"><summary><span>Recently shipped</span><span class="track-count small quiet">{log.length} changelog entries</span></summary><div><p class="soft">The latest entries from the implementation log.</p><ul>{log.slice(0, 14).map((c) => <li><span class="lamp lamp-ok" aria-hidden="true"></span><span>{c.title}<small class="quiet">{day(c.date)}</small></span></li>)}</ul></div></details>
-      </div>
+      <p class="roadmap-note"><a class="text-link" href="/roadmap/">Read the full roadmap and changelog <span aria-hidden="true">→</span></a></p>
     </section>
 
     <section id="start" class="availability frame section" aria-labelledby="start-title">
@@ -204,6 +173,6 @@ reason    account's email domain
       <div class="availability-actions">{sourcePublic ? <a class="button button-brand" href={release}>Download alpha.1 <span aria-hidden="true">↗</span></a> : <a class="button button-brand" href="https://octaviosantacruz.com">Visit the maintainer's site <span aria-hidden="true">↗</span></a>}<a class="text-link" href="#engine">Back to the live demo ↑</a></div>
     </section>
   </main>
-  <footer class="footer frame"><a class="mark" href="#main-content"><Logo size={26} /><span>switchboard</span></a><p>Built by <a href="https://octaviosantacruz.com">Octavio Santacruz</a>. MIT licensed.<br />{sourcePublic ? <a href={repo}>Source on GitHub</a> : "Source is private while the alpha settles."}</p><a href="#main-content" class="text-link">Back to top ↑</a></footer>
+  <Footer />
 </Base>
 <script>import "../scripts/page";</script>

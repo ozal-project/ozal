@@ -1,6 +1,6 @@
 [
   {
-    "time": "2026-10-26T01:52:36Z",
+    "time": "2026-10-26T03:41:52Z",
     "who": "ana@acme.dev",
     "host": "grafana",
     "type": "access.allowed",
@@ -8,7 +8,7 @@
     "reason": ""
   },
   {
-    "time": "2026-10-26T01:52:41Z",
+    "time": "2026-10-26T03:41:58Z",
     "who": "ana@acme.dev",
     "host": "billing",
     "type": "access.allowed",
@@ -16,7 +16,7 @@
     "reason": ""
   },
   {
-    "time": "2026-10-26T01:52:46Z",
+    "time": "2026-10-26T03:42:03Z",
     "who": "ana@acme.dev",
     "host": "wiki",
     "type": "access.allowed",
@@ -24,7 +24,7 @@
     "reason": ""
   },
   {
-    "time": "2026-10-26T01:52:58Z",
+    "time": "2026-10-26T03:42:16Z",
     "who": "bob@other.org",
     "host": "grafana",
     "type": "access.denied",
@@ -32,7 +32,7 @@
     "reason": "account's email domain is not on the allowed list"
   },
   {
-    "time": "2026-10-26T01:53:03Z",
+    "time": "2026-10-26T03:42:20Z",
     "who": "bob@other.org",
     "host": "wiki",
     "type": "access.denied",
@@ -40,7 +40,7 @@
     "reason": "account's email domain is not on the allowed list"
   },
   {
-    "time": "2026-10-26T01:53:04Z",
+    "time": "2026-10-26T03:42:21Z",
     "who": "bob@other.org",
     "host": "billing",
     "type": "access.denied",
