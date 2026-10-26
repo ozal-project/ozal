@@ -1,0 +1,90 @@
+---
+import { APPS } from "../lib/engine";
+const apps = Object.entries(APPS);
+const groups = ["engineering", "finance", "support"];
+---
+<section id="engine" class="border-line/60 scroll-mt-20 border-t">
+  <div class="mx-auto max-w-6xl px-5 py-20">
+    <p class="eyebrow">Try it · no install</p>
+    <h2 class="h2 mt-3">Ask the real engine.</h2>
+    <p class="lede">
+      This is the code the gateway runs to decide who gets in, compiled to WebAssembly and running in your browser:
+      nothing you choose here leaves this page. Change the app or the visitor and watch the decision change.
+    </p>
+
+    <div id="engine-demo" class="mt-9">
+      <!-- Without JavaScript or before the engine loads, the same decision as a fixed example. -->
+      <div data-fallback class="card p-5">
+        <p class="eyebrow">Recorded example</p>
+        <p class="mt-3 text-sm"><span class="tag tag-no">refused</span> <b class="font-semibold">bob@other.org</b> opens <span class="font-mono">grafana.acme.dev</span></p>
+        <p class="text-ink-2 mt-2 text-sm"><span class="text-ink font-mono text-[0.8rem]">missing_required_group</span> — account is missing required group engineering.</p>
+        <p class="text-muted mt-4 text-[0.8rem]" data-status>The live engine loads when this section comes into view and needs JavaScript.</p>
+        <button type="button" data-start hidden class="btn btn-brand btn-sm mt-3">Load the engine</button>
+      </div>
+
+      <div data-panel hidden class="grid gap-4 lg:grid-cols-[1fr_1.1fr]">
+        <div class="card grid content-start gap-5 p-5">
+          <fieldset>
+            <legend class="eyebrow mb-2.5">App</legend>
+            <div class="grid gap-1.5">
+              {apps.map(([key, app], i) => (
+                <label class="border-line hover:border-line-2 has-[:checked]:border-brand has-[:checked]:bg-brand/[0.07] flex cursor-pointer items-start gap-3 rounded-xl border px-3.5 py-2.5">
+                  <input type="radio" name="app" value={key} checked={i === 0} class="accent-brand mt-1" />
+                  <span><span class="block font-mono text-[0.85rem]">{app.host}</span><span class="text-muted block text-[0.8rem]">{app.blurb}</span></span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend class="eyebrow mb-2.5">Visitor</legend>
+            <div class="flex flex-wrap gap-1.5">
+              {[["none", "Not signed in"], ["ana", "Ana · ana@acme.dev"], ["bob", "Bob · bob@other.org"]].map(([value, label], i) => (
+                <label class="border-line-2 has-[:checked]:bg-ink has-[:checked]:text-bg has-[:focus-visible]:outline-brand-2 cursor-pointer rounded-full border px-3 py-1.5 text-[0.85rem] has-[:focus-visible]:outline-2">
+                  <input type="radio" name="who" value={value} checked={i === 1} class="sr-only" />{label}
+                </label>
+              ))}
+            </div>
+            <div class="mt-4 grid gap-3 text-[0.85rem]">
+              <div class="flex flex-wrap items-center gap-x-4 gap-y-2"><span class="text-muted">Groups</span>
+                {groups.map((g, i) => <label class="flex items-center gap-1.5"><input type="checkbox" name="group" value={g} checked={i === 0} class="accent-brand" />{g}</label>)}
+              </div>
+              <label class="flex items-center gap-2"><input type="checkbox" name="verified" checked class="accent-brand" />Email verified by the provider</label>
+              <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <label class="flex items-center gap-2"><span class="text-muted">Signed in with</span>
+                  <select name="method" class="bg-raised border-line-2 rounded-lg border px-2 py-1"><option value="passkey">a passkey</option><option value="oidc">an identity provider</option></select>
+                </label>
+                <label class="flex items-center gap-2"><input type="checkbox" name="bound" class="accent-brand" />The passkey stays on one device</label>
+              </div>
+            </div>
+          </fieldset>
+        </div>
+
+        <div class="grid content-start gap-4">
+          <div data-verdict data-state="allowed" class="card data-[state=allowed]:border-ok/50 data-[state=refused]:border-no/50 data-[state=again]:border-wait/50 data-[state=error]:border-no/50 p-5" aria-live="polite">
+            <p class="eyebrow">Decision</p>
+            <p data-verdict-title class="mt-2 text-2xl font-semibold tracking-[-0.02em]">—</p>
+            <p data-code class="text-brand-2 mt-1 font-mono text-[0.8rem]"></p>
+            <p data-reason class="text-ink-2 mt-2 text-sm"></p>
+            <ul data-stages class="border-line mt-4 border-t pt-3"></ul>
+          </div>
+          <div class="grid gap-2">
+            <details class="card px-4 py-3"><summary class="text-ink-2 cursor-pointer text-sm">The route as written in the config</summary><pre data-config class="code mt-3"></pre></details>
+            <details class="card px-4 py-3"><summary class="text-ink-2 cursor-pointer text-sm">The engine's full answer</summary><pre data-raw class="code mt-3 max-h-80"></pre></details>
+          </div>
+          <p class="text-muted text-[0.8rem]" data-status></p>
+        </div>
+      </div>
+    </div>
+    <p class="text-muted mt-5 max-w-3xl text-[0.8rem] leading-relaxed">
+      It answers one question: may this person open this app? Signing in, certificates, rate limits and the rest of the pipeline
+      are on the edge and are not simulated here. The demo needs no server: <code class="text-ink-2 font-mono text-[0.78rem]">engine.wasm</code> is built from this repository's own <code class="text-ink-2 font-mono text-[0.78rem]">internal/auth</code>.
+    </p>
+  </div>
+</section>
+
+<script>
+  import { setup } from "../scripts/engine";
+  const root = document.getElementById("engine-demo");
+  if (root) setup(root);
+</script>

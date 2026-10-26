@@ -24,3 +24,9 @@ Describe capabilities only at the level supported by the current alpha. Keep
 automated test coverage, observed single-host operation, experimental code and
 roadmap items distinct (`REL-008`); a passing build alone is not deployment
 evidence.
+
+The "Ask the real engine" section runs `internal/auth` in the browser: `scripts/build-site-engine.sh`
+compiles `cmd/policywasm` to `public/engine.wasm` (about 7 MB, 2 MB compressed, loaded only when the
+section comes into view) and copies the matching `wasm_exec.js`. Both are build outputs and are not
+committed. `internal/policydemo` is the only code in between; it adds input checks, not policy, and a
+test compares its answer with `auth.NewReport`. The page states what it does not simulate.

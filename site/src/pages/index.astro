@@ -1,6 +1,7 @@
 ---
 import Base from "../layouts/Base.astro";
 import Logo from "../components/Logo.astro";
+import Engine from "../components/Engine.astro";
 import { closures, doneIds, openTasks, tracks, type State } from "../lib/tracker";
 import todo from "../../../docs/TO_IMPLEMENT.md?raw";
 import implemented from "../../../docs/IMPLEMENTED.md?raw";
@@ -77,6 +78,7 @@ const code = (s: string) => s.replace(/`([^`]+)`/g, '<code class="text-ink font-
       <a href="/" class="flex items-center gap-2.5 font-semibold tracking-tight" aria-label="Switchboard home"><Logo /> switchboard</a>
       <nav class="text-ink-2 hidden items-center gap-7 text-sm md:flex" aria-label="Sections">
         <a href="#people" class="hover:text-ink">Product</a>
+        <a href="#engine" class="hover:text-ink">Try it</a>
         <a href="#today" class="hover:text-ink">What works</a>
         <a href="#roadmap" class="hover:text-ink">Roadmap</a>
         <a href="#changelog" class="hover:text-ink">Changelog</a>
@@ -87,6 +89,7 @@ const code = (s: string) => s.replace(/`([^`]+)`/g, '<code class="text-ink font-
         <summary class="btn btn-sm cursor-pointer list-none">Menu</summary>
         <nav class="card absolute right-0 z-30 mt-2 grid min-w-48 gap-1 p-2 text-sm" aria-label="Mobile sections">
           <a class="hover:bg-raised rounded-lg px-3 py-2" href="#people">Product</a>
+          <a class="hover:bg-raised rounded-lg px-3 py-2" href="#engine">Try it</a>
           <a class="hover:bg-raised rounded-lg px-3 py-2" href="#today">What works</a>
           <a class="hover:bg-raised rounded-lg px-3 py-2" href="#roadmap">Roadmap</a>
           <a class="hover:bg-raised rounded-lg px-3 py-2" href="#changelog">Changelog</a>
@@ -109,7 +112,7 @@ const code = (s: string) => s.replace(/`([^`]+)`/g, '<code class="text-ink font-
         reason anyone can read.
       </p>
       <div class="mt-8 flex flex-wrap justify-center gap-2.5">
-        <a href="#people" class="btn btn-brand">See how it works</a>
+        <a href="#engine" class="btn btn-brand">Try the engine</a>
         <a href="#roadmap" class="btn">Roadmap</a>
         <a href={release} class="btn">Alpha release <span aria-hidden="true">↗</span></a>
       </div>
@@ -201,6 +204,8 @@ const code = (s: string) => s.replace(/`([^`]+)`/g, '<code class="text-ink font-
       </div>
       <p class="text-muted mt-4 text-[0.8rem]">"Designed" screens are where the console and the visitor pages are going (<a class="text-ink-2 underline decoration-line-2 underline-offset-4" href="#roadmap">roadmap</a>); the decision underneath them is the same one the developer sees today.</p>
     </section>
+
+    <Engine />
 
     <!-- What works -->
     <section id="today" class="border-line/60 scroll-mt-20 border-t">
