@@ -10,7 +10,9 @@ on:
   push:
     branches: [main]
     # The roadmap and changelog are read from the trackers at build time.
-    paths: [site/**, docs/TO_IMPLEMENT.md, docs/IMPLEMENTED.md, scripts/pages/**, .github/workflows/site.yml]
+    # The live demo is the access decision compiled to WebAssembly, so a change
+    # to the engine republishes the page.
+    paths: [site/**, docs/TO_IMPLEMENT.md, docs/IMPLEMENTED.md, scripts/pages/**, scripts/build-site-engine.sh, internal/auth/**, internal/config/**, internal/policycontext/**, internal/policydemo/**, cmd/policywasm/**, .github/workflows/site.yml]
   workflow_dispatch:
 
 permissions:
@@ -42,6 +44,18 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: site/package-lock.json
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      # The demo's engine, from the same code the edge runs, and the matching
+      # wasm_exec.js from this Go toolchain.
+      - name: Build the live demo engine
+        run: scripts/build-site-engine.sh
+
+      - name: Test the engine as the page runs it
+        run: node scripts/test-site-engine.mjs
 
       - name: Build
         working-directory: site
