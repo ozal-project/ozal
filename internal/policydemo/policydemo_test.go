@@ -100,3 +100,31 @@ func TestADemoRouteCannotReachAnything(t *testing.T) {
 		t.Fatalf("report = %+v, failure = %q", report.Decision, failure)
 	}
 }
+
+// The demo takes JSON typed into a web page. Whatever it is, the answer is
+// either a refusal with a reason or a report that parses; it never panics, and
+// it never answers with both.
+func FuzzExplain(f *testing.F) {
+	for _, seed := range []string{
+		``, `{`, `null`, `[]`, `{"route":{}}`,
+		`{"route":{"host":"a.dev"}}`,
+		`{"route":{"host":"a.dev","auth_required":true,"access":{"allowed_domains":["x.dev"]}},"principal":{"email":"a@x.dev","email_verified":true}}`,
+		`{"route":{"host":"a.dev","auth_required":true,"access":{"context_rule":{"when":{"session_device_bound":false},"then":"deny"}}},"principal":{"email":"a@x.dev","method":"passkey","device_bound":true}}`,
+		`{"route":{"host":"a.dev"},"principal":{"email":"a@x.dev","groups":null,"method":"oidc","device_bound":true}}`,
+		`{"route":{"host":"a.dev"},"request_method":"BREW"}`,
+	} {
+		f.Add([]byte(seed))
+	}
+	f.Fuzz(func(t *testing.T, input []byte) {
+		out, err := policydemo.Explain(input)
+		if (err == nil) == (out == nil) {
+			t.Fatalf("exactly one of an answer and an error: err=%v out=%q", err, out)
+		}
+		if err == nil {
+			var report map[string]any
+			if json.Unmarshal(out, &report) != nil || report["decision"] == nil {
+				t.Fatalf("the answer is not a report: %q", out)
+			}
+		}
+	})
+}

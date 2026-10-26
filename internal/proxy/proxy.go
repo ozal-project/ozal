@@ -221,6 +221,20 @@ type StepUpGate interface {
 	RedirectToStepUp(w http.ResponseWriter, r *http.Request, code auth.DecisionCode, methods []string)
 }
 
+// DeniedGate is implemented by a gate that can answer a signed-in person whom
+// policy refused with a page that explains and offers a way forward, instead
+// of a bare "access denied" (CTX-007). It reports whether it wrote the
+// response. Only a browser navigation gets the page: an API client keeps the
+// plain 403 it can parse.
+type DeniedGate interface {
+	ServeDenied(w http.ResponseWriter, r *http.Request, p auth.Principal, code auth.DecisionCode) bool
+}
+
+// wantsPage reports whether the request is a browser asking for a document.
+func wantsPage(r *http.Request) bool {
+	return (r.Method == http.MethodGet || r.Method == http.MethodHead) && strings.Contains(r.Header.Get("Accept"), "text/html")
+}
+
 // New builds a host-routed reverse proxy handler from the given routes.
 // It fails fast on invalid or duplicate hosts and targets. checker and gate may be nil.
 func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Option) (http.Handler, error) {
@@ -373,6 +387,9 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 					Context:    &decisionContext,
 				}
 				if !emitAccessEvent(w, req, cfg, event, rt.auditRequired) {
+					return
+				}
+				if page, ok := gate.(DeniedGate); ok && wantsPage(req) && page.ServeDenied(w, req, principal, decision.Code) {
 					return
 				}
 				http.Error(w, "access denied", http.StatusForbidden)

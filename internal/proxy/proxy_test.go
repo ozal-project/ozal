@@ -1388,3 +1388,82 @@ func TestNewPasskeyContextStepUpIsAuditedBeforeForward(t *testing.T) {
 		t.Fatalf("new-passkey context step-up event = %+v, found %t", stepUp, ok)
 	}
 }
+
+// deniedGate is a gate that can show a refused, signed-in person a page.
+type deniedGate struct {
+	fakeGate
+	served []auth.DecisionCode
+}
+
+func (g *deniedGate) ServeDenied(w http.ResponseWriter, r *http.Request, p auth.Principal, code auth.DecisionCode) bool {
+	g.served = append(g.served, code)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusForbidden)
+	_, _ = w.Write([]byte("<h1>You can't open this</h1>"))
+	return true
+}
+
+// A refused person in a browser gets the gate's page; anything that is not a
+// browser navigation keeps the plain 403 it can parse.
+func TestARefusedBrowserGetsThePageAndAnAPIClientGetsPlainText(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Error("a refused request reached the upstream") }))
+	defer upstream.Close()
+	route := []config.Route{{Host: "grafana.localhost", Target: upstream.URL, Access: &config.AccessPolicy{AllowedEmails: []string{"ana@acme.dev"}}}}
+	person := auth.Principal{Subject: "sb:1", Email: "bob@other.org", EmailVerified: true, AuthTime: time.Now()}
+	for name, tc := range map[string]struct {
+		method, accept string
+		wantPage       bool
+	}{
+		"browser navigation": {http.MethodGet, "text/html,application/xhtml+xml,*/*;q=0.8", true},
+		"browser head":       {http.MethodHead, "text/html", true},
+		"fetch for json":     {http.MethodGet, "application/json", false},
+		"curl":               {http.MethodGet, "*/*", false},
+		"no accept":          {http.MethodGet, "", false},
+		"a form post":        {http.MethodPost, "text/html", false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			gate := &deniedGate{fakeGate: fakeGate{authenticated: true, principal: person}}
+			handler, err := New(route, nil, gate)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req := httptest.NewRequest(tc.method, "http://grafana.localhost/", nil)
+			if tc.accept != "" {
+				req.Header.Set("Accept", tc.accept)
+			}
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != http.StatusForbidden {
+				t.Fatalf("status = %d, want 403", rec.Code)
+			}
+			if got := len(gate.served) == 1; got != tc.wantPage {
+				t.Fatalf("page served = %v, want %v (body %q)", got, tc.wantPage, rec.Body)
+			}
+			if !tc.wantPage && strings.TrimSpace(rec.Body.String()) != "access denied" {
+				t.Fatalf("body = %q, want the plain text", rec.Body)
+			}
+			if tc.wantPage && gate.served[0] != auth.CodeEmailNotAllowed {
+				t.Fatalf("the page was told %q", gate.served[0])
+			}
+		})
+	}
+}
+
+// A gate that cannot render a page (the OIDC gate) keeps the plain 403 even
+// for a browser.
+func TestAGateWithoutAPageKeepsThePlain403(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer upstream.Close()
+	gate := &fakeGate{authenticated: true, principal: auth.Principal{Subject: "x", Email: "bob@other.org", EmailVerified: true}}
+	handler, err := New([]config.Route{{Host: "grafana.localhost", Target: upstream.URL, Access: &config.AccessPolicy{AllowedEmails: []string{"ana@acme.dev"}}}}, nil, gate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "http://grafana.localhost/", nil)
+	req.Header.Set("Accept", "text/html")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden || strings.TrimSpace(rec.Body.String()) != "access denied" {
+		t.Fatalf("%d %q", rec.Code, rec.Body)
+	}
+}

@@ -72,3 +72,8 @@ button:disabled { opacity: 0.55; cursor: progress; }
 .devices li button:disabled { opacity: 0.35; cursor: not-allowed; }
 footer { font-size: 0.75rem; color: var(--muted); text-align: center; }
 footer a { color: inherit; }
+
+/* The refusal page (CTX-007): the way forward is the one strong button. */
+.action { display: block; width: 100%; padding: 12px; margin-top: 4px; border-radius: 10px; background: var(--accent); color: var(--accent-fg); font-weight: 700; text-align: center; text-decoration: none; }
+.reference { margin: 12px 0 0; font: 0.75rem var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.host, .email { overflow-wrap: anywhere; }
