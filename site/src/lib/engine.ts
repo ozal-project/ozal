@@ -3,25 +3,26 @@
 // access. Kept free of the DOM so it can be tested.
 
 export type Access = {
-  required_groups?: string[];
   allowed_domains?: string[];
+  allowed_emails?: string[];
   max_auth_age_minutes?: number;
   // Evaluated with the person's session: deny when the passkey is not bound.
   context_rule?: { when: { session_device_bound: boolean }; then: "deny" };
 };
 export type App = { host: string; blurb: string; access?: Access };
 
-// Four routes that show the four ways a policy can say no (or ask again).
+// Four routes that show four ways a policy answers: a domain, one person with
+// a condition on the device, a domain with a recent login, and nobody to ask.
 export const APPS: Record<string, App> = {
-  grafana: { host: "grafana.acme.dev", blurb: "Engineering only", access: { required_groups: ["engineering"] } },
-  billing: { host: "billing.acme.dev", blurb: "Finance, and only from a passkey that stays on one device", access: { required_groups: ["finance"], context_rule: { when: { session_device_bound: false }, then: "deny" } } },
-  wiki: { host: "wiki.acme.dev", blurb: "Anyone at acme.dev who signed in recently", access: { allowed_domains: ["acme.dev"], max_auth_age_minutes: 15 } },
+  grafana: { host: "grafana.acme.dev", blurb: "Only people at acme.dev", access: { allowed_domains: ["acme.dev"] } },
+  billing: { host: "billing.acme.dev", blurb: "Only Ana, and only from a passkey that stays on one device", access: { allowed_emails: ["ana@acme.dev"], context_rule: { when: { session_device_bound: false }, then: "deny" } } },
+  wiki: { host: "wiki.acme.dev", blurb: "People at acme.dev who signed in within 15 minutes", access: { allowed_domains: ["acme.dev"], max_auth_age_minutes: 15 } },
   blog: { host: "blog.acme.dev", blurb: "Public, no login" },
 };
 
-export const PEOPLE: Record<string, string> = { ana: "ana@acme.dev", bob: "bob@other.org" };
+export const PEOPLE: Record<string, string> = { ana: "ana@acme.dev", carla: "carla@acme.dev", bob: "bob@other.org" };
 
-export type Visitor = { who: string; groups: string[]; verified: boolean; method: string; bound: boolean };
+export type Visitor = { who: string; verified: boolean; method: string; bound: boolean };
 
 export function requestFor(app: string, visitor: Visitor) {
   const config = APPS[app];
@@ -33,7 +34,7 @@ export function requestFor(app: string, visitor: Visitor) {
     principal: {
       email: PEOPLE[visitor.who],
       email_verified: visitor.verified,
-      groups: visitor.groups,
+      groups: [],
       method: visitor.method,
       ...(passkey ? { device_bound: visitor.bound } : {}),
     },
@@ -52,6 +53,37 @@ export type Report = {
 // person and writes what the session must also have into the reason; the
 // proxy then sends them to log in again when the session falls short.
 const hasCondition = (reason: string) => reason.startsWith("allowed; the session must also have");
+
+// plainDecision says what happened in a sentence a visitor to the page can
+// follow. The engine's own words stay one click away, in its full answer.
+export function plainDecision(report: Report, app: string, visitor: Visitor): string {
+  const { host, access } = APPS[app];
+  const email = PEOPLE[visitor.who];
+  const d = report.decision;
+  if (!access) return `${host} is public: anyone may open it, with no login.`;
+  switch (d.code) {
+    case "authentication_required":
+      return "Nobody is signed in, so the visitor is sent to log in first.";
+    case "domain_not_allowed":
+      return `Only addresses at ${(access.allowed_domains ?? []).join(" or ")} may open ${host}; ${email} is not one of them.`;
+    case "email_not_allowed":
+      return `Only ${(access.allowed_emails ?? []).join(" or ")} may open ${host}; ${email} is not on the list.`;
+    case "email_not_verified":
+      return `The provider has not confirmed that ${email} really belongs to them, so the engine does not trust the address.`;
+    case "context_rule_denied":
+    case "context_signal_unknown":
+      return `${host} only opens from a passkey that stays on one device; this sign-in does not qualify.`;
+    case "allowed": {
+      if (!hasCondition(d.reason)) return `${email} may open ${host}.`;
+      const minutes = /last (\d+) min/.exec(d.reason)?.[1];
+      return minutes
+        ? `${email} is allowed, but only with a sign-in from the last ${minutes} minutes; an older session is sent to log in again.`
+        : `${email} is allowed, as long as the sign-in meets the app's extra requirement.`;
+    }
+    default:
+      return d.reason;
+  }
+}
 
 export function describe(report: Report): { state: "allowed" | "refused" | "again"; title: string } {
   const d = report.decision;

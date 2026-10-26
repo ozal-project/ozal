@@ -2,7 +2,7 @@
 // decision the edge runs compiled to WebAssembly, and shows what it answers for
 // a route and a visitor chosen on the page. Everything is rendered with
 // textContent: nothing typed or returned is ever parsed as HTML.
-import { describe, requestFor, stagesFor, type Report, type Visitor, APPS } from "../lib/engine";
+import { describe, plainDecision, requestFor, stagesFor, type Report, type Visitor, APPS } from "../lib/engine";
 
 declare const Go: new () => { importObject: WebAssembly.Imports; run(instance: WebAssembly.Instance): Promise<void> };
 declare global {
@@ -49,17 +49,15 @@ const $ = <T extends HTMLElement>(root: ParentNode, selector: string) => root.qu
 const text = (node: Element, value: string) => (node.textContent = value);
 
 function readVisitor(root: HTMLElement): Visitor {
-  const checked = (name: string) => Array.from(root.querySelectorAll<HTMLInputElement>(`input[name="${name}"]:checked`)).map((i) => i.value);
   return {
     who: ($(root, 'input[name="who"]:checked') as HTMLInputElement).value,
-    groups: checked("group"),
     verified: $<HTMLInputElement>(root, 'input[name="verified"]').checked,
     method: $<HTMLSelectElement>(root, 'select[name="method"]').value,
     bound: $<HTMLInputElement>(root, 'input[name="bound"]').checked,
   };
 }
 
-function render(root: HTMLElement, report: Report | { error: string }) {
+function render(root: HTMLElement, report: Report | { error: string }, app: string, visitor: Visitor) {
   const verdict = $(root, "[data-verdict]");
   const stages = $(root, "[data-stages]");
   stages.replaceChildren();
@@ -74,17 +72,17 @@ function render(root: HTMLElement, report: Report | { error: string }) {
   verdict.dataset.state = d.state;
   text($(root, "[data-verdict-title]"), d.title);
   text($(root, "[data-code]"), report.decision.code);
-  text($(root, "[data-reason]"), report.decision.reason);
+  text($(root, "[data-reason]"), plainDecision(report, app, visitor));
   for (const stage of stagesFor(report)) {
     const li = document.createElement("li");
-    li.className = "flex items-baseline gap-3 py-1.5 text-[0.84rem]";
+    li.className = "stage";
     const dot = document.createElement("span");
-    dot.className = `dot dot-${stage.state === "ok" ? "ok" : stage.state === "no" ? "no" : "off"} translate-y-[-1px]`;
+    dot.className = `lamp ${stage.state === "ok" ? "lamp-ok" : stage.state === "no" ? "lamp-no" : ""}`;
     const name = document.createElement("span");
-    name.className = "w-20 shrink-0 font-mono";
+    name.className = "stage-name";
     name.textContent = stage.name;
     const note = document.createElement("span");
-    note.className = stage.state === "skip" ? "text-muted" : "text-ink-2";
+    note.className = stage.state === "skip" ? "quiet" : "soft";
     note.textContent = stage.note;
     li.append(dot, name, note);
     stages.append(li);
@@ -101,29 +99,32 @@ function run(root: HTMLElement) {
   const config = APPS[app];
   text($(root, "[data-config]"), JSON.stringify({ host: config.host, ...(config.access ? { access: config.access } : {}) }, null, 2));
   const out = window.switchboardExplain!(JSON.stringify(requestFor(app, visitor)));
-  render(root, JSON.parse(out));
+  render(root, JSON.parse(out), app, visitor);
 }
 
 export function setup(root: HTMLElement) {
-  const status = $(root, "[data-status]");
+  // There is a status line in the recorded answer and one beside the live
+  // decision: say the same thing in both, so it is always where the eye is.
+  const statuses = [...root.querySelectorAll<HTMLElement>("[data-status]")];
+  const say = (message: string) => statuses.forEach((n) => (n.textContent = message));
   const panel = $(root, "[data-panel]");
   const fallback = $(root, "[data-fallback]");
   const start = $<HTMLButtonElement>(root, "[data-start]");
 
   async function boot() {
     start.disabled = true;
-    text(status, "Loading the engine (about 2 MB)…");
+    say("Loading the engine (about 2 MB)…");
     try {
       await ensureEngine();
     } catch (e) {
       start.disabled = false;
-      text(status, `The engine did not load (${(e as Error).message}). The example above is the same decision, pre-recorded.`);
+      say(`The engine did not load (${(e as Error).message}). The example above is the same decision, pre-recorded.`);
       return;
     }
     fallback.hidden = true;
     panel.hidden = false;
     start.hidden = true;
-    text(status, `Running in your browser · engine ${window.switchboardEngine}`);
+    say(`Running in your browser · engine ${window.switchboardEngine}`);
     run(root);
   }
 
@@ -134,7 +135,7 @@ export function setup(root: HTMLElement) {
   const saving = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData;
   if (saving) {
     start.hidden = false;
-    text(status, "Data saver is on: press the button to load the engine (about 2 MB).");
+    say("Data saver is on: press the button to load the engine (about 2 MB).");
   } else if ("IntersectionObserver" in window) {
     const watcher = new IntersectionObserver((entries) => {
       if (entries.some((e) => e.isIntersecting)) {
