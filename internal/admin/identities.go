@@ -135,6 +135,7 @@ func (h *Handler) registerIdentities() {
 	h.mux.HandleFunc("POST /_/api/admin/passkeys/begin", h.requireBearer(h.addPasskeyBegin))
 	h.mux.HandleFunc("POST /_/api/admin/passkeys/finish", h.requireBearer(h.addPasskeyFinish))
 	h.mux.HandleFunc("POST /_/api/admin/enrolments", h.requireLocal(h.issueEnrolment))
+	h.mux.HandleFunc("POST /_/api/admin/enrol/info", h.enrolInfo)
 	h.mux.HandleFunc("POST /_/api/admin/enrol/begin", h.enrolBegin)
 	h.mux.HandleFunc("POST /_/api/admin/enrol/finish", h.enrolFinish)
 	h.mux.HandleFunc("POST /_/api/admin/login/begin", h.adminLoginBegin)
@@ -300,6 +301,33 @@ func (h *Handler) failedSignIn(r *http.Request, code string, err error) {
 		reason = err.Error()
 	}
 	h.emit(events.Event{Type: events.Type("admin.sign_in_failed"), Actor: "browser", Code: code, Reason: reason})
+}
+
+// enrolInfo tells the holder of a valid link what the link is for, so the form
+// asks only what the host does not already know: an invitation fixed the email,
+// a recovery fixes the whole account. The link is the credential, and this
+// answer does not use it up.
+func (h *Handler) enrolInfo(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	var req struct {
+		Token string `json:"token"`
+	}
+	if err := decodeJSON(w, r, &req); err != nil || req.Token == "" || len(req.Token) > 128 {
+		writeError(w, http.StatusBadRequest, "this enrolment link is not valid")
+		return
+	}
+	hash := sha256.Sum256([]byte(req.Token))
+	enrolment, err := h.identities.Enrolment(r.Context(), hash[:])
+	if err != nil {
+		h.failedSignIn(r, "enrolment_invalid", err)
+		writeError(w, http.StatusUnauthorized, "this enrolment link expired or was already used; ask for a new one")
+		return
+	}
+	info := map[string]string{"kind": enrolment.Kind}
+	if enrolment.Kind != enrolBootstrap {
+		info["email"], info["name"] = enrolment.Account.Email, enrolment.Account.Name
+	}
+	writeJSON(w, http.StatusOK, info)
 }
 
 func (h *Handler) enrolBegin(w http.ResponseWriter, r *http.Request) {

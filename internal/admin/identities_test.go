@@ -538,3 +538,34 @@ func TestPasskeyAddedAfterTheSessionWasRevokedIsRefused(t *testing.T) {
 		t.Fatalf("late add = %d %s, want 401", rec.Code, rec.Body)
 	}
 }
+
+func TestEnrolInfoTellsTheFormWhatTheLinkAlreadyFixes(t *testing.T) {
+	h, _ := identityHandler(t)
+	first, _ := hostEnrolment(t, h, "bootstrap", "")
+	info := func(token string) (int, map[string]any) {
+		rec := browser(h, "localhost:9091", "/_/api/admin/enrol/info", "", map[string]string{"token": token})
+		out := map[string]any{}
+		_ = json.Unmarshal(rec.Body.Bytes(), &out)
+		return rec.Code, out
+	}
+	if code, got := info(first); code != http.StatusOK || got["kind"] != "bootstrap" || got["email"] != nil {
+		t.Fatalf("bootstrap info = %d %v", code, got)
+	}
+	owner := decode(t, enrol(t, h, newAuthenticator(t), first, "Octavio", "octavio@example.com"))["token"].(string)
+	invitation, _ := invite(t, h, owner, "ana@example.com", "people")
+	if code, got := info(invitation); code != http.StatusOK || got["kind"] != "invite" || got["email"] != "ana@example.com" {
+		t.Fatalf("invite info = %d %v", code, got)
+	}
+	enrol(t, h, newAuthenticator(t), invitation, "Ana", "ana@example.com")
+	recovery, _ := hostEnrolment(t, h, "recover", "ana@example.com")
+	if code, got := info(recovery); code != http.StatusOK || got["kind"] != "recover" || got["email"] != "ana@example.com" {
+		t.Fatalf("recover info = %d %v", code, got)
+	}
+	// Asking does not use the link up, and an unknown one learns nothing.
+	if code, _ := info(recovery); code != http.StatusOK {
+		t.Fatal("info consumed the link")
+	}
+	if code, got := info("nope"); code != http.StatusUnauthorized || got["email"] != nil {
+		t.Fatalf("unknown token = %d %v", code, got)
+	}
+}
