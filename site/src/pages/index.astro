@@ -7,34 +7,23 @@ import Engine from "../components/Engine.astro";
 import EdgeMap from "../components/EdgeMap.astro";
 import { rows } from "../lib/board";
 import sample from "../data/access-sample.json";
-import { doneIds, openTasks, type State } from "../lib/tracker";
-import todo from "../../../docs/TO_IMPLEMENT.md?raw";
-import implemented from "../../../docs/IMPLEMENTED.md?raw";
 
 const repo = "https://github.com/octaviosantacruz/switchboard";
 const release = `${repo}/releases/tag/v0.1.0-alpha.1`;
 // Keep repository links hidden while GitHub reports the repository as private.
 const sourcePublic = false;
 
-// Roadmap and changelog come from docs/TO_IMPLEMENT.md and docs/IMPLEMENTED.md.
-const open = openTasks(todo);
-const done = doneIds(open, implemented);
-const count = (s: State) => open.filter((t) => t.state === s).length;
-const stats = [
-  { n: done.size, label: "tasks done" },
-  { n: count("progress"), label: "in progress" },
-  { n: count("planned") + count("ready"), label: "planned" },
-];
 const board = rows(sample);
 
+// "In use" runs on the author's server; "Tested" is covered by automated
+// tests only; "Unreleased" is on main but not in alpha.1.
 const works = [
-  { t: "Routing by hostname", d: "Routes HTTP services by hostname, with health checks and one config for localhost or a real domain.", e: "Automated tests · Linux edge dogfooding" },
-  { t: "Automatic HTTPS", d: "ACME TLS-ALPN-01 or Cloudflare DNS-01, with a single-level wildcard and background renewal.", e: "A production certificate on the author's server · the DNS adapter is Cloudflare-specific" },
-  { t: "Login per route", d: "Signs people in with a passkey or an external OIDC provider, then checks their verified email and its domain.", e: "Automated tests · passkeys are on main, not in alpha.1" },
-  { t: "Explainable decisions", d: "The same decision, with a stable code and a reason, in the CLI, the console and this page.", e: "Automated tests" },
-  { t: "Static sites", d: "Immutable builds, a switch for the live one, rollback, and deploys from GitHub Actions with no stored secret.", e: "Observed on the author's server · single host" },
-  { t: "A console for operators", d: "What needs attention, what changed and who got in, in plain words. Loopback-only: never expose it publicly.", e: "On main · recorded demo workspace" },
-  { t: "Secrets by reference", d: "env: and file: references resolved at runtime; nothing resolved is written back.", e: "Automated tests · one binary, optional embedded SQLite" },
+  { t: "Routing by hostname", d: "Any HTTP app, with health checks.", e: "In use" },
+  { t: "Automatic HTTPS", d: "Certificates issued and renewed for you.", e: "In use" },
+  { t: "Sign-in per app", d: "Passkeys or your OIDC provider.", e: "Tested" },
+  { t: "Explainable decisions", d: "A code and a reason for every answer.", e: "Tested" },
+  { t: "Static sites", d: "Deploys from GitHub Actions, one-step rollback.", e: "In use" },
+  { t: "Operator console", d: "Who got in and what changed, in plain words.", e: "Unreleased" },
 ];
 
 const pipeline = [
@@ -57,27 +46,38 @@ const steps = [
   { short: "The log", t: "The log explains both", d: "Every decision with its reason: why Ana got in and why Bob did not.", img: "access-log", w: 2560, h: 1600, alt: "The access log listing allowed and refused requests with their reasons." },
 ];
 ---
-<Base title="Switchboard — your apps, your access rules" description="Control who can open your apps, with a reason for every decision. A self-hosted access gateway in one Go binary. Try the real policy engine in your browser.">
+<Base title="Switchboard — the front door for your self-hosted apps" description="Put your internal apps on the internet without a VPN. Switchboard signs people in, checks your rules and only then lets them reach the app. Self-hosted, one Go binary.">
   <Header here="home" />
 
   <main id="main-content" tabindex="-1">
     <section class="hero frame" aria-labelledby="hero-title">
       <div class="hero-copy">
-        <h1 id="hero-title">Your apps.<br />Your access rules.</h1>
-        <p class="hero-description">Control who can open your apps, with a reason for every decision. Self-hosted in one Go binary.</p>
+        <h1 id="hero-title">The front door for your self&#8209;hosted apps.</h1>
+        <p class="hero-description">Put Grafana, a wiki or any internal tool on the internet. Switchboard signs people in, checks your rules, and only then lets them reach the app. No VPN, one Go binary.</p>
         <div class="hero-actions">
-          <a class="button button-brand" href="#engine">Try an access decision <span aria-hidden="true">↗</span></a>
-          <a class="text-link" href="#how">See how it decides <span aria-hidden="true">↓</span></a>
+          <a class="button button-brand" href="#how">See how it works <span aria-hidden="true">↓</span></a>
+          <a class="text-link" href="#engine">Try an access decision <span aria-hidden="true">↓</span></a>
         </div>
-        <p class="hero-note">Early alpha. Running on the author's server.<br />The demo uses the same Go policy code as the gateway.</p>
+        <p class="hero-note">Early alpha, running on the author's server. If you know Cloudflare Access or Pomerium: the same idea, on a server you own.</p>
       </div>
-      <Engine />
+      <dl class="compare" aria-label="Before and after Switchboard">
+        <div class="compare-before">
+          <dt>Without it</dt>
+          <dd><code>grafana.yourdomain.com</code> answers anyone who finds it. Every app has its own login, or none.</dd>
+        </div>
+        <div class="compare-after">
+          <dt>With Switchboard</dt>
+          <dd>People sign in once, with a passkey or the login you already use (Google, Microsoft, any OIDC provider).</dd>
+          <dd>Your rules decide: "only <code>@acme.dev</code> emails open Grafana", "only Ana opens Billing".</dd>
+          <dd>Every attempt is logged with its reason, so you can see who got in and why someone did not.</dd>
+        </div>
+      </dl>
     </section>
 
     <section id="how" class="section frame" aria-labelledby="how-title">
       <div class="section-intro">
-        <h2 id="how-title">One place decides.</h2>
-        <p>Every request to your apps passes through Switchboard first. It checks who is asking, decides with your rules, and either lets them through, asks them to sign in, or refuses with a reason.</p>
+        <h2 id="how-title">Everyone goes through one door.</h2>
+        <p>Your apps stop facing the internet directly. Every request reaches Switchboard first, which checks who is asking and either lets them through, asks them to sign in, or refuses with a reason. The apps themselves do not change.</p>
       </div>
       <EdgeMap />
       <div class="how">
@@ -96,6 +96,14 @@ code      domain_not_allowed
 reason    account's email domain
           is not on the allowed list</code></pre><p class="small quiet">Any decision can be traced from the CLI, the console's log or the live demo, with the same code.</p></div>
       </div>
+    </section>
+
+    <section class="try section frame" aria-labelledby="try-title">
+      <div class="try-copy">
+        <h2 id="try-title">Ask it a question.</h2>
+        <p>Pick an app and a person and read the answer. This is the real access decision, the same Go code as the gateway, compiled to WebAssembly and running in your browser. Nothing is sent anywhere.</p>
+      </div>
+      <Engine />
     </section>
 
     <section id="tour" class="section frame" aria-labelledby="tour-title">
@@ -130,23 +138,22 @@ reason    account's email domain
     </section>
 
     <section id="today" class="section frame" aria-labelledby="today-title">
-      <div class="section-intro"><h2 id="today-title">What works today.</h2><p>Automated tests and limited use by one operator. The evidence and release boundaries are stated with each capability.</p></div>
-      <div class="capabilities">{works.map((w) => (
-        <article><h3>{w.t}</h3><p>{w.d}</p><p class="small quiet">{w.e}</p></article>
-      ))}</div>
-      <p class="scope-note"><strong>Still experimental.</strong> Outbound tunnels, rate limiting and Telegram alerts exist in the code and sit outside the alpha's promise. Account recovery requires the operator's local CLI.</p>
+      <div class="section-intro"><h2 id="today-title">What works today.</h2><p>An early alpha, used by one operator.</p></div>
+      <ul class="works">{works.map((w) => (
+        <li><h3>{w.t}</h3><p>{w.d}</p><span class={`works-tag works-${w.e.toLowerCase().replace(" ", "-")}`}>{w.e}</span></li>
+      ))}</ul>
+      <p class="scope-note small quiet">Experimental, outside the alpha: tunnels, rate limiting, Telegram alerts.</p>
     </section>
 
     <section id="roadmap" class="section frame" aria-labelledby="roadmap-title">
-      <div class="section-intro"><h2 id="roadmap-title">Where it goes next.</h2><p>A year-long project, October 2026 to September 2027. The full roadmap, module by module, is read from the project's trackers.</p></div>
-      <dl class="progress-counts">{stats.map((s) => <div><dt>{s.label}</dt><dd>{s.n}</dd></div>)}</dl>
-      <ol class="release-plan">{trains.map((t) => <li class={t.now ? "current" : ""}><h3>{t.v} · {t.n}</h3><p class="small quiet">{t.now ? "Current · " : "Planned · "}{t.when}</p><p>{t.line}</p></li>)}</ol>
-      <p class="roadmap-note"><a class="text-link" href="/roadmap/">Read the full roadmap and changelog <span aria-hidden="true">→</span></a></p>
+      <div class="section-intro"><h2 id="roadmap-title">Where it goes next.</h2><p>Four releases, October 2026 to September 2027.</p></div>
+      <ol class="timeline">{trains.map((t) => <li class={t.now ? "current" : ""} aria-current={t.now ? "step" : undefined}><p class="timeline-when small">{t.now ? "Now · " : ""}{t.when}</p><h3>{t.v} {t.n}</h3><p>{t.line}</p></li>)}</ol>
+      <p class="roadmap-note"><a class="text-link" href="/roadmap/">Full roadmap and changelog <span aria-hidden="true">→</span></a></p>
     </section>
 
     <section id="start" class="availability frame section" aria-labelledby="start-title">
-      <div><h2 id="start-title">Explore the alpha.</h2><p>{sourcePublic ? "Downloads for Linux, macOS and Windows, with a quickstart to route your first app." : "The repository and alpha downloads are currently private. You can try the policy engine here, walk through the five screens or visit the maintainer's site to get in touch."}</p></div>
-      <div class="availability-actions">{sourcePublic ? <a class="button button-brand" href={release}>Download alpha.1 <span aria-hidden="true">↗</span></a> : <a class="button button-brand" href="https://octaviosantacruz.com">Visit the maintainer's site <span aria-hidden="true">↗</span></a>}<a class="text-link" href="#engine">Back to the live demo ↑</a></div>
+      <div><h2 id="start-title">Explore the alpha.</h2><p>{sourcePublic ? "Downloads for Linux, macOS and Windows, with a quickstart to route your first app." : "The code and downloads are private for now."}</p></div>
+      <div class="availability-actions">{sourcePublic ? <a class="button button-brand" href={release}>Download alpha.1 <span aria-hidden="true">↗</span></a> : <a class="button button-brand" href="https://octaviosantacruz.com">Visit the maintainer's site <span aria-hidden="true">↗</span></a>}<a class="text-link" href="#how">Back to how it works ↑</a></div>
     </section>
   </main>
   <Footer />

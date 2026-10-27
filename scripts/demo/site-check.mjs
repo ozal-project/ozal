@@ -32,7 +32,6 @@ try {
     await page.keyboard.press("Enter");
     assert.equal(await page.evaluate(() => document.activeElement.id), "main-content");
     await page.evaluate(() => scrollTo(0, 0));
-    await live(page);
     const geometry = await page.evaluate(() => ({
       overflow: document.documentElement.scrollWidth - innerWidth,
       titleOverflow: document.querySelector("h1").scrollWidth - document.querySelector("h1").clientWidth,
@@ -49,6 +48,8 @@ try {
     assert.ok(geometry.navigation, `${width}px navigation must remain visible and fit`);
     assert.deepEqual(geometry.brokenAnchors, []);
     assert.equal(geometry.privateDownloads, 0, "private releases must not be advertised as a public download");
+    await page.locator("#engine").scrollIntoViewIfNeeded();
+    await live(page);
     await decision(page, "allowed");
     await choose(page, "who", "bob"); await decision(page, "domain_not_allowed");
     await choose(page, "who", "ana"); await decision(page, "allowed");
@@ -104,6 +105,7 @@ try {
   const retry = await failing.newPage(); checkPage(retry);
   await retry.route("**/engine.wasm", (route) => route.abort());
   await retry.goto(url);
+  await retry.locator("#engine").scrollIntoViewIfNeeded();
   await retry.getByRole("button", { name: "Retry the engine" }).waitFor();
   assert.equal(await retry.locator("[data-fallback]").isVisible(), true);
   await retry.unroute("**/engine.wasm");

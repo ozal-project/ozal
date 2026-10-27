@@ -33,11 +33,11 @@ const people = [["none", "Not signed in"], ["ana", "Ana", "ana@acme.dev"], ["car
         <p class="small">Decision code: <code data-code></code></p>
         <details class="decision-stages"><summary>How this answer was reached</summary><ul data-stages></ul></details>
       </div>
-      <details class="engine-technical"><summary>Policy and engine output</summary><div><h3>Route config</h3><pre data-config class="code"></pre><h3>Full engine answer</h3><pre data-raw class="code"></pre></div></details>
+      <details class="engine-technical"><summary>Show the policy and raw answer</summary><div><h3>Route config</h3><pre data-config class="code" tabindex="0"></pre><h3>Raw answer</h3><pre data-raw class="code" tabindex="0"></pre></div></details>
       <p class="engine-status small quiet" data-status></p>
     </div>
   </div>
-  <p class="engine-scope">Real Go authorization code, compiled to WebAssembly. Demo identities only. Sign-in, TLS and rate limits run on the server and are outside this demo.</p>
+  <p class="engine-scope">Demo identities only. Sign-in, TLS and rate limits run on the server, not here.</p>
 </section>
 <script>
   import { setup } from "../scripts/engine";

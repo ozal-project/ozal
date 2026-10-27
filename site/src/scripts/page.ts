@@ -8,5 +8,5 @@ if (!matchMedia("(prefers-reduced-motion: reduce)").matches && "IntersectionObse
       observer.unobserve(entry.target);
     }
   }, { threshold: 0.1 });
-  document.querySelectorAll(".hero-copy > *, .section-intro > *, .capabilities article, .map, .how > *").forEach((node) => observer.observe(node));
+  document.querySelectorAll(".hero-copy > *, .compare > div, .try-copy > *, .section-intro > *, .works li, .timeline li, .map, .how > *").forEach((node) => observer.observe(node));
 }
