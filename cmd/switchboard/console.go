@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 )
@@ -24,7 +25,7 @@ func runConsole(ctx context.Context, args []string, out io.Writer) error {
 	tools := fs.String("tools", "", "comma-separated tools this login may change (default: all): applications, connectors, people, publishing, sites")
 	email := fs.String("email", "", "recover: email of the administrator who lost their passkeys")
 	id := fs.String("id", "", "session id to revoke")
-	origin := fs.String("url", "http://127.0.0.1:9090", "private browser URL (use the locally forwarded port for a remote edge)")
+	origin := fs.String("url", "", "private browser URL (default: the admin.listen port of the config; use the locally forwarded port when it differs)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -37,6 +38,9 @@ func runConsole(ctx context.Context, args []string, out io.Writer) error {
 	}
 	if !strings.HasPrefix(*af.target, "unix:") && c.base != "http://localhost" {
 		return errors.New("console credentials are issued on the host admin Unix socket only")
+	}
+	if *origin == "" {
+		*origin = forwardedURL(af.adminListen())
 	}
 	switch args[0] {
 	case "enrol", "recover":
@@ -62,6 +66,7 @@ func runConsole(ctx context.Context, args []string, out io.Writer) error {
 			what = "replace the passkeys of " + *email + " (the old ones stop working)"
 		}
 		fmt.Fprintf(out, "Open once within ten minutes in your browser to %s. Passkeys need the name localhost, so the link uses it:\n%s/overview#enrol=%s\n", what, passkeyOrigin(base), url.QueryEscape(answer.Token))
+		fmt.Fprint(out, sshHint(os.Getenv("SSH_CONNECTION"), invokingUser(), base))
 	case "login":
 		if strings.TrimSpace(*name) == "" {
 			return errors.New("login needs -name OPERATOR")
@@ -78,6 +83,7 @@ func runConsole(ctx context.Context, args []string, out io.Writer) error {
 			return err
 		}
 		fmt.Fprintf(out, "Open once within five minutes on the private console (do not share this link):\n%s/overview#operator=%s\n", base, url.QueryEscape(answer.Token))
+		fmt.Fprint(out, sshHint(os.Getenv("SSH_CONNECTION"), invokingUser(), base))
 	case "list":
 		var answer struct {
 			Sessions []struct {
@@ -132,4 +138,51 @@ func passkeyOrigin(base string) string {
 		}
 	}
 	return u.String()
+}
+
+// forwardedURL is the browser URL for an admin.listen value such as
+// "127.0.0.1:9091"; an unset or unreadable value keeps the historic port.
+func forwardedURL(listen string) string {
+	_, port, err := net.SplitHostPort(listen)
+	if err != nil || port == "" {
+		return "http://127.0.0.1:9090"
+	}
+	return "http://127.0.0.1:" + port
+}
+
+// invokingUser is the person at the keyboard, not root under sudo.
+func invokingUser() string {
+	if u := os.Getenv("SUDO_USER"); u != "" {
+		return u
+	}
+	return os.Getenv("USER")
+}
+
+// sshHint tells someone who is logged into the host over SSH how to reach the
+// admin console from their own computer: the console only listens on the
+// host's loopback, so their browser needs a forwarded port. It is empty when
+// the command is not running in an SSH session.
+func sshHint(sshConnection, user, base string) string {
+	fields := strings.Fields(sshConnection)
+	u, err := url.Parse(base)
+	if len(fields) != 4 || err != nil || u.Port() == "" || user == "" {
+		return ""
+	}
+	return fmt.Sprintf("From your computer, forward the port first, then open the link:\n  ssh -N -L %[1]s:127.0.0.1:%[1]s %[2]s@%[3]s\n", u.Port(), user, fields[2])
+}
+
+// enrolCommand is the command to run on this host to create the first
+// administrator: short when `switchboard` on the PATH is this very binary and
+// the config is at the installed path, explicit otherwise. lookPath resolves
+// a command name to the file it runs ("" when absent).
+func enrolCommand(exe, configPath string, lookPath func(string) string) string {
+	name := exe
+	if found := lookPath("switchboard"); found != "" && found == exe {
+		name = "switchboard"
+	}
+	command := "sudo " + name + " console enrol"
+	if configPath != installedConfig {
+		command += " -config " + configPath
+	}
+	return command
 }

@@ -230,7 +230,7 @@ func TestApplyWithoutTerminalIsNotReportedAsSuccess(t *testing.T) {
 func runRoot(t *testing.T, dir, sum, link string, fakeExit string) (string, int) {
 	t.Helper()
 	fake := dir + "/sw"
-	cmd := exec.Command("sh", "-c", RootScript, "upgrade", fake, sum, link, dir+"/real", "-unit", "u")
+	cmd := exec.Command("sh", "-c", RootScript, "upgrade", fake, sum, link, dir+"/real", "/etc/x/routing.json", "-unit", "u")
 	cmd.Env = append(cmd.Environ(), "TMPROOT="+dir, "FAKE_EXIT="+fakeExit)
 	out, err := cmd.CombinedOutput()
 	code := 0
@@ -257,8 +257,17 @@ func TestRootScriptChecksHashRunsCopyAndLinks(t *testing.T) {
 	if code != 0 || !strings.Contains(out, "fake upgrade upgrade -sha256 "+sum+" -unit u") {
 		t.Fatalf("expected a run: %d %s", code, out)
 	}
-	if target, err := os.Readlink(dir + "/link"); err != nil || target != dir+"/real" {
-		t.Fatalf("command link not created: %v %q", err, target)
+	wrapper, err := os.ReadFile(dir + "/link")
+	if err != nil || !strings.Contains(string(wrapper), "managed by sbctl") ||
+		!strings.Contains(string(wrapper), "/etc/x/routing.json") || !strings.Contains(string(wrapper), "exec "+dir+"/real") {
+		t.Fatalf("wrapper not written: %v %q", err, wrapper)
+	}
+	if err := os.WriteFile(dir+"/foreign", []byte("mine"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runRoot(t, dir, sum, dir+"/foreign", "0")
+	if got, _ := os.ReadFile(dir + "/foreign"); string(got) != "mine" {
+		t.Fatal("a file sbctl did not write was replaced")
 	}
 	os.Remove(dir + "/link")
 	if _, code := runRoot(t, dir, sum, dir+"/link", "3"); code != 3 {

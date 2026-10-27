@@ -176,6 +176,13 @@ func (h *Handler) relyingParty(r *http.Request) (*webauthn.WebAuthn, error) {
 	})
 }
 
+// WithEnrolCommand sets the exact command that creates the first administrator
+// on this host, so the console shows one that works here instead of a generic
+// guess. It is shown only while nobody is enrolled.
+func WithEnrolCommand(command string) Option {
+	return func(h *Handler) { h.enrolCommand = command }
+}
+
 func (h *Handler) adminState(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	enrolled, err := h.identities.Enrolled(r.Context())
@@ -183,7 +190,11 @@ func (h *Handler) adminState(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "administrator directory unavailable")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"enrolled": enrolled})
+	state := map[string]any{"enrolled": enrolled}
+	if !enrolled && h.enrolCommand != "" {
+		state["enrol_command"] = h.enrolCommand
+	}
+	writeJSON(w, http.StatusOK, state)
 }
 
 // issueEnrolment is the host's one door: a printed link, valid ten minutes.

@@ -44,6 +44,15 @@ func addAdminFlags(fs *flag.FlagSet) adminFlags {
 	}
 }
 
+// adminListen is admin.listen of the resolved config, or "" when unreadable.
+func (f adminFlags) adminListen() string {
+	cfg, err := config.Load(resolveConfigPath(*f.config))
+	if err != nil {
+		return ""
+	}
+	return cfg.Admin.Listen
+}
+
 func (f adminFlags) client() (*adminClient, error) {
 	target := *f.target
 	if target == "" {
@@ -126,12 +135,15 @@ func emitOffline(sink events.Sink, e events.Event) {
 const installedConfig = "/etc/switchboard/config.json"
 
 // resolveConfigPath lets an installed host run `switchboard console enrol` from
-// any directory: the untouched default ./config.json falls back to the
-// installed config when there is none beside the shell. An explicit -config
-// is always used as given.
+// any directory. An explicit -config is always used as given; otherwise
+// $SWITCHBOARD_CONFIG (set by the command wrapper of a host whose config is not
+// at the standard path), then ./config.json, then the installed config.
 func resolveConfigPath(given string) string {
 	if given != "config.json" {
 		return given
+	}
+	if env := os.Getenv("SWITCHBOARD_CONFIG"); env != "" {
+		return env
 	}
 	if _, err := os.Stat(given); err == nil {
 		return given

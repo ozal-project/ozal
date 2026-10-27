@@ -17,9 +17,11 @@
   let error = $state("");
   // null: the edge keeps no administrator directory; false: nobody enrolled yet.
   let enrolled = $state<boolean | null>(null);
+  // The host tells us the command that works on it; this is only the fallback.
+  let enrolCommand = $state("sudo switchboard console enrol");
   let waiting = $state(false);
   const onLocalhost = location.hostname === "localhost";
-  onMount(() => { void adminState(AbortSignal.timeout(10_000)).then((state) => { enrolled = state ? state.enrolled : null; }).catch(() => {}); });
+  onMount(() => { void adminState(AbortSignal.timeout(10_000)).then((state) => { enrolled = state ? state.enrolled : null; if (state?.enrol_command) enrolCommand = state.enrol_command; }).catch(() => {}); });
 
   async function passkey() {
     if (waiting) return;
@@ -56,8 +58,8 @@
   <Button class="w-full" onclick={passkey} disabled={waiting || !onLocalhost}>{waiting ? "Waiting for your device…" : "Sign in with your passkey"}</Button>
 {:else if enrolled === false}
   <p class="text-sm font-medium">No administrator exists yet.</p>
-  <p class="text-muted-foreground mt-1 mb-3 text-sm">On the host, run this once. It prints a link that opens here and asks for your name and email, then creates your passkey.</p>
-  <CopyCommand command="switchboard console enrol" label="Copy enrol command" />
+  <p class="text-muted-foreground mt-1 mb-3 text-sm">On the host, run this once. It prints a link, and the SSH command to forward the port if you are connected remotely. The link opens here and asks for your name and email, then creates your passkey.</p>
+  <CopyCommand command={enrolCommand} label="Copy enrol command" />
 {/if}
 {#if enrolled !== null && !onLocalhost}
   <p class="border-warning/40 bg-warning/[0.06] mt-3 rounded-md border px-3 py-2 text-xs" role="status">Passkeys need this console opened as <span class="font-mono">localhost</span> (for example http://localhost:{location.port || "9091"}), not by IP address.</p>

@@ -79,7 +79,7 @@ export async function enrolWithPasskey(token: string, name: string, email: strin
   return api<AdminSession>("/_/api/admin/enrol/finish", credentialJSON(credential), begun.ceremony);
 }
 
-export async function adminState(signal?: AbortSignal): Promise<{ enrolled: boolean } | null> {
+export async function adminState(signal?: AbortSignal): Promise<{ enrolled: boolean; enrol_command?: string } | null> {
   const res = await fetch("/_/api/admin/state", { cache: "no-store", signal });
   if (!res.ok) return null;
   return res.json();

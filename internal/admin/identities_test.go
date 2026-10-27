@@ -16,7 +16,7 @@ import (
 
 const consoleOrigin = "http://localhost:9091"
 
-func identityHandler(t *testing.T) (*Handler, *events.Recorder) {
+func identityHandler(t *testing.T, extra ...Option) (*Handler, *events.Recorder) {
 	t.Helper()
 	ctx := context.Background()
 	db, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "state.db"))
@@ -32,7 +32,7 @@ func identityHandler(t *testing.T) (*Handler, *events.Recorder) {
 		t.Fatal(err)
 	}
 	recorder := &events.Recorder{}
-	return New(&fakeManager{cfg: config.Config{Admin: config.Admin{Token: "secret"}}}, recorder, WithIdentities(sqlite.NewAdmins(db))), recorder
+	return New(&fakeManager{cfg: config.Config{Admin: config.Admin{Token: "secret"}}}, recorder, append([]Option{WithIdentities(sqlite.NewAdmins(db))}, extra...)...), recorder
 }
 
 // browser sends a same-origin JSON request the way the console does.
@@ -339,5 +339,21 @@ func TestDisablingAnAdministratorEndsTheirSessionAndGuardsTheLastManager(t *test
 	}
 	if rec := api(h, http.MethodPost, "/_/api/admins/"+anaID+"/enable", owner, nil); rec.Code != http.StatusOK {
 		t.Fatalf("enable = %d", rec.Code)
+	}
+}
+
+func TestStateShowsTheHostCommandOnlyBeforeTheFirstAdministrator(t *testing.T) {
+	h, _ := identityHandler(t, WithEnrolCommand("sudo switchboard console enrol -config /etc/x/routing.json"))
+	before := decode(t, requestWithHost(h, "localhost:9091", http.MethodGet, "/_/api/admin/state", "", ""))
+	if before["enrol_command"] != "sudo switchboard console enrol -config /etc/x/routing.json" {
+		t.Fatalf("command missing before enrolment: %v", before)
+	}
+	token, _ := hostEnrolment(t, h, "bootstrap", "")
+	if rec := enrol(t, h, newAuthenticator(t), token, "Octavio", "octavio@example.com"); rec.Code != http.StatusOK {
+		t.Fatalf("enrol = %d", rec.Code)
+	}
+	after := decode(t, requestWithHost(h, "localhost:9091", http.MethodGet, "/_/api/admin/state", "", ""))
+	if _, leaked := after["enrol_command"]; leaked {
+		t.Fatalf("host paths still shown after enrolment: %v", after)
 	}
 }

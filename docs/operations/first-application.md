@@ -53,7 +53,8 @@ El host abre la puerta una sola vez; después cada administrador entra con su
 propio passkey y no hace falta ningún comando en el host.
 
 ```sh
-sudo switchboard console enrol            # instalación con el servicio
+sudo switchboard console enrol            # instalación con el servicio; por SSH imprime también el `ssh -N -L` para abrir el enlace
+SWITCHBOARD_CONFIG=/ruta/config.json switchboard console enrol   # config fuera de /etc/switchboard
 switchboard console enrol -config /ruta/my-edge/config.json   # arranque manual
 ```
 

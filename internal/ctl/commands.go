@@ -22,12 +22,12 @@ const (
 // its own directory and checks its hash there; only that copy runs, so the SSH
 // user's files never execute as root unchecked. SIGHUP is ignored so a dropped
 // session cannot stop a cutover halfway. Arguments: staged path, sha256, the
-// command link ("-" for none), the installed binary path, then the flags for `switchboard upgrade`.
+// command link ("-" for none), the installed binary path, the config path, then the flags for `switchboard upgrade`.
 const RootScript = `
 set -u
 trap '' HUP
-STAGED=$1 SHA=$2 LINK=$3 BINARY=$4
-shift 4
+STAGED=$1 SHA=$2 LINK=$3 BINARY=$4 CONFIG=$5
+shift 5
 T=$(mktemp -d "${TMPROOT:-/root}/sbupgrade.XXXXXX") || exit 2
 cp "$STAGED" "$T/switchboard" && chmod 755 "$T/switchboard" || { rm -rf "$T"; exit 2; }
 if [ "$(sha256sum "$T/switchboard" | cut -d' ' -f1)" != "$SHA" ]; then
@@ -38,8 +38,15 @@ fi
 "$T/switchboard" upgrade -sha256 "$SHA" "$@"
 code=$?
 rm -rf "$T"
-if [ "$code" -eq 0 ] && [ "$LINK" != "-" ] && [ ! -e "$LINK" ]; then
-  ln -s "$BINARY" "$LINK" && echo "    command link $LINK -> $BINARY"
+if [ "$code" -eq 0 ] && [ "$LINK" != "-" ]; then
+  # The command is a tiny wrapper that knows this host's config, so
+  # "sudo switchboard console enrol" works from any directory. A file this
+  # tool did not write is never replaced.
+  if [ ! -e "$LINK" ] || [ -L "$LINK" ] || grep -q '^# managed by sbctl' "$LINK" 2>/dev/null; then
+    W=$(mktemp "$(dirname "$LINK")/.switchboard.XXXXXX") &&
+    printf '#!/bin/sh\n# managed by sbctl\nSWITCHBOARD_CONFIG=${SWITCHBOARD_CONFIG:-%s}\nexport SWITCHBOARD_CONFIG\nexec %s "$@"\n' "$CONFIG" "$BINARY" > "$W" &&
+    chmod 755 "$W" && mv -f "$W" "$LINK" && echo "    command $LINK runs $BINARY with $CONFIG"
+  fi
 fi
 exit $code
 `
@@ -56,7 +63,7 @@ func UpgradeCommand(e Edge, staged, sha string) string {
 		link = e.CommandLink
 	}
 	args := []string{
-		staged, sha, link, e.Binary,
+		staged, sha, link, e.Binary, e.Config,
 		"-unit", e.Unit, "-binary", e.Binary, "-config", e.Config,
 		"-db", e.StateDB, "-user", e.ServiceUser, "-keep", strconv.Itoa(keep),
 	}

@@ -34,6 +34,7 @@ type routeManager interface {
 
 // Handler serves the administrative dashboard and authenticated mutations.
 type Handler struct {
+	enrolCommand           string
 	github                 repositoryReader
 	operators              *operatorSessions
 	manager                routeManager

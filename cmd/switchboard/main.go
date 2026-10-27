@@ -13,7 +13,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
@@ -196,6 +198,7 @@ func main() {
 		adminOpts = append(adminOpts, admin.WithPeople(identity))
 		// UI-007: administrators have their own passkeys, apart from users.
 		adminOpts = append(adminOpts, admin.WithIdentities(sqlite.NewAdmins(db)))
+		adminOpts = append(adminOpts, admin.WithEnrolCommand(hostEnrolCommand(*configPath)))
 		// CLI-001: the connector registry is managed through the admin API
 		// (changes on the unix socket only); the edge revalidates live
 		// attachments against the same table.
@@ -716,4 +719,28 @@ func runCertificateManager(ctx context.Context, manager certificateWorker, relea
 	go func() { defer close(done); manager.Run(workerCtx) }()
 	var once sync.Once
 	return func() { once.Do(func() { cancel(); <-done; release() }) }
+}
+
+// hostEnrolCommand describes how to enrol on this host from its own paths.
+func hostEnrolCommand(configPath string) string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	if abs, err := filepath.Abs(configPath); err == nil {
+		configPath = abs
+	}
+	return enrolCommand(exe, configPath, func(name string) string {
+		found, err := exec.LookPath(name)
+		if err != nil {
+			return ""
+		}
+		if resolved, err := filepath.EvalSymlinks(found); err == nil {
+			return resolved
+		}
+		return found
+	})
 }
