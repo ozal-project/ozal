@@ -60,7 +60,7 @@
     <Button variant="outline" disabled={busy} onclick={load}>{busy ? "Reading…" : "Read projects & GitHub"}</Button>
   </div>
 {:else}
-<PageHeader eyebrow="Build" title="CI projects" intro="Choose which repository may publish each static site. Publishing and visitor access are separate permissions.">
+<PageHeader title="CI projects" intro="Choose which repository may publish each static site. Publishing and visitor access are separate permissions.">
   <Button variant="outline" disabled={busy} onclick={load}>{busy ? "Reading…" : "Read projects & GitHub"}</Button>
 </PageHeader>
 {/if}

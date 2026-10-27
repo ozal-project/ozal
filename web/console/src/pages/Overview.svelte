@@ -15,6 +15,7 @@
   import { navigate } from "$lib/router.svelte";
   import TriangleAlertIcon from "@lucide/svelte/icons/triangle-alert";
   import CheckIcon from "@lucide/svelte/icons/circle-check";
+  import EdgeMap from "$lib/brand/EdgeMap.svelte";
 
   const MAX = 500;
 
@@ -121,7 +122,7 @@
   });
 </script>
 
-<PageHeader eyebrow="Operate" title="Overview" intro={status ? headline(status, needs.length) : "Reading the edge…"}>
+<PageHeader title="Overview" intro={status ? headline(status, needs.length) : "Reading the edge…"}>
   <Freshness observedAt={statusAt} error={statusError} staleAfterMs={45_000} />
 </PageHeader>
 
@@ -144,6 +145,8 @@
     <p class="text-muted-foreground flex items-center gap-2 text-sm"><CheckIcon class="text-success size-4" aria-hidden="true" />Nothing needs you right now.</p>
   {/if}
 </div>
+
+{#if status}<EdgeMap routes={status.routes} allowed={summary.allowed} refused={summary.refused} />{/if}
 
 <div class="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
   <Panel label="What changed" title="Recent changes" sub="Deploys, reloads, people and connectors, newest first." bodyClass="p-0">

@@ -18,12 +18,22 @@ export type Tool = (typeof tools)[number]["id"];
 // console does not flash its sign-in panel for someone who just arrived with one.
 // `passkey` is true when the session came from an administrator passkey (it
 // has an account to add passkeys to); host logins and tokens do not.
-export const admin = $state({ token: "", asked: 0, name: "", expires: "", tools: [] as string[], notice: "", ready: false, enrol: "", passkey: false });
+// `renewable` sessions (passkey sign-ins) are extended while the person is
+// active; the others end at `expires` whatever happens.
+export const admin = $state({ token: "", asked: 0, name: "", expires: "", tools: [] as string[], notice: "", ready: false, enrol: "", passkey: false, renewable: false });
+
+export type SessionStart = { token: string; name?: string; expires?: string; tools?: string[]; renewable?: boolean };
+
+// startSession is the one place a tab becomes signed in.
+export function startSession(s: SessionStart, passkey: boolean) {
+  admin.token = s.token; admin.name = s.name ?? ""; admin.expires = s.expires ?? ""; admin.tools = s.tools ?? [];
+  admin.renewable = !!s.renewable; admin.passkey = passkey; admin.notice = ""; admin.enrol = "";
+}
 
 // can reports whether this tab's session may use a tool. Locked means no.
 export const can = (tool: Tool) => !!admin.token && admin.tools.includes(tool);
 
-export const signOut = () => { admin.token = ""; admin.name = ""; admin.expires = ""; admin.tools = []; admin.passkey = false; };
+export const signOut = () => { admin.token = ""; admin.name = ""; admin.expires = ""; admin.tools = []; admin.passkey = false; admin.renewable = false; };
 
 // endSession signs out because the edge no longer accepts this credential.
 export function endSession(notice = "This session is no longer valid. Sign in again.") {

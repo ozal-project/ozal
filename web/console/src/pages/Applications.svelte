@@ -1,11 +1,11 @@
 <script lang="ts">
+  import Summary from "$lib/Summary.svelte";
   import { onMount } from "svelte";
   import PageHeader from "$lib/PageHeader.svelte";
   import Panel from "$lib/Panel.svelte";
-  import Stat from "$lib/Stat.svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
-  import { admin, askForToken } from "$lib/adminToken.svelte";
+  import { admin, askForToken, can } from "$lib/adminToken.svelte";
   import { setupStatus, planApplication, saveApplication, type SetupStatus, type ApplicationRoute, type ApplicationPlan, type ApplicationDraft } from "$lib/api";
   import { navigate } from "$lib/router.svelte";
   import ApplicationRemove from "$lib/ApplicationRemove.svelte";
@@ -68,7 +68,7 @@
   }
 </script>
 
-<PageHeader eyebrow="Operate" title="Applications" intro="Bring an existing website, choose who may open it, then check it before moving your domain.">
+<PageHeader title="Applications" intro="Websites behind Switchboard and who may open each one." tabs={[...(can("applications") ? [{ path: "/applications" as const, label: "Manage" }] : []), { path: "/routes" as const, label: "Routing & health" }]}>
   <Button variant="outline" onclick={load} disabled={loading}>Refresh configuration</Button>
   <Button onclick={() => edit(null)} disabled={!status || waiting}>Add existing website</Button>
 </PageHeader>
@@ -81,11 +81,12 @@
     <p class="text-muted-foreground mt-3 text-sm">For a fresh local installation, run <code>switchboard setup -dir ./my-edge</code> on its host. The generated guide covers identity, invitations, restart and recovery.</p>
   </Panel>
 {:else}
-  <div class="mb-6 grid gap-4 sm:grid-cols-3">
-    <Stat label="Applications" value={status.routes.length} note={`${status.routes.filter((r) => r.access || r.auth_required).length} private`} lamp={status.routes.length ? "on" : "idle"} />
-    <Stat label="Identity" value={status.methods.length ? status.methods.length : "None"} note={status.methods.length ? status.methods.join(" / ") : "Configure passkeys or OIDC before going private"} lamp={status.methods.length ? "on" : "wait"} />
-    <Stat label="Static publishing" value={status.pages_enabled ? "On" : "Off"} note={status.admin_socket_configured ? "Host socket configured" : "Host socket not configured"} lamp={status.pages_enabled ? "on" : "idle"} />
-  </div>
+  <Summary label="Applications summary" items={[
+    { value: status.routes.length, label: "applications" },
+    { value: status.routes.filter((r) => r.access || r.auth_required).length, label: "private" },
+    { value: status.routes.filter((r) => r.site).length, label: "static sites" },
+    ...(status.methods.length ? [] : [{ value: "No", label: "sign-in method configured", tone: "warn" as const }]),
+  ]} />
   {#if editing}
     <Panel title={base ? `Edit ${base.host}` : "Add an existing website"} label="Prepare before cutover" class="mb-6">
       <form onsubmit={prepare} class="grid max-w-3xl gap-4 sm:grid-cols-2">

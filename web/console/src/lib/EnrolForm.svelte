@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { admin } from "$lib/adminToken.svelte";
+  import { admin, startSession } from "$lib/adminToken.svelte";
   import { Button } from "$lib/components/ui/button";
   import { onMount } from "svelte";
   import { enrolInfo, enrolWithPasskey, explainPasskeyError, type EnrolInfo } from "$lib/passkey";
@@ -23,6 +23,7 @@
   });
   const knownEmail = $derived(info?.kind === "invite" || info?.kind === "recover");
   const recovery = $derived(info?.kind === "recover");
+  const device = $derived(info?.kind === "device");
 
   async function submit(e: SubmitEvent) {
     e.preventDefault();
@@ -30,8 +31,7 @@
     busy = true; error = "";
     try {
       const session = await enrolWithPasskey(admin.enrol, name.trim(), email.trim());
-      admin.token = session.token; admin.name = session.name; admin.expires = session.expires; admin.tools = session.tools;
-      admin.enrol = ""; admin.notice = ""; admin.passkey = true;
+      startSession(session, true);
     } catch (e) { error = explainPasskeyError(e); }
     finally { busy = false; }
   }
@@ -39,7 +39,9 @@
 
 <form onsubmit={submit} class="grid gap-4">
   {#if error}<p class="text-destructive text-sm" role="alert">{error}</p>{/if}
-  {#if recovery}
+  {#if device}
+    <p class="text-sm">This adds a passkey from this browser for <span class="font-medium">{info?.name || info?.email}</span> ({info?.email}). Your other passkeys keep working.</p>
+  {:else if recovery}
     <p class="text-sm">This link replaces the passkeys of <span class="font-medium">{info?.name || info?.email}</span> ({info?.email}). The old ones stop working.</p>
   {:else}
     <div class="grid gap-1.5">
@@ -58,5 +60,5 @@
       </div>
     {/if}
   {/if}
-  <Button type="submit" disabled={busy || (!recovery && (!name.trim() || !email.trim()))}>{busy ? "Waiting for your device…" : "Create my passkey"}</Button>
+  <Button type="submit" disabled={busy || (!recovery && !device && (!name.trim() || !email.trim()))}>{busy ? "Waiting for your device…" : "Create my passkey"}</Button>
 </form>

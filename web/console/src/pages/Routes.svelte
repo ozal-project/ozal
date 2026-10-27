@@ -1,9 +1,10 @@
 <script lang="ts">
+  import { can } from "$lib/adminToken.svelte";
+  import Summary from "$lib/Summary.svelte";
   import { friendlyHealth } from "$lib/wording.ts";
   import { onMount } from "svelte";
   import PageHeader from "$lib/PageHeader.svelte";
   import Panel from "$lib/Panel.svelte";
-  import Stat from "$lib/Stat.svelte";
   import * as Table from "$lib/components/ui/table";
   import { Button } from "$lib/components/ui/button";
   import { Skeleton } from "$lib/components/ui/skeleton";
@@ -69,21 +70,14 @@
   }
 </script>
 
-<PageHeader eyebrow="Routing" title="Routes & hostnames" intro="Every hostname Switchboard answers, who may open it, and whether the app behind it responds. These are routing keys, not published DNS.">
+<PageHeader title="Applications" intro="Every hostname Switchboard answers, its access rule and whether the app behind it responds." tabs={[...(can("applications") ? [{ path: "/applications" as const, label: "Manage" }] : []), { path: "/routes" as const, label: "Routing & health" }]}>
   <div class="flex flex-col items-start gap-2 sm:items-end">
     <Button variant="outline" size="sm" onclick={load} disabled={loading}><RefreshIcon class={["size-3.5", loading && "animate-spin"]} /> Refresh</Button>
     <Freshness observedAt={observedAt} refreshing={loading && data !== null} error={error} />
   </div>
 </PageHeader>
 
-<div class="mb-5 flex flex-wrap gap-x-4 gap-y-1 rounded-lg border px-3 py-2 text-sm sm:hidden" aria-label="Route summary">
-  <span>{counts.total} routes</span><span>{counts.protected} require login</span><span>{counts.unhealthy} unhealthy</span>
-</div>
-<div class="mb-6 hidden gap-4 sm:grid sm:grid-cols-3">
-  <Stat label="Hostnames" value={data ? counts.total : "—"} note="Routes in the active snapshot" lamp={data ? "on" : "idle"} />
-  <Stat label="Require login" value={data ? counts.protected : "—"} note="Protected by an access policy" lamp={data && counts.protected ? "wait" : "idle"} />
-  <Stat label="Unhealthy upstreams" value={data ? counts.unhealthy : "—"} note="The app behind it fails its health check" lamp={counts.unhealthy > 0 ? "off" : data ? "on" : "idle"} />
-</div>
+<Summary label="Routing summary" items={[{ value: data ? counts.total : "—", label: "hostnames" }, { value: data ? counts.protected : "—", label: "require login" }, { value: data ? counts.unhealthy : "—", label: "not answering", tone: counts.unhealthy ? "bad" : undefined }]} />
 
 {#if data?.audit && !data.audit.available}
   <div class="border-destructive/40 bg-destructive/[0.06] mb-6 rounded-lg border p-4" role="alert">

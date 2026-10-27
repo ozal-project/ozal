@@ -1,9 +1,9 @@
 <script lang="ts">
+  import Summary from "$lib/Summary.svelte";
   import { onMount, untrack } from "svelte";
   import { admin, can, endSession } from "$lib/adminToken.svelte";
   import PageHeader from "$lib/PageHeader.svelte";
   import Panel from "$lib/Panel.svelte";
-  import Stat from "$lib/Stat.svelte";
   import * as Table from "$lib/components/ui/table";
   import * as Select from "$lib/components/ui/select";
   import { Input } from "$lib/components/ui/input";
@@ -15,7 +15,7 @@
   import PolicyEvidence from "$lib/PolicyEvidence.svelte";
   import { emptyFeed, receive } from "$lib/feed";
   import { openEventStream } from "$lib/eventStream";
-  import { shortId, subjectsOf, whoActed as actedBy } from "$lib/wording.ts";
+  import { eventReason, shortId, subjectsOf, whoActed as actedBy } from "$lib/wording.ts";
   import PauseIcon from "@lucide/svelte/icons/pause";
   import PlayIcon from "@lucide/svelte/icons/play";
   import SearchIcon from "@lucide/svelte/icons/search";
@@ -28,6 +28,9 @@
     "route.created": "Route added", "route.create_failed": "Route creation failed", "route.deleted": "Route removed", "route.delete_failed": "Route removal failed", "config.reloaded": "Configuration reloaded", "config.reload_failed": "Configuration reload failed",
     "tunnel.connected": "Tunnel connected", "tunnel.disconnected": "Tunnel disconnected", "tunnel.rejected": "Tunnel rejected", "connector.enrolled": "Connector enrolled", "connector.rotated": "Connector certificate rotated", "connector.revoked": "Connector revoked", "notify.chat_paired": "Alert chat paired",
     "origin.denied": "Origin pull rejected",
+    "operator.signed_in": "Signed in to the console", "operator.signed_out": "Signed out of the console", "operator.login_issued": "Host login issued", "operator.revoked": "Console session ended",
+    "admin.invited": "Administrator invited", "admin.enrolment_issued": "Setup link issued", "admin.recovery_issued": "Recovery link issued", "admin.device_link_issued": "Link for another browser issued",
+    "admin.passkey_registered": "Administrator passkey created", "admin.passkey_added": "Administrator passkey added", "admin.sign_in_failed": "Console sign-in failed", "session.revoked": "Session ended",
     "pages.deployed": "Site deployed", "pages.rolled_back": "Site rolled back", "pages.refused": "Deployment refused", "pages.deploy_refused": "Project deployment refused", "pages.failed": "Deployment failed",
   };
   const categories = [
@@ -52,10 +55,12 @@
   const outcome = (e: AccessEvent) =>
     e.error || /[._](denied|failed|rejected|refused)$/.test(e.type) ? "deny" : /[._](allowed|succeeded|deployed|rolled_back)$/.test(e.type) ? "allow" : "info";
   const group = (e: AccessEvent) =>
-    e.type.startsWith("access.") || e.type.startsWith("origin.") ? "access" : e.type.startsWith("login.") ? "login" : e.type.startsWith("tunnel.") || e.type.startsWith("connector.") ? "tunnel" : e.type.startsWith("pages.") ? "pages" : "changes";
+    e.type.startsWith("access.") || e.type.startsWith("origin.") ? "access" : e.type.startsWith("login.") || e.type.startsWith("operator.") || e.type.startsWith("admin.sign") ? "login" : e.type.startsWith("tunnel.") || e.type.startsWith("connector.") ? "tunnel" : e.type.startsWith("pages.") ? "pages" : "changes";
 
   // A deployment's reason is its 64-character content hash: the first 12 tell builds apart.
-  const reasonText = (e: AccessEvent) => (e.reason && /^[0-9a-f]{40,}$/.test(e.reason) ? shortId(e.reason) : e.reason);
+  const reasonText = (e: AccessEvent) => (e.reason && /^[0-9a-f]{40,}$/.test(e.reason) ? shortId(e.reason) : eventReason(e.reason));
+  // A console session's code is its internal grant id: noise next to who and when.
+  const codeText = (e: AccessEvent) => (/^(operator|admin|session)\./.test(e.type) ? "" : e.code ?? "");
   // Passkey sessions leave an opaque id in events; the people list says whose it is.
   let subjects = $state(new Map<string, string>());
   const whoActed = (actor?: string) => actedBy(actor, subjects);
@@ -124,7 +129,7 @@
   const streamText = { locked: "Sign in to view activity", connecting: "Connecting…", live: "Live event stream", reconnected: "Live · reconnected", lost: "Connection lost · retrying" };
 </script>
 
-<PageHeader eyebrow="Access control" title="Access activity" intro="Every request Switchboard let in or refused, who asked, and why.">
+<PageHeader title="Activity" intro="Every decision and change, who made it and why.">
   <span class="border-border bg-card flex items-center gap-2 rounded-full border px-3.5 py-1.5 font-mono text-xs">
     <span class={["lamp", stream === "lost" ? "lamp-off" : stream === "connecting" || stream === "locked" ? "lamp-wait" : "lamp-on"]} aria-hidden="true"></span>
     {streamText[stream]}
@@ -138,15 +143,7 @@
   </div>
 {/if}
 
-<div class="mb-5 flex flex-wrap gap-x-4 gap-y-1 rounded-lg border px-3 py-2 text-sm sm:hidden" aria-label="Activity summary">
-  <span>{shown.length} events</span><span>{denied} denied</span><span>{routes ? protectedCount : "—"} protected routes</span>
-</div>
-<div class="mb-6 hidden gap-4 sm:grid sm:grid-cols-3">
-  <Stat label="Events retained" value={shown.length} note={`Most recent ${MAX} in this view`} lamp={shown.length ? "on" : "idle"} />
-  <Stat label="Refused" value={denied} note="Access denied within the retained events" lamp={denied > 0 ? "off" : "idle"} />
-  <Stat label="Lines requiring login" value={routes ? protectedCount : "—"} lamp={routes ? "wait" : "idle"}
-    note={routes ? `${protectedCount} of ${routes.length} configured routes` : routesError ? "Route configuration unavailable" : "Reading routing configuration…"} />
-</div>
+<Summary label="Activity summary" items={[{ value: shown.length, label: "events" }, { value: denied, label: "refused", tone: denied ? "bad" : undefined }]} />
 
 <div class="grid grid-cols-[minmax(0,1fr)] gap-6 min-[1500px]:grid-cols-[minmax(0,1fr)_320px]">
   <Panel label="Decision feed" title={`${filtered.length} shown · ${shown.length} retained`} sub={stream === "locked" ? "Sign in to load events" : frozen ? "Paused — new events are held back" : stream === "lost" ? "Stream unavailable — retrying" : "Newest first"} class="min-w-0">
@@ -186,7 +183,7 @@
             </div>
             <div class="mt-2 pl-5 text-sm">{whoActed(e.actor) || "No actor recorded"}</div>
             {#if e.host}<a href={`/routes?host=${encodeURIComponent(e.host)}`} onclick={(event) => { event.preventDefault(); inspect(e.host); }} class="text-muted-foreground mt-0.5 ml-5 block break-all font-mono text-xs underline underline-offset-4">{e.host}</a>{/if}
-            {#if e.code || e.reason || e.error}<p class="text-muted-foreground mt-2 text-xs"><span class="font-mono">{e.code}</span>{e.code && (e.reason || e.error) ? " · " : ""}{[reasonText(e), e.error].filter(Boolean).join(" · ")}</p>{/if}
+            {#if codeText(e) || e.reason || e.error}<p class="text-muted-foreground mt-2 text-xs"><span class="font-mono">{codeText(e)}</span>{codeText(e) && (e.reason || e.error) ? " · " : ""}{[reasonText(e), e.error].filter(Boolean).join(" · ")}</p>{/if}
             {#if e.remote}<p class="text-muted-foreground mt-1 text-xs">Peer <span class="font-mono">{e.remote}</span></p>{/if}
             {#if e.deployment}<p class="text-muted-foreground mt-2 break-all font-mono text-xs">{deploymentSource(e)}</p>{/if}
             <PolicyEvidence context={e.context} />
@@ -207,7 +204,7 @@
                     <span class={["lamp", o === "allow" ? "lamp-on" : o === "deny" ? "lamp-off" : "lamp-idle"]} aria-hidden="true"></span>
                     {labels[e.type] ?? e.type}
                   </div>
-                  {#if e.code || e.reason || e.error}<div class="text-muted-foreground mt-1 pl-5 text-xs"><span class="font-mono">{e.code}</span>{e.code && (e.reason || e.error) ? " · " : ""}{[reasonText(e), e.error].filter(Boolean).join(" · ")}</div>{/if}
+                  {#if codeText(e) || e.reason || e.error}<div class="text-muted-foreground mt-1 pl-5 text-xs"><span class="font-mono">{codeText(e)}</span>{codeText(e) && (e.reason || e.error) ? " · " : ""}{[reasonText(e), e.error].filter(Boolean).join(" · ")}</div>{/if}
                   {#if e.deployment}<p class="text-muted-foreground mt-2 break-all pl-5 font-mono text-xs">{deploymentSource(e)}</p>{/if}
                   <PolicyEvidence context={e.context} />
                 </Table.Cell>

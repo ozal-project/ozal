@@ -1,8 +1,8 @@
 <script lang="ts">
+  import Summary from "$lib/Summary.svelte";
   import { onMount, untrack } from "svelte";
   import PageHeader from "$lib/PageHeader.svelte";
   import Panel from "$lib/Panel.svelte";
-  import Stat from "$lib/Stat.svelte";
   import * as Table from "$lib/components/ui/table";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -146,7 +146,7 @@
   const total = $derived(sites?.reduce((n, s) => n + s.deployments.length, 0) ?? 0);
 </script>
 
-<PageHeader eyebrow="Pages" title="Sites & deployments" intro="Static sites Switchboard serves from its own store. Every deployment is immutable and named by its content hash; going live or back is one switch, never a half-copied site.">
+<PageHeader title="Sites" intro="Static sites served by Switchboard. Each version is kept whole, so going live or back is one switch.">
   <div class="flex flex-col items-start gap-2 sm:items-end">
     <Button variant="outline" size="sm" onclick={load} disabled={loading}><RefreshIcon class={["size-3.5", loading && "animate-spin"]} /> Refresh</Button>
     <Freshness observedAt={observedAt} refreshing={loading && sites !== null} error={error} />
@@ -158,14 +158,7 @@
     <p class="text-muted-foreground text-sm">Add a <code class="font-mono">pages</code> block (an absolute <code class="font-mono">dir</code>) and start Switchboard with <code class="font-mono">-db</code>. Routes then serve a deployment with <code class="font-mono">"site": "name"</code>.</p>
   </Panel>
 {:else}
-  <div class="mb-5 flex flex-wrap gap-x-4 gap-y-1 rounded-lg border px-3 py-2 text-sm sm:hidden" aria-label="Sites summary">
-    <span>{sites ? sites.length : "—"} sites</span><span>{total} retained builds</span><span>Upload from Applications</span>
-  </div>
-  <div class="mb-6 hidden gap-4 sm:grid sm:grid-cols-3">
-    <Stat label="Sites" value={sites ? sites.length : "—"} note="With at least one deployment" lamp={sites ? "on" : "idle"} />
-    <Stat label="Retained builds" value={sites ? total : "—"} note="Ready for an instant rollback" lamp={total ? "on" : "idle"} />
-    <Stat label="Upload a build" value="Applications" note="Select a static site and upload its artifact" lamp="idle" />
-  </div>
+  <Summary label="Sites summary" items={[{ value: sites ? sites.length : "—", label: "sites" }, { value: sites ? total : "—", label: "versions kept for rollback" }]} />
 
   {#if error && sites}<p class="border-warning/40 bg-warning/[0.06] mb-4 rounded-md border p-3 text-sm" role="status">Showing the last successful read. Refresh failed: {error}</p>{/if}
   {#if routeStatusError}<p class="text-destructive mb-4 text-sm" role="alert">Hostname mappings could not be refreshed. Retry before changing a live build. <button class="underline" onclick={load}>Retry</button></p>{/if}

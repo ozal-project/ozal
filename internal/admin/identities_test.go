@@ -569,3 +569,83 @@ func TestEnrolInfoTellsTheFormWhatTheLinkAlreadyFixes(t *testing.T) {
 		t.Fatalf("unknown token = %d %v", code, got)
 	}
 }
+
+func TestPasskeySessionsSlideOnlyWhenRenewedAndNeverPastTheLimit(t *testing.T) {
+	s := newOperatorSessions()
+	now := time.Date(2026, 10, 27, 9, 0, 0, 0, time.UTC)
+	s.now = func() time.Time { return now }
+	token, g, err := s.issueSliding("Octavio")
+	if err != nil || !g.Expires.Equal(now.Add(passkeyIdle)) {
+		t.Fatalf("issue: %v %v", g.Expires, err)
+	}
+	now = now.Add(20 * time.Minute)
+	if got, _ := s.authenticate(token); !got.Expires.Equal(g.Expires) {
+		t.Fatal("an ordinary request extended the session; only renew may")
+	}
+	renewed, ok := s.renew(token)
+	if !ok || !renewed.Expires.Equal(now.Add(passkeyIdle)) {
+		t.Fatalf("renew = %v %v", renewed.Expires, ok)
+	}
+	// Keep renewing: the session still ends at the absolute limit.
+	for i := 0; i < 30; i++ {
+		now = now.Add(25 * time.Minute)
+		s.renew(token)
+	}
+	if _, ok := s.authenticate(token); ok {
+		t.Fatal("a renewed session outlived its absolute limit")
+	}
+	// Idle: no renewal for longer than the idle window ends it.
+	token, _, _ = s.issueSliding("Octavio")
+	now = now.Add(passkeyIdle + time.Second)
+	if _, ok := s.renew(token); ok {
+		t.Fatal("an idle session was renewed after it expired")
+	}
+	// Host logins do not slide.
+	host, hg, _ := s.issue("host", false)
+	now = now.Add(time.Minute)
+	if got, _ := s.renew(host); !got.Expires.Equal(hg.Expires) {
+		t.Fatal("a host login was extended")
+	}
+}
+
+func TestAnotherBrowserAddsAPasskeyThroughAOneUseLink(t *testing.T) {
+	h, _ := identityHandler(t)
+	chrome := newAuthenticator(t)
+	token, _ := hostEnrolment(t, h, "bootstrap", "")
+	session := decode(t, enrol(t, h, chrome, token, "Octavio", "octavio@example.com"))["token"].(string)
+
+	if rec := api(h, http.MethodPost, "/_/api/admin/devices", "secret", nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("admin token issued a device link: %d", rec.Code)
+	}
+	rec := api(h, http.MethodPost, "/_/api/admin/devices", session, nil)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("device link = %d %s", rec.Code, rec.Body)
+	}
+	link := decode(t, rec)["token"].(string)
+	info := decode(t, browser(h, "localhost:9091", "/_/api/admin/enrol/info", "", map[string]string{"token": link}))
+	if info["kind"] != "device" || info["email"] != "octavio@example.com" {
+		t.Fatalf("info = %v", info)
+	}
+	firefox := newAuthenticator(t)
+	joined := enrol(t, h, firefox, link, "", "")
+	if joined.Code != http.StatusOK || decode(t, joined)["token"] == "" {
+		t.Fatalf("device enrol = %d %s", joined.Code, joined.Body)
+	}
+	for name, device := range map[string]*virtualAuthenticator{"chrome": chrome, "firefox": firefox} {
+		if rec := signIn(t, h, device); rec.Code != http.StatusOK {
+			t.Fatalf("%s passkey sign-in = %d", name, rec.Code)
+		}
+	}
+	if rec := enrol(t, h, newAuthenticator(t), link, "", ""); rec.Code == http.StatusOK {
+		t.Fatal("a device link was used twice")
+	}
+	// Recovery ends a link that was issued before it.
+	again := decode(t, api(h, http.MethodPost, "/_/api/admin/devices", session, nil))["token"].(string)
+	recover, _ := hostEnrolment(t, h, "recover", "octavio@example.com")
+	if rec := enrol(t, h, newAuthenticator(t), recover, "", ""); rec.Code != http.StatusOK {
+		t.Fatalf("recovery = %d", rec.Code)
+	}
+	if rec := enrol(t, h, newAuthenticator(t), again, "", ""); rec.Code == http.StatusOK {
+		t.Fatal("a device link survived the account's recovery")
+	}
+}

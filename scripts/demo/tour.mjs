@@ -172,7 +172,7 @@ async function main() {
   await move(page.locator("text=Why people were refused"));
   await shot("overview");
   await pause(3400);
-  await click(page.locator('nav[aria-label="Console"] a', { hasText: "Access log" }));
+  await click(page.locator('nav[aria-label="Console"] a', { hasText: "Activity" }));
   await page.locator("table").getByText("Access denied").first().waitFor();
   await say("Every decision, with its reason.");
   await shot("access-log");

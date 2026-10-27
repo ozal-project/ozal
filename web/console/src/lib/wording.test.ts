@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { friendlyHealth, shortId, subjectsOf, whoActed } from "./wording.ts";
+import { eventReason, friendlyHealth, shortId, subjectsOf, whoActed } from "./wording.ts";
 
 test("an admin request names the admin API, not a throwaway port", () => {
   assert.equal(whoActed("127.0.0.1:56198"), "the admin API");
@@ -40,4 +40,16 @@ test("a passkey session's opaque id is shown as the person's email when the cons
   assert.equal(whoActed("sb:unknown", people), "sb:unknown", "an id nobody knows is shown as it is, never hidden");
   assert.equal(whoActed("sb:850d973b"), "sb:850d973b", "without the list the id stays");
   assert.equal(people.size, 1, "a person with no subject cannot be matched");
+});
+
+test("operator and administrator actors read as people", () => {
+  assert.equal(whoActed("operator:Saint"), "Saint (host login)");
+  assert.equal(whoActed("admin:ana@acme.dev"), "ana@acme.dev");
+  assert.equal(whoActed("local"), "the host");
+});
+
+test("tool lists in reasons get spaces", () => {
+  assert.equal(eventReason("tools: administrators,people,sites"), "tools: administrators, people, sites");
+  assert.equal(eventReason("passkey"), "passkey");
+  assert.equal(eventReason(undefined), "");
 });

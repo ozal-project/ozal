@@ -18,6 +18,9 @@ export function whoActed(actor?: string, subjects?: Map<string, string>): string
   if (known) return known;
   if (address.test(actor)) return "the admin API";
   if (actor === "admin") return "the admin token";
+  if (actor === "local") return "the host";
+  if (actor.startsWith("operator:")) return `${actor.slice(9)} (host login)`;
+  if (actor.startsWith("admin:")) return actor.slice(6);
   if (actor.startsWith("signal:")) return `a reload signal (${actor.slice(7)})`;
   return actor;
 }
@@ -37,3 +40,10 @@ export function friendlyHealth(raw: string): string {
 
 // shortId is the first characters of a content hash, enough to tell builds apart.
 export const shortId = (id?: string): string => (id ? id.slice(0, 12) : "");
+
+// eventReason keeps the audit text but reads as a sentence: a tool list loses
+// its machine commas ("tools: people,sites" becomes "tools: people, sites").
+export function eventReason(reason?: string): string {
+  if (!reason) return "";
+  return reason.replace(/^tools: (.*)$/, (_, list: string) => `tools: ${list.split(",").map((t) => t.trim()).filter(Boolean).join(", ")}`);
+}

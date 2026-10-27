@@ -34,6 +34,7 @@ type routeManager interface {
 
 // Handler serves the administrative dashboard and authenticated mutations.
 type Handler struct {
+	devices                *deviceBook
 	enrolCommand           string
 	github                 repositoryReader
 	operators              *operatorSessions
@@ -58,7 +59,7 @@ func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 	if sink == nil {
 		sink = events.Discard
 	}
-	h := &Handler{operators: newOperatorSessions(), manager: manager, sink: sink, mux: http.NewServeMux(), ceremonies: newCeremonyBook()}
+	h := &Handler{operators: newOperatorSessions(), manager: manager, sink: sink, mux: http.NewServeMux(), ceremonies: newCeremonyBook(), devices: newDeviceBook()}
 	h.registerOperators()
 	h.mux.HandleFunc("GET /_/console.css", h.consoleCSS)
 	h.mux.HandleFunc("GET /_/fonts/manrope.ttf", h.consoleFont)

@@ -80,14 +80,14 @@
   onMount(() => { void load(); return () => request.cancel(); });
 </script>
 
-<PageHeader eyebrow="Operate" title="Administrators" intro="The people who run this console. Each signs in with their own passkey and sees only the tools you give them." />
+<PageHeader title="Administrators" intro="Who runs this console. Each signs in with a passkey and sees only the tools you give them." />
 
 {#if error && !admins}<p class="border-destructive/40 bg-destructive/10 mb-6 rounded-xl border px-4 py-3 text-sm" role="alert">Administrators could not be read ({error}).</p>{/if}
 
 <div class="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
   <Panel label="Directory" title={admins ? `${admins.filter((a) => !a.disabled).length} active` : "Reading…"} bodyClass="p-0">
     {#if admins && admins.length === 0}
-      <p class="text-muted-foreground px-5 py-8 text-sm">No administrator yet.</p>
+      <p class="text-muted-foreground px-5 py-8 text-sm">No administrator has a passkey account yet.{#if !admin.passkey}{" "}You are using a host login, which is not an account; invite yourself to get one.{/if}</p>
     {:else if admins}
       <ul class="divide-y">
         {#each admins as a (a.id)}

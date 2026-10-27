@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { admin, tools } from "$lib/adminToken.svelte";
+  import { admin, startSession, tools } from "$lib/adminToken.svelte";
   import { Button } from "$lib/components/ui/button";
   import CopyCommand from "$lib/CopyCommand.svelte";
 
@@ -22,8 +22,7 @@
       const response = await fetch("/_/api/operators/session", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: AbortSignal.timeout(10_000) });
       if (!response.ok) throw new Error("This credential could not be verified. Check it and try again.");
       const session: { kind: string; name?: string; expires?: string; tools: string[] } = await response.json();
-      admin.token = token; admin.name = session.name || (session.kind === "sites" ? "Sites token" : "");
-      admin.expires = session.expires || ""; admin.tools = session.tools; admin.notice = "";
+      startSession({ token, name: session.name || (session.kind === "sites" ? "Sites token" : ""), expires: session.expires, tools: session.tools }, false);
       draft = "";
     } catch (e) { error = (e as Error).message; }
     finally { checking = false; }

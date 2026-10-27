@@ -10,6 +10,13 @@ const normalize = (p: string): Page => moved[p] ?? ((pages as readonly string[])
 
 export const route = $state({ path: normalize(location.pathname), search: location.search });
 
+// The address bar shows the page that is shown: "/" or an old bookmark is
+// rewritten in place instead of leaving a URL that names something else.
+function syncAddress() {
+  if (location.pathname !== route.path) history.replaceState(null, "", route.path + location.search + location.hash);
+}
+syncAddress();
+
 export function navigate(to: Page, context?: { host?: string }) {
   const safe = new URLSearchParams();
   const source = context ?? (to === "/routes" ? Object.fromEntries(new URLSearchParams(location.search)) : {});
@@ -26,4 +33,5 @@ export function navigate(to: Page, context?: { host?: string }) {
 addEventListener("popstate", () => {
   route.path = normalize(location.pathname);
   route.search = location.search;
+  syncAddress();
 });

@@ -2,7 +2,7 @@
 // reads (status, live events). Wording lives here, not in the page, so it is
 // tested and the page only lays it out. Nothing here decides access.
 import type { AccessEvent, StatusResponse } from "./api";
-import { friendlyHealth, whoActed } from "./wording.ts";
+import { eventReason, friendlyHealth, whoActed } from "./wording.ts";
 
 export type Attention = {
   kind: "route" | "certificate" | "audit";
@@ -159,8 +159,23 @@ export function changes(events: AccessEvent[], subjects?: Map<string, string>): 
       case "tunnel.connected": case "tunnel.disconnected":
         out.push({ ...base, title: `${host || "A connector"} ${e.type === "tunnel.connected" ? "connected" : "disconnected"}`, detail: "", tone: e.type === "tunnel.connected" ? "good" : "bad" });
         break;
+      case "operator.signed_in":
+        out.push({ ...base, title: `${whoActed(e.actor, subjects) || "Someone"} signed in to the console`, detail: e.reason === "passkey" ? "With a passkey." : "With a host login.", tone: "neutral" });
+        break;
+      case "operator.signed_out":
+        out.push({ ...base, title: `${whoActed(e.actor, subjects) || "Someone"} signed out`, detail: "", tone: "neutral" });
+        break;
+      case "operator.login_issued":
+        out.push({ ...base, title: `A host login was issued for ${host || "an operator"}`, detail: eventReason(e.reason), tone: "neutral" });
+        break;
+      case "operator.revoked":
+        out.push({ ...base, title: "A console session was ended from the host", detail: "", tone: "neutral" });
+        break;
+      case "admin.invited":
+        out.push({ ...base, title: `${host || "An administrator"} was invited to the console`, detail: [eventReason(e.reason), e.actor ? `By ${whoActed(e.actor, subjects)}.` : ""].filter(Boolean).join(" · "), tone: "neutral" });
+        break;
       default:
-        out.push({ ...base, title: e.type.replace(/[._]/g, " "), detail: [host, e.reason].filter(Boolean).join(" · "), tone: /failed|rejected|refused/.test(e.type) ? "bad" : "neutral" });
+        out.push({ ...base, title: e.type.replace(/[._]/g, " "), detail: [host, eventReason(e.reason)].filter(Boolean).join(" · "), tone: /failed|rejected|refused/.test(e.type) ? "bad" : "neutral" });
     }
   }
   return out;

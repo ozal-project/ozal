@@ -31,15 +31,15 @@ const failNextRequest = async (path) => evaluate(`(() => { const original = wind
 const goPage = async (href, title) => {
   await ab("set", "viewport", "1440", "1000");
   await ab("eval", "window.scrollTo(0, 0)");
-  await ab("eval", `document.querySelector('nav[aria-label=\"Console\"] a[href=\"${href}\"]').focus()`);
+  await ab("eval", `document.querySelector('nav a[href=\"${href}\"]').focus()`);
   await ab("press", "Enter");
-  await ab("wait", "--fn", `document.querySelector('#main-content h1')?.textContent?.trim() === ${JSON.stringify(title)}`);
+  await ab("wait", "--fn", `location.pathname === ${JSON.stringify(href)} && document.querySelector('#main-content h1')?.textContent?.trim() === ${JSON.stringify(title)}`);
   await ab("eval", "window.scrollTo(0, 0)");
 };
 const auditPage = async (widths = [[1440, 1000], [1024, 900], [390, 844], [320, 800]]) => {
   for (const [width, height] of widths) {
     await ab("set", "viewport", String(width), String(height));
-    const overflow = await evaluate("({ viewport: innerWidth, main: document.querySelector('#main-content')?.getBoundingClientRect().right, offenders: [...document.querySelectorAll('body *')].filter((el) => { const r = el.getBoundingClientRect(); const scroller = el.closest('.overflow-x-auto, nav[aria-label=\"Console sections\"]'); return !scroller && (r.right > innerWidth + 1 || r.left < -1); }).slice(0, 12).map((el) => ({ tag: el.tagName, className: String(el.className).slice(0, 120), text: (el.textContent || '').trim().slice(0, 80), left: Math.round(el.getBoundingClientRect().left), right: Math.round(el.getBoundingClientRect().right) })) })");
+    const overflow = await evaluate("({ viewport: innerWidth, main: document.querySelector('#main-content')?.getBoundingClientRect().right, offenders: [...document.querySelectorAll('body *')].filter((el) => { const r = el.getBoundingClientRect(); const scroller = el.closest('.overflow-x-auto, nav[aria-label$=\" views\"]'); return !scroller && (r.right > innerWidth + 1 || r.left < -1); }).slice(0, 12).map((el) => ({ tag: el.tagName, className: String(el.className).slice(0, 120), text: (el.textContent || '').trim().slice(0, 80), left: Math.round(el.getBoundingClientRect().left), right: Math.round(el.getBoundingClientRect().right) })) })");
     assert(overflow.main <= width && overflow.offenders.length === 0, `overflow at ${width}: ${JSON.stringify(overflow)}`);
     const result = JSON.parse(await ab("a11y"));
     const violations = result.data?.violations ?? result.data?.results?.violations;
@@ -70,7 +70,7 @@ try {
   assert.equal(await evaluate("document.activeElement?.textContent?.trim()"), "Applications", "keyboard navigation did not focus the page heading");
   await ab("find", "role", "button", "click", "--name", "Refresh configuration", "--exact");
   step = "refresh Applications configuration";
-  await ab("wait", "--fn", "document.querySelector('#main-content')?.textContent?.includes('Static publishing')");
+  await ab("wait", "--fn", "document.querySelector('#main-content')?.textContent?.includes('static sites')");
   await ab("find", "role", "button", "click", "--name", "Add existing website", "--exact");
   await ab("fill", "#app-host", `extra.demo.localhost:${PORT}`);
   await ab("fill", "#app-target", "http://127.0.0.1:19101");
@@ -125,7 +125,7 @@ try {
   people = await api("GET", "/_/api/people");
   assert.deepEqual(people.users.find((p) => p.email === "new-operator-test@example.test").groups, ["staff"]);
   step = "Overview sites error and retry";
-  await goPage("/sites", "Sites & deployments");
+  await goPage("/sites", "Sites");
   await failNextRequest("/_/api/sites");
   await goPage("/overview", "Overview");
 
@@ -136,7 +136,7 @@ try {
 
   step = "CI publishing error and retry";
   await goPage("/applications", "Applications");
-  await goPage("/sites", "Sites & deployments");
+  await goPage("/sites", "Sites");
   await ab("wait", "--text", "Who may publish from CI");
   await failNextRequest("/_/api/projects");
   await ab("find", "role", "button", "click", "--name", "Read projects & GitHub", "--exact");
@@ -156,7 +156,7 @@ try {
   await auditPage([[1440, 1000], [390, 844]]);
 
   step = "Sites hostname mapping error and recovery";
-  await goPage("/sites", "Sites & deployments");
+  await goPage("/sites", "Sites");
   await failNextRequest("/_/api/status");
   await ab("find", "role", "button", "click", "--name", "Refresh", "--exact");
   await ab("wait", "--text", "Hostname mappings could not be refreshed");
@@ -193,7 +193,7 @@ try {
   assert.equal((await api("GET", "/_/api/setup")).routes.some((r) => r.host === appHost), false, "confirmed removal left the route configured");
 
   step = "responsive layouts and accessibility";
-  const pages = [["/overview", "Overview"], ["/applications", "Applications"], ["/sites", "Sites & deployments"], ["/people", "People & passkeys"], ["/administrators", "Administrators"], ["/connectors", "Connectors"], ["/activity", "Access activity"], ["/routes", "Routes & hostnames"]];
+  const pages = [["/overview", "Overview"], ["/applications", "Applications"], ["/routes", "Applications"], ["/sites", "Sites"], ["/people", "People"], ["/administrators", "Administrators"], ["/connectors", "Connectors"], ["/activity", "Activity"]];
   for (const [href, title] of pages) {
     await goPage(href, title);
     await auditPage([[1440, 1000], [1024, 900], [390, 844], [320, 800]]);
@@ -205,13 +205,14 @@ try {
     }
   }
   step = "signing out hides the console entirely";
-  await goPage("/people", "People & passkeys");
+  await ab("set", "viewport", "1440", "1000");
+  await goPage("/people", "People");
   await ab("wait", "--text", "new-operator-test@example.test");
   await ab("find", "role", "button", "click", "--name", "Acceptance operator", "--exact");
   await ab("find", "role", "button", "click", "--name", "Sign out", "--exact");
   await ab("wait", "--text", "Use a host login");
   assert.equal(await evaluate("document.body.innerText.includes('new-operator-test@example.test')"), false, "signing out kept the people list visible");
-  for (const name of ["Applications", "Connectors", "Access log", "Routes & policy", "loopback only"]) {
+  for (const name of ["Applications", "Connectors", "Activity", "Routing & health", "Administrators"]) {
     assert.equal(await evaluate(`document.body.innerText.includes(${JSON.stringify(name)})`), false, `the signed-out screen still shows ${name}`);
   }
   assert.equal(await evaluate("document.querySelectorAll('nav').length"), 0, "the signed-out screen still has navigation");

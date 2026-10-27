@@ -76,6 +76,81 @@ type pendingCeremony struct {
 	expires   time.Time
 }
 
+// deviceTTL is how long an "add this browser" link lasts.
+const deviceTTL = 10 * time.Minute
+
+// deviceBook holds one-use links that let a signed-in administrator add a
+// passkey from another browser or password manager (a passkey saved in one
+// manager is invisible to another browser). They live in memory only: a
+// restart simply ends them.
+type deviceBook struct {
+	mu    sync.Mutex
+	now   func() time.Time
+	links map[[32]byte]deviceLink
+}
+
+type deviceLink struct {
+	account string
+	expires time.Time
+}
+
+func newDeviceBook() *deviceBook {
+	return &deviceBook{now: time.Now, links: map[[32]byte]deviceLink{}}
+}
+
+func (b *deviceBook) issue(account string) (string, time.Time, error) {
+	token, hash, err := newEnrolmentToken()
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	now := b.now()
+	for key, l := range b.links {
+		if !now.Before(l.expires) || l.account == account {
+			delete(b.links, key) // one live link per account
+		}
+	}
+	if len(b.links) >= 64 {
+		return "", time.Time{}, errors.New("too many device links")
+	}
+	expires := now.Add(deviceTTL)
+	b.links[[32]byte(hash)] = deviceLink{account: account, expires: expires}
+	return token, expires, nil
+}
+
+// peek returns the account a live link is for without using it.
+func (b *deviceBook) peek(token string) (string, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	l, ok := b.links[sha256.Sum256([]byte(token))]
+	if !ok || !b.now().Before(l.expires) {
+		return "", false
+	}
+	return l.account, true
+}
+
+// take uses a link up; it succeeds once.
+func (b *deviceBook) take(hash []byte, account string) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	key := [32]byte(hash)
+	l, ok := b.links[key]
+	delete(b.links, key)
+	return ok && l.account == account && b.now().Before(l.expires)
+}
+
+// revokeAccount ends every link of an account (recovered or disabled).
+func (b *deviceBook) revokeAccount(account string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for key, l := range b.links {
+		if l.account == account {
+			delete(b.links, key)
+		}
+	}
+}
+
 // ceremonyBook keeps begun ceremonies in memory; each finishes at most once.
 type ceremonyBook struct {
 	mu      sync.Mutex
@@ -132,6 +207,7 @@ func (u *webUser) WebAuthnCredentials() []webauthn.Credential { return u.credent
 
 func (h *Handler) registerIdentities() {
 	h.mux.HandleFunc("GET /_/api/admin/state", h.adminState)
+	h.mux.HandleFunc("POST /_/api/admin/devices", h.requireBearer(h.issueDeviceLink))
 	h.mux.HandleFunc("POST /_/api/admin/passkeys/begin", h.requireBearer(h.addPasskeyBegin))
 	h.mux.HandleFunc("POST /_/api/admin/passkeys/finish", h.requireBearer(h.addPasskeyFinish))
 	h.mux.HandleFunc("POST /_/api/admin/enrolments", h.requireLocal(h.issueEnrolment))
@@ -316,6 +392,15 @@ func (h *Handler) enrolInfo(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "this enrolment link is not valid")
 		return
 	}
+	if id, ok := h.devices.peek(req.Token); ok {
+		account, _, found := h.accountWithCredentials(r.Context(), id)
+		if !found {
+			writeError(w, http.StatusUnauthorized, "this link expired or was already used; ask for a new one")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"kind": "device", "email": account.Email, "name": account.Name})
+		return
+	}
 	hash := sha256.Sum256([]byte(req.Token))
 	enrolment, err := h.identities.Enrolment(r.Context(), hash[:])
 	if err != nil {
@@ -347,6 +432,26 @@ func (h *Handler) enrolBegin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hash := sha256.Sum256([]byte(req.Token))
+	if id, ok := h.devices.peek(req.Token); ok {
+		account, credentials, found := h.accountWithCredentials(r.Context(), id)
+		if !found {
+			writeError(w, http.StatusUnauthorized, "this link expired or was already used; ask for a new one")
+			return
+		}
+		creation, session, err := rp.BeginRegistration(&webUser{account: account, credentials: credentials},
+			webauthn.WithExclusions(webauthn.Credentials(credentials).CredentialDescriptors()))
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "adding a passkey could not start")
+			return
+		}
+		ceremony, err := h.ceremonies.put(pendingCeremony{enrol: true, kind: "device", session: *session, tokenHash: hash[:], account: account})
+		if err != nil {
+			writeError(w, http.StatusTooManyRequests, "too many sign-ins in progress; try again shortly")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ceremony": ceremony, "options": creation})
+		return
+	}
 	enrolment, err := h.identities.Enrolment(r.Context(), hash[:])
 	if err != nil {
 		h.failedSignIn(r, "enrolment_invalid", err)
@@ -408,6 +513,14 @@ func (h *Handler) enrolFinish(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "this step expired; start again")
 		return
 	}
+	if pending.kind == "device" {
+		h.finishDevice(w, r, rp, pending)
+		return
+	}
+	if pending.kind == "add" {
+		writeError(w, http.StatusUnauthorized, "this step expired; start again")
+		return
+	}
 	credential, err := rp.FinishRegistration(&webUser{account: pending.account}, pending.session, r)
 	if err != nil {
 		h.failedSignIn(r, "enrol_invalid", err)
@@ -428,6 +541,7 @@ func (h *Handler) enrolFinish(w http.ResponseWriter, r *http.Request) {
 	}
 	if pending.kind == enrolRecover {
 		h.operators.revokeAccount(account.ID)
+		h.devices.revokeAccount(account.ID)
 	}
 	h.emit(events.Event{Type: events.Type("admin.passkey_registered"), Actor: "admin:" + account.Email, Code: account.ID})
 	h.startAdminSession(w, account)
@@ -505,14 +619,14 @@ func (h *Handler) adminLoginFinish(w http.ResponseWriter, r *http.Request) {
 // startAdminSession turns a verified administrator into the same short,
 // memory-only operator session the host login produces.
 func (h *Handler) startAdminSession(w http.ResponseWriter, account adminid.Account) {
-	token, grant, err := h.operators.issue(account.Name, false, account.Tools...)
+	token, grant, err := h.operators.issueSliding(account.Name, account.Tools...)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "the session could not be opened")
 		return
 	}
 	h.operators.bind(grant.ID, account.ID)
 	h.emit(events.Event{Type: events.Type("operator.signed_in"), Actor: "admin:" + account.Email, Code: grant.ID, Reason: "passkey"})
-	writeJSON(w, http.StatusOK, map[string]any{"token": token, "name": grant.Name, "id": grant.ID, "expires": grant.Expires, "tools": grant.Tools})
+	writeJSON(w, http.StatusOK, map[string]any{"token": token, "name": grant.Name, "id": grant.ID, "expires": grant.Expires, "tools": grant.Tools, "renewable": true})
 }
 
 type adminView struct {
@@ -743,6 +857,55 @@ func (h *Handler) addPasskeyFinish(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"added": true})
 }
 
+// issueDeviceLink gives the signed-in administrator a one-use link to open in
+// another browser, where it creates a passkey for the same account. It exists
+// because passkeys are kept per password manager: one saved by Chrome is not
+// offered by Firefox.
+func (h *Handler) issueDeviceLink(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	self := h.callerAccount(r)
+	if self == "" {
+		writeError(w, http.StatusForbidden, "sign in with your passkey to add another browser")
+		return
+	}
+	token, expires, err := h.devices.issue(self)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "the link could not be issued")
+		return
+	}
+	h.emit(events.Event{Type: events.Type("admin.device_link_issued"), Actor: h.actorOf(r)})
+	writeJSON(w, http.StatusCreated, map[string]any{"token": token, "expires": expires})
+}
+
+// finishDevice completes a passkey created through a device link and signs
+// that browser in. The link is used up under the identity lock, so a recovery
+// or a disable that ended it meanwhile wins.
+func (h *Handler) finishDevice(w http.ResponseWriter, r *http.Request, rp *webauthn.WebAuthn, pending pendingCeremony) {
+	credential, err := rp.FinishRegistration(&webUser{account: pending.account}, pending.session, r)
+	if err != nil {
+		h.failedSignIn(r, "device_passkey_invalid", err)
+		writeError(w, http.StatusUnauthorized, "the passkey could not be verified; try again")
+		return
+	}
+	h.identityMu.Lock()
+	defer h.identityMu.Unlock()
+	if !h.devices.take(pending.tokenHash, pending.account.ID) {
+		writeError(w, http.StatusUnauthorized, "this link expired or was already used; ask for a new one")
+		return
+	}
+	account, _, found := h.accountWithCredentials(r.Context(), pending.account.ID)
+	if !found {
+		writeError(w, http.StatusUnauthorized, "that administrator is no longer active")
+		return
+	}
+	if err := h.identities.AddPasskey(r.Context(), account.ID, *credential); err != nil {
+		writeError(w, http.StatusServiceUnavailable, "the passkey could not be saved")
+		return
+	}
+	h.emit(events.Event{Type: events.Type("admin.passkey_added"), Actor: "admin:" + account.Email, Reason: "another browser"})
+	h.startAdminSession(w, account)
+}
+
 // accountWithCredentials finds an enabled administrator by ID with their
 // active passkeys.
 func (h *Handler) accountWithCredentials(ctx context.Context, id string) (adminid.Account, []webauthn.Credential, bool) {
@@ -795,8 +958,9 @@ func (h *Handler) setAdminDisabled(disabled bool) http.HandlerFunc {
 			return
 		}
 		if disabled {
-			// Their open sessions end now, not when they expire.
+			// Their open sessions and links end now, not when they expire.
 			h.operators.revokeAccount(id)
+			h.devices.revokeAccount(id)
 		}
 		h.emit(events.Event{Type: events.Type(action + "d"), Actor: h.actorOf(r), Host: account.Email})
 		writeJSON(w, http.StatusOK, map[string]bool{"disabled": disabled})

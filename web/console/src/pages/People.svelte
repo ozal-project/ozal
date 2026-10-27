@@ -1,10 +1,10 @@
 <script lang="ts">
+  import Summary from "$lib/Summary.svelte";
   import { onMount, untrack } from "svelte";
   import GroupCatalog from "$lib/GroupCatalog.svelte";
   import Membership from "$lib/Membership.svelte";
   import PageHeader from "$lib/PageHeader.svelte";
   import Panel from "$lib/Panel.svelte";
-  import Stat from "$lib/Stat.svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
@@ -201,7 +201,7 @@
   const expires = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 </script>
 
-<PageHeader eyebrow="Identity" title="People & passkeys" intro="Who can sign in, and from which devices. Invite someone, see their passkeys, or cut their access at once.">
+<PageHeader title="People" intro="Who can sign in to your applications, and with which passkeys.">
   <div class="flex flex-col items-start gap-2 sm:items-end">
     <Button variant="outline" size="sm" onclick={load} disabled={loading}><RefreshIcon class={["size-3.5", loading && "animate-spin"]} /> Refresh</Button>
     <Freshness observedAt={observedAt} refreshing={loading && people !== null} error={error} />
@@ -213,14 +213,7 @@
     <p class="text-muted-foreground text-sm">Add <code class="font-mono">auth.passkeys</code> (<code class="font-mono">rp_id</code>, <code class="font-mono">login_url</code>) and start Switchboard with <code class="font-mono">-db</code>.</p>
   </Panel>
 {:else}
-  <div class="mb-5 flex flex-wrap gap-x-4 gap-y-1 rounded-lg border px-3 py-2 text-sm sm:hidden" aria-label="People summary">
-    <span>{people ? people.users.length : "—"} people</span><span>{people ? activeKeys : "—"} active passkeys</span><span>{people ? disabledCount : "—"} disabled</span>
-  </div>
-  <div class="mb-6 hidden gap-4 sm:grid sm:grid-cols-3">
-    <Stat label="People" value={people ? people.users.length : "—"} note="Invited by the operator" lamp={people?.users.length ? "on" : "idle"} />
-    <Stat label="Active passkeys" value={people ? activeKeys : "—"} note="A passkey may sync across devices" lamp={activeKeys ? "on" : "idle"} />
-    <Stat label="Disabled" value={people ? disabledCount : "—"} note="Cannot sign in; sessions ended" lamp={disabledCount ? "wait" : "idle"} />
-  </div>
+  <Summary label="People summary" items={[{ value: people ? people.users.length : "—", label: "people" }, { value: people ? activeKeys : "—", label: "passkeys" }, { value: people ? disabledCount : "—", label: "disabled", tone: disabledCount ? "warn" : undefined }]} />
 
   <GroupCatalog refreshedAt={observedAt} />
   <Panel label="Invite" title="Invite someone" sub="They get a one-time link to create their passkey on their own device. It works once and expires in 15 minutes." class="mb-6">

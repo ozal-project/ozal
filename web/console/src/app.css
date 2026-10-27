@@ -95,7 +95,7 @@
    the new look; only their appearance changed. */
 @layer components {
   body {
-    background-image: radial-gradient(1100px 520px at 78% -14%, color-mix(in srgb, var(--primary) 13%, transparent), transparent 62%);
+    background-image: radial-gradient(1100px 520px at 78% -14%, color-mix(in srgb, var(--primary) 7%, transparent), transparent 62%);
     background-repeat: no-repeat;
   }
   /* Small label above a block. */
@@ -115,11 +115,74 @@
   .lamp-idle { --lamp: #34343c; box-shadow: none; }
   .lamp-lg { @apply size-3; }
   .panel {
-    @apply bg-card relative rounded-2xl border;
+    @apply bg-card relative rounded-xl border;
   }
-  .panel-head { @apply flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3.5; }
+  .panel-head { @apply flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3; }
   /* A connecting line, as a divider next to labels. */
   .cord { stroke: #6b6b76; fill: none; stroke-linecap: round; }
 }
 
 @keyframes lamp-pulse { 50% { opacity: 0.45; } }
+
+/* Identity motion. Every animation here stops under prefers-reduced-motion
+   (rule above); none is needed to read or use a page. */
+.logo-live .logo-cord { stroke-dasharray: 1; stroke-dashoffset: 1; animation: cord-draw 0.9s 0.15s cubic-bezier(0.6, 0, 0.2, 1) forwards; }
+.logo-live .logo-from { animation: jack-pop 0.35s ease-out both; }
+.logo-live .logo-to { transform-box: fill-box; transform-origin: center; animation: jack-pop 0.35s 0.95s ease-out both; }
+.logo-signal { offset-path: path("M6 10.5 C6 19, 20 7, 20 15.5"); offset-rotate: 0deg; opacity: 0; animation: signal-run 3.2s 1.4s ease-in-out infinite; }
+@keyframes cord-draw { to { stroke-dashoffset: 0; } }
+@keyframes jack-pop { from { opacity: 0; transform: scale(0.4); } }
+@keyframes signal-run { 0% { offset-distance: 0%; opacity: 0; } 10% { opacity: 1; } 45% { offset-distance: 100%; opacity: 1; } 55%, 100% { offset-distance: 100%; opacity: 0; } }
+
+.patchbay { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.55; mask-image: radial-gradient(70% 70% at 50% 45%, black, transparent); }
+.patch-jack { fill: color-mix(in srgb, var(--muted-foreground) 35%, transparent); }
+.patch-cord { fill: none; stroke: color-mix(in srgb, var(--muted-foreground) 45%, transparent); stroke-width: 1.4; stroke-dasharray: 1; stroke-dashoffset: 1; animation: cord-draw 1.6s cubic-bezier(0.6, 0, 0.2, 1) forwards; }
+.patch-signal { fill: none; stroke: var(--primary); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 0.06 0.94; stroke-dashoffset: 1; opacity: 0; animation: patch-signal 5s ease-in-out infinite; filter: drop-shadow(0 0 4px var(--primary)); }
+.patch-lit { fill: none; stroke: var(--primary); stroke-width: 1.4; opacity: 0; animation: patch-lit 5s ease-in-out infinite; }
+.patch-cord-1 { animation-delay: 0.3s, 0.3s; } .patch-cord-1.patch-signal, .patch-cord-1.patch-lit { animation-delay: 2.1s; }
+.patch-cord-0.patch-signal, .patch-cord-0.patch-lit { animation-delay: 1.4s; }
+.patch-cord-2 { animation-delay: 0.6s; } .patch-cord-2.patch-signal, .patch-cord-2.patch-lit { animation-delay: 3.2s; }
+.patch-cord-3 { animation-delay: 0.9s; } .patch-cord-3.patch-signal, .patch-cord-3.patch-lit { animation-delay: 4.3s; }
+.patch-cord-4 { animation-delay: 1.2s; } .patch-cord-4.patch-signal, .patch-cord-4.patch-lit { animation-delay: 5.4s; }
+@keyframes patch-signal { 0% { stroke-dashoffset: 1; opacity: 0; } 8% { opacity: 1; } 60% { stroke-dashoffset: 0.06; opacity: 1; } 70%, 100% { stroke-dashoffset: 0.06; opacity: 0; } }
+@keyframes patch-lit { 0%, 55% { opacity: 0; } 62% { opacity: 0.9; } 100% { opacity: 0; } }
+
+/* A page change: the new page settles in from slightly below. */
+.page-enter { animation: page-in 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+@keyframes page-in { from { opacity: 0; transform: translateY(6px); } }
+
+/* The navigation marker: a lit cord on the left of the current section. */
+.nav-item { position: relative; }
+.nav-item[aria-current="page"]::before {
+  content: ""; position: absolute; left: -0.5rem; top: 22%; bottom: 22%; width: 3px; border-radius: 0 3px 3px 0;
+  background: var(--primary); box-shadow: 0 0 10px color-mix(in srgb, var(--primary) 70%, transparent);
+  animation: marker-in 0.25s ease-out both;
+}
+@keyframes marker-in { from { transform: scaleY(0); } }
+
+.tab[aria-current="page"] { border-color: var(--primary); }
+
+/* The Overview map. Text uses the theme; cords carry staggered signals. */
+.edgemap { font-family: inherit; }
+.em-node { fill: var(--card); stroke: var(--border); }
+.em-hub { fill: color-mix(in srgb, var(--primary) 10%, var(--card)); stroke: color-mix(in srgb, var(--primary) 45%, transparent); }
+.em-dot { fill: var(--foreground); }
+.em-dot-primary { fill: var(--primary); }
+.em-glyph { fill: var(--muted-foreground); }
+.em-glyph-line { fill: none; stroke: var(--muted-foreground); stroke-width: 1.8; stroke-linecap: round; }
+.em-label { fill: var(--muted-foreground); font-size: 12px; }
+.em-cord { fill: none; stroke: color-mix(in srgb, var(--muted-foreground) 40%, transparent); stroke-width: 1.4; }
+.em-cord-bad { stroke: color-mix(in srgb, var(--destructive) 70%, transparent); stroke-dasharray: 4 5; }
+.em-signal { fill: none; stroke: var(--primary); stroke-width: 2.2; stroke-linecap: round; stroke-dasharray: 0.08 0.92; stroke-dashoffset: 1; opacity: 0; animation: em-run 3.6s ease-in-out infinite; filter: drop-shadow(0 0 3px var(--primary)); }
+.em-d1 { animation-delay: 1.2s; } .em-d2 { animation-delay: 1.6s; } .em-d3 { animation-delay: 2.1s; } .em-d4 { animation-delay: 2.5s; }
+.em-d5 { animation-delay: 2.9s; } .em-d6 { animation-delay: 3.3s; } .em-d7 { animation-delay: 0.6s; } .em-d8 { animation-delay: 0.9s; }
+@keyframes em-run { 0% { stroke-dashoffset: 1; opacity: 0; } 10% { opacity: 1; } 55% { stroke-dashoffset: 0.08; opacity: 1; } 65%, 100% { stroke-dashoffset: 0.08; opacity: 0; } }
+.em-row-bg { fill: transparent; stroke: var(--border); transition: fill 0.15s; }
+.em-row:hover .em-row-bg, .em-row:focus-visible .em-row-bg { fill: var(--accent); }
+.em-row:focus-visible { outline: none; }
+.em-row:focus-visible .em-row-bg { stroke: var(--ring); }
+.em-host { fill: var(--foreground); font-family: var(--font-mono); font-size: 12.5px; }
+.em-meta { fill: var(--muted-foreground); font-size: 11.5px; }
+.em-lamp-ok { fill: var(--success); }
+.em-lamp-bad { fill: var(--destructive); }
+.em-lamp-idle { fill: var(--muted-foreground); opacity: 0.5; }

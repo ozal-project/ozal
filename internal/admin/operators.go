@@ -32,7 +32,18 @@ type operatorGrant struct {
 	Expires   time.Time `json:"expires"`
 	Tools     []string  `json:"tools"`
 	bootstrap bool
+	// idle > 0 makes the session sliding: each use pushes Expires to now+idle,
+	// never past limit. Passkey sessions slide; host logins do not.
+	idle  time.Duration
+	limit time.Time
 }
+
+// Passkey sessions end after half an hour without use, and after twelve hours
+// whatever happens: a forgotten tab does not stay open for good.
+const (
+	passkeyIdle  = 30 * time.Minute
+	passkeyLimit = 12 * time.Hour
+)
 
 func (g operatorGrant) allows(tool string) bool { return slices.Contains(g.Tools, tool) }
 
@@ -129,6 +140,42 @@ func (s *operatorSessions) authenticate(token string) (operatorGrant, bool) {
 	g, ok := s.grants[sha256.Sum256([]byte(token))]
 	return g, ok && !g.bootstrap
 }
+
+// renew extends a sliding session to now+idle, never past its limit. It is
+// called only when the person is active in the console: background refreshes
+// of an unattended tab must not keep it signed in.
+func (s *operatorSessions) renew(token string) (operatorGrant, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.purge()
+	hash := sha256.Sum256([]byte(token))
+	g, ok := s.grants[hash]
+	if !ok || g.bootstrap || g.idle == 0 {
+		return g, ok && !g.bootstrap
+	}
+	next := s.now().Add(g.idle)
+	if next.After(g.limit) {
+		next = g.limit
+	}
+	g.Expires = next
+	s.grants[hash] = g
+	return g, true
+}
+
+// issueSliding opens a passkey session: idle timeout with an absolute limit.
+func (s *operatorSessions) issueSliding(name string, tools ...string) (string, operatorGrant, error) {
+	token, g, err := s.issue(name, false, tools...)
+	if err != nil {
+		return "", operatorGrant{}, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	hash := sha256.Sum256([]byte(token))
+	now := s.now()
+	g.idle, g.limit, g.Expires = passkeyIdle, now.Add(passkeyLimit), now.Add(passkeyIdle)
+	s.grants[hash] = g
+	return token, g, nil
+}
 func (s *operatorSessions) bind(sessionID, accountID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -172,6 +219,7 @@ func (h *Handler) registerOperators() {
 	h.mux.HandleFunc("GET /_/api/operators", h.requireLocal(h.listOperators))
 	h.mux.HandleFunc("DELETE /_/api/operators/{id}", h.requireLocal(h.revokeOperator))
 	h.mux.HandleFunc("POST /_/api/operators/logout", h.requireBearer(h.logoutOperator))
+	h.mux.HandleFunc("POST /_/api/operators/renew", h.requireBearer(h.renewOperator))
 }
 
 // operatorSession describes only the credential presented by this request.
@@ -179,7 +227,7 @@ func (h *Handler) registerOperators() {
 func (h *Handler) operatorSession(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if g, ok := r.Context().Value(operatorKey{}).(operatorGrant); ok {
-		writeJSON(w, http.StatusOK, map[string]any{"name": g.Name, "expires": g.Expires, "tools": g.Tools, "kind": "operator"})
+		writeJSON(w, http.StatusOK, map[string]any{"name": g.Name, "expires": g.Expires, "tools": g.Tools, "kind": "operator", "renewable": g.idle > 0})
 		return
 	}
 	if !isLocal(r) {
@@ -193,6 +241,20 @@ func (h *Handler) operatorSession(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"tools": operatorTools, "kind": "admin"})
 }
+
+// renewOperator keeps an active passkey session open; other credentials are
+// answered as they are.
+func (h *Handler) renewOperator(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	_, token, _ := strings.Cut(r.Header.Get("Authorization"), " ")
+	g, ok := h.operators.renew(strings.TrimSpace(token))
+	if !ok {
+		writeJSON(w, http.StatusOK, map[string]any{"renewable": false})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"expires": g.Expires, "renewable": g.idle > 0})
+}
+
 func (h *Handler) issueOperator(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name  string   `json:"name"`

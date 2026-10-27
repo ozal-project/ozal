@@ -1,8 +1,8 @@
 <script lang="ts">
+  import Summary from "$lib/Summary.svelte";
   import { onMount, onDestroy } from "svelte";
   import PageHeader from "$lib/PageHeader.svelte";
   import Panel from "$lib/Panel.svelte";
-  import Stat from "$lib/Stat.svelte";
   import CopyCommand from "$lib/CopyCommand.svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -56,7 +56,7 @@
   const progress = $derived(mine ? (mine.connected ? 5 : 4) : 0);
 </script>
 
-<PageHeader eyebrow="Operate" title="Connectors" intro="Private hosts that publish applications to this edge without opening a port at home. Enrolment and revocation stay with the host operator.">
+<PageHeader title="Connectors" intro="Private hosts that publish applications without opening a port.">
   <Button variant="outline" disabled={loading} onclick={() => load()}>{loading ? "Reading…" : records ? "Refresh" : "Read connector registry"}</Button>
   <Button onclick={() => { adding = !adding; if (adding && !records) void load(); }}>{adding ? "Close guide" : "Connect a private host"}</Button>
 </PageHeader>
@@ -64,11 +64,7 @@
 {#if error && records}<p role="status" class="border-warning/40 bg-warning/[0.06] mb-4 rounded-md border p-3 text-sm">Showing the last successful registry read. Refresh failed: {error}</p>
 {:else if error}<p role="alert" class="text-destructive mb-4 text-sm">{error}</p>{/if}
 
-<div class="mb-6 grid gap-4 sm:grid-cols-3">
-  <Stat label="Enrolled" value={records ? active.length : "—"} note="Active identities in the registry" lamp={records ? (active.length ? "on" : "idle") : "idle"} />
-  <Stat label="Connected now" value={records ? connected : "—"} note="Attached to this edge" lamp={records ? (connected ? "on" : "idle") : "idle"} />
-  <Stat label="Certificate expiring" value={records ? expiring : "—"} note="Under 10 days left" lamp={expiring ? "wait" : "idle"} />
-</div>
+<Summary label="Connectors summary" items={[{ value: records ? active.length : "—", label: "enrolled" }, { value: records ? connected : "—", label: "connected" }, { value: records ? expiring : "—", label: "certificates expiring soon", tone: expiring ? "warn" : undefined }]} />
 
 {#if adding}
   <Panel label="New private host" title="Connect it in five steps" sub="Each step shows the exact command. This page watches the registry and ticks a step when it sees the result." class="mb-6">

@@ -1,12 +1,13 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { admin } from "$lib/adminToken.svelte";
+  import { admin, startSession } from "$lib/adminToken.svelte";
   import { adminState, signInWithPasskey, explainPasskeyError } from "$lib/passkey";
   import { Button } from "$lib/components/ui/button";
   import CopyCommand from "$lib/CopyCommand.svelte";
   import EnrolForm from "$lib/EnrolForm.svelte";
   import HostLogin from "$lib/auth/HostLogin.svelte";
   import Wordmark from "$lib/brand/Wordmark.svelte";
+  import Patchbay from "$lib/brand/Patchbay.svelte";
 
   // The only thing a signed-out tab shows. It says what this is and how to get
   // in, and nothing about what is inside.
@@ -42,18 +43,19 @@
     waiting = true; error = "";
     try {
       const session = await signInWithPasskey();
-      admin.token = session.token; admin.name = session.name; admin.expires = session.expires; admin.tools = session.tools; admin.notice = ""; admin.passkey = true;
-    } catch (e) { error = explainPasskeyError(e); }
+      startSession(session, true);
+    } catch (e) { error = explainPasskeyError(e, "sign-in"); }
     finally { waiting = false; }
   }
 
-  const heading = $derived(admin.enrol ? "Create your administrator passkey" : mode === "host" ? "Sign in from the host" : enrolled === false ? "Set up the first administrator" : "Sign in");
+  const heading = $derived(admin.enrol ? "Create your passkey" : mode === "host" ? "Sign in from the host" : enrolled === false ? "Set up the first administrator" : "Sign in");
 </script>
 
 <main class="relative flex min-h-screen items-center justify-center overflow-hidden px-5 py-12">
+  <Patchbay />
   <div aria-hidden="true" class="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_50%_at_50%_0%,color-mix(in_oklab,var(--primary)_14%,transparent),transparent)]"></div>
   <div class="animate-in fade-in-0 slide-in-from-bottom-3 relative w-full max-w-md duration-500 motion-reduce:animate-none">
-    <div class="mb-8 flex justify-center"><Wordmark /></div>
+    <div class="mb-8 flex justify-center"><Wordmark animated /></div>
     <div class="panel p-8">
       <h1 class="text-xl font-semibold">{heading}</h1>
 
@@ -82,6 +84,7 @@
         <p class="text-muted-foreground mt-1 mb-6 text-sm">Use the passkey you created for this console.</p>
         {#if error || admin.notice}<p class="text-destructive mb-4 text-sm" role="alert">{error || admin.notice}</p>{/if}
         <Button class="w-full" onclick={passkey} disabled={waiting || !onLocalhost}>{waiting ? "Waiting for your device…" : "Sign in with your passkey"}</Button>
+        <p class="text-muted-foreground mt-4 text-xs leading-relaxed">A passkey works in the browser or password manager that saved it. To use this browser too, sign in where it works and choose <span class="text-foreground">Sign in on another browser</span> in your menu.</p>
       {:else}
         <p class="text-muted-foreground mt-2 text-sm" role="status">Checking…</p>
       {/if}
