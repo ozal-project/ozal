@@ -194,6 +194,8 @@ func main() {
 		identity := sqlite.NewIdentity(db)
 		managerOpts = append(managerOpts, routemanager.WithPasskeyDirectory(identity))
 		adminOpts = append(adminOpts, admin.WithPeople(identity))
+		// UI-007: administrators have their own passkeys, apart from users.
+		adminOpts = append(adminOpts, admin.WithIdentities(sqlite.NewAdmins(db)))
 		// CLI-001: the connector registry is managed through the admin API
 		// (changes on the unix socket only); the edge revalidates live
 		// attachments against the same table.

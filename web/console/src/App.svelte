@@ -3,6 +3,7 @@
   import { route, navigate, type Page } from "$lib/router.svelte";
   import AdminMenu from "$lib/AdminMenu.svelte";
   import SignIn from "$lib/SignIn.svelte";
+  import EnrolForm from "$lib/EnrolForm.svelte";
   import { admin, can, tools as toolList, type Tool } from "$lib/adminToken.svelte";
   import Connectors from "./pages/Connectors.svelte";
   import Applications from "./pages/Applications.svelte";
@@ -11,11 +12,13 @@
   import Routes from "./pages/Routes.svelte";
   import Sites from "./pages/Sites.svelte";
   import People from "./pages/People.svelte";
+  import Administrators from "./pages/Administrators.svelte";
   import Wordmark from "$lib/brand/Wordmark.svelte";
   import LayoutDashboardIcon from "@lucide/svelte/icons/layout-dashboard";
   import AppWindowIcon from "@lucide/svelte/icons/app-window";
   import GlobeIcon from "@lucide/svelte/icons/globe";
   import UsersIcon from "@lucide/svelte/icons/users";
+  import ShieldCheckIcon from "@lucide/svelte/icons/shield-check";
   import PlugIcon from "@lucide/svelte/icons/plug";
   import ScrollTextIcon from "@lucide/svelte/icons/scroll-text";
   import RouteIcon from "@lucide/svelte/icons/route";
@@ -29,6 +32,7 @@
       { path: "/applications", label: "Applications", icon: AppWindowIcon, tool: "applications" },
       { path: "/sites", label: "Sites", icon: GlobeIcon },
       { path: "/people", label: "People", icon: UsersIcon, tool: "people" },
+      { path: "/administrators", label: "Administrators", icon: ShieldCheckIcon, tool: "administrators" },
       { path: "/connectors", label: "Connectors", icon: PlugIcon, tool: "connectors" },
       { path: "/activity", label: "Access log", icon: ScrollTextIcon },
     ] },
@@ -114,11 +118,18 @@
     </nav>
     <main id="main-content" tabindex="-1" class="mx-auto w-full max-w-[1320px] flex-1 px-5 py-10 md:px-10">
       {#if !admin.token}
-        {#if admin.ready}
+        {#if admin.enrol}
           <div class="panel mx-auto max-w-lg p-8">
-            <p class="plate">Operators</p>
+            <p class="plate">Administrator</p>
+            <h1 tabindex="-1" class="mt-2 mb-1 text-xl font-semibold outline-none">Create your administrator passkey</h1>
+            <p class="text-muted-foreground mb-5 text-sm">The host opened this link for you. Your passkey stays on your device; from now on you sign in with it, with no command on the host.</p>
+            <EnrolForm />
+          </div>
+        {:else if admin.ready}
+          <div class="panel mx-auto max-w-lg p-8">
+            <p class="plate">Administrators</p>
             <h1 tabindex="-1" class="mt-2 mb-1 text-xl font-semibold outline-none">Sign in to open the console</h1>
-            <p class="text-muted-foreground mb-5 text-sm">Routes, people, sites and activity are only shown to a signed-in operator, even on this machine. The host chooses what each login may change: pick the tools, run the command on the host and open the one-use link it prints.</p>
+            <p class="text-muted-foreground mb-5 text-sm">Routes, people, sites and activity are only shown to a signed-in administrator, even on this machine.</p>
             <SignIn />
           </div>
         {/if}
@@ -134,6 +145,7 @@
       {:else if route.path === "/activity"}<Activity />
       {:else if route.path === "/routes"}<Routes />
       {:else if route.path === "/people"}<People />
+      {:else if route.path === "/administrators"}<Administrators />
       {:else if route.path === "/sites"}<Sites />
       {:else}<Overview />{/if}
     </main>

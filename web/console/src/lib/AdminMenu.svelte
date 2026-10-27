@@ -3,7 +3,7 @@
   import { admin, tools, signOut } from "$lib/adminToken.svelte";
   import { Button } from "$lib/components/ui/button";
   import SignIn from "$lib/SignIn.svelte";
-  import { exchangeHostLogin } from "$lib/operatorLogin";
+  import { exchangeHostLogin, takeHostLink } from "$lib/operatorLogin";
   import ShieldIcon from "@lucide/svelte/icons/shield-check";
   import LockIcon from "@lucide/svelte/icons/lock";
   import CheckIcon from "@lucide/svelte/icons/check";
@@ -18,10 +18,13 @@
   let seen = admin.asked;
 
   onMount(() => {
-    void exchangeHostLogin().then((session) => {
-      if (!session) return;
-      admin.token = session.token; admin.name = session.name; admin.expires = session.expires; admin.tools = session.tools ?? []; admin.notice = "";
-    }).catch((e) => { admin.notice = (e as Error).message; }).finally(() => { admin.ready = true; });
+    const link = takeHostLink();
+    if (link?.kind === "enrol") { admin.enrol = link.token; admin.ready = true; }
+    else if (link) {
+      void exchangeHostLogin(link.token).then((session) => {
+        admin.token = session.token; admin.name = session.name; admin.expires = session.expires; admin.tools = session.tools ?? []; admin.notice = "";
+      }).catch((e) => { admin.notice = (e as Error).message; }).finally(() => { admin.ready = true; });
+    } else admin.ready = true;
     const timer = setInterval(() => {
       if (admin.expires && Date.parse(admin.expires) <= Date.now()) { signOut(); admin.notice = "Your operator session expired. Ask the host for a new login."; }
     }, 5_000);

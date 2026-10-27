@@ -280,3 +280,15 @@ export async function fetchConnectors(token: string, signal?: AbortSignal): Prom
   if (!res.ok) throw new Error(`Connector registry could not be read (HTTP ${res.status}).`);
   return ((await res.json()) as { connectors: Connector[] }).connectors;
 }
+
+export type AdminAccount = { id: string; name: string; email: string; tools: string[]; disabled: boolean; passkeys: number; created_at: string; last_used_at?: string; you?: boolean };
+export async function fetchAdmins(signal?: AbortSignal): Promise<AdminAccount[]> {
+  const res = await authedGet("/_/api/admins", signal);
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return ((await res.json()) as { admins: AdminAccount[] }).admins ?? [];
+}
+export const inviteAdmin = (token: string, email: string, tools: string[], name?: string, signal?: AbortSignal) =>
+  adminPost<{ token: string; expires: string; email: string; tools: string[] }>(token, "/_/api/admins/invite", { email, tools, name }, signal);
+export const setAdminDisabled = (token: string, id: string, disabled: boolean, signal?: AbortSignal) =>
+  adminPost(token, `/_/api/admins/${encodeURIComponent(id)}/${disabled ? "disable" : "enable"}`, undefined, signal);

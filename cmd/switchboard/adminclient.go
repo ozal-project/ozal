@@ -40,19 +40,20 @@ func addAdminFlags(fs *flag.FlagSet) adminFlags {
 	return adminFlags{
 		target:   fs.String("admin", "", "admin API: unix:/path or http(s)://host:port (default: admin.socket from -config)"),
 		tokenRef: fs.String("token", "env:SWITCHBOARD_ADMIN_TOKEN", "admin token reference for an http(s) -admin (env:NAME or file:/path)"),
-		config:   fs.String("config", "config.json", "routing config (its admin.socket is the default -admin)"),
+		config:   fs.String("config", "config.json", "routing config (its admin.socket is the default -admin); when ./config.json is absent, "+installedConfig+" is used"),
 	}
 }
 
 func (f adminFlags) client() (*adminClient, error) {
 	target := *f.target
 	if target == "" {
-		cfg, err := config.Load(*f.config)
+		path := resolveConfigPath(*f.config)
+		cfg, err := config.Load(path)
 		if err != nil {
 			return nil, err
 		}
 		if cfg.Admin.Socket == "" {
-			return nil, fmt.Errorf("%s has no admin.socket: set it, or pass -admin (or -db for offline break-glass)", *f.config)
+			return nil, fmt.Errorf("%s has no admin.socket: set it, or pass -admin (or -db for offline break-glass)", path)
 		}
 		target = "unix:" + cfg.Admin.Socket
 	}
@@ -119,4 +120,24 @@ func offlineNotice() events.Sink {
 func emitOffline(sink events.Sink, e events.Event) {
 	e.Time, e.Actor = time.Now(), "offline"
 	sink.Emit(e)
+}
+
+// installedConfig is where scripts/release/install-service.sh puts the config.
+const installedConfig = "/etc/switchboard/config.json"
+
+// resolveConfigPath lets an installed host run `switchboard console enrol` from
+// any directory: the untouched default ./config.json falls back to the
+// installed config when there is none beside the shell. An explicit -config
+// is always used as given.
+func resolveConfigPath(given string) string {
+	if given != "config.json" {
+		return given
+	}
+	if _, err := os.Stat(given); err == nil {
+		return given
+	}
+	if _, err := os.Stat(installedConfig); err == nil {
+		return installedConfig
+	}
+	return given
 }

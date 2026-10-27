@@ -1,0 +1,581 @@
+package admin
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"errors"
+	"net"
+	"net/http"
+	"net/mail"
+	"strings"
+	"sync"
+	"time"
+	"unicode"
+
+	"github.com/go-webauthn/webauthn/protocol"
+	"github.com/go-webauthn/webauthn/webauthn"
+
+	"github.com/octaviosantacruz/switchboard/internal/adminid"
+	"github.com/octaviosantacruz/switchboard/internal/events"
+)
+
+// Administrative identity (UI-007): the people who run the console sign in
+// with their own passkey instead of a command on the host. The host still
+// opens the door once (`console enrol`) and is the only recovery path.
+// Administrators live apart from application users, so an application
+// passkey or group never opens the console.
+
+const (
+	enrolBootstrap = "bootstrap"
+	enrolRecover   = "recover"
+	enrolInvite    = "invite"
+	enrolmentTTL   = 10 * time.Minute
+	adminCeremony  = "X-Switchboard-Ceremony"
+)
+
+// identities is what the sign-in flows need from storage; the SQLite adapter
+// implements it.
+type identities interface {
+	Enrolled(ctx context.Context) (bool, error)
+	// IssueEnrolment stores the hash of a host-issued one-use token. A
+	// bootstrap fails with adminid.ErrAlreadyEnrolled once an administrator exists;
+	// a recover needs the email of an existing one.
+	IssueEnrolment(ctx context.Context, request adminid.EnrolmentRequest, tokenHash []byte, expires time.Time) error
+	Enrolment(ctx context.Context, tokenHash []byte) (adminid.Enrolment, error)
+	// CompleteEnrolment uses the token and stores the credential in one
+	// transaction. A bootstrap creates the first account (all tools); a
+	// recover revokes the account's previous passkeys.
+	CompleteEnrolment(ctx context.Context, tokenHash []byte, account adminid.Account, credential webauthn.Credential) (adminid.Account, error)
+	// AccountByHandle returns an enabled administrator and active passkeys.
+	AccountByHandle(ctx context.Context, handle []byte) (adminid.Account, []webauthn.Credential, error)
+	// Accounts lists every administrator, enabled or not.
+	Accounts(ctx context.Context) ([]adminid.Summary, error)
+	// SetDisabled disables or enables one; disabling the last enabled
+	// administrator who can manage administrators fails.
+	SetDisabled(ctx context.Context, id string, disabled bool) (adminid.Account, error)
+	// RecordLogin stores a credential's new counter; it fails for a revoked one.
+	RecordLogin(ctx context.Context, credential webauthn.Credential) error
+}
+
+// WithIdentities enables passkey sign-in for administrators.
+func WithIdentities(store identities) Option {
+	return func(h *Handler) { h.identities = store }
+}
+
+type pendingCeremony struct {
+	enrol     bool
+	kind      string
+	session   webauthn.SessionData
+	tokenHash []byte
+	account   adminid.Account
+	expires   time.Time
+}
+
+// ceremonyBook keeps begun ceremonies in memory; each finishes at most once.
+type ceremonyBook struct {
+	mu      sync.Mutex
+	now     func() time.Time
+	pending map[string]pendingCeremony
+}
+
+func newCeremonyBook() *ceremonyBook {
+	return &ceremonyBook{now: time.Now, pending: map[string]pendingCeremony{}}
+}
+
+func (b *ceremonyBook) put(c pendingCeremony) (string, error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	id := base64.RawURLEncoding.EncodeToString(raw)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	now := b.now()
+	for key, p := range b.pending {
+		if !now.Before(p.expires) {
+			delete(b.pending, key)
+		}
+	}
+	if len(b.pending) >= 64 {
+		return "", errors.New("too many pending sign-ins")
+	}
+	c.expires = now.Add(5 * time.Minute)
+	b.pending[id] = c
+	return id, nil
+}
+
+func (b *ceremonyBook) take(id string, enrol bool) (pendingCeremony, bool) {
+	b.mu.Lock()
+	c, ok := b.pending[id]
+	delete(b.pending, id)
+	b.mu.Unlock()
+	if !ok || c.enrol != enrol || !b.now().Before(c.expires) {
+		return pendingCeremony{}, false
+	}
+	return c, true
+}
+
+type webUser struct {
+	account     adminid.Account
+	credentials []webauthn.Credential
+}
+
+func (u *webUser) WebAuthnID() []byte                         { return u.account.Handle }
+func (u *webUser) WebAuthnName() string                       { return u.account.Email }
+func (u *webUser) WebAuthnDisplayName() string                { return u.account.Name }
+func (u *webUser) WebAuthnCredentials() []webauthn.Credential { return u.credentials }
+
+func (h *Handler) registerIdentities() {
+	h.mux.HandleFunc("GET /_/api/admin/state", h.adminState)
+	h.mux.HandleFunc("POST /_/api/admin/enrolments", h.requireLocal(h.issueEnrolment))
+	h.mux.HandleFunc("POST /_/api/admin/enrol/begin", h.enrolBegin)
+	h.mux.HandleFunc("POST /_/api/admin/enrol/finish", h.enrolFinish)
+	h.mux.HandleFunc("POST /_/api/admin/login/begin", h.adminLoginBegin)
+	h.mux.HandleFunc("POST /_/api/admin/login/finish", h.adminLoginFinish)
+	h.mux.HandleFunc("GET /_/api/admins", h.requireTool("administrators", h.listAdmins))
+	h.mux.HandleFunc("POST /_/api/admins/invite", h.requireTool("administrators", h.inviteAdmin))
+	h.mux.HandleFunc("POST /_/api/admins/{id}/disable", h.requireTool("administrators", h.setAdminDisabled(true)))
+	h.mux.HandleFunc("POST /_/api/admins/{id}/enable", h.requireTool("administrators", h.setAdminDisabled(false)))
+}
+
+// relyingParty derives the WebAuthn relying party from the page's own origin.
+// A passkey is bound to a registrable name, never to an IP address, so the
+// console must be opened as localhost (the SSH tunnel's local end).
+func (h *Handler) relyingParty(r *http.Request) (*webauthn.WebAuthn, error) {
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	origin := scheme + "://" + r.Host
+	if r.Header.Get("Origin") != origin {
+		return nil, errors.New("open the console on its own origin")
+	}
+	hostname, _, err := net.SplitHostPort(r.Host)
+	if err != nil {
+		hostname = r.Host
+	}
+	if !strings.EqualFold(hostname, "localhost") {
+		return nil, errors.New("passkeys need the console opened as localhost (for example http://localhost:9091), not by IP address")
+	}
+	return webauthn.New(&webauthn.Config{
+		RPID:          "localhost",
+		RPDisplayName: "Switchboard console",
+		RPOrigins:     []string{origin},
+		AuthenticatorSelection: protocol.AuthenticatorSelection{
+			ResidentKey:      protocol.ResidentKeyRequirementRequired,
+			UserVerification: protocol.VerificationRequired,
+		},
+		AttestationPreference: protocol.PreferNoAttestation,
+		Timeouts: webauthn.TimeoutsConfig{
+			Login:        webauthn.TimeoutConfig{Enforce: true, Timeout: 5 * time.Minute, TimeoutUVD: 5 * time.Minute},
+			Registration: webauthn.TimeoutConfig{Enforce: true, Timeout: 5 * time.Minute, TimeoutUVD: 5 * time.Minute},
+		},
+	})
+}
+
+func (h *Handler) adminState(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	enrolled, err := h.identities.Enrolled(r.Context())
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "administrator directory unavailable")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"enrolled": enrolled})
+}
+
+// issueEnrolment is the host's one door: a printed link, valid ten minutes.
+func (h *Handler) issueEnrolment(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Kind  string `json:"kind"`
+		Email string `json:"email"`
+	}
+	if err := decodeJSON(w, r, &req); err != nil || (req.Kind != enrolBootstrap && req.Kind != enrolRecover) {
+		writeError(w, http.StatusBadRequest, "kind must be bootstrap or recover")
+		return
+	}
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	if req.Kind == enrolRecover && !validEmail(email) {
+		writeError(w, http.StatusBadRequest, "recover needs the administrator's email")
+		return
+	}
+	if !h.recordMutationIntent(w, r, "admin.enrolment", req.Kind) {
+		return
+	}
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		writeError(w, http.StatusServiceUnavailable, "enrolment could not be issued")
+		return
+	}
+	token := base64.RawURLEncoding.EncodeToString(raw)
+	hash := sha256.Sum256([]byte(token))
+	expires := time.Now().Add(enrolmentTTL)
+	switch err := h.identities.IssueEnrolment(r.Context(), adminid.EnrolmentRequest{Kind: req.Kind, Email: email}, hash[:], expires); {
+	case errors.Is(err, adminid.ErrAlreadyEnrolled):
+		writeError(w, http.StatusConflict, "an administrator already exists; use recover with their email")
+		return
+	case errors.Is(err, adminid.ErrAccountNotFound):
+		writeError(w, http.StatusNotFound, "no administrator has that email")
+		return
+	case err != nil:
+		writeError(w, http.StatusServiceUnavailable, "enrolment could not be issued")
+		return
+	}
+	h.emit(events.Event{Type: events.Type("admin.enrolment_issued"), Actor: "local", Code: req.Kind})
+	writeJSON(w, http.StatusCreated, map[string]any{"token": token, "expires": expires})
+}
+
+func validEmail(email string) bool {
+	if len(email) < 3 || len(email) > 254 {
+		return false
+	}
+	addr, err := mail.ParseAddress(email)
+	return err == nil && addr.Address == email
+}
+
+func cleanName(name string) (string, bool) {
+	name = strings.TrimSpace(name)
+	return name, name != "" && len(name) <= 80 && !strings.ContainsFunc(name, unicode.IsControl)
+}
+
+func (h *Handler) failedSignIn(r *http.Request, code string, err error) {
+	reason := ""
+	if err != nil {
+		reason = err.Error()
+	}
+	h.emit(events.Event{Type: events.Type("admin.sign_in_failed"), Actor: "browser", Code: code, Reason: reason})
+}
+
+func (h *Handler) enrolBegin(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	rp, err := h.relyingParty(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	var req struct {
+		Token string `json:"token"`
+		Name  string `json:"name"`
+		Email string `json:"email"`
+	}
+	if err := decodeJSON(w, r, &req); err != nil || req.Token == "" || len(req.Token) > 128 {
+		writeError(w, http.StatusBadRequest, "this enrolment link is not valid")
+		return
+	}
+	hash := sha256.Sum256([]byte(req.Token))
+	enrolment, err := h.identities.Enrolment(r.Context(), hash[:])
+	if err != nil {
+		h.failedSignIn(r, "enrolment_invalid", err)
+		writeError(w, http.StatusUnauthorized, "this enrolment link expired or was already used; ask the host for a new one")
+		return
+	}
+	account := enrolment.Account
+	if enrolment.Kind == enrolBootstrap || enrolment.Kind == enrolInvite {
+		name, ok := cleanName(req.Name)
+		email := strings.ToLower(strings.TrimSpace(req.Email))
+		tools := operatorTools
+		if enrolment.Kind == enrolInvite {
+			// The invitation fixed who this is and what they may change.
+			email, tools = enrolment.Account.Email, enrolment.Account.Tools
+			if name == "" {
+				name, ok = cleanName(enrolment.Account.Name)
+			}
+		}
+		if !ok || !validEmail(email) {
+			writeError(w, http.StatusBadRequest, "give your full name and a valid email")
+			return
+		}
+		handle := make([]byte, 32)
+		id := make([]byte, 16)
+		if _, err := rand.Read(handle); err != nil {
+			writeError(w, http.StatusServiceUnavailable, "enrolment could not start")
+			return
+		}
+		if _, err := rand.Read(id); err != nil {
+			writeError(w, http.StatusServiceUnavailable, "enrolment could not start")
+			return
+		}
+		account = adminid.Account{ID: hex.EncodeToString(id), Handle: handle, Name: name, Email: email, Tools: tools}
+	}
+	creation, session, err := rp.BeginRegistration(&webUser{account: account})
+	if err != nil {
+		h.failedSignIn(r, "enrol_begin_failed", err)
+		writeError(w, http.StatusInternalServerError, "enrolment could not start")
+		return
+	}
+	id, err := h.ceremonies.put(pendingCeremony{enrol: true, kind: enrolment.Kind, session: *session, tokenHash: hash[:], account: account})
+	if err != nil {
+		writeError(w, http.StatusTooManyRequests, "too many sign-ins in progress; try again shortly")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ceremony": id, "options": creation})
+}
+
+func (h *Handler) enrolFinish(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	rp, err := h.relyingParty(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	pending, ok := h.ceremonies.take(r.Header.Get(adminCeremony), true)
+	if !ok {
+		h.failedSignIn(r, "ceremony_unknown", nil)
+		writeError(w, http.StatusUnauthorized, "this step expired; start again")
+		return
+	}
+	credential, err := rp.FinishRegistration(&webUser{account: pending.account}, pending.session, r)
+	if err != nil {
+		h.failedSignIn(r, "enrol_invalid", err)
+		writeError(w, http.StatusUnauthorized, "the passkey could not be verified; try again")
+		return
+	}
+	h.identityMu.Lock()
+	defer h.identityMu.Unlock()
+	account, err := h.identities.CompleteEnrolment(r.Context(), pending.tokenHash, pending.account, *credential)
+	if err != nil {
+		h.failedSignIn(r, "enrol_store_failed", err)
+		if errors.Is(err, adminid.ErrEnrolmentInvalid) || errors.Is(err, adminid.ErrAlreadyEnrolled) {
+			writeError(w, http.StatusUnauthorized, "this enrolment link expired or was already used; ask the host for a new one")
+			return
+		}
+		writeError(w, http.StatusServiceUnavailable, "the passkey could not be saved")
+		return
+	}
+	if pending.kind == enrolRecover {
+		h.operators.revokeAccount(account.ID)
+	}
+	h.emit(events.Event{Type: events.Type("admin.passkey_registered"), Actor: "admin:" + account.Email, Code: account.ID})
+	h.startAdminSession(w, account)
+}
+
+func (h *Handler) adminLoginBegin(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	rp, err := h.relyingParty(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	assertion, session, err := rp.BeginDiscoverableLogin(webauthn.WithUserVerification(protocol.VerificationRequired))
+	if err != nil {
+		h.failedSignIn(r, "begin_failed", err)
+		writeError(w, http.StatusInternalServerError, "sign-in could not start")
+		return
+	}
+	id, err := h.ceremonies.put(pendingCeremony{session: *session})
+	if err != nil {
+		writeError(w, http.StatusTooManyRequests, "too many sign-ins in progress; try again shortly")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ceremony": id, "options": assertion})
+}
+
+func (h *Handler) adminLoginFinish(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	rp, err := h.relyingParty(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	pending, ok := h.ceremonies.take(r.Header.Get(adminCeremony), false)
+	if !ok {
+		h.failedSignIn(r, "ceremony_unknown", nil)
+		writeError(w, http.StatusUnauthorized, "this step expired; start again")
+		return
+	}
+	var found adminid.Account
+	lookup := func(_, handle []byte) (webauthn.User, error) {
+		account, credentials, err := h.identities.AccountByHandle(r.Context(), handle)
+		if err != nil {
+			return nil, err
+		}
+		found = account
+		return &webUser{account: account, credentials: credentials}, nil
+	}
+	_, credential, err := rp.FinishPasskeyLogin(lookup, pending.session, r)
+	if err != nil || found.ID == "" {
+		h.failedSignIn(r, "passkey_invalid", err)
+		writeError(w, http.StatusUnauthorized, "that passkey is not an administrator of this edge")
+		return
+	}
+	if credential.Authenticator.CloneWarning {
+		h.failedSignIn(r, "passkey_clone_warning", nil)
+		writeError(w, http.StatusUnauthorized, "that passkey was refused; ask the host to recover your access")
+		return
+	}
+	h.identityMu.Lock()
+	defer h.identityMu.Unlock()
+	found, _, err = h.identities.AccountByHandle(r.Context(), found.Handle)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "that administrator is no longer active")
+		return
+	}
+	if err := h.identities.RecordLogin(r.Context(), *credential); err != nil {
+		h.failedSignIn(r, "passkey_record_failed", err)
+		writeError(w, http.StatusUnauthorized, "that passkey is no longer active")
+		return
+	}
+	h.startAdminSession(w, found)
+}
+
+// startAdminSession turns a verified administrator into the same short,
+// memory-only operator session the host login produces.
+func (h *Handler) startAdminSession(w http.ResponseWriter, account adminid.Account) {
+	token, grant, err := h.operators.issue(account.Name, false, account.Tools...)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "the session could not be opened")
+		return
+	}
+	h.operators.bind(grant.ID, account.ID)
+	h.emit(events.Event{Type: events.Type("operator.signed_in"), Actor: "admin:" + account.Email, Code: grant.ID, Reason: "passkey"})
+	writeJSON(w, http.StatusOK, map[string]any{"token": token, "name": grant.Name, "id": grant.ID, "expires": grant.Expires, "tools": grant.Tools})
+}
+
+type adminView struct {
+	ID         string   `json:"id"`
+	Name       string   `json:"name"`
+	Email      string   `json:"email"`
+	Tools      []string `json:"tools"`
+	Disabled   bool     `json:"disabled"`
+	Passkeys   int      `json:"passkeys"`
+	CreatedAt  string   `json:"created_at"`
+	LastUsedAt string   `json:"last_used_at,omitempty"`
+	You        bool     `json:"you,omitempty"`
+}
+
+func (h *Handler) listAdmins(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	accounts, err := h.identities.Accounts(r.Context())
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "administrator directory unavailable")
+		return
+	}
+	self := h.callerAccount(r)
+	out := make([]adminView, 0, len(accounts))
+	for _, a := range accounts {
+		view := adminView{ID: a.ID, Name: a.Name, Email: a.Email, Tools: a.Tools, Disabled: !a.DisabledAt.IsZero(), Passkeys: a.Passkeys, CreatedAt: a.CreatedAt.UTC().Format(time.RFC3339), You: a.ID == self}
+		if !a.LastUsedAt.IsZero() {
+			view.LastUsedAt = a.LastUsedAt.UTC().Format(time.RFC3339)
+		}
+		out = append(out, view)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"admins": out, "tools": operatorTools})
+}
+
+// callerAccount is the administrator behind this request's operator session,
+// or "" for the admin token, the host socket or a host login.
+func (h *Handler) callerAccount(r *http.Request) string {
+	grant, ok := r.Context().Value(operatorKey{}).(operatorGrant)
+	if !ok {
+		return ""
+	}
+	return h.operators.account(grant.ID)
+}
+
+// inviteAdmin lets someone with the administrators tool add another person
+// with a chosen subset of tools. A grant can never exceed its giver's own
+// tools, so delegating cannot widen authority.
+func (h *Handler) inviteAdmin(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Email string   `json:"email"`
+		Name  string   `json:"name"`
+		Tools []string `json:"tools"`
+	}
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "email and tools required")
+		return
+	}
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	if !validEmail(email) {
+		writeError(w, http.StatusBadRequest, "give a valid email")
+		return
+	}
+	name := ""
+	if strings.TrimSpace(req.Name) != "" {
+		var ok bool
+		if name, ok = cleanName(req.Name); !ok {
+			writeError(w, http.StatusBadRequest, "name must be 1 to 80 characters without control characters")
+			return
+		}
+	}
+	tools, err := normalizeTools(req.Tools)
+	if err != nil || len(req.Tools) == 0 {
+		writeError(w, http.StatusBadRequest, "choose at least one tool; known tools: "+strings.Join(operatorTools, ", "))
+		return
+	}
+	if grant, ok := r.Context().Value(operatorKey{}).(operatorGrant); ok {
+		for _, tool := range tools {
+			if !grant.allows(tool) {
+				writeError(w, http.StatusForbidden, "you cannot grant the "+tool+" tool: this session does not include it")
+				return
+			}
+		}
+	}
+	if !h.recordMutationIntent(w, r, "admin.invite", email) {
+		return
+	}
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		writeError(w, http.StatusServiceUnavailable, "invitation could not be issued")
+		return
+	}
+	token := base64.RawURLEncoding.EncodeToString(raw)
+	hash := sha256.Sum256([]byte(token))
+	expires := time.Now().Add(24 * time.Hour)
+	switch err := h.identities.IssueEnrolment(r.Context(), adminid.EnrolmentRequest{Kind: enrolInvite, Email: email, Name: name, Tools: tools}, hash[:], expires); {
+	case errors.Is(err, adminid.ErrEmailTaken):
+		writeError(w, http.StatusConflict, "that email already is an administrator; use recovery on the host if they lost access")
+		return
+	case err != nil:
+		writeError(w, http.StatusServiceUnavailable, "invitation could not be issued")
+		return
+	}
+	h.emit(events.Event{Type: events.Type("admin.invited"), Actor: h.actorOf(r), Host: email, Reason: "tools: " + strings.Join(tools, ",")})
+	writeJSON(w, http.StatusCreated, map[string]any{"token": token, "expires": expires, "email": email, "tools": tools})
+}
+
+func (h *Handler) actorOf(r *http.Request) string {
+	if grant, ok := r.Context().Value(operatorKey{}).(operatorGrant); ok {
+		return "operator:" + grant.Name
+	}
+	return "local"
+}
+
+func (h *Handler) setAdminDisabled(disabled bool) http.HandlerFunc {
+	action := "admin.enable"
+	if disabled {
+		action = "admin.disable"
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		if disabled && id == h.callerAccount(r) {
+			writeError(w, http.StatusConflict, "you cannot disable your own account; ask another administrator or the host")
+			return
+		}
+		if !h.recordMutationIntent(w, r, action, id) {
+			return
+		}
+		h.identityMu.Lock()
+		defer h.identityMu.Unlock()
+		account, err := h.identities.SetDisabled(r.Context(), id, disabled)
+		switch {
+		case errors.Is(err, adminid.ErrAccountNotFound):
+			writeError(w, http.StatusNotFound, "no such administrator")
+			return
+		case errors.Is(err, adminid.ErrLastAdministrator):
+			writeError(w, http.StatusConflict, "this is the last enabled administrator who can manage administrators")
+			return
+		case err != nil:
+			writeError(w, http.StatusServiceUnavailable, "the change could not be saved")
+			return
+		}
+		if disabled {
+			// Their open sessions end now, not when they expire.
+			h.operators.revokeAccount(id)
+		}
+		h.emit(events.Event{Type: events.Type(action + "d"), Actor: h.actorOf(r), Host: account.Email})
+		writeJSON(w, http.StatusOK, map[string]bool{"disabled": disabled})
+	}
+}

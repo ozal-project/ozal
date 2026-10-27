@@ -59,7 +59,7 @@ The [product experience review](architecture/product-experience.md) documents
 installation, bringing an existing website, server/connector boundaries,
 self-hosted console, GitHub, groups and the visitor journey. The owner authorized implementation on 2026-10-26 ("ok cerremos esos puntos").
 Local implementation is underway with the boundaries below. Existing owner decisions remain:
-self-hosted, one operator, project-scoped deployers, builds in CI, manual DNS
+self-hosted, named administrators, project-scoped deployers, builds in CI, manual DNS
 by default and recovery through host authority.
 
 Recommended sequence: first the protected install/add-existing-app journey
@@ -68,8 +68,9 @@ existing `ID-012` and `UI-004/005`), then CI/domains (`PAGES-004/009`).
 Repository discovery and connector onboarding follow with `PAGES-010` and
 `TUN-004`. `UI-007` needs an explicit authority decision before implementing
 remote administration. Identity namespacing in `ID-014` must precede adding
-providers or account linking. The authorized implementation keeps self-hosting and one operator. Named
-operator sessions are asserted by the host; no SaaS, fleet console or multi-operator RBAC is introduced. Existing public exposure gates still apply.
+providers or account linking. The newer owner direction in `UI-007` permits multiple named
+administrators with explicitly scoped tools; there is no SaaS or fleet console.
+Existing public exposure gates still apply.
 
 | ID | Task | State | Done when |
 |---|---|---|---|
@@ -81,6 +82,8 @@ operator sessions are asserted by the host; no SaaS, fleet console or multi-oper
 | `PAGES-010` | Optional GitHub repository discovery with a self-hosted GitHub App integration; select only authorized repos, bind project trust, hand off a workflow for review. OIDC Actions deploy auth remains `PAGES-008`; CI acceptance remains `PAGES-004`. | In progress — optional metadata-only GitHub App adapter, host-only reference setup, paginated repo selection, verified project trust and explicit disconnect semantics; Go race tests and full gate pass 2026-10-26. No real App/account acceptance has occurred. | Selected-repository install, denied/removed repo, expired credential, disconnect and API failure paths tested; secrets stay server-side; permissions match endpoints; manual project config still works; disconnect explicitly handles remaining deploy trust; GitHub teams/login are not inferred from repo access. |
 | `TUN-004` | Guided connector onboarding and trust view: destination-generated key, authorized enrollment, explicit resource scope, certificate expiry, connection freshness, revocation consequences and renewal handoff. Reuse `TUN-002` and host authority; no host process dashboard. | In progress — prepare/sign/check CLI, destination-local key, connector trust view, affected hosts and expiry metadata (012); full local gate passes 2026-10-26 and pilot renewal is reused. No second-host or generic renewal acceptance has occurred. | A second owned host can be enrolled following the guide without exposing its private key; only configured destinations work; wrong/revoked identity fails; reconnect/renewal and affected apps are visible; uninstall/revoke leaves no usable enrollment; process/service management stays outside Switchboard. |
 
+`UI-007` administrator passkeys (2026-10-26, local): `console enrol` (host socket) prints a ten-minute one-use link; the browser asks for full name and email and creates a passkey, making the first administrator (every tool); later sign-ins use that passkey on the console itself (`/_/api/admin/*`, migration 013, `internal/adminid`, separate from application users). `console recover -email` revokes the old passkeys and existing administrator sessions and enrols a new one; a second bootstrap is refused. WebAuthn binds to `localhost`, so the console must be opened by that name, not an IP. Regressions: first-admin enrol once, passkey sign-in, unknown passkey, IP/foreign origin refused, host-only issuing, recovery revokes (mutation-checked). **Administrators page (same day):** anyone with the new `administrators` tool lists administrators, invites another by email with a chosen subset of tools (never more than the inviter holds; 24 h one-use link, identity and tools fixed by the stored invitation) and disables or enables them; disabling ends their open sessions at once, nobody disables themselves, and the last enabled manager cannot be removed. Regressions: invitee scope, grant ceiling, disable ends sessions, last-manager guard (mutation-checked). Not yet: editing an administrator's tools in place (disable and re-invite), invitees need their own SSH tunnel to the console until private remote transport with a real domain exists, step-up. Installer: `/usr/local/bin/switchboard` links the installed binary and admin commands default to `/etc/switchboard/config.json`.
+
 `UI-007` local work in progress: People and Sites listings now require their
 respective authority, including the Sites publisher token for site history;
 the console clears those listings on session change and `site list` sends its
@@ -91,8 +94,9 @@ read (`ok`, no configuration) and is what the installer, `upgrade` and the demo
 scripts probe. The console shows one sign-in panel until a session exists,
 signs itself out on a 401 (revoked or replaced credential) and only reads
 People or Sites for sessions that include those tools.
-Personal administrative passkeys, persistent grants, step-up, private remote
-access and the remaining UI/API redesign are not implemented by this change.
+Those read-boundary changes alone did not implement administrative passkeys;
+the separate local work described above adds them and persistent grants.
+Step-up, private remote access and the remaining UI/API redesign are pending.
 
 ### Product scope and portability evidence — 2026-10-20
 

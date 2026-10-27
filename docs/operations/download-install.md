@@ -56,8 +56,13 @@ sudo scripts/release/install-service.sh --binary ./switchboard --target http://1
 sudo scripts/release/install-service.sh --archive ./switchboard_VERSION_linux_amd64.tar.gz --sha256 SHA256_ESPERADO
 ```
 
+El instalador deja `/usr/local/bin/switchboard` como enlace al binario instalado:
+`switchboard` se ejecuta desde cualquier directorio y `switchboard upgrade`
+sigue actualizándolo. Los comandos de administración usan
+`/etc/switchboard/config.json` cuando no hay un `config.json` en el directorio actual.
+
 Al terminar imprime los pasos siguientes: túnel SSH a la consola, enlace de un
-solo uso (`console login`) y alta de la primera aplicación en la consola.
+solo uso (`sudo switchboard console enrol`, que crea al primer administrador con su passkey) y alta de la primera aplicación en la consola.
 `scripts/release/test-install-service.sh` lo prueba con el binario real en un
 directorio de staging, sin root.
 

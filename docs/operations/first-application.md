@@ -25,7 +25,7 @@ login del operador. Usa esas rutas; no copies credenciales a un chat.
 ```sh
 switchboard -config /ruta/my-edge/config.json -db /ruta/my-edge/state.db
 # En otra terminal del mismo host:
-switchboard console login -config /ruta/my-edge/config.json -name Octavio
+switchboard console enrol -config /ruta/my-edge/config.json
 switchboard user invite -config /ruta/my-edge/config.json \
   -email ana@example.com -group members -return-to http://localhost:8888/
 ```
@@ -46,6 +46,38 @@ En Windows no hay socket Unix administrativo; las sesiones del operador
 emitidas por el host requieren Linux/macOS. Para la consola local Windows se
 conserva el token por archivo y la recuperación offline con el proceso detenido.
 La instalación de servicio descrita en este repositorio es Linux/systemd.
+
+## Primer administrador y acceso por persona
+
+El host abre la puerta una sola vez; después cada administrador entra con su
+propio passkey y no hace falta ningún comando en el host.
+
+```sh
+sudo switchboard console enrol            # instalación con el servicio
+switchboard console enrol -config /ruta/my-edge/config.json   # arranque manual
+```
+
+Imprime un enlace que sirve una vez durante diez minutos. Ábrelo en el
+navegador que tiene el túnel; pide nombre completo y correo (no se envía
+ningún mensaje) y crea el passkey. Esa persona queda como la primera
+administradora, con todas las herramientas. Desde entonces la consola ofrece
+«Sign in with your passkey». Un passkey queda atado al nombre del sitio, y
+WebAuthn no admite direcciones IP: abre la consola como `http://localhost:PUERTO`
+(el extremo local del túnel), nunca como `127.0.0.1`.
+
+Si pierdes el dispositivo, el host emite una recuperación:
+`sudo switchboard console recover -email tu@correo`. Revoca los passkeys
+anteriores de esa persona y crea uno nuevo con el enlace. Un segundo
+`console enrol` se rechaza mientras exista un administrador. Los administradores
+no son usuarios de aplicaciones: un passkey de visitante no abre la consola.
+
+Desde la consola, **Administrators** permite invitar a otra persona por correo con
+una parte de tus herramientas (nunca más de las que tú tienes), y deshabilitarla;
+sus sesiones abiertas terminan al instante. La invitación sirve una vez durante
+24 horas y la persona la abre como `localhost` por su propio túnel SSH.
+
+`console login` y el token de admin siguen disponibles como vía de emergencia
+y automatización.
 
 ## Sesión del operador
 

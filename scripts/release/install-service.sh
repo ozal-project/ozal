@@ -51,6 +51,7 @@ lib=$prefix/usr/local/lib/switchboard
 etc=$prefix/etc/switchboard
 state=$prefix/var/lib/switchboard
 unit=$prefix/etc/systemd/system/switchboard.service
+bin_link=$prefix/usr/local/bin/switchboard
 config=$etc/config.json
 
 if [[ -z "$prefix" && $EUID -ne 0 && $dry -eq 0 ]]; then
@@ -58,7 +59,7 @@ if [[ -z "$prefix" && $EUID -ne 0 && $dry -eq 0 ]]; then
   exit 2
 fi
 # A previous installation is never overwritten: use `switchboard upgrade`.
-for path in "$config" "$lib/switchboard" "$unit"; do
+for path in "$config" "$lib/switchboard" "$unit" "$bin_link"; do
   if [[ -e "$path" ]]; then
     echo "$path already exists. This installer only creates a new installation; use 'switchboard upgrade' (docs/operations/systemd.md)." >&2
     exit 1
@@ -67,6 +68,7 @@ done
 
 echo "Plan"
 echo "  binary   $lib/switchboard (root:root 755)"
+echo "  command  $bin_link -> $lib/switchboard (so 'switchboard' runs from any directory)"
 echo "  config   $config (root:root 644, no secrets)"
 echo "  token    $etc/admin.token (root:switchboard 640, random)"
 echo "  state    $state (switchboard 700), console on 127.0.0.1:9090 only"
@@ -91,6 +93,10 @@ fi
 
 install -d -m 755 "$lib" "$etc" "$prefix/etc/systemd/system"
 install -m 755 "$binary" "$lib/switchboard"
+# A link, not a copy: `switchboard upgrade` replaces the file under $lib and the
+# command on the PATH follows it.
+install -d -m 755 "$(dirname "$bin_link")"
+ln -s /usr/local/lib/switchboard/switchboard "$bin_link"
 
 # Admin token: random, readable only by root and the service account.
 umask 0077
@@ -148,8 +154,11 @@ Switchboard is running. Nothing is public: the proxy and the console listen on l
 
 Next
   1. Open the console (from your computer): ssh -N -L 9090:127.0.0.1:9090 USER@THIS_HOST
-  2. Get your one-use private link, on this host:
-       sudo -u switchboard $lib/switchboard console login -config $config -name YOUR_NAME
-  3. Open it, then Applications: add your existing website and invite the first person.
+     then browse to http://localhost:9090 (passkeys need the name localhost, not an IP address)
+  2. Create the first administrator, on this host (works from any directory):
+       sudo switchboard console enrol
+     Open the link it prints, in the browser that has the tunnel, with your name and email.
+     It creates your passkey; from then on you sign in with it and need no command here.
+  3. In the console, Applications: add your existing website and invite the first person.
   4. Back up $state and $etc. Recovery and upgrades: docs/operations/systemd.md
 EOF

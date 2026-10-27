@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -14,13 +15,14 @@ import (
 
 func runConsole(ctx context.Context, args []string, out io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: switchboard console login|list|revoke [flags]")
+		return errors.New("usage: switchboard console enrol|recover|login|list|revoke [flags]")
 	}
 	fs := flag.NewFlagSet("console "+args[0], flag.ContinueOnError)
 	fs.SetOutput(out)
 	af := addAdminFlags(fs)
 	name := fs.String("name", "", "operator name asserted by host authority")
 	tools := fs.String("tools", "", "comma-separated tools this login may change (default: all): applications, connectors, people, publishing, sites")
+	email := fs.String("email", "", "recover: email of the administrator who lost their passkeys")
 	id := fs.String("id", "", "session id to revoke")
 	origin := fs.String("url", "http://127.0.0.1:9090", "private browser URL (use the locally forwarded port for a remote edge)")
 	if err := fs.Parse(args[1:]); err != nil {
@@ -37,6 +39,29 @@ func runConsole(ctx context.Context, args []string, out io.Writer) error {
 		return errors.New("console credentials are issued on the host admin Unix socket only")
 	}
 	switch args[0] {
+	case "enrol", "recover":
+		kind := "bootstrap"
+		if args[0] == "recover" {
+			kind = "recover"
+			if strings.TrimSpace(*email) == "" {
+				return errors.New("recover needs -email ADMINISTRATOR")
+			}
+		}
+		base, err := adminBase(*origin)
+		if err != nil {
+			return err
+		}
+		var answer struct {
+			Token string `json:"token"`
+		}
+		if err := c.do(ctx, http.MethodPost, "/_/api/admin/enrolments", map[string]string{"kind": kind, "email": *email}, &answer); err != nil {
+			return err
+		}
+		what := "create the first administrator"
+		if kind == "recover" {
+			what = "replace the passkeys of " + *email + " (the old ones stop working)"
+		}
+		fmt.Fprintf(out, "Open once within ten minutes in your browser to %s. Passkeys need the name localhost, so the link uses it:\n%s/overview#enrol=%s\n", what, passkeyOrigin(base), url.QueryEscape(answer.Token))
 	case "login":
 		if strings.TrimSpace(*name) == "" {
 			return errors.New("login needs -name OPERATOR")
@@ -90,4 +115,21 @@ func splitTools(v string) []string {
 		}
 	}
 	return out
+}
+
+// passkeyOrigin rewrites a loopback address to the name localhost: WebAuthn
+// binds a passkey to a domain name and refuses an IP address.
+func passkeyOrigin(base string) string {
+	u, err := url.Parse(base)
+	if err != nil {
+		return base
+	}
+	if ip := net.ParseIP(u.Hostname()); ip != nil && ip.IsLoopback() {
+		if port := u.Port(); port != "" {
+			u.Host = "localhost:" + port
+		} else {
+			u.Host = "localhost"
+		}
+	}
+	return u.String()
 }

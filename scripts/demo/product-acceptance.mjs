@@ -193,7 +193,7 @@ try {
   assert.equal((await api("GET", "/_/api/setup")).routes.some((r) => r.host === appHost), false, "confirmed removal left the route configured");
 
   step = "responsive layouts and accessibility";
-  const pages = [["/overview", "Overview"], ["/applications", "Applications"], ["/sites", "Sites & deployments"], ["/people", "People & passkeys"], ["/connectors", "Connectors"], ["/activity", "Access activity"], ["/routes", "Routes & hostnames"]];
+  const pages = [["/overview", "Overview"], ["/applications", "Applications"], ["/sites", "Sites & deployments"], ["/people", "People & passkeys"], ["/administrators", "Administrators"], ["/connectors", "Connectors"], ["/activity", "Access activity"], ["/routes", "Routes & hostnames"]];
   for (const [href, title] of pages) {
     await goPage(href, title);
     await auditPage([[1440, 1000], [1024, 900], [390, 844], [320, 800]]);

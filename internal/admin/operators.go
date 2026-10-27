@@ -24,7 +24,7 @@ type operatorKey struct{}
 // operatorTools are the console's areas of authority. A host login names the
 // tools its session may change; an unnamed login grants all of them. Reading
 // what the console shows is not a tool: it needs any operator session.
-var operatorTools = []string{"applications", "connectors", "people", "publishing", "sites"}
+var operatorTools = []string{"administrators", "applications", "connectors", "people", "publishing", "sites"}
 
 type operatorGrant struct {
 	ID        string    `json:"id"`
@@ -60,15 +60,19 @@ type operatorSessions struct {
 	mu     sync.Mutex
 	now    func() time.Time
 	grants map[[32]byte]operatorGrant
+	// accounts links a session ID to the administrator it belongs to, so
+	// disabling a person ends their sessions.
+	accounts map[string]string
 }
 
 func newOperatorSessions() *operatorSessions {
-	return &operatorSessions{now: time.Now, grants: make(map[[32]byte]operatorGrant)}
+	return &operatorSessions{now: time.Now, grants: make(map[[32]byte]operatorGrant), accounts: make(map[string]string)}
 }
 func (s *operatorSessions) purge() {
 	for key, g := range s.grants {
 		if !s.now().Before(g.Expires) {
 			delete(s.grants, key)
+			delete(s.accounts, g.ID)
 		}
 	}
 }
@@ -125,9 +129,35 @@ func (s *operatorSessions) authenticate(token string) (operatorGrant, bool) {
 	g, ok := s.grants[sha256.Sum256([]byte(token))]
 	return g, ok && !g.bootstrap
 }
+func (s *operatorSessions) bind(sessionID, accountID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.accounts[sessionID] = accountID
+}
+func (s *operatorSessions) account(sessionID string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.accounts[sessionID]
+}
+func (s *operatorSessions) revokeAccount(accountID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for sessionID, owner := range s.accounts {
+		if owner != accountID {
+			continue
+		}
+		delete(s.accounts, sessionID)
+		for hash, g := range s.grants {
+			if g.ID == sessionID {
+				delete(s.grants, hash)
+			}
+		}
+	}
+}
 func (s *operatorSessions) revoke(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	delete(s.accounts, id)
 	for hash, g := range s.grants {
 		if g.ID == id {
 			delete(s.grants, hash)

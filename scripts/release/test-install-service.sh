@@ -20,6 +20,8 @@ export SWITCHBOARD_INSTALL_PREFIX=$work/stage
 "$install" --binary "$bin" --target http://127.0.0.1:4000 --group staff >/dev/null
 p=$work/stage
 [[ -x $p/usr/local/lib/switchboard/switchboard ]]
+# The command is a link to the installed binary, so upgrades keep it current.
+[[ -L $p/usr/local/bin/switchboard && $(readlink "$p/usr/local/bin/switchboard") == /usr/local/lib/switchboard/switchboard ]]
 [[ -s $p/etc/switchboard/config.json && -s $p/etc/systemd/system/switchboard.service ]]
 grep -q '"required_groups": \["staff"\]' "$p/etc/switchboard/config.json"
 grep -q 'http://127.0.0.1:4000' "$p/etc/switchboard/config.json"

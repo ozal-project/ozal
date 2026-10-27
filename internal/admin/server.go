@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/octaviosantacruz/switchboard/internal/config"
@@ -43,6 +44,9 @@ type Handler struct {
 	mutationAudit          events.AuditAppender
 	auditMutationsRequired bool
 	pages                  deployments
+	identities             identities
+	identityMu             sync.Mutex
+	ceremonies             *ceremonyBook
 	people                 people
 	connectors             connectors
 	pairing                pairing
@@ -53,7 +57,7 @@ func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 	if sink == nil {
 		sink = events.Discard
 	}
-	h := &Handler{operators: newOperatorSessions(), manager: manager, sink: sink, mux: http.NewServeMux()}
+	h := &Handler{operators: newOperatorSessions(), manager: manager, sink: sink, mux: http.NewServeMux(), ceremonies: newCeremonyBook()}
 	h.registerOperators()
 	h.mux.HandleFunc("GET /_/console.css", h.consoleCSS)
 	h.mux.HandleFunc("GET /_/fonts/manrope.ttf", h.consoleFont)
@@ -80,6 +84,9 @@ func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 	}
 	if h.pages != nil {
 		h.registerSites()
+	}
+	if h.identities != nil {
+		h.registerIdentities()
 	}
 	if h.people != nil {
 		h.registerPeople()
