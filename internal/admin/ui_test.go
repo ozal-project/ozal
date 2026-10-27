@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io/fs"
 	"net/http"
+	"path"
 	"strings"
 	"testing"
 	"time"
@@ -112,20 +113,44 @@ func TestConsoleHomeAndAssets(t *testing.T) {
 	if err != nil || len(assets) == 0 {
 		t.Fatalf("no built console script embedded: %v", err)
 	}
-	asset := "/" + strings.TrimPrefix(assets[0], "console/")
+	// The page references only the sign-in entry; the console itself is a
+	// separate chunk loaded after authentication.
 	index := request(handler, http.MethodGet, "/activity", "", "")
-	if !strings.Contains(index.Body.String(), asset) {
-		t.Fatalf("console index does not reference its built script %s", asset)
+	asset := ""
+	for _, a := range assets {
+		name := "/" + strings.TrimPrefix(a, "console/")
+		if strings.HasPrefix(path.Base(a), "Console-") {
+			if strings.Contains(index.Body.String(), name) {
+				t.Fatalf("index preloads the console chunk %s before sign-in", name)
+			}
+			continue
+		}
+		if strings.Contains(index.Body.String(), name) {
+			asset = name
+		}
+	}
+	if asset == "" {
+		t.Fatalf("console index references none of its built scripts %v", assets)
 	}
 	rec := request(handler, http.MethodGet, asset, "", "")
 	if rec.Code != 200 || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/javascript") ||
 		!strings.Contains(rec.Header().Get("Cache-Control"), "immutable") || rec.Header().Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatalf("asset %s: %d %v", asset, rec.Code, rec.Header())
 	}
+	// Content checks cover every built script: the console chunk holds the pages.
+	var scripts strings.Builder
+	for _, a := range assets {
+		body, err := fs.ReadFile(consoleApp, a)
+		if err != nil {
+			t.Fatal(err)
+		}
+		scripts.Write(body)
+	}
+	bundle := scripts.String()
 	// The Overview (UI-005) is the console's first page and says what needs the
 	// operator, what changed, who got in and where each site came from.
 	for _, want := range []string{"Nothing needs you right now.", "Recent changes", "Who got in", "What is live, and where it came from", "uploaded by hand"} {
-		if !strings.Contains(rec.Body.String(), want) {
+		if !strings.Contains(bundle, want) {
 			t.Errorf("the embedded overview console lacks %q", want)
 		}
 	}
@@ -135,11 +160,11 @@ func TestConsoleHomeAndAssets(t *testing.T) {
 		"route.delete_failed", "Route removal failed",
 		"config.reload_failed", "Configuration reload failed",
 	} {
-		if !strings.Contains(rec.Body.String(), want) {
+		if !strings.Contains(bundle, want) {
 			t.Errorf("the embedded activity console lacks %q", want)
 		}
 	}
-	if strings.Contains(rec.Body.String(), "localStorage") {
+	if strings.Contains(bundle, "localStorage") {
 		t.Fatal("the console must not persist anything in localStorage (the admin token included)")
 	}
 

@@ -204,13 +204,17 @@ try {
       await ab("screenshot", join(root, "applications-390.png"));
     }
   }
-  step = "locking hides protected people and sites";
+  step = "signing out hides the console entirely";
   await goPage("/people", "People & passkeys");
   await ab("wait", "--text", "new-operator-test@example.test");
   await ab("find", "role", "button", "click", "--name", "Acceptance operator", "--exact");
-  await ab("find", "role", "button", "click", "--name", "Lock this tab", "--exact");
-  await ab("wait", "--text", "Sign in to open the console");
-  assert.equal(await evaluate("document.body.innerText.includes('new-operator-test@example.test')"), false, "locking kept the people list visible");
+  await ab("find", "role", "button", "click", "--name", "Sign out", "--exact");
+  await ab("wait", "--text", "Use a host login");
+  assert.equal(await evaluate("document.body.innerText.includes('new-operator-test@example.test')"), false, "signing out kept the people list visible");
+  for (const name of ["Applications", "Connectors", "Access log", "Routes & policy", "loopback only"]) {
+    assert.equal(await evaluate(`document.body.innerText.includes(${JSON.stringify(name)})`), false, `the signed-out screen still shows ${name}`);
+  }
+  assert.equal(await evaluate("document.querySelectorAll('nav').length"), 0, "the signed-out screen still has navigation");
   assert.equal(await evaluate("(async () => (await fetch('/_/api/people')).status)()"), 401, "anonymous people listing remained available");
   assert.equal(await evaluate("(async () => (await fetch('/_/api/sites')).status)()"), 401, "anonymous site listing remained available");
   assert.equal(await evaluate("(async () => (await fetch('/_/events')).status)()"), 401, "anonymous event stream remained available");

@@ -1,9 +1,7 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { route, navigate, type Page } from "$lib/router.svelte";
-  import AdminMenu from "$lib/AdminMenu.svelte";
-  import SignIn from "$lib/SignIn.svelte";
-  import EnrolForm from "$lib/EnrolForm.svelte";
+  import UserMenu from "$lib/UserMenu.svelte";
   import { admin, can, tools as toolList, type Tool } from "$lib/adminToken.svelte";
   import Connectors from "./pages/Connectors.svelte";
   import Applications from "./pages/Applications.svelte";
@@ -44,7 +42,7 @@
   const current = $derived(groups.find((g) => g.items.some((i) => i.path === route.path)) ?? groups[0]);
   const currentItem = $derived(nav.find((i) => i.path === route.path) ?? nav[0]);
   // A signed-in session without the page's tool sees why, not a page of 403s.
-  const blocked = $derived(!!admin.token && !!currentItem.tool && !can(currentItem.tool));
+  const blocked = $derived(!!currentItem.tool && !can(currentItem.tool));
 
   const go = (e: MouseEvent, path: Page) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
@@ -98,14 +96,14 @@
   </div>
 
   <div class="flex min-w-0 flex-1 flex-col">
-    <header class="bg-background/80 border-border sticky top-0 z-10 flex min-h-16 flex-wrap items-center justify-between gap-4 border-b px-5 py-3 backdrop-blur md:px-10">
+    <header class="bg-background/80 border-border sticky top-0 z-10 flex min-h-16 items-center justify-between gap-4 border-b px-5 py-3 backdrop-blur md:px-10">
       <div class="md:hidden"><Wordmark /></div>
       <p class="hidden items-center gap-2 text-sm md:flex" aria-label="Current page">
         <span class="text-muted-foreground">{current.name}</span><span class="text-muted-foreground/50" aria-hidden="true">/</span><span class="font-medium">{currentItem.label}</span>
       </p>
-      <div class="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-3">
-        <AdminMenu />
-        <span class="border-border bg-card flex items-center gap-2 rounded-full border px-3 py-1 font-mono text-[0.7rem]">
+      <div class="ml-auto flex min-w-0 items-center justify-end gap-3">
+        <UserMenu />
+        <span class="border-border bg-card hidden items-center gap-2 rounded-full border px-3 py-1 font-mono text-[0.7rem] sm:flex">
           <span class="lamp lamp-on" aria-hidden="true"></span>loopback only
         </span>
       </div>
@@ -117,27 +115,11 @@
       {/each}
     </nav>
     <main id="main-content" tabindex="-1" class="mx-auto w-full max-w-[1320px] flex-1 px-5 py-10 md:px-10">
-      {#if !admin.token}
-        {#if admin.enrol}
-          <div class="panel mx-auto max-w-lg p-8">
-            <p class="plate">Administrator</p>
-            <h1 tabindex="-1" class="mt-2 mb-1 text-xl font-semibold outline-none">Create your administrator passkey</h1>
-            <p class="text-muted-foreground mb-5 text-sm">The host opened this link for you. Your passkey stays on your device; from now on you sign in with it, with no command on the host.</p>
-            <EnrolForm />
-          </div>
-        {:else if admin.ready}
-          <div class="panel mx-auto max-w-lg p-8">
-            <p class="plate">Administrators</p>
-            <h1 tabindex="-1" class="mt-2 mb-1 text-xl font-semibold outline-none">Sign in to open the console</h1>
-            <p class="text-muted-foreground mb-5 text-sm">Routes, people, sites and activity are only shown to a signed-in administrator, even on this machine.</p>
-            <SignIn />
-          </div>
-        {/if}
-      {:else if blocked}
+      {#if blocked}
         <div class="panel mx-auto max-w-lg p-8 text-center">
           <p class="plate">Not included in this session</p>
           <h1 tabindex="-1" class="mt-2 text-xl font-semibold outline-none">This session cannot open {currentItem.label}</h1>
-          <p class="text-muted-foreground mt-2 text-sm">You are signed in as {admin.name || "an operator"} without the {toolList.find((t) => t.id === currentItem.tool)?.label} tool. Open Admin in the header to see what it may change, then ask the host for a login that includes it.</p>
+          <p class="text-muted-foreground mt-2 text-sm">You are signed in as {admin.name || "an operator"} without the {toolList.find((t) => t.id === currentItem.tool)?.label} tool. Your menu in the header lists what this session may change; ask an administrator to include it.</p>
         </div>
       {:else if route.path === "/overview"}<Overview />
       {:else if route.path === "/applications"}<Applications />

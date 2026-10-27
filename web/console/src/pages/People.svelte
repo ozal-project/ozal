@@ -208,12 +208,7 @@
   </div>
 </PageHeader>
 
-{#if !admin.token.trim()}
-  <Panel label="People" title="Sign in to manage people">
-    <p class="text-muted-foreground text-sm">A session with access to People is required to view invitations, groups and passkeys.</p>
-    <Button class="mt-4" onclick={askForToken}>Sign in</Button>
-  </Panel>
-{:else if people && !people.enabled}
+{#if people && !people.enabled}
   <Panel label="People" title="Passkeys are not enabled on this edge">
     <p class="text-muted-foreground text-sm">Add <code class="font-mono">auth.passkeys</code> (<code class="font-mono">rp_id</code>, <code class="font-mono">login_url</code>) and start Switchboard with <code class="font-mono">-db</code>.</p>
   </Panel>

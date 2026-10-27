@@ -16,12 +16,14 @@ export type Tool = (typeof tools)[number]["id"];
 // `notice` says why the tab is signed out (expired, revoked, host refused).
 // `ready` turns true once a host login link in the URL has been tried, so the
 // console does not flash its sign-in panel for someone who just arrived with one.
-export const admin = $state({ token: "", asked: 0, name: "", expires: "", tools: [] as string[], notice: "", ready: false, enrol: "" });
+// `passkey` is true when the session came from an administrator passkey (it
+// has an account to add passkeys to); host logins and tokens do not.
+export const admin = $state({ token: "", asked: 0, name: "", expires: "", tools: [] as string[], notice: "", ready: false, enrol: "", passkey: false });
 
 // can reports whether this tab's session may use a tool. Locked means no.
 export const can = (tool: Tool) => !!admin.token && admin.tools.includes(tool);
 
-export const signOut = () => { admin.token = ""; admin.name = ""; admin.expires = ""; admin.tools = []; };
+export const signOut = () => { admin.token = ""; admin.name = ""; admin.expires = ""; admin.tools = []; admin.passkey = false; };
 
 // endSession signs out because the edge no longer accepts this credential.
 export function endSession(notice = "This session is no longer valid. Sign in again.") {
@@ -30,8 +32,9 @@ export function endSession(notice = "This session is no longer valid. Sign in ag
   admin.notice = notice;
 }
 
-// askForToken is how a page that needs a session says so: the Admin menu in
-// the header opens, wherever the person was looking on the page.
+// askForToken is how a page that needs a session says so. The console only
+// renders with a session, so this is a guard for a session that just ended:
+// the sign-in screen replaces the console as soon as the token is cleared.
 export function askForToken() {
   admin.asked++;
 }

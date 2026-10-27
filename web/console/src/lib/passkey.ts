@@ -97,3 +97,9 @@ export async function addPasskey(session: string): Promise<void> {
   if (!credential) throw new Error("No passkey was created.");
   await api<{ added: boolean }>("/_/api/admin/passkeys/finish", credentialJSON(credential), begun.ceremony, session);
 }
+
+export type EnrolInfo = { kind: "bootstrap" | "invite" | "recover"; email?: string; name?: string };
+// What the link already fixes, so the form asks only for what is missing.
+export async function enrolInfo(token: string): Promise<EnrolInfo> {
+  return api<EnrolInfo>("/_/api/admin/enrol/info", { token });
+}

@@ -153,12 +153,7 @@
   </div>
 </PageHeader>
 
-{#if !admin.token.trim()}
-  <Panel label="Sites" title="Sign in to view sites">
-    <p class="text-muted-foreground text-sm">A Sites credential or a session with access to Sites is required.</p>
-    <Button class="mt-4" onclick={askForToken}>Sign in</Button>
-  </Panel>
-{:else if disabled}
+{#if disabled}
   <Panel label="Pages" title="Not enabled on this edge">
     <p class="text-muted-foreground text-sm">Add a <code class="font-mono">pages</code> block (an absolute <code class="font-mono">dir</code>) and start Switchboard with <code class="font-mono">-db</code>. Routes then serve a deployment with <code class="font-mono">"site": "name"</code>.</p>
   </Panel>
