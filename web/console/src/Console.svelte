@@ -13,6 +13,7 @@
   import Sites from "./pages/Sites.svelte";
   import People from "./pages/People.svelte";
   import Administrators from "./pages/Administrators.svelte";
+  import Groups from "./pages/Groups.svelte";
   import Wordmark from "$lib/brand/Wordmark.svelte";
   import LayoutDashboardIcon from "@lucide/svelte/icons/layout-dashboard";
   import AppWindowIcon from "@lucide/svelte/icons/app-window";
@@ -27,8 +28,8 @@
   import type { Component } from "svelte";
 
   // Few entries, grouped by what the product does. Related views of one thing
-  // (an application and its routing table) are tabs on its page, and the
-  // console's own settings sit apart, next to the person signed in.
+  // (an application and its routing table; people, their groups and who runs
+  // the console) are tabs on one page.
   type Item = { path: Page; label: string; icon: Component<{ class?: string }>; tool?: Tool; also?: Page[] };
   const groups: { name: string; items: Item[] }[] = [
     { name: "", items: [
@@ -36,7 +37,7 @@
     ] },
     { name: "Access", items: [
       { path: "/applications", label: "Applications", icon: AppWindowIcon, tool: "applications", also: ["/routes"] },
-      { path: "/people", label: "People", icon: UsersIcon, tool: "people" },
+      { path: "/people", label: "People", icon: UsersIcon, tool: "people", also: ["/groups", "/administrators"] },
     ] },
     { name: "Edge", items: [
       { path: "/sites", label: "Sites", icon: GlobeIcon },
@@ -44,15 +45,20 @@
       { path: "/activity", label: "Activity", icon: ScrollTextIcon },
     ] },
   ];
-  const settings: Item = { path: "/administrators", label: "Administrators", icon: ShieldCheckIcon, tool: "administrators" };
   // The navigation lists what this session can open; a direct link to a page
   // outside it still explains why instead of disappearing. Without the
-  // applications tool, Applications opens on its read-only routing view.
-  const target = (i: Item): Page => (i.path === "/applications" && !can("applications") ? "/routes" : i.path);
-  const visible = $derived(groups.map((g) => ({ ...g, items: g.items.filter((i) => !i.tool || can(i.tool) || !!i.also) })).filter((g) => g.items.length));
+  // applications tool, Applications opens on its read-only routing view; with
+  // only the administrators tool, People opens on its Administrators tab.
+  const target = (i: Item): Page => {
+    if (i.path === "/applications" && !can("applications")) return "/routes";
+    if (i.path === "/people" && !can("people") && can("administrators")) return "/administrators";
+    return i.path;
+  };
+  const visible = $derived(groups.map((g) => ({ ...g, items: g.items.filter((i) => !i.tool || can(i.tool) || (i.path === "/applications") || (i.path === "/people" && can("administrators"))) })).filter((g) => g.items.length));
   const isActive = (i: Item) => route.path === i.path || !!i.also?.includes(route.path);
   let menuOpen = $state(false);
-  const nav = [...groups.flatMap((g) => g.items), settings, { path: "/routes" as Page, label: "Applications", icon: RouteIcon, tool: "applications" as Tool }];
+  const nav: Item[] = [...groups.flatMap((g) => g.items), { path: "/groups", label: "Groups", icon: UsersIcon, tool: "people" },
+    { path: "/administrators", label: "Administrators", icon: ShieldCheckIcon, tool: "administrators" }, { path: "/routes", label: "Applications", icon: RouteIcon, tool: "applications" }];
   const currentItem = $derived(nav.find((i) => i.path === route.path) ?? nav[0]);
   // A signed-in session without the page's tool sees why, not a page of 403s.
   const blocked = $derived(route.path !== "/routes" && !!currentItem.tool && !can(currentItem.tool));
@@ -98,7 +104,6 @@
     {/each}
   </nav>
   <div class="mt-auto flex flex-col gap-1 p-2">
-    {#if can("administrators")}<nav class="flex flex-col" aria-label="Console settings">{@render link(settings)}</nav>{/if}
     <div class="border-sidebar-border mt-1 border-t pt-2"><UserMenu placement="up" /></div>
   </div>
 {/snippet}
@@ -135,6 +140,7 @@
       {:else if route.path === "/activity"}<Activity />
       {:else if route.path === "/routes"}<Routes />
       {:else if route.path === "/people"}<People />
+      {:else if route.path === "/groups"}<Groups />
       {:else if route.path === "/administrators"}<Administrators />
       {:else if route.path === "/sites"}<Sites />
       {:else}<Overview />{/if}

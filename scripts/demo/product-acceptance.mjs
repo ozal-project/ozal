@@ -115,13 +115,13 @@ try {
   await ab("press", "Tab");
   assert.equal(await evaluate("document.activeElement?.textContent?.trim()"), "Cancel", "dialog focus did not remain contained");
   await ab("press", "Escape");
-  assert.equal(await evaluate("document.querySelector('dialog[open]') === null"), true, "Escape did not close membership review");
+  assert.equal(await evaluate("document.querySelectorAll('dialog[open]').length"), 1, "Escape did not close only the membership review");
   await ab("wait", "--fn", "document.activeElement?.textContent?.trim() === 'Review change'");
   people = await api("GET", "/_/api/people");
   assert.deepEqual(people.users.find((p) => p.email === "new-operator-test@example.test").groups, ["ops"], "Escape changed membership");
   await ab("find", "role", "button", "click", "--name", "Review change", "--exact");
-  await ab("click", "dialog[open] button:last-child");
-  await ab("wait", "--text", "Membership saved.");
+  await ab("find", "role", "button", "click", "--name", "Save membership", "--exact");
+  await ab("wait", "--text", "Membership saved");
   people = await api("GET", "/_/api/people");
   assert.deepEqual(people.users.find((p) => p.email === "new-operator-test@example.test").groups, ["staff"]);
   step = "Overview sites error and retry";
@@ -193,7 +193,7 @@ try {
   assert.equal((await api("GET", "/_/api/setup")).routes.some((r) => r.host === appHost), false, "confirmed removal left the route configured");
 
   step = "responsive layouts and accessibility";
-  const pages = [["/overview", "Overview"], ["/applications", "Applications"], ["/routes", "Applications"], ["/sites", "Sites"], ["/people", "People"], ["/administrators", "Administrators"], ["/connectors", "Connectors"], ["/activity", "Activity"]];
+  const pages = [["/overview", "Overview"], ["/applications", "Applications"], ["/routes", "Applications"], ["/sites", "Sites"], ["/people", "People"], ["/groups", "People"], ["/administrators", "People"], ["/connectors", "Connectors"], ["/activity", "Activity"]];
   for (const [href, title] of pages) {
     await goPage(href, title);
     await auditPage([[1440, 1000], [1024, 900], [390, 844], [320, 800]]);

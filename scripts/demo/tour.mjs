@@ -125,12 +125,14 @@ async function main() {
   mark("invite");
   await say("Inviting Ana: a one-time link, no password to share.");
   await open("People");
+  await click(page.getByRole("button", { name: "Invite person" }));
   await page.waitForSelector("#inv-email");
   await type(page.locator("#inv-email"), "ana@acme.dev");
   await type(page.locator("#inv-name"), "Ana");
   await click(page.getByRole("button", { name: "Create invitation" }));
   const link = await page.locator('input[aria-label="Invitation link"]').inputValue();
   await pause(1800);
+  await click(page.getByRole("button", { name: "Done" }));
 
   // 3 · Ana creates her passkey.
   await go(link, "Ana opens her link and creates a passkey on her own device.");

@@ -134,8 +134,10 @@ try {
   assert.equal(await phone.page.locator("#main-content h1").count(), 0, "the removed passkey still signed in");
 
   step = "invite an administrator with one tool";
-  await laptop.page.locator('nav a[href="/administrators"]').click();
-  await laptop.page.locator("#main-content h1", { hasText: "Administrators" }).waitFor();
+  await laptop.page.locator('nav[aria-label="Console"] a[href="/people"]').first().click();
+  await laptop.page.locator('nav[aria-label="People views"] a[href="/administrators"]').click();
+  await laptop.page.locator("#main-content h1", { hasText: "People" }).waitFor();
+  await laptop.page.getByRole("button", { name: "Add administrator" }).first().click();
   await laptop.page.locator("#adm-email").fill("bea@acme.dev");
   await laptop.page.locator("#adm-name").fill("Bea");
   await laptop.page.getByRole("checkbox", { name: /^People/ }).check();
@@ -155,7 +157,8 @@ try {
   await laptop.page.reload();
   await signedOut(laptop.page);
   await laptop.page.getByRole("button", { name: "Sign in with your passkey" }).click();
-  await laptop.page.locator("#main-content h1", { hasText: "Administrators" }).waitFor();
+  await laptop.page.locator("#main-content h1", { hasText: "People" }).waitFor();
+  assert.equal(new URL(laptop.page.url()).pathname, "/administrators", "sign-in did not return to the same view");
   await laptop.page.locator("li", { hasText: "bea@acme.dev" }).getByRole("button", { name: "Reset passkeys" }).click();
   const recovery = (await laptop.page.getByText("Recovery link for bea@acme.dev").locator("..").locator("code").textContent()).trim();
   step = "recovery link on a new device";

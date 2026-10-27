@@ -114,6 +114,12 @@
   .lamp-wait { --lamp: var(--warning); animation: lamp-pulse 1.6s ease-in-out infinite; }
   .lamp-idle { --lamp: #34343c; box-shadow: none; }
   .lamp-lg { @apply size-3; }
+  /* A group name; as a button it adds or removes the group. */
+  .chip {
+    @apply bg-muted text-foreground inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs;
+  }
+  button.chip { @apply hover:bg-accent focus-visible:ring-ring cursor-pointer focus-visible:ring-2 focus-visible:outline-none; }
+  .chip-add { @apply text-muted-foreground border-border border border-dashed bg-transparent; }
   .panel {
     @apply bg-card relative rounded-xl border;
   }

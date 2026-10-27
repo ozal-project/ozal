@@ -87,7 +87,7 @@ func TestConsoleHomeAndAssets(t *testing.T) {
 	handler := New(&fakeManager{cfg: config.Config{Admin: config.Admin{Token: readToken}}}, broker, WithEvents(broker))
 
 	// Every client route gets the app shell with the strict CSP.
-	for _, path := range []string{"/", "/overview", "/activity", "/routes", "/simulator"} {
+	for _, path := range []string{"/", "/overview", "/activity", "/routes", "/simulator", "/people", "/groups", "/administrators"} {
 		rec := request(handler, http.MethodGet, path, "", "")
 		csp := rec.Header().Get("Content-Security-Policy")
 		if rec.Code != 200 || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/html") ||
