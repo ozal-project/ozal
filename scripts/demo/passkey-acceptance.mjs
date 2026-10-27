@@ -43,6 +43,13 @@ const device = async () => {
 const inConsole = (page) => page.locator("#main-content h1", { hasText: "Overview" }).waitFor();
 const signedOut = (page) => page.getByRole("button", { name: "Sign in with your passkey" }).waitFor();
 const menu = async (page, name) => { await page.getByRole("button", { name, exact: true }).click(); return page.locator("#user-menu"); };
+// A revoked session ends on the console's next request: either the page
+// already noticed (event stream, renewal) or the next navigation makes it.
+const endedOnNextRequest = async (page) => {
+  const people = page.locator('nav a[href="/people"]');
+  if (await people.isVisible()) await people.click({ timeout: 5_000 }).catch(() => {});
+  await signedOut(page);
+};
 const signOut = async (page, name) => { await (await menu(page, name)).getByRole("button", { name: "Sign out" }).click(); await signedOut(page); };
 const admins = async () => {
   const res = await fetch(`http://127.0.0.1:${ADMIN_PORT}/_/api/admins`, { headers: { Authorization: `Bearer ${edge.token}` } });
@@ -96,6 +103,36 @@ try {
   assert.equal(await reused.credentials(), 0, "a used device link enrolled again");
   await reused.context.close();
 
+  step = "remove the passkey of a lost device";
+  await (await menu(laptop.page, "Olivia Owner")).getByRole("button", { name: "Your passkeys" }).click();
+  const own = laptop.page.getByRole("dialog", { name: "Your passkeys" });
+  await own.getByText("this session").waitFor();
+  assert.equal(await own.getByRole("listitem").count(), 2);
+  assert.equal(await own.getByRole("button", { name: /^Remove / }).count(), 1, "the passkey of this session must not offer removal");
+  await own.getByRole("button", { name: /^Remove / }).click();
+  await laptop.page.getByRole("heading", { name: "Remove this passkey?" }).waitFor();
+  await laptop.page.keyboard.press("Escape");
+  assert.equal((await admins()).find((a) => a.email === "olivia@acme.dev").passkeys, 2, "cancelling removed a passkey");
+  await own.getByRole("button", { name: /^Remove / }).click();
+  await laptop.page.getByRole("button", { name: "Remove passkey" }).click();
+  await own.getByText("can no longer sign in").waitFor();
+  assert.equal(await own.getByRole("listitem").count(), 1);
+  assert.equal((await admins()).find((a) => a.email === "olivia@acme.dev").passkeys, 1);
+  await own.getByRole("button", { name: "Close" }).click();
+  // On a phone the menu lives in the drawer; the dialog must still show.
+  await laptop.page.setViewportSize({ width: 390, height: 844 });
+  await laptop.page.getByRole("button", { name: "Open menu" }).click();
+  await (await menu(laptop.page, "Olivia Owner")).getByRole("button", { name: "Your passkeys" }).click();
+  await own.getByText("this session").waitFor();
+  assert.ok(await own.isVisible(), "the passkeys dialog is hidden on a phone");
+  await own.getByRole("button", { name: "Close" }).click();
+  await laptop.page.getByRole("button", { name: "Close menu" }).click();
+  await laptop.page.setViewportSize({ width: 1280, height: 900 });
+  await endedOnNextRequest(phone.page);
+  await phone.page.getByRole("button", { name: "Sign in with your passkey" }).click();
+  await phone.page.getByRole("alert").waitFor();
+  assert.equal(await phone.page.locator("#main-content h1").count(), 0, "the removed passkey still signed in");
+
   step = "invite an administrator with one tool";
   await laptop.page.locator('nav a[href="/administrators"]').click();
   await laptop.page.locator("#main-content h1", { hasText: "Administrators" }).waitFor();
@@ -129,15 +166,14 @@ try {
   await inConsole(beaNew.page);
   step = "the lost device is signed out and its passkey refused";
   // Her open session on the lost device ends on its next request.
-  await bea.page.locator('nav a[href="/people"]').click();
-  await signedOut(bea.page);
+  await endedOnNextRequest(bea.page);
   await bea.page.getByRole("button", { name: "Sign in with your passkey" }).click();
   await bea.page.getByRole("alert").waitFor();
   assert.equal(await bea.page.locator("#main-content h1").count(), 0, "a replaced passkey still signed in");
   assert.equal((await admins()).find((a) => a.email === "bea@acme.dev").passkeys, 1, "recovery kept the old passkey");
 
   assert.deepEqual(errors, [], "no uncaught browser errors");
-  console.log("Administrator passkeys: first-run enrol once, passkey sign-in, device link for another browser (one use), scoped invitation, recovery revokes old passkey and session");
+  console.log("Administrator passkeys: first-run enrol once, passkey sign-in, device link for another browser (one use), removing a lost passkey ends its session, scoped invitation, recovery revokes old passkey and session");
 } catch (error) {
   console.error(`Passkey acceptance failed at ${step}: ${error.message}`);
   if (process.env.SB_DEBUG) for (const [i, c] of (browser?.contexts() ?? []).entries()) for (const p of c.pages()) console.error(`--- device ${i} ${p.url()}\n` + (await p.locator("body").innerText().catch(() => "")).slice(0, 600));

@@ -74,16 +74,20 @@ type operatorSessions struct {
 	// accounts links a session ID to the administrator it belongs to, so
 	// disabling a person ends their sessions.
 	accounts map[string]string
+	// credentials links a session ID to the passkey that opened it, so
+	// removing that passkey ends the sessions it opened.
+	credentials map[string]string
 }
 
 func newOperatorSessions() *operatorSessions {
-	return &operatorSessions{now: time.Now, grants: make(map[[32]byte]operatorGrant), accounts: make(map[string]string)}
+	return &operatorSessions{now: time.Now, grants: make(map[[32]byte]operatorGrant), accounts: make(map[string]string), credentials: make(map[string]string)}
 }
 func (s *operatorSessions) purge() {
 	for key, g := range s.grants {
 		if !s.now().Before(g.Expires) {
 			delete(s.grants, key)
 			delete(s.accounts, g.ID)
+			delete(s.credentials, g.ID)
 		}
 	}
 }
@@ -176,10 +180,29 @@ func (s *operatorSessions) issueSliding(name string, tools ...string) (string, o
 	s.grants[hash] = g
 	return token, g, nil
 }
-func (s *operatorSessions) bind(sessionID, accountID string) {
+func (s *operatorSessions) bind(sessionID, accountID string, credentialID []byte) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.accounts[sessionID] = accountID
+	s.credentials[sessionID] = string(credentialID)
+}
+
+// credential is the ID of the passkey that opened a session, or "".
+func (s *operatorSessions) credential(sessionID string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.credentials[sessionID]
+}
+
+// revokeCredential ends every session opened with one passkey.
+func (s *operatorSessions) revokeCredential(credentialID []byte) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for sessionID, used := range s.credentials {
+		if used == string(credentialID) {
+			s.revokeLocked(sessionID)
+		}
+	}
 }
 func (s *operatorSessions) account(sessionID string) string {
 	s.mu.Lock()
@@ -193,18 +216,17 @@ func (s *operatorSessions) revokeAccount(accountID string) {
 		if owner != accountID {
 			continue
 		}
-		delete(s.accounts, sessionID)
-		for hash, g := range s.grants {
-			if g.ID == sessionID {
-				delete(s.grants, hash)
-			}
-		}
+		s.revokeLocked(sessionID)
 	}
 }
 func (s *operatorSessions) revoke(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.revokeLocked(id)
+}
+func (s *operatorSessions) revokeLocked(id string) {
 	delete(s.accounts, id)
+	delete(s.credentials, id)
 	for hash, g := range s.grants {
 		if g.ID == id {
 			delete(s.grants, hash)

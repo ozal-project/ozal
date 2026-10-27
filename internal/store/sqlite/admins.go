@@ -128,7 +128,7 @@ func (s *Admins) Enrolment(ctx context.Context, tokenHash []byte) (adminid.Enrol
 // CompleteEnrolment uses the token and stores the passkey in one transaction.
 // The conditional UPDATE makes the token single-use even when two browsers
 // finish together.
-func (s *Admins) CompleteEnrolment(ctx context.Context, tokenHash []byte, account adminid.Account, credential webauthn.Credential) (adminid.Account, error) {
+func (s *Admins) CompleteEnrolment(ctx context.Context, tokenHash []byte, account adminid.Account, credential webauthn.Credential, label string) (adminid.Account, error) {
 	encoded, err := json.Marshal(credential)
 	if err != nil {
 		return adminid.Account{}, fmt.Errorf("encode credential: %w", err)
@@ -201,8 +201,8 @@ func (s *Admins) CompleteEnrolment(ctx context.Context, tokenHash []byte, accoun
 		}
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO admin_passkeys (credential_id, account_id, credential_json, created_at) VALUES (?, ?, ?, ?)`,
-		credential.ID, account.ID, string(encoded), now); err != nil {
+		`INSERT INTO admin_passkeys (credential_id, account_id, credential_json, created_at, label) VALUES (?, ?, ?, ?, ?)`,
+		credential.ID, account.ID, string(encoded), now, nullLabel(label)); err != nil {
 		return adminid.Account{}, fmt.Errorf("insert passkey: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -375,15 +375,15 @@ func (s *Admins) SetDisabled(ctx context.Context, id string, disabled bool) (adm
 }
 
 // AddPasskey attaches another credential to an enabled administrator.
-func (s *Admins) AddPasskey(ctx context.Context, accountID string, credential webauthn.Credential) error {
+func (s *Admins) AddPasskey(ctx context.Context, accountID string, credential webauthn.Credential, label string) error {
 	encoded, err := json.Marshal(credential)
 	if err != nil {
 		return err
 	}
 	result, err := s.db.ExecContext(ctx,
-		`INSERT INTO admin_passkeys (credential_id, account_id, credential_json, created_at)
-		 SELECT ?, id, ?, ? FROM admin_accounts WHERE id = ? AND disabled_at IS NULL`,
-		credential.ID, string(encoded), s.now().Unix(), accountID)
+		`INSERT INTO admin_passkeys (credential_id, account_id, credential_json, created_at, label)
+		 SELECT ?, id, ?, ?, ? FROM admin_accounts WHERE id = ? AND disabled_at IS NULL`,
+		credential.ID, string(encoded), s.now().Unix(), nullLabel(label), accountID)
 	if err != nil {
 		return fmt.Errorf("insert passkey: %w", err)
 	}
@@ -391,6 +391,68 @@ func (s *Admins) AddPasskey(ctx context.Context, accountID string, credential we
 		return adminid.ErrAccountNotFound
 	}
 	return nil
+}
+
+// Passkeys lists an administrator's active passkeys, oldest first.
+func (s *Admins) Passkeys(ctx context.Context, accountID string) ([]adminid.Passkey, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT credential_id, label, created_at, last_used_at FROM admin_passkeys WHERE account_id = ? AND revoked_at IS NULL ORDER BY created_at, credential_id`, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("list passkeys: %w", err)
+	}
+	defer rows.Close()
+	var out []adminid.Passkey
+	for rows.Next() {
+		var (
+			passkey  adminid.Passkey
+			label    sql.NullString
+			created  int64
+			lastUsed sql.NullInt64
+		)
+		if err := rows.Scan(&passkey.ID, &label, &created, &lastUsed); err != nil {
+			return nil, err
+		}
+		passkey.Label = label.String
+		passkey.CreatedAt = time.Unix(created, 0)
+		passkey.LastUsedAt = unixOrZero(lastUsed)
+		out = append(out, passkey)
+	}
+	return out, rows.Err()
+}
+
+// RemovePasskey revokes one active passkey of an administrator. It refuses
+// the account's last one, so removing cannot lock the person out.
+func (s *Admins) RemovePasskey(ctx context.Context, accountID string, credentialID []byte) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var active, target int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT COUNT(*), COUNT(CASE WHEN credential_id = ? THEN 1 END) FROM admin_passkeys WHERE account_id = ? AND revoked_at IS NULL`,
+		credentialID, accountID).Scan(&active, &target); err != nil {
+		return fmt.Errorf("count passkeys: %w", err)
+	}
+	if target == 0 {
+		return adminid.ErrPasskeyNotFound
+	}
+	if active < 2 {
+		return adminid.ErrLastPasskey
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE admin_passkeys SET revoked_at = ? WHERE account_id = ? AND credential_id = ? AND revoked_at IS NULL`,
+		s.now().Unix(), accountID, credentialID); err != nil {
+		return fmt.Errorf("revoke passkey: %w", err)
+	}
+	return tx.Commit()
+}
+
+func nullLabel(label string) any {
+	if label == "" {
+		return nil
+	}
+	return label
 }
 
 // retireRecoveries marks every unused recovery link of an account as used.

@@ -649,3 +649,123 @@ func TestAnotherBrowserAddsAPasskeyThroughAOneUseLink(t *testing.T) {
 		t.Fatal("a device link survived the account's recovery")
 	}
 }
+
+type passkeyEntry struct {
+	ID      string `json:"id"`
+	Label   string `json:"label"`
+	Current bool   `json:"current"`
+}
+
+func listPasskeys(t *testing.T, h *Handler, session string) (int, []passkeyEntry) {
+	t.Helper()
+	rec := api(h, http.MethodGet, "/_/api/admin/passkeys", session, nil)
+	var out struct {
+		Passkeys []passkeyEntry `json:"passkeys"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &out)
+	return rec.Code, out.Passkeys
+}
+
+func TestAdministratorRemovesALostPasskeyAndItsSessionsEnd(t *testing.T) {
+	h, recorder := identityHandler(t)
+	laptop, phone := newAuthenticator(t), newAuthenticator(t)
+	token, _ := hostEnrolment(t, h, "bootstrap", "")
+	desk := decode(t, enrol(t, h, laptop, token, "Octavio", "octavio@example.com"))["token"].(string)
+	if rec := addPasskey(t, h, desk, phone); rec.Code != http.StatusOK {
+		t.Fatalf("add passkey = %d %s", rec.Code, rec.Body)
+	}
+	onPhone := decode(t, signIn(t, h, phone))["token"].(string)
+
+	code, passkeys := listPasskeys(t, h, desk)
+	if code != http.StatusOK || len(passkeys) != 2 {
+		t.Fatalf("list = %d %v", code, passkeys)
+	}
+	var lost string
+	for _, p := range passkeys {
+		if !p.Current {
+			lost = p.ID
+		}
+	}
+	if lost == "" || passkeys[0].Current == passkeys[1].Current {
+		t.Fatalf("exactly one passkey must be this session's: %v", passkeys)
+	}
+	for _, p := range passkeys {
+		if p.Current {
+			if rec := api(h, http.MethodDelete, "/_/api/admin/passkeys/"+p.ID, desk, nil); rec.Code != http.StatusConflict {
+				t.Fatalf("removed the passkey that opened this session while another exists: %d", rec.Code)
+			}
+		}
+	}
+	if rec := api(h, http.MethodDelete, "/_/api/admin/passkeys/"+lost, desk, nil); rec.Code != http.StatusOK {
+		t.Fatalf("remove = %d %s", rec.Code, rec.Body)
+	}
+	if code, _ := listPasskeys(t, h, onPhone); code != http.StatusUnauthorized {
+		t.Fatalf("a session opened with the removed passkey still works: %d", code)
+	}
+	if rec := signIn(t, h, phone); rec.Code == http.StatusOK {
+		t.Fatal("the removed passkey still signs in")
+	}
+	if code, passkeys := listPasskeys(t, h, desk); code != http.StatusOK || len(passkeys) != 1 || !passkeys[0].Current {
+		t.Fatalf("the remaining session or passkey was affected: %d %v", code, passkeys)
+	}
+	if rec := signIn(t, h, laptop); rec.Code != http.StatusOK {
+		t.Fatalf("the kept passkey stopped signing in: %d", rec.Code)
+	}
+	if !recorder.Has("admin.passkey_removed") {
+		t.Fatal("removal was not recorded")
+	}
+}
+
+func TestPasskeyRemovalIsOnlyForYourOtherPasskeys(t *testing.T) {
+	h, _ := identityHandler(t)
+	owner := ownerSession(t, h)
+	link, _ := invite(t, h, owner, "bea@example.com", "people")
+	bea := decode(t, enrol(t, h, newAuthenticator(t), link, "Bea", ""))["token"].(string)
+	_, mine := listPasskeys(t, h, owner)
+	_, hers := listPasskeys(t, h, bea)
+	if len(mine) != 1 || len(hers) != 1 {
+		t.Fatalf("passkeys = %v / %v", mine, hers)
+	}
+
+	if rec := api(h, http.MethodDelete, "/_/api/admin/passkeys/"+mine[0].ID, owner, nil); rec.Code != http.StatusConflict {
+		t.Fatalf("removed the passkey that opened this session: %d", rec.Code)
+	}
+	if rec := api(h, http.MethodDelete, "/_/api/admin/passkeys/"+hers[0].ID, owner, nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("removed another administrator's passkey: %d", rec.Code)
+	}
+	if rec := api(h, http.MethodDelete, "/_/api/admin/passkeys/not%20base64", owner, nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("malformed id = %d", rec.Code)
+	}
+	host, _, err := h.operators.issue("Host operator", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, session := range map[string]string{"admin token": "secret", "host login": host} {
+		if code, _ := listPasskeys(t, h, session); code != http.StatusForbidden {
+			t.Fatalf("%s listed passkeys: %d", name, code)
+		}
+		if rec := api(h, http.MethodDelete, "/_/api/admin/passkeys/"+hers[0].ID, session, nil); rec.Code != http.StatusForbidden {
+			t.Fatalf("%s removed a passkey: %d", name, rec.Code)
+		}
+	}
+	if code, hers := listPasskeys(t, h, bea); code != http.StatusOK || len(hers) != 1 {
+		t.Fatalf("Bea's passkey changed: %d %v", code, hers)
+	}
+}
+
+func TestDeviceLabelNamesBrowserAndSystem(t *testing.T) {
+	for ua, want := range map[string]string{
+		"Mozilla/5.0 (X11; Linux x86_64; rv:142.0) Gecko/20100101 Firefox/142.0":                                                                  "Firefox on Linux",
+		"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36":                                   "Chrome on Linux",
+		"Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Mobile Safari/537.36":                            "Chrome on Android",
+		"Mozilla/5.0 (iPhone; CPU iPhone OS 19_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/19.0 Mobile/15E148 Safari/604.1": "Safari on iPhone",
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0":           "Edge on Windows",
+		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/19.0 Safari/605.1.15":                   "Safari on macOS",
+		"curl/8.0": "",
+		"":         "",
+	} {
+		if got := deviceLabel(ua); got != want {
+			t.Errorf("deviceLabel(%q) = %q, want %q", ua, got, want)
+		}
+	}
+}

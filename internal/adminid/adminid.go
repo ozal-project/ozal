@@ -21,7 +21,20 @@ var (
 	// ErrLastAdministrator refuses disabling the only enabled administrator
 	// who can manage administrators: nobody could invite or recover anyone.
 	ErrLastAdministrator = errors.New("admin: this is the last enabled administrator who can manage administrators")
+	// ErrPasskeyNotFound means the account has no active passkey with that ID.
+	ErrPasskeyNotFound = errors.New("admin: passkey not found")
+	// ErrLastPasskey refuses removing an account's only active passkey: only
+	// the host could let that person in again.
+	ErrLastPasskey = errors.New("admin: this is the account's only passkey")
 )
+
+// Passkey is one active credential of an administrator, as they see it.
+type Passkey struct {
+	ID         []byte
+	Label      string
+	CreatedAt  time.Time
+	LastUsedAt time.Time
+}
 
 // Account is one administrator.
 type Account struct {

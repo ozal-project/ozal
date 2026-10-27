@@ -2,6 +2,8 @@
   import { tick } from "svelte";
   import { route, navigate, type Page } from "$lib/router.svelte";
   import UserMenu from "$lib/UserMenu.svelte";
+  import PasskeysDialog from "$lib/PasskeysDialog.svelte";
+  import { dialogs } from "$lib/dialogs.svelte";
   import { admin, can, tools as toolList, type Tool } from "$lib/adminToken.svelte";
   import Connectors from "./pages/Connectors.svelte";
   import Applications from "./pages/Applications.svelte";
@@ -100,6 +102,8 @@
     <div class="border-sidebar-border mt-1 border-t pt-2"><UserMenu placement="up" /></div>
   </div>
 {/snippet}
+
+{#if admin.passkey}<PasskeysDialog bind:open={dialogs.passkeys} />{/if}
 
 <div class="flex min-h-screen">
   <a href="#main-content" class="sr-only focus:not-sr-only focus:bg-background focus:text-foreground focus:ring-ring fixed top-2 left-2 z-50 rounded-md px-3 py-2 text-sm focus:ring-2">Skip to content</a>

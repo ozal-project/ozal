@@ -225,6 +225,8 @@ SWITCHBOARD_BIN=/tmp/switchboard-product-candidate CHROME=/ruta/a/chrome \
 
 Comprueba que el enlace del primer administrador funciona una sola vez, que se
 entra con passkey después de salir, que el enlace para otro navegador agrega una
-passkey y no sirve dos veces, que una invitación con una sola herramienta da sólo
+passkey y no sirve dos veces, que borrar desde "Your passkeys" la passkey de un
+dispositivo perdido cierra su sesión y la deja inútil (también desde el menú del
+celular), que una invitación con una sola herramienta da sólo
 esa, y que el reseteo de otro administrador corta su sesión abierta y deja inútil
 su passkey vieja. No prueba el vencimiento por inactividad (30 minutos) ni Firefox.

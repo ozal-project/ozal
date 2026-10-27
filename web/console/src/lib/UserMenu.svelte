@@ -3,6 +3,7 @@
   import { admin, tools, signOut } from "$lib/adminToken.svelte";
   import { addPasskey, explainPasskeyError, issueDeviceLink } from "$lib/passkey";
   import CopyCommand from "$lib/CopyCommand.svelte";
+  import { dialogs } from "$lib/dialogs.svelte";
   import ChevronIcon from "@lucide/svelte/icons/chevron-down";
 
   // Who is signed in, what the session may change, and the way out. In the
@@ -14,6 +15,7 @@
   let trigger = $state<HTMLButtonElement | null>(null);
   let adding = $state(false);
   let notice = $state("");
+  function manage() { close(true); dialogs.passkeys = true; }
 
   async function show() { open = true; notice = ""; await tick(); }
   function close(returnFocus = false) { open = false; if (returnFocus) trigger?.focus(); }
@@ -87,6 +89,7 @@
         {#if admin.passkey}
           <button type="button" class="hover:bg-accent rounded-md px-2 py-1.5 text-left" onclick={otherBrowser}>Sign in on another browser</button>
           <button type="button" class="hover:bg-accent rounded-md px-2 py-1.5 text-left" onclick={another} disabled={adding}>{adding ? "Waiting for your device…" : "Add a passkey on this device"}</button>
+          <button type="button" class="hover:bg-accent rounded-md px-2 py-1.5 text-left" onclick={manage}>Your passkeys</button>
         {:else}
           <p class="text-muted-foreground px-2 py-1.5 text-xs">A host login has no administrator account, so it cannot add passkeys.</p>
         {/if}

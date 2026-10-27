@@ -119,6 +119,25 @@ export async function addPasskey(session: string): Promise<void> {
   await api<{ added: boolean }>("/_/api/admin/passkeys/finish", credentialJSON(credential), begun.ceremony, session);
 }
 
+export type OwnPasskey = { id: string; label?: string; created_at: string; last_used_at?: string; current?: boolean };
+
+async function bearerRequest<T>(method: string, path: string, session: string, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(path, { method, cache: "no-store", signal: signal ?? AbortSignal.timeout(15_000), headers: { Authorization: `Bearer ${session}` } });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data as { error?: string }).error || `HTTP ${res.status}`);
+  return data as T;
+}
+
+// The signed-in administrator's own passkeys; `current` opened this session.
+export async function listOwnPasskeys(session: string, signal?: AbortSignal): Promise<OwnPasskey[]> {
+  return (await bearerRequest<{ passkeys: OwnPasskey[] }>("GET", "/_/api/admin/passkeys", session, signal)).passkeys ?? [];
+}
+
+// Revokes one of them; the sessions it opened end on the edge at once.
+export async function removeOwnPasskey(session: string, id: string): Promise<void> {
+  await bearerRequest("DELETE", `/_/api/admin/passkeys/${encodeURIComponent(id)}`, session);
+}
+
 export type EnrolInfo = { kind: "bootstrap" | "invite" | "recover" | "device"; email?: string; name?: string };
 // What the link already fixes, so the form asks only for what is missing.
 export async function enrolInfo(token: string): Promise<EnrolInfo> {

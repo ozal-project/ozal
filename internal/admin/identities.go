@@ -48,7 +48,7 @@ type identities interface {
 	// CompleteEnrolment uses the token and stores the credential in one
 	// transaction. A bootstrap creates the first account (all tools); a
 	// recover revokes the account's previous passkeys.
-	CompleteEnrolment(ctx context.Context, tokenHash []byte, account adminid.Account, credential webauthn.Credential) (adminid.Account, error)
+	CompleteEnrolment(ctx context.Context, tokenHash []byte, account adminid.Account, credential webauthn.Credential, label string) (adminid.Account, error)
 	// AccountByHandle returns an enabled administrator and active passkeys.
 	AccountByHandle(ctx context.Context, handle []byte) (adminid.Account, []webauthn.Credential, error)
 	// Accounts lists every administrator, enabled or not.
@@ -57,7 +57,11 @@ type identities interface {
 	// administrator who can manage administrators fails.
 	SetDisabled(ctx context.Context, id string, disabled bool) (adminid.Account, error)
 	// AddPasskey attaches another credential to an enabled administrator.
-	AddPasskey(ctx context.Context, accountID string, credential webauthn.Credential) error
+	AddPasskey(ctx context.Context, accountID string, credential webauthn.Credential, label string) error
+	// Passkeys lists an administrator's active passkeys.
+	Passkeys(ctx context.Context, accountID string) ([]adminid.Passkey, error)
+	// RemovePasskey revokes one; the account's last passkey is refused.
+	RemovePasskey(ctx context.Context, accountID string, credentialID []byte) error
 	// RecordLogin stores a credential's new counter; it fails for a revoked one.
 	RecordLogin(ctx context.Context, credential webauthn.Credential) error
 }
@@ -210,6 +214,8 @@ func (h *Handler) registerIdentities() {
 	h.mux.HandleFunc("POST /_/api/admin/devices", h.requireBearer(h.issueDeviceLink))
 	h.mux.HandleFunc("POST /_/api/admin/passkeys/begin", h.requireBearer(h.addPasskeyBegin))
 	h.mux.HandleFunc("POST /_/api/admin/passkeys/finish", h.requireBearer(h.addPasskeyFinish))
+	h.mux.HandleFunc("GET /_/api/admin/passkeys", h.requireBearer(h.listPasskeys))
+	h.mux.HandleFunc("DELETE /_/api/admin/passkeys/{id}", h.requireBearer(h.removePasskey))
 	h.mux.HandleFunc("POST /_/api/admin/enrolments", h.requireLocal(h.issueEnrolment))
 	h.mux.HandleFunc("POST /_/api/admin/enrol/info", h.enrolInfo)
 	h.mux.HandleFunc("POST /_/api/admin/enrol/begin", h.enrolBegin)
@@ -529,7 +535,7 @@ func (h *Handler) enrolFinish(w http.ResponseWriter, r *http.Request) {
 	}
 	h.identityMu.Lock()
 	defer h.identityMu.Unlock()
-	account, err := h.identities.CompleteEnrolment(r.Context(), pending.tokenHash, pending.account, *credential)
+	account, err := h.identities.CompleteEnrolment(r.Context(), pending.tokenHash, pending.account, *credential, deviceLabel(r.UserAgent()))
 	if err != nil {
 		h.failedSignIn(r, "enrol_store_failed", err)
 		if errors.Is(err, adminid.ErrEnrolmentInvalid) || errors.Is(err, adminid.ErrAlreadyEnrolled) {
@@ -544,7 +550,7 @@ func (h *Handler) enrolFinish(w http.ResponseWriter, r *http.Request) {
 		h.devices.revokeAccount(account.ID)
 	}
 	h.emit(events.Event{Type: events.Type("admin.passkey_registered"), Actor: "admin:" + account.Email, Code: account.ID})
-	h.startAdminSession(w, account)
+	h.startAdminSession(w, account, credential.ID)
 }
 
 func (h *Handler) adminLoginBegin(w http.ResponseWriter, r *http.Request) {
@@ -613,18 +619,18 @@ func (h *Handler) adminLoginFinish(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "that passkey is no longer active")
 		return
 	}
-	h.startAdminSession(w, found)
+	h.startAdminSession(w, found, credential.ID)
 }
 
 // startAdminSession turns a verified administrator into the same short,
 // memory-only operator session the host login produces.
-func (h *Handler) startAdminSession(w http.ResponseWriter, account adminid.Account) {
+func (h *Handler) startAdminSession(w http.ResponseWriter, account adminid.Account, credentialID []byte) {
 	token, grant, err := h.operators.issueSliding(account.Name, account.Tools...)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "the session could not be opened")
 		return
 	}
-	h.operators.bind(grant.ID, account.ID)
+	h.operators.bind(grant.ID, account.ID, credentialID)
 	h.emit(events.Event{Type: events.Type("operator.signed_in"), Actor: "admin:" + account.Email, Code: grant.ID, Reason: "passkey"})
 	writeJSON(w, http.StatusOK, map[string]any{"token": token, "name": grant.Name, "id": grant.ID, "expires": grant.Expires, "tools": grant.Tools, "renewable": true})
 }
@@ -849,7 +855,7 @@ func (h *Handler) addPasskeyFinish(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "your session ended; sign in again")
 		return
 	}
-	if err := h.identities.AddPasskey(r.Context(), self, *credential); err != nil {
+	if err := h.identities.AddPasskey(r.Context(), self, *credential, deviceLabel(r.UserAgent())); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "the passkey could not be saved")
 		return
 	}
@@ -898,12 +904,133 @@ func (h *Handler) finishDevice(w http.ResponseWriter, r *http.Request, rp *webau
 		writeError(w, http.StatusUnauthorized, "that administrator is no longer active")
 		return
 	}
-	if err := h.identities.AddPasskey(r.Context(), account.ID, *credential); err != nil {
+	if err := h.identities.AddPasskey(r.Context(), account.ID, *credential, deviceLabel(r.UserAgent())); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "the passkey could not be saved")
 		return
 	}
 	h.emit(events.Event{Type: events.Type("admin.passkey_added"), Actor: "admin:" + account.Email, Reason: "another browser"})
-	h.startAdminSession(w, account)
+	h.startAdminSession(w, account, credential.ID)
+}
+
+type passkeyView struct {
+	ID         string `json:"id"`
+	Label      string `json:"label,omitempty"`
+	CreatedAt  string `json:"created_at"`
+	LastUsedAt string `json:"last_used_at,omitempty"`
+	Current    bool   `json:"current,omitempty"`
+}
+
+// listPasskeys shows the signed-in administrator their own active passkeys
+// and which one opened this session.
+func (h *Handler) listPasskeys(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	self, current := h.callerPasskey(r)
+	if self == "" {
+		writeError(w, http.StatusForbidden, "sign in with your passkey to see your passkeys")
+		return
+	}
+	passkeys, err := h.identities.Passkeys(r.Context(), self)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "passkeys unavailable")
+		return
+	}
+	out := make([]passkeyView, 0, len(passkeys))
+	for _, p := range passkeys {
+		view := passkeyView{ID: base64.RawURLEncoding.EncodeToString(p.ID), Label: p.Label, CreatedAt: p.CreatedAt.UTC().Format(time.RFC3339), Current: string(p.ID) == current}
+		if !p.LastUsedAt.IsZero() {
+			view.LastUsedAt = p.LastUsedAt.UTC().Format(time.RFC3339)
+		}
+		out = append(out, view)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"passkeys": out})
+}
+
+// removePasskey lets an administrator revoke one of their own passkeys, for
+// a lost phone or a browser they no longer use. The passkey that opened this
+// session cannot be removed from it, which also keeps the last one; the
+// sessions the removed passkey opened end at once.
+func (h *Handler) removePasskey(w http.ResponseWriter, r *http.Request) {
+	self, current := h.callerPasskey(r)
+	if self == "" {
+		writeError(w, http.StatusForbidden, "sign in with your passkey to remove one")
+		return
+	}
+	id, err := base64.RawURLEncoding.DecodeString(r.PathValue("id"))
+	if err != nil || len(id) == 0 {
+		writeError(w, http.StatusNotFound, "no such passkey")
+		return
+	}
+	if string(id) == current {
+		writeError(w, http.StatusConflict, "this session was opened with that passkey; sign in with another one to remove it")
+		return
+	}
+	if !h.recordMutationIntent(w, r, "admin.passkey_remove", "") {
+		return
+	}
+	h.identityMu.Lock()
+	defer h.identityMu.Unlock()
+	if owner, _ := h.callerPasskey(r); owner != self {
+		writeError(w, http.StatusUnauthorized, "your session ended; sign in again")
+		return
+	}
+	switch err := h.identities.RemovePasskey(r.Context(), self, id); {
+	case errors.Is(err, adminid.ErrPasskeyNotFound):
+		writeError(w, http.StatusNotFound, "no such passkey")
+		return
+	case errors.Is(err, adminid.ErrLastPasskey):
+		writeError(w, http.StatusConflict, "this is your only passkey; add another before removing it")
+		return
+	case err != nil:
+		writeError(w, http.StatusServiceUnavailable, "the passkey could not be removed")
+		return
+	}
+	h.operators.revokeCredential(id)
+	h.emit(events.Event{Type: events.Type("admin.passkey_removed"), Actor: h.actorOf(r)})
+	writeJSON(w, http.StatusOK, map[string]bool{"removed": true})
+}
+
+// callerPasskey is the administrator behind this request's session and the
+// passkey that opened it; both are "" for the admin token or a host login.
+func (h *Handler) callerPasskey(r *http.Request) (account, credential string) {
+	grant, ok := r.Context().Value(operatorKey{}).(operatorGrant)
+	if !ok {
+		return "", ""
+	}
+	return h.operators.account(grant.ID), h.operators.credential(grant.ID)
+}
+
+// deviceLabel names where a passkey was made, from the browser's User-Agent:
+// "Firefox on Linux", "Chrome on Android". It is a hint for the person who
+// owns the passkey, never an authorization input.
+func deviceLabel(userAgent string) string {
+	browser := ""
+	for _, b := range []struct{ token, name string }{
+		{"Edg/", "Edge"}, {"OPR/", "Opera"}, {"Firefox/", "Firefox"}, {"FxiOS/", "Firefox"},
+		{"CriOS/", "Chrome"}, {"Chrome/", "Chrome"}, {"Safari/", "Safari"},
+	} {
+		if strings.Contains(userAgent, b.token) {
+			browser = b.name
+			break
+		}
+	}
+	system := ""
+	for _, o := range []struct{ token, name string }{
+		{"Android", "Android"}, {"iPhone", "iPhone"}, {"iPad", "iPad"}, {"Windows", "Windows"},
+		{"Mac OS X", "macOS"}, {"CrOS", "ChromeOS"}, {"Linux", "Linux"},
+	} {
+		if strings.Contains(userAgent, o.token) {
+			system = o.name
+			break
+		}
+	}
+	switch {
+	case browser != "" && system != "":
+		return browser + " on " + system
+	case browser != "":
+		return browser
+	default:
+		return system
+	}
 }
 
 // accountWithCredentials finds an enabled administrator by ID with their
