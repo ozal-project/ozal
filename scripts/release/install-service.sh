@@ -148,17 +148,19 @@ if [[ -z "${ready:-}" ]]; then
   exit 1
 fi
 
+link="$("$lib/switchboard" console enrol -config "$config" 2>/dev/null | grep -m1 'overview#enrol=' || true)"
+[[ -n "$link" ]] || link='(not printed: run  sudo switchboard console enrol  or  sudo cat '$state/setup-link')'
+
 cat <<EOF
 
 Switchboard is running. Nothing is public: the proxy and the console listen on loopback.
 
 Next
-  1. Open the console (from your computer): ssh -N -L 9090:127.0.0.1:9090 USER@THIS_HOST
-     then browse to http://localhost:9090 (passkeys need the name localhost, not an IP address)
-  2. Create the first administrator, on this host (works from any directory):
-       sudo switchboard console enrol
-     Open the link it prints, in the browser that has the tunnel, with your name and email.
-     It creates your passkey; from then on you sign in with it and need no command here.
+  1. From your computer, forward the console port: ssh -N -L 9090:127.0.0.1:9090 USER@THIS_HOST
+     (passkeys need the name localhost, not an IP address)
+  2. Create the first administrator: open this link in that browser (one use, 10 minutes),
+     give your name and email and create your passkey. No command is needed on the host.
+       $link
   3. In the console, Applications: add your existing website and invite the first person.
   4. Back up $state and $etc. Recovery and upgrades: docs/operations/systemd.md
 EOF

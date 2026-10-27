@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/octaviosantacruz/switchboard/internal/config"
 	"github.com/octaviosantacruz/switchboard/internal/events"
@@ -37,11 +38,19 @@ func identityHandler(t *testing.T, extra ...Option) (*Handler, *events.Recorder)
 
 // browser sends a same-origin JSON request the way the console does.
 func browser(h http.Handler, host, path, ceremony string, body any) *httptest.ResponseRecorder {
+	return browserAs(h, host, path, ceremony, "", body)
+}
+
+// browserAs is browser with a signed-in operator session.
+func browserAs(h http.Handler, host, path, ceremony, session string, body any) *httptest.ResponseRecorder {
 	raw, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "http://"+host+path, bytes.NewReader(raw))
 	req.Host = host
 	req.Header.Set("Origin", "http://"+host)
 	req.Header.Set("Content-Type", "application/json")
+	if session != "" {
+		req.Header.Set("Authorization", "Bearer "+session)
+	}
 	if ceremony != "" {
 		req.Header.Set(adminCeremony, ceremony)
 	}
@@ -355,5 +364,177 @@ func TestStateShowsTheHostCommandOnlyBeforeTheFirstAdministrator(t *testing.T) {
 	after := decode(t, requestWithHost(h, "localhost:9091", http.MethodGet, "/_/api/admin/state", "", ""))
 	if _, leaked := after["enrol_command"]; leaked {
 		t.Fatalf("host paths still shown after enrolment: %v", after)
+	}
+}
+
+// addPasskey runs the browser side of adding another passkey to the signed-in
+// administrator.
+func addPasskey(t *testing.T, h *Handler, session string, device *virtualAuthenticator) *httptest.ResponseRecorder {
+	t.Helper()
+	begin := browserAs(h, "localhost:9091", "/_/api/admin/passkeys/begin", "", session, map[string]string{})
+	if begin.Code != http.StatusOK {
+		return begin
+	}
+	started := decode(t, begin)
+	credential := device.create(t, started["options"].(map[string]any), consoleOrigin)
+	return browserAs(h, "localhost:9091", "/_/api/admin/passkeys/finish", started["ceremony"].(string), session, credential)
+}
+
+func TestAdministratorAddsASecondPasskeyAndEitherSignsIn(t *testing.T) {
+	h, _ := identityHandler(t)
+	first := newAuthenticator(t)
+	token, _ := hostEnrolment(t, h, "bootstrap", "")
+	rec := enrol(t, h, first, token, "Octavio", "octavio@example.com")
+	session := decode(t, rec)["token"].(string)
+
+	if rec := browserAs(h, "localhost:9091", "/_/api/admin/passkeys/begin", "", "", map[string]string{}); rec.Code == http.StatusOK {
+		t.Fatal("a passkey was added without a session")
+	}
+	second := newAuthenticator(t)
+	if rec := addPasskey(t, h, session, second); rec.Code != http.StatusOK {
+		t.Fatalf("add passkey = %d %s", rec.Code, rec.Body)
+	}
+	for name, device := range map[string]*virtualAuthenticator{"first": first, "second": second} {
+		if rec := signIn(t, h, device); rec.Code != http.StatusOK {
+			t.Fatalf("%s passkey cannot sign in: %d %s", name, rec.Code, rec.Body)
+		}
+	}
+	// A session that did not come from a passkey (the admin token) has no account to add to.
+	if rec := browserAs(h, "localhost:9091", "/_/api/admin/passkeys/begin", "", "secret", map[string]string{}); rec.Code != http.StatusForbidden {
+		t.Fatalf("admin token added a passkey: %d", rec.Code)
+	}
+}
+
+func TestAdministratorRecoversAnotherFromTheConsoleButNeverUpward(t *testing.T) {
+	h, _ := identityHandler(t)
+	owner := ownerSession(t, h)
+	adaOld := newAuthenticator(t)
+	inviteToken, _ := invite(t, h, owner, "ana@example.com", "people")
+	anaSession := decode(t, enrol(t, h, adaOld, inviteToken, "Ana", "ana@example.com"))["token"].(string)
+	bobToken, _ := invite(t, h, owner, "bob@example.com", "administrators", "people")
+	bob := decode(t, enrol(t, h, newAuthenticator(t), bobToken, "Bob", "bob@example.com"))["token"].(string)
+
+	list := decode(t, api(h, http.MethodGet, "/_/api/admins", owner, nil))["admins"].([]any)
+	ids := map[string]string{}
+	for _, a := range list {
+		m := a.(map[string]any)
+		ids[m["email"].(string)] = m["id"].(string)
+	}
+	// Bob holds administrators+people: he can recover Ana (people) but not the owner (every tool).
+	if rec := api(h, http.MethodPost, "/_/api/admins/"+ids["octavio@example.com"]+"/recover", bob, nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("recovery climbed to the owner: %d", rec.Code)
+	}
+	// Ana has no administrators tool.
+	if rec := api(h, http.MethodPost, "/_/api/admins/"+ids["ana@example.com"]+"/recover", anaSession, nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("an administrator without the tool recovered someone: %d", rec.Code)
+	}
+	// Nobody recovers themselves here: they are signed in.
+	if rec := api(h, http.MethodPost, "/_/api/admins/"+ids["bob@example.com"]+"/recover", bob, nil); rec.Code != http.StatusConflict {
+		t.Fatalf("self recovery = %d, want 409", rec.Code)
+	}
+	rec := api(h, http.MethodPost, "/_/api/admins/"+ids["ana@example.com"]+"/recover", bob, nil)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("recover Ana = %d %s", rec.Code, rec.Body)
+	}
+	link := decode(t, rec)["token"].(string)
+	adaNew := newAuthenticator(t)
+	if rec := enrol(t, h, adaNew, link, "", ""); rec.Code != http.StatusOK {
+		t.Fatalf("Ana's recovery enrol = %d %s", rec.Code, rec.Body)
+	}
+	if rec := request(h, http.MethodGet, "/_/api/status", anaSession, ""); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("Ana's session survived recovery: %d", rec.Code)
+	}
+	if rec := signIn(t, h, adaOld); rec.Code == http.StatusOK {
+		t.Fatal("the replaced passkey still signs in")
+	}
+	if rec := signIn(t, h, adaNew); rec.Code != http.StatusOK {
+		t.Fatalf("new passkey sign-in = %d", rec.Code)
+	}
+}
+
+func TestFirstRunLinkEnrolsOnceAndIsSilentAfterwards(t *testing.T) {
+	h, _ := identityHandler(t)
+	token, expires, err := IssueFirstRun(context.Background(), h.identities)
+	if err != nil || token == "" || time.Until(expires) < 10*time.Minute || time.Until(expires) > FirstRunTTL {
+		t.Fatalf("first-run link: %q %v %v", token, expires, err)
+	}
+	if rec := enrol(t, h, newAuthenticator(t), token, "Octavio", "octavio@example.com"); rec.Code != http.StatusOK {
+		t.Fatalf("enrol with the first-run link = %d %s", rec.Code, rec.Body)
+	}
+	if again, _, err := IssueFirstRun(context.Background(), h.identities); err != nil || again != "" {
+		t.Fatalf("a link was issued after the first administrator: %q %v", again, err)
+	}
+}
+
+func TestOnlyTheLatestRecoveryLinkWorksAndNoneSurviveRecovery(t *testing.T) {
+	h, _ := identityHandler(t)
+	owner := ownerSession(t, h)
+	invitation, _ := invite(t, h, owner, "ana@example.com", "people")
+	enrol(t, h, newAuthenticator(t), invitation, "Ana", "ana@example.com")
+	list := decode(t, api(h, http.MethodGet, "/_/api/admins", owner, nil))["admins"].([]any)
+	var ana string
+	for _, a := range list {
+		if m := a.(map[string]any); m["email"] == "ana@example.com" {
+			ana = m["id"].(string)
+		}
+	}
+	issue := func() string {
+		rec := api(h, http.MethodPost, "/_/api/admins/"+ana+"/recover", owner, nil)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("recover = %d", rec.Code)
+		}
+		return decode(t, rec)["token"].(string)
+	}
+	first, second, third := issue(), issue(), issue()
+	// Issuing again replaced the older links.
+	if rec := enrol(t, h, newAuthenticator(t), first, "", ""); rec.Code == http.StatusOK {
+		t.Fatal("an older recovery link still worked after a newer one was issued")
+	}
+	// A host-issued link (the other door) is retired by the same completion.
+	hostLink, _ := hostEnrolment(t, h, "recover", "ana@example.com")
+	if rec := enrol(t, h, newAuthenticator(t), hostLink, "", ""); rec.Code != http.StatusOK {
+		t.Fatalf("latest link = %d %s", rec.Code, rec.Body)
+	}
+	for name, link := range map[string]string{"second": second, "third": third} {
+		if rec := enrol(t, h, newAuthenticator(t), link, "", ""); rec.Code == http.StatusOK {
+			t.Fatalf("the %s recovery link replaced the account again after it was recovered", name)
+		}
+	}
+}
+
+// A passkey request that passed the session check just before a recovery
+// revoked the session must not be saved after the recovery.
+func TestPasskeyAddedAfterTheSessionWasRevokedIsRefused(t *testing.T) {
+	h, _ := identityHandler(t)
+	device := newAuthenticator(t)
+	token, _ := hostEnrolment(t, h, "bootstrap", "")
+	session := decode(t, enrol(t, h, device, token, "Octavio", "octavio@example.com"))["token"].(string)
+
+	grant, ok := h.operators.authenticate(session)
+	if !ok {
+		t.Fatal("session not recognised")
+	}
+	begin := browserAs(h, "localhost:9091", "/_/api/admin/passkeys/begin", "", session, map[string]string{})
+	started := decode(t, begin)
+	credential := newAuthenticator(t).create(t, started["options"].(map[string]any), consoleOrigin)
+
+	// The request passes every check and waits for the identity lock, which a
+	// recovery holds while it revokes the account's sessions.
+	raw, _ := json.Marshal(credential)
+	req := httptest.NewRequest(http.MethodPost, "http://localhost:9091/_/api/admin/passkeys/finish", bytes.NewReader(raw))
+	req.Host = "localhost:9091"
+	req.Header.Set("Origin", "http://localhost:9091")
+	req.Header.Set(adminCeremony, started["ceremony"].(string))
+	req = req.WithContext(context.WithValue(req.Context(), operatorKey{}, grant))
+	rec := httptest.NewRecorder()
+	h.identityMu.Lock()
+	done := make(chan struct{})
+	go func() { h.addPasskeyFinish(rec, req); close(done) }()
+	time.Sleep(300 * time.Millisecond)
+	h.operators.revokeAccount(h.operators.account(grant.ID))
+	h.identityMu.Unlock()
+	<-done
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("late add = %d %s, want 401", rec.Code, rec.Body)
 	}
 }

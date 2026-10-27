@@ -34,8 +34,9 @@ func (s *Admins) Enrolled(ctx context.Context) (bool, error) {
 	return n > 0, nil
 }
 
-// IssueEnrolment stores a one-use token hash. Issuing a new token does not
-// cancel older unused ones: they all expire.
+// IssueEnrolment stores a one-use token hash. A new recovery link replaces any
+// older unused one for the same account (the latest link wins); other kinds
+// keep older unused tokens until they expire.
 func (s *Admins) IssueEnrolment(ctx context.Context, request adminid.EnrolmentRequest, tokenHash []byte, expires time.Time) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -58,6 +59,9 @@ func (s *Admins) IssueEnrolment(ctx context.Context, request adminid.EnrolmentRe
 			return err
 		}
 		accountID = account.ID
+		if err := retireRecoveries(ctx, tx, account.ID, s.now().Unix()); err != nil {
+			return err
+		}
 	case "invite":
 		email = strings.ToLower(strings.TrimSpace(request.Email))
 		var n int
@@ -185,6 +189,11 @@ func (s *Admins) CompleteEnrolment(ctx context.Context, tokenHash []byte, accoun
 		account, err = scanAdmin(tx.QueryRowContext(ctx, adminColumns+` WHERE id = ? AND disabled_at IS NULL`, accountID.String))
 		if err != nil {
 			return adminid.Account{}, adminid.ErrEnrolmentInvalid
+		}
+		// Every other recovery link for this account dies with this one, so a
+		// link that leaked cannot replace the new passkeys afterwards.
+		if err := retireRecoveries(ctx, tx, account.ID, now); err != nil {
+			return adminid.Account{}, err
 		}
 		// Recovery assumes the old passkeys are lost or exposed.
 		if _, err := tx.ExecContext(ctx, `UPDATE admin_passkeys SET revoked_at = ? WHERE account_id = ? AND revoked_at IS NULL`, now, account.ID); err != nil {
@@ -319,6 +328,13 @@ func (s *Admins) SetDisabled(ctx context.Context, id string, disabled bool) (adm
 	if err != nil {
 		return adminid.Account{}, err
 	}
+	if disabled {
+		// A disabled account keeps no live recovery link: enabling it again
+		// must not revive one.
+		if err := retireRecoveries(ctx, tx, id, s.now().Unix()); err != nil {
+			return adminid.Account{}, err
+		}
+	}
 	if disabled && account.DisabledAt.IsZero() {
 		rows, err := tx.QueryContext(ctx, `SELECT tools_json FROM admin_accounts WHERE disabled_at IS NULL AND id <> ?`, id)
 		if err != nil {
@@ -356,4 +372,30 @@ func (s *Admins) SetDisabled(ctx context.Context, id string, disabled bool) (adm
 		return adminid.Account{}, err
 	}
 	return account, nil
+}
+
+// AddPasskey attaches another credential to an enabled administrator.
+func (s *Admins) AddPasskey(ctx context.Context, accountID string, credential webauthn.Credential) error {
+	encoded, err := json.Marshal(credential)
+	if err != nil {
+		return err
+	}
+	result, err := s.db.ExecContext(ctx,
+		`INSERT INTO admin_passkeys (credential_id, account_id, credential_json, created_at)
+		 SELECT ?, id, ?, ? FROM admin_accounts WHERE id = ? AND disabled_at IS NULL`,
+		credential.ID, string(encoded), s.now().Unix(), accountID)
+	if err != nil {
+		return fmt.Errorf("insert passkey: %w", err)
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		return adminid.ErrAccountNotFound
+	}
+	return nil
+}
+
+// retireRecoveries marks every unused recovery link of an account as used.
+func retireRecoveries(ctx context.Context, tx *sql.Tx, accountID string, now int64) error {
+	_, err := tx.ExecContext(ctx,
+		`UPDATE admin_enrolments SET used_at = ? WHERE account_id = ? AND kind = 'recover' AND used_at IS NULL`, now, accountID)
+	return err
 }

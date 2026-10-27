@@ -292,3 +292,5 @@ export const inviteAdmin = (token: string, email: string, tools: string[], name?
   adminPost<{ token: string; expires: string; email: string; tools: string[] }>(token, "/_/api/admins/invite", { email, tools, name }, signal);
 export const setAdminDisabled = (token: string, id: string, disabled: boolean, signal?: AbortSignal) =>
   adminPost(token, `/_/api/admins/${encodeURIComponent(id)}/${disabled ? "disable" : "enable"}`, undefined, signal);
+export const recoverAdmin = (token: string, id: string, signal?: AbortSignal) =>
+  adminPost<{ token: string; expires: string; email: string }>(token, `/_/api/admins/${encodeURIComponent(id)}/recover`, undefined, signal);

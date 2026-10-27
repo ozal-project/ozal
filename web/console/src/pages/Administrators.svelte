@@ -5,7 +5,8 @@
   import CopyCommand from "$lib/CopyCommand.svelte";
   import { Button } from "$lib/components/ui/button";
   import { admin, tools } from "$lib/adminToken.svelte";
-  import { fetchAdmins, inviteAdmin, setAdminDisabled, type AdminAccount } from "$lib/api";
+  import { fetchAdmins, inviteAdmin, recoverAdmin, setAdminDisabled, type AdminAccount } from "$lib/api";
+  import { addPasskey, explainPasskeyError } from "$lib/passkey";
   import { LatestRequest } from "$lib/latestRequest";
 
   // People who run this console. They sign in with their own passkey; the host
@@ -50,6 +51,24 @@
     finally { busy = false; }
   }
 
+  let recovery = $state<{ link: string; email: string; expires: string } | null>(null);
+  async function reset(account: AdminAccount) {
+    notices = { ...notices, [account.id]: "" }; recovery = null;
+    try {
+      const made = await recoverAdmin(admin.token.trim(), account.id);
+      recovery = { link: `${location.origin}/overview#enrol=${encodeURIComponent(made.token)}`, email: made.email, expires: made.expires };
+    } catch (e) { notices = { ...notices, [account.id]: (e as Error).message }; }
+  }
+
+  async function addMine(account: AdminAccount) {
+    notices = { ...notices, [account.id]: "" };
+    try {
+      await addPasskey(admin.token.trim());
+      notices = { ...notices, [account.id]: "Passkey added: you can sign in with either device." };
+      await load();
+    } catch (e) { notices = { ...notices, [account.id]: explainPasskeyError(e) }; }
+  }
+
   async function toggle(account: AdminAccount) {
     notices = { ...notices, [account.id]: "" };
     try {
@@ -68,7 +87,7 @@
 <div class="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
   <Panel label="Directory" title={admins ? `${admins.filter((a) => !a.disabled).length} active` : "Reading…"} bodyClass="p-0">
     {#if admins && admins.length === 0}
-      <p class="text-muted-foreground px-5 py-8 text-sm">No administrator yet. On the host run <span class="font-mono">sudo switchboard console enrol</span>.</p>
+      <p class="text-muted-foreground px-5 py-8 text-sm">No administrator yet.</p>
     {:else if admins}
       <ul class="divide-y">
         {#each admins as a (a.id)}
@@ -80,12 +99,26 @@
                 {#each a.tools as id (id)}<span class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs">{label(id)}</span>{/each}
               </p>
               <p class="text-muted-foreground mt-1.5 text-xs">{a.passkeys} passkey{a.passkeys === 1 ? "" : "s"} · last sign-in {when(a.last_used_at)}</p>
-              {#if notices[a.id]}<p class="text-destructive mt-1 text-xs" role="alert">{notices[a.id]}</p>{/if}
+              {#if notices[a.id]}<p class="text-muted-foreground mt-1 text-xs" role="status">{notices[a.id]}</p>{/if}
             </div>
-            {#if !a.you}<Button variant="outline" size="sm" onclick={() => toggle(a)}>{a.disabled ? "Enable" : "Disable"}</Button>{/if}
+            <div class="flex gap-2">
+              {#if a.you}
+                <Button variant="outline" size="sm" onclick={() => addMine(a)}>Add a passkey</Button>
+              {:else}
+                {#if !a.disabled}<Button variant="outline" size="sm" onclick={() => reset(a)}>Reset passkeys</Button>{/if}
+                <Button variant="outline" size="sm" onclick={() => toggle(a)}>{a.disabled ? "Enable" : "Disable"}</Button>
+              {/if}
+            </div>
           </li>
         {/each}
       </ul>
+    {/if}
+    {#if recovery}
+      <div class="border-t px-5 py-4" aria-live="polite">
+        <p class="text-sm font-medium">Recovery link for {recovery.email}</p>
+        <CopyCommand command={recovery.link} label="Copy recovery link" />
+        <p class="text-muted-foreground mt-2 text-xs">Works once, until {when(recovery.expires)}. Opening it replaces every passkey of that person and ends their open sessions. Send it only to them. Shown only now.</p>
+      </div>
     {/if}
   </Panel>
 

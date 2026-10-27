@@ -56,6 +56,8 @@ type identities interface {
 	// SetDisabled disables or enables one; disabling the last enabled
 	// administrator who can manage administrators fails.
 	SetDisabled(ctx context.Context, id string, disabled bool) (adminid.Account, error)
+	// AddPasskey attaches another credential to an enabled administrator.
+	AddPasskey(ctx context.Context, accountID string, credential webauthn.Credential) error
 	// RecordLogin stores a credential's new counter; it fails for a revoked one.
 	RecordLogin(ctx context.Context, credential webauthn.Credential) error
 }
@@ -130,6 +132,8 @@ func (u *webUser) WebAuthnCredentials() []webauthn.Credential { return u.credent
 
 func (h *Handler) registerIdentities() {
 	h.mux.HandleFunc("GET /_/api/admin/state", h.adminState)
+	h.mux.HandleFunc("POST /_/api/admin/passkeys/begin", h.requireBearer(h.addPasskeyBegin))
+	h.mux.HandleFunc("POST /_/api/admin/passkeys/finish", h.requireBearer(h.addPasskeyFinish))
 	h.mux.HandleFunc("POST /_/api/admin/enrolments", h.requireLocal(h.issueEnrolment))
 	h.mux.HandleFunc("POST /_/api/admin/enrol/begin", h.enrolBegin)
 	h.mux.HandleFunc("POST /_/api/admin/enrol/finish", h.enrolFinish)
@@ -137,6 +141,7 @@ func (h *Handler) registerIdentities() {
 	h.mux.HandleFunc("POST /_/api/admin/login/finish", h.adminLoginFinish)
 	h.mux.HandleFunc("GET /_/api/admins", h.requireTool("administrators", h.listAdmins))
 	h.mux.HandleFunc("POST /_/api/admins/invite", h.requireTool("administrators", h.inviteAdmin))
+	h.mux.HandleFunc("POST /_/api/admins/{id}/recover", h.requireTool("administrators", h.recoverAdmin))
 	h.mux.HandleFunc("POST /_/api/admins/{id}/disable", h.requireTool("administrators", h.setAdminDisabled(true)))
 	h.mux.HandleFunc("POST /_/api/admins/{id}/enable", h.requireTool("administrators", h.setAdminDisabled(false)))
 }
@@ -236,6 +241,44 @@ func (h *Handler) issueEnrolment(w http.ResponseWriter, r *http.Request) {
 	}
 	h.emit(events.Event{Type: events.Type("admin.enrolment_issued"), Actor: "local", Code: req.Kind})
 	writeJSON(w, http.StatusCreated, map[string]any{"token": token, "expires": expires})
+}
+
+// newEnrolmentToken makes a one-use token and the hash that is stored.
+func newEnrolmentToken() (string, []byte, error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", nil, err
+	}
+	token := base64.RawURLEncoding.EncodeToString(raw)
+	hash := sha256.Sum256([]byte(token))
+	return token, hash[:], nil
+}
+
+// FirstRunTTL is how long the setup link printed at start stays valid.
+const FirstRunTTL = 15 * time.Minute
+
+// IssueFirstRun mints the one-use setup link for the first administrator,
+// for the host to keep where only the host reads it (the installer's output
+// and a root-only file; never the log). It returns "" when an administrator already exists.
+// It is the same authority as `console enrol`: whoever can read the host's
+// log can already run that command.
+func IssueFirstRun(ctx context.Context, store identities) (string, time.Time, error) {
+	enrolled, err := store.Enrolled(ctx)
+	if err != nil || enrolled {
+		return "", time.Time{}, err
+	}
+	token, hash, err := newEnrolmentToken()
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	expires := time.Now().Add(FirstRunTTL)
+	if err := store.IssueEnrolment(ctx, adminid.EnrolmentRequest{Kind: enrolBootstrap}, hash, expires); err != nil {
+		if errors.Is(err, adminid.ErrAlreadyEnrolled) {
+			return "", time.Time{}, nil
+		}
+		return "", time.Time{}, err
+	}
+	return token, expires, nil
 }
 
 func validEmail(email string) bool {
@@ -545,6 +588,147 @@ func (h *Handler) inviteAdmin(w http.ResponseWriter, r *http.Request) {
 	}
 	h.emit(events.Event{Type: events.Type("admin.invited"), Actor: h.actorOf(r), Host: email, Reason: "tools: " + strings.Join(tools, ",")})
 	writeJSON(w, http.StatusCreated, map[string]any{"token": token, "expires": expires, "email": email, "tools": tools})
+}
+
+// recoverTTL is how long a recovery link an administrator hands over lasts.
+const recoverTTL = time.Hour
+
+// recoverAdmin lets an administrator give another one a way back in after
+// losing every passkey: a one-use link that replaces their passkeys. It is the
+// console's counterpart of `console recover`, so nobody has to reach the host
+// for it. Whoever holds the link becomes that account, so the caller needs
+// every tool the target has: recovery cannot be used to climb.
+func (h *Handler) recoverAdmin(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == h.callerAccount(r) {
+		writeError(w, http.StatusConflict, "you are signed in; add another passkey instead")
+		return
+	}
+	accounts, err := h.identities.Accounts(r.Context())
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "administrator directory unavailable")
+		return
+	}
+	var target *adminid.Summary
+	for i := range accounts {
+		if accounts[i].ID == id && accounts[i].DisabledAt.IsZero() {
+			target = &accounts[i]
+		}
+	}
+	if target == nil {
+		writeError(w, http.StatusNotFound, "no such active administrator")
+		return
+	}
+	if grant, ok := r.Context().Value(operatorKey{}).(operatorGrant); ok {
+		for _, tool := range target.Tools {
+			if !grant.allows(tool) {
+				writeError(w, http.StatusForbidden, "you cannot recover this administrator: they hold the "+tool+" tool and this session does not")
+				return
+			}
+		}
+	}
+	if !h.recordMutationIntent(w, r, "admin.recover", target.Email) {
+		return
+	}
+	token, hash, err := newEnrolmentToken()
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "the link could not be issued")
+		return
+	}
+	expires := time.Now().Add(recoverTTL)
+	if err := h.identities.IssueEnrolment(r.Context(), adminid.EnrolmentRequest{Kind: enrolRecover, Email: target.Email}, hash, expires); err != nil {
+		writeError(w, http.StatusServiceUnavailable, "the link could not be issued")
+		return
+	}
+	h.emit(events.Event{Type: events.Type("admin.recovery_issued"), Actor: h.actorOf(r), Host: target.Email})
+	writeJSON(w, http.StatusCreated, map[string]any{"token": token, "expires": expires, "email": target.Email})
+}
+
+// addPasskeyBegin starts adding another passkey to the signed-in
+// administrator's own account, so losing one device never locks them out.
+func (h *Handler) addPasskeyBegin(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	self := h.callerAccount(r)
+	if self == "" {
+		writeError(w, http.StatusForbidden, "sign in with your passkey to add another one")
+		return
+	}
+	rp, err := h.relyingParty(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	account, credentials, ok := h.accountWithCredentials(r.Context(), self)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "that administrator is no longer active")
+		return
+	}
+	creation, session, err := rp.BeginRegistration(&webUser{account: account, credentials: credentials},
+		webauthn.WithExclusions(webauthn.Credentials(credentials).CredentialDescriptors()))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "adding a passkey could not start")
+		return
+	}
+	id, err := h.ceremonies.put(pendingCeremony{enrol: true, kind: "add", session: *session, account: account})
+	if err != nil {
+		writeError(w, http.StatusTooManyRequests, "too many sign-ins in progress; try again shortly")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ceremony": id, "options": creation})
+}
+
+func (h *Handler) addPasskeyFinish(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	self := h.callerAccount(r)
+	pending, ok := h.ceremonies.take(r.Header.Get(adminCeremony), true)
+	if self == "" || !ok || pending.kind != "add" || pending.account.ID != self {
+		h.failedSignIn(r, "add_passkey_unknown", nil)
+		writeError(w, http.StatusUnauthorized, "this step expired; start again")
+		return
+	}
+	rp, err := h.relyingParty(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	credential, err := rp.FinishRegistration(&webUser{account: pending.account}, pending.session, r)
+	if err != nil {
+		h.failedSignIn(r, "add_passkey_invalid", err)
+		writeError(w, http.StatusUnauthorized, "the passkey could not be verified; try again")
+		return
+	}
+	h.identityMu.Lock()
+	defer h.identityMu.Unlock()
+	// The session was checked before this lock. A recovery or a disable that
+	// ran meanwhile revoked it under the same lock, so check again now: a
+	// passkey must never be attached after the account's sessions ended.
+	if h.callerAccount(r) != self {
+		h.failedSignIn(r, "add_passkey_session_revoked", nil)
+		writeError(w, http.StatusUnauthorized, "your session ended; sign in again")
+		return
+	}
+	if err := h.identities.AddPasskey(r.Context(), self, *credential); err != nil {
+		writeError(w, http.StatusServiceUnavailable, "the passkey could not be saved")
+		return
+	}
+	h.emit(events.Event{Type: events.Type("admin.passkey_added"), Actor: h.actorOf(r), Host: pending.account.Email})
+	writeJSON(w, http.StatusOK, map[string]bool{"added": true})
+}
+
+// accountWithCredentials finds an enabled administrator by ID with their
+// active passkeys.
+func (h *Handler) accountWithCredentials(ctx context.Context, id string) (adminid.Account, []webauthn.Credential, bool) {
+	accounts, err := h.identities.Accounts(ctx)
+	if err != nil {
+		return adminid.Account{}, nil, false
+	}
+	for _, a := range accounts {
+		if a.ID == id {
+			account, credentials, err := h.identities.AccountByHandle(ctx, a.Handle)
+			return account, credentials, err == nil
+		}
+	}
+	return adminid.Account{}, nil, false
 }
 
 func (h *Handler) actorOf(r *http.Request) string {

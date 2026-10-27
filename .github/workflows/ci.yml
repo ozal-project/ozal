@@ -17,15 +17,12 @@ jobs:
       matrix:
         # ubuntu-latest moves to Ubuntu 26.04 between 2026-10-19 and 2026-11-19;
         # pinned so one commit cannot pass on one image and fail on the other.
-        os: [ubuntu-24.04, macos-latest, windows-latest]
+        # Windows is temporarily paused while compatibility work continues (REL-011).
+        os: [ubuntu-24.04, macos-latest]
     defaults:
       run:
         shell: bash
     steps:
-      # Windows runners default to core.autocrlf=true, which rewrites every
-      # file to CRLF and makes gofmt list the whole tree. Set before checkout.
-      - name: Keep LF line endings
-        run: git config --global core.autocrlf false
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:

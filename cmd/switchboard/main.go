@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -197,7 +198,24 @@ func main() {
 		managerOpts = append(managerOpts, routemanager.WithPasskeyDirectory(identity))
 		adminOpts = append(adminOpts, admin.WithPeople(identity))
 		// UI-007: administrators have their own passkeys, apart from users.
-		adminOpts = append(adminOpts, admin.WithIdentities(sqlite.NewAdmins(db)))
+		administrators := sqlite.NewAdmins(db)
+		adminOpts = append(adminOpts, admin.WithIdentities(administrators))
+		// A fresh install needs no command: until the first administrator
+		// exists, a one-use setup link is kept in a file only root and the
+		// service account can read. It is never written to the log: logs are
+		// read by more people and shipped elsewhere.
+		setupLink := filepath.Join(filepath.Dir(*dbPath), "setup-link")
+		if token, _, err := admin.IssueFirstRun(ctx, administrators); err != nil {
+			log.Printf("console: could not prepare the first-administrator link: %v", err)
+		} else if token != "" {
+			if err := writeSetupLink(setupLink, firstRunNotice(loaded.Admin.Listen, token)); err != nil {
+				log.Printf("console: could not store the setup link (%v); run: sudo switchboard console enrol", err)
+			} else {
+				log.Printf("console: no administrator yet. The setup link is in %s (root only, valid %d minutes): sudo cat %s", setupLink, int(admin.FirstRunTTL.Minutes()), setupLink)
+			}
+		} else {
+			_ = os.Remove(setupLink)
+		}
 		adminOpts = append(adminOpts, admin.WithEnrolCommand(hostEnrolCommand(*configPath)))
 		// CLI-001: the connector registry is managed through the admin API
 		// (changes on the unix socket only); the edge revalidates live
@@ -743,4 +761,38 @@ func hostEnrolCommand(configPath string) string {
 		}
 		return found
 	})
+}
+
+// firstRunNotice is the log line that replaces `console enrol` on a new
+// install: the link for the first administrator and how to reach it remotely.
+func firstRunNotice(adminListen, token string) string {
+	base := passkeyOrigin(forwardedURL(adminListen))
+	port := "9090"
+	if u, err := url.Parse(base); err == nil && u.Port() != "" {
+		port = u.Port()
+	}
+	return fmt.Sprintf("console: no administrator yet. Open this link once (valid %d minutes): %s/overview#enrol=%s\n"+
+		"console: from another computer, forward the port first: ssh -N -L %s:127.0.0.1:%s USER@THIS_HOST",
+		int(admin.FirstRunTTL.Minutes()), base, url.QueryEscape(token), port, port)
+}
+
+// writeSetupLink stores the link with mode 0600, replacing any older one.
+func writeSetupLink(path, text string) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".setup-link-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if err := tmp.Chmod(0o600); err != nil {
+		tmp.Close()
+		return err
+	}
+	if _, err := tmp.WriteString(text + "\n"); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }

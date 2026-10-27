@@ -17,10 +17,10 @@ const encode = (buffer: ArrayBuffer): string => {
   return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 };
 
-async function api<T>(path: string, body: unknown, ceremony?: string): Promise<T> {
+async function api<T>(path: string, body: unknown, ceremony?: string, bearer?: string): Promise<T> {
   const res = await fetch(path, {
     method: "POST", cache: "no-store", signal: AbortSignal.timeout(300_000),
-    headers: { "Content-Type": "application/json", ...(ceremony ? { "X-Switchboard-Ceremony": ceremony } : {}) },
+    headers: { "Content-Type": "application/json", ...(ceremony ? { "X-Switchboard-Ceremony": ceremony } : {}), ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}) },
     body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
@@ -83,4 +83,17 @@ export async function adminState(signal?: AbortSignal): Promise<{ enrolled: bool
   const res = await fetch("/_/api/admin/state", { cache: "no-store", signal });
   if (!res.ok) return null;
   return res.json();
+}
+
+// Adds another passkey to the signed-in administrator, so losing one device
+// does not lock them out.
+export async function addPasskey(session: string): Promise<void> {
+  const begun = await api<Begun>("/_/api/admin/passkeys/begin", {}, undefined, session);
+  const pk = begun.options.publicKey;
+  pk.challenge = decode(pk.challenge);
+  pk.user.id = decode(pk.user.id);
+  for (const c of pk.excludeCredentials ?? []) c.id = decode(c.id);
+  const credential = (await navigator.credentials.create({ publicKey: pk as PublicKeyCredentialCreationOptions })) as PublicKeyCredential | null;
+  if (!credential) throw new Error("No passkey was created.");
+  await api<{ added: boolean }>("/_/api/admin/passkeys/finish", credentialJSON(credential), begun.ceremony, session);
 }

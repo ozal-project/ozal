@@ -58,7 +58,7 @@
   <Button class="w-full" onclick={passkey} disabled={waiting || !onLocalhost}>{waiting ? "Waiting for your device…" : "Sign in with your passkey"}</Button>
 {:else if enrolled === false}
   <p class="text-sm font-medium">No administrator exists yet.</p>
-  <p class="text-muted-foreground mt-1 mb-3 text-sm">On the host, run this once. It prints a link, and the SSH command to forward the port if you are connected remotely. The link opens here and asks for your name and email, then creates your passkey.</p>
+  <p class="text-muted-foreground mt-1 mb-3 text-sm">The host prepared a setup link: the installer printed it, and a root-only file on the host keeps a fresh one at every start until an administrator exists. Open it here, give your name and email, and create your passkey. If you lost it, this command prints a new one on the host:</p>
   <CopyCommand command={enrolCommand} label="Copy enrol command" />
 {/if}
 {#if enrolled !== null && !onLocalhost}

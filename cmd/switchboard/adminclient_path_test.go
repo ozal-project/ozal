@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -65,5 +66,31 @@ func TestEnrolCommandIsShortOnlyWhenItIsTrue(t *testing.T) {
 	// Another switchboard earlier on the PATH must not be advertised.
 	if got := enrolCommand("/opt/sb/switchboard", installedConfig, func(string) string { return "/usr/bin/switchboard" }); got != "sudo /opt/sb/switchboard console enrol" {
 		t.Fatal(got)
+	}
+}
+
+func TestFirstRunNoticeCarriesTheLinkAndThePort(t *testing.T) {
+	got := firstRunNotice("127.0.0.1:9091", "TOKEN")
+	for _, want := range []string{"http://localhost:9091/overview#enrol=TOKEN", "ssh -N -L 9091:127.0.0.1:9091"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing %q in %q", want, got)
+		}
+	}
+}
+
+func TestSetupLinkFileIsPrivateAndReplaced(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "setup-link")
+	if err := writeSetupLink(path, "old"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeSetupLink(path, "new"); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("setup link mode = %v %v", info.Mode(), err)
+	}
+	if got, _ := os.ReadFile(path); string(got) != "new\n" {
+		t.Fatalf("not replaced: %q", got)
 	}
 }
