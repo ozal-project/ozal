@@ -1,0 +1,79 @@
+---
+// Three people knock, one place decides. The same cords and signal as the
+// console's Overview: Ana is let through to Grafana, Bob is refused with a
+// reason, someone without a session is sent to sign in, and the public blog
+// needs no one. CSS only; under reduced motion the picture stays still.
+const people = [
+  { id: "ana", y: 110, name: "Ana", sub: "ana@acme.dev" },
+  { id: "bob", y: 210, name: "Bob", sub: "bob@other.org" },
+  { id: "anon", y: 310, name: "Not signed in", sub: "no session" },
+];
+const apps = [
+  { id: "grafana", y: 90, name: "grafana.acme.dev", rule: "company email" },
+  { id: "billing", y: 170, name: "billing.acme.dev", rule: "Ana, device-bound passkey" },
+  { id: "wiki", y: 250, name: "wiki.acme.dev", rule: "recent sign-in" },
+  { id: "blog", y: 330, name: "blog.acme.dev", rule: "public" },
+];
+const inbound = (y: number) => `M196 ${y} C340 ${y}, 360 210, 488 210`;
+const outbound = (y: number) => `M712 210 C840 210, 840 ${y}, 948 ${y}`;
+---
+<figure class="map" aria-labelledby="map-caption">
+  <svg class="map-art" viewBox="0 0 1200 420" aria-hidden="true">
+    {people.map((p) => <path d={inbound(p.y)} class="m-cord" />)}
+    {apps.map((a) => <path d={outbound(a.y)} class="m-cord" />)}
+    <path d={inbound(110)} class="m-sig m-ana-in" pathLength="1" />
+    <path d={outbound(90)} class="m-sig m-ana-out" pathLength="1" />
+    <path d={inbound(210)} class="m-sig m-sig-no m-bob-in" pathLength="1" />
+    <path d={inbound(310)} class="m-sig m-sig-wait m-anon-in" pathLength="1" />
+    <path d={outbound(330)} class="m-sig m-blog" pathLength="1" />
+
+    {people.map((p) => (
+      <g transform={`translate(40 ${p.y - 26})`}>
+        <rect width="156" height="52" rx="12" class="m-box" />
+        <circle cx="26" cy="26" r="13" class={`m-avatar m-avatar-${p.id}`} />
+        <text x="26" y="30.5" text-anchor="middle" class="m-initial">{p.id === "anon" ? "?" : p.name[0]}</text>
+        <text x="50" y="23" class="m-name">{p.name}</text>
+        <text x="50" y="39" class="m-sub">{p.sub}</text>
+      </g>
+    ))}
+
+    <g transform="translate(488 140)">
+      <rect width="224" height="140" rx="20" class="m-hub" />
+      <g transform="translate(92 22) scale(1.55)">
+        <circle cx="6" cy="7" r="3.2" class="m-dot" />
+        <circle cx="20" cy="19" r="3.2" class="m-dot-brand" />
+        <path d="M6 10.5 C6 19, 20 7, 20 15.5" class="m-mark" />
+      </g>
+      <text x="112" y="92" text-anchor="middle" class="m-hub-name">Switchboard</text>
+      <text x="112" y="114" text-anchor="middle" class="m-sub">trust · identify · authorize</text>
+    </g>
+    <g class="m-verdict m-verdict-no" transform="translate(600 318)">
+      <rect x="-92" y="-15" width="184" height="30" rx="15" />
+      <text y="5" text-anchor="middle">Bob · domain_not_allowed</text>
+    </g>
+    <g class="m-verdict m-verdict-wait" transform="translate(600 318)">
+      <rect x="-80" y="-15" width="160" height="30" rx="15" />
+      <text y="5" text-anchor="middle">Sign in first</text>
+    </g>
+    <g class="m-verdict m-verdict-ok" transform="translate(600 318)">
+      <rect x="-80" y="-15" width="160" height="30" rx="15" />
+      <text y="5" text-anchor="middle">Ana · allowed</text>
+    </g>
+
+    {apps.map((a) => (
+      <g transform={`translate(948 ${a.y - 24})`}>
+        <rect width="216" height="48" rx="12" class={`m-box m-app-${a.id}`} />
+        <circle cx="22" cy="24" r="4" class="m-lamp" />
+        <text x="38" y="21" class="m-app">{a.name}</text>
+        <text x="38" y="37" class="m-sub">{a.rule}</text>
+      </g>
+    ))}
+  </svg>
+  <ol class="map-list">
+    <li><span class="lamp lamp-ok"></span><span><strong>Ana</strong> opens grafana.acme.dev: her company email is allowed.</span></li>
+    <li><span class="lamp lamp-no"></span><span><strong>Bob</strong> is refused, with the reason <code>domain_not_allowed</code>.</span></li>
+    <li><span class="lamp lamp-wait"></span><span><strong>Someone without a session</strong> is asked to sign in first.</span></li>
+    <li><span class="lamp"></span><span><strong>The blog</strong> is public and needs no one.</span></li>
+  </ol>
+  <figcaption id="map-caption" class="small quiet">Every request reaches one place that decides, with a stable code and a reason. The live demo above runs that same decision.</figcaption>
+</figure>

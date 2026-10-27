@@ -297,3 +297,97 @@
   .motion-enter { animation: enter 440ms cubic-bezier(.22,1,.36,1); }
   @keyframes enter { from { opacity: .5; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 }
+
+/* Identity motion, shared with the console: the mark draws its cord and a
+   signal runs it; the map below shows one place deciding. Nothing here is
+   needed to read the page, and all of it stops under reduced motion. */
+@layer components {
+  .map { margin-top: 8px; }
+  .map-art { width: 100%; height: auto; font-family: var(--font-sans); }
+  .map-list { display: none; gap: 12px; margin-top: 8px; }
+  .map-list li { display: grid; grid-template-columns: 8px minmax(0,1fr); gap: 12px; align-items: baseline; color: var(--color-ink-2); }
+  .map-list code { font-family: var(--font-mono); font-size: .875rem; }
+  .map figcaption { margin-top: 18px; max-width: 70ch; }
+  .m-cord { fill: none; stroke: #3a3a44; stroke-width: 1.5; }
+  .m-box { fill: var(--color-tile); stroke: var(--color-tile-3); }
+  .m-hub { fill: #17152a; stroke: color-mix(in srgb, var(--color-brand) 55%, transparent); }
+  .m-dot { fill: var(--color-ink); } .m-dot-brand { fill: var(--color-brand); }
+  .m-mark { fill: none; stroke: var(--color-ink); stroke-width: 2; stroke-linecap: round; }
+  .m-avatar { fill: var(--color-tile-3); } .m-avatar-ana { fill: #1f3a30; } .m-avatar-bob { fill: #42231f; } .m-avatar-anon { fill: #41321b; }
+  .m-initial { fill: var(--color-ink); font-size: 13px; font-weight: 600; }
+  .m-name, .m-app { fill: var(--color-ink); font-size: 15px; font-weight: 500; }
+  .m-app { font-family: var(--font-mono); font-size: 13.5px; }
+  .m-hub-name { fill: var(--color-ink); font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
+  .m-sub { fill: var(--color-muted); font-size: 12px; }
+  .m-lamp { fill: var(--color-ok); }
+  .m-app-blog + .m-lamp { fill: var(--color-muted); }
+  .m-sig { fill: none; stroke: var(--color-brand); stroke-width: 3; stroke-linecap: round; stroke-dasharray: .1 1; stroke-dashoffset: .1; opacity: 0; filter: drop-shadow(0 0 5px var(--color-brand)); }
+  .m-sig-no { stroke: var(--color-no); filter: drop-shadow(0 0 5px var(--color-no)); }
+  .m-sig-wait { stroke: var(--color-wait); filter: drop-shadow(0 0 5px var(--color-wait)); }
+  .m-verdict { opacity: 0; }
+  .m-verdict rect { stroke-width: 1; }
+  .m-verdict text { font-family: var(--font-mono); font-size: 12.5px; }
+  .m-verdict-ok rect { fill: #17382d; stroke: #2d6b53; } .m-verdict-ok text { fill: #a1e6c5; }
+  .m-verdict-no rect { fill: #42231f; stroke: #7a3a33; } .m-verdict-no text { fill: #ffb3a9; }
+  .m-verdict-wait rect { fill: #41321b; stroke: #7a5f2f; } .m-verdict-wait text { fill: #f2d39b; }
+  .logo .logo-signal { opacity: 0; }
+
+  .walk-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 28px; }
+  .walk-tabs label { position: relative; cursor: pointer; }
+  .walk-tabs input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .walk-tabs label > span { display: flex; align-items: center; gap: 10px; padding: 9px 16px 9px 10px; border-radius: 999px; background: var(--color-tile); color: var(--color-muted); font-size: var(--step-small); transition: background-color 150ms,color 150ms; }
+  .walk-tabs label > span > b { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--color-tile-3); font-size: .75rem; font-weight: 600; }
+  .walk-tabs label:has(input:checked) > span { background: var(--color-tile-3); color: var(--color-ink); }
+  .walk-tabs label:has(input:checked) > span > b { background: var(--color-brand); border-color: var(--color-brand); color: var(--color-brand-ink); }
+  .walk-tabs label:has(input:focus-visible) { outline: 3px solid var(--color-brand); outline-offset: 3px; border-radius: 999px; }
+  .walk .step { display: grid; grid-template-columns: minmax(0,.62fr) minmax(0,1.38fr); gap: 48px; align-items: center; }
+  .walk:has(#walk-1:checked) .step:not(#step-1), .walk:has(#walk-2:checked) .step:not(#step-2), .walk:has(#walk-3:checked) .step:not(#step-3),
+  .walk:has(#walk-4:checked) .step:not(#step-4), .walk:has(#walk-5:checked) .step:not(#step-5) { display: none; }
+  .walk .step-copy h3 { font-size: clamp(1.5rem,2.4vw,2rem); line-height: 1.2; letter-spacing: -.03em; font-weight: 500; }
+  .walk .step-copy p { margin-top: 14px; color: var(--color-ink-2); max-width: 44ch; }
+  .walk .step-shot img { width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--color-tile-3); box-shadow: 0 30px 80px -30px rgba(0,0,0,.7); }
+  .walk .step-narrow img { max-width: 460px; max-height: 560px; object-fit: cover; object-position: top; margin-inline: auto; }
+  .walk-next { margin-top: 22px; display: inline-flex; gap: 8px; color: var(--color-muted); font-size: var(--step-small); }
+  .how { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,.9fr); gap: 32px; margin-top: 40px; align-items: start; }
+  .pipeline-strip { display: grid; gap: 2px; }
+  .pipeline-strip li { display: grid; grid-template-columns: 6.5rem minmax(0,1fr) auto; gap: 16px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid var(--color-tile-2); }
+  .pipeline-strip strong { font-family: var(--font-mono); font-weight: 500; font-size: .9375rem; }
+  .pipeline-strip p { color: var(--color-muted); font-size: var(--step-small); }
+}
+@media (max-width:800px) {
+  .walk .step { grid-template-columns: 1fr; gap: 24px; }
+  .how { grid-template-columns: 1fr; }
+}
+@media (max-width:640px) {
+  .map-art { display: none; }
+  .map-list { display: grid; }
+  .pipeline-strip li { grid-template-columns: 5.5rem minmax(0,1fr); }
+  .pipeline-strip li > .pipeline-state { grid-column: 2; }
+}
+@media (prefers-reduced-motion:no-preference) {
+  .logo-live .logo-cord { stroke-dasharray: 1; stroke-dashoffset: 1; animation: cord-draw .9s .15s cubic-bezier(.6,0,.2,1) forwards; }
+  .logo-live .logo-to { transform-box: fill-box; transform-origin: center; animation: jack-pop .35s .95s ease-out both; }
+  .logo-live .logo-signal { offset-path: path("M6 10.5 C6 19, 20 7, 20 15.5"); animation: signal-run 3.2s 1.4s ease-in-out infinite; }
+  @keyframes cord-draw { to { stroke-dashoffset: 0; } }
+  @keyframes jack-pop { from { opacity: 0; transform: scale(.4); } }
+  @keyframes signal-run { 0% { offset-distance: 0%; opacity: 0; } 10% { opacity: 1; } 45% { offset-distance: 100%; opacity: 1; } 55%,100% { offset-distance: 100%; opacity: 0; } }
+
+  .m-ana-in { animation: m-run-a 8s linear infinite; }
+  .m-ana-out { animation: m-run-b 8s linear infinite; }
+  .m-bob-in { animation: m-run-c 8s linear infinite; }
+  .m-anon-in { animation: m-run-d 8s linear infinite; }
+  .m-blog { animation: m-run-e 8s linear infinite; opacity: .6; }
+  .m-verdict-ok { animation: m-show-a 8s linear infinite; }
+  .m-verdict-no { animation: m-show-c 8s linear infinite; }
+  .m-verdict-wait { animation: m-show-d 8s linear infinite; }
+  .m-app-grafana { animation: m-glow 8s linear infinite; }
+  @keyframes m-run-a { 0% { stroke-dashoffset: .1; opacity: 1; } 14% { stroke-dashoffset: -.9; opacity: 1; } 15%,100% { stroke-dashoffset: -.9; opacity: 0; } }
+  @keyframes m-run-b { 0%,15% { stroke-dashoffset: .1; opacity: 0; } 16% { opacity: 1; } 27% { stroke-dashoffset: -.9; opacity: 1; } 28%,100% { stroke-dashoffset: -.9; opacity: 0; } }
+  @keyframes m-run-c { 0%,35% { stroke-dashoffset: .1; opacity: 0; } 36% { opacity: 1; } 49% { stroke-dashoffset: -.9; opacity: 1; } 50%,100% { stroke-dashoffset: -.9; opacity: 0; } }
+  @keyframes m-run-d { 0%,64% { stroke-dashoffset: .1; opacity: 0; } 65% { opacity: 1; } 78% { stroke-dashoffset: -.9; opacity: 1; } 79%,100% { stroke-dashoffset: -.9; opacity: 0; } }
+  @keyframes m-run-e { 0% { stroke-dashoffset: .1; } 100% { stroke-dashoffset: -.9; } }
+  @keyframes m-show-a { 0%,13% { opacity: 0; } 15%,30% { opacity: 1; } 33%,100% { opacity: 0; } }
+  @keyframes m-show-c { 0%,48% { opacity: 0; } 50%,61% { opacity: 1; } 64%,100% { opacity: 0; } }
+  @keyframes m-show-d { 0%,77% { opacity: 0; } 79%,92% { opacity: 1; } 95%,100% { opacity: 0; } }
+  @keyframes m-glow { 0%,26% { stroke: var(--color-tile-3); } 28%,34% { stroke: var(--color-ok); } 40%,100% { stroke: var(--color-tile-3); } }
+}

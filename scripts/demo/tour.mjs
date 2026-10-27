@@ -55,7 +55,7 @@ let livePage; // for a screenshot of where a failure happened
 
 async function main() {
   if (!chrome) throw new Error("pass --chrome PATH (or set CHROME): a Chrome or Chromium binary");
-  const edge = await startDemoEdge({ binary });
+  const edge = await startDemoEdge({ binary, adminSocket: true });
   let browser;
   cleanup = async () => { await browser?.close().catch(() => {}); await edge.stop().catch(() => {}); };
   rmSync(work, { recursive: true, force: true });
@@ -97,12 +97,26 @@ async function main() {
     await (target ?? page).screenshot({ path: join(shotsDir, `${name}.jpg`), type: "jpeg", quality: 88 });
     await overlayVisible(true);
   };
+  // The console opens only after sign-in, and its session lives in the tab: a
+  // host login (as the host's operator would use) signs in, and the tour moves
+  // between console pages with the menu instead of reloading.
+  const signInConsole = async (caption) => {
+    const out = execFileSync(binary, ["console", "login", "-config", join(edge.dir, "config.json"), "-name", "Operator", "-url", edge.consoleURL], { encoding: "utf8" });
+    const url = out.split("\n").find((line) => line.startsWith("http"));
+    if (!url) throw new Error("host login returned no URL");
+    await go(url, caption);
+    await page.waitForSelector('nav[aria-label="Console"]');
+  };
+  const open = async (label) => {
+    await click(page.locator('nav[aria-label="Console"] a, nav[aria-label="Console settings"] a', { hasText: label }));
+    await page.waitForFunction((l) => document.querySelector("#main-content h1")?.textContent?.trim() === l, label);
+  };
   const t0 = Date.now();
   const marks = {};
   const mark = (name) => { marks[name] = (Date.now() - t0) / 1000; };
 
   // 1 · The operator opens the console.
-  await go(`${edge.consoleURL}/overview`, "The operator opens the console. One thing needs attention.");
+  await signInConsole("The operator opens the console. One thing needs attention.");
   await pause(2500);
   await move(page.locator("text=is not answering").first());
   await pause(2200);
@@ -110,12 +124,8 @@ async function main() {
   // 2 · Invite Ana.
   mark("invite");
   await say("Inviting Ana: a one-time link, no password to share.");
-  await click(page.locator('nav[aria-label="Console"] a', { hasText: "People" }));
+  await open("People");
   await page.waitForSelector("#inv-email");
-  await click(page.getByRole("button", { name: "Unlock changes" }));
-  await page.locator("#admin-token").pressSequentially(edge.token, { delay: 25 });
-  await pause(300);
-  await click(page.getByRole("button", { name: "Unlock", exact: true }));
   await type(page.locator("#inv-email"), "ana@acme.dev");
   await type(page.locator("#inv-name"), "Ana");
   await click(page.getByRole("button", { name: "Create invitation" }));
@@ -151,7 +161,7 @@ async function main() {
   // back in and race Bob's invitation. Sign out for real, but let the sign-in page stay blank.
   const signIn = /\/_\/auth\/login(\?|$)/;
   await page.route(signIn, (route) => route.fulfill({ contentType: "text/html", body: "<!doctype html><title>Signed out</title>" }));
-  await click(page.getByRole("button", { name: "Sign out" }));
+  await click(page.getByText("Sign out", { exact: true }).first());
   await page.waitForURL(signIn);
   await page.unroute(signIn);
   await go(edge.invites.bob, "Bob, from another company, creates his passkey.");
@@ -167,27 +177,30 @@ async function main() {
   await pause(600);
 
   // 5 · The operator sees who got in, and why Bob did not.
-  await go(`${edge.consoleURL}/overview`, "Back in the console: who got in, and why Bob was refused.");
+  await signInConsole("Back in the console: who got in, and why Bob was refused.");
   await pause(2800);
   await move(page.locator("text=Why people were refused"));
   await shot("overview");
   await pause(3400);
-  await click(page.locator('nav[aria-label="Console"] a', { hasText: "Activity" }));
+  await open("Activity");
   await page.locator("table").getByText("Access denied").first().waitFor();
+  await click(page.locator("button", { hasText: "All events" }).first());
+  await click(page.getByRole("option", { name: "Access decisions" }));
   await say("Every decision, with its reason.");
   await shot("access-log");
   await exportAccessSample(edge);
   await pause(3600);
 
   // 6 · A deploy lands while the operator watches.
-  await click(page.locator('nav[aria-label="Console"] a', { hasText: "Overview" }));
+  await open("Overview");
   await page.waitForSelector("text=Recent changes");
   await say("A deploy lands. The console shows it, and where it came from.");
   await pause(1500);
   await edge.deploy("blog", { "index.html": "<!doctype html><meta charset=utf-8><title>Acme blog</title><h1>Acme blog</h1><p>Launch day.</p>" });
   await page.waitForSelector("text=blog was updated");
   await pause(3800);
-  await go(`${edge.consoleURL}/people`, "Switchboard: every door to your apps, one place that decides.");
+  await say("Switchboard: every door to your apps, one place that decides.");
+  await open("People");
   await shot("people");
   await pause(3400);
   await say("");

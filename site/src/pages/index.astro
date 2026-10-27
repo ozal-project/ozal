@@ -4,6 +4,7 @@ import Header from "../components/Header.astro";
 import Footer from "../components/Footer.astro";
 import { trains } from "../data/trains";
 import Engine from "../components/Engine.astro";
+import EdgeMap from "../components/EdgeMap.astro";
 import { rows } from "../lib/board";
 import sample from "../data/access-sample.json";
 import { doneIds, openTasks, type State } from "../lib/tracker";
@@ -49,11 +50,11 @@ const stateWord = { built: "Built", building: "In progress", planned: "Planned" 
 
 
 const steps = [
-  { t: "The operator sees what needs attention", d: "One thing is wrong: an app that does not answer. Recent changes and who got in sit below it.", img: "overview", w: 2560, h: 1600, alt: "The console Overview with an app that is not answering, recent changes and access decisions." },
-  { t: "Inviting Ana", d: "The operator invites her by email. She gets a one-time link and creates a passkey on her own device. No password to share.", img: "people", w: 2560, h: 1600, alt: "The People page with an invitation form and the list of invited people." },
-  { t: "Ana sees only her apps", d: "Grafana, Billing and the wiki. Nothing else is listed, and a sensitive app can ask her to sign in again.", img: "portal", w: 840, h: 860, narrow: true, alt: "Ana's page lists the apps her account may open." },
-  { t: "Bob, from another company, is refused", d: "He gets a clear answer with the reason and a way back to his own apps, not a bare error.", img: "refused", w: 840, h: 702, narrow: true, alt: "Bob's refusal page names the reason and links back to his apps." },
-  { t: "The log explains both", d: "Every decision with its reason: why Ana got in and why Bob did not.", img: "access-log", w: 2560, h: 1600, alt: "The access log listing allowed and refused requests with their reasons." },
+  { short: "What needs you", t: "The operator sees what needs attention", d: "One thing is wrong: an app that does not answer. A live map shows every app behind the edge, with who got in and what changed below it.", img: "overview", w: 2560, h: 1600, alt: "The console Overview with an app that is not answering, recent changes and access decisions." },
+  { short: "Invite Ana", t: "Inviting Ana", d: "The operator invites her by email. She gets a one-time link and creates a passkey on her own device. No password to share.", img: "people", w: 2560, h: 1600, alt: "The People page with an invitation form and the list of invited people." },
+  { short: "Ana's apps", t: "Ana sees only her apps", d: "Grafana, Billing and the wiki. Nothing else is listed, and a sensitive app can ask her to sign in again.", img: "portal", w: 840, h: 1438, narrow: true, alt: "Ana's page lists the apps her account may open." },
+  { short: "Bob is refused", t: "Bob, from another company, is refused", d: "He gets a clear answer with the reason and a way back to his own apps, not a bare error.", img: "refused", w: 840, h: 702, narrow: true, alt: "Bob's refusal page names the reason and links back to his apps." },
+  { short: "The log", t: "The log explains both", d: "Every decision with its reason: why Ana got in and why Bob did not.", img: "access-log", w: 2560, h: 1600, alt: "The access log listing allowed and refused requests with their reasons." },
 ];
 ---
 <Base title="Switchboard — your apps, your access rules" description="Control who can open your apps, with a reason for every decision. A self-hosted access gateway in one Go binary. Try the real policy engine in your browser.">
@@ -66,51 +67,25 @@ const steps = [
         <p class="hero-description">Control who can open your apps, with a reason for every decision. Self-hosted in one Go binary.</p>
         <div class="hero-actions">
           <a class="button button-brand" href="#engine">Try an access decision <span aria-hidden="true">↗</span></a>
-          <a class="text-link" href="#tour">Watch the product tour <span aria-hidden="true">↓</span></a>
+          <a class="text-link" href="#how">See how it decides <span aria-hidden="true">↓</span></a>
         </div>
         <p class="hero-note">Early alpha. Running on the author's server.<br />The demo uses the same Go policy code as the gateway.</p>
       </div>
       <Engine />
     </section>
 
-    <section id="views" class="section frame" aria-labelledby="views-title">
+    <section id="how" class="section frame" aria-labelledby="how-title">
       <div class="section-intro">
-        <h2 id="views-title">See who gets in.</h2>
-        <p>People open their apps. Operators manage access. Developers can trace the decision. These are real screens from a recorded demo workspace.</p>
+        <h2 id="how-title">One place decides.</h2>
+        <p>Every request to your apps passes through Switchboard first. It checks who is asking, decides with your rules, and either lets them through, asks them to sign in, or refuses with a reason.</p>
       </div>
-      <div class="product-views">
-        <fieldset class="view-picker">
-          <legend class="sr-only">Choose a product view</legend>
-          <label><input type="radio" id="view-operator" name="product-view" checked /><span>For operators</span></label>
-          <label><input type="radio" id="view-person" name="product-view" /><span>For app users</span></label>
-          <label><input type="radio" id="view-developer" name="product-view" /><span>For developers</span></label>
-        </fieldset>
-        <div class="product-panel operator-view">
-          <div class="product-copy">
-            <h3>What needs you,<br /> and what changed.</h3>
-            <p>See the app that stopped answering, recent deployments, and who was allowed or refused. Invite people and manage their passkeys from the same console.</p>
-            <p class="small quiet">The operator console stays on loopback. Screenshots use demo data.</p>
-          </div>
-          <figure class="product-shot"><a href="/shots/overview.jpg" aria-label="Open the full-size operator console screenshot"><img src="/shots/overview.jpg" width="2560" height="1600" loading="lazy" alt="Switchboard Overview with an app needing attention, recent changes and access decisions." /></a><figcaption>Operator console · Overview. Open the image to see it full size.</figcaption></figure>
+      <EdgeMap />
+      <div class="how">
+        <div>
+          <h3 class="sub-title">The same order, every request.</h3>
+          <ol class="pipeline-strip">{pipeline.map((p) => <li><strong>{p.s}</strong><p>{p.d}</p><span class={`small pipeline-state ${p.state}`}>{stateWord[p.state]}</span></li>)}</ol>
         </div>
-        <div class="product-panel person-view">
-          <div class="product-copy">
-            <h3>Your apps.<br /> A clear way back.</h3>
-            <p>A signed-in person sees only the apps their policy allows. A refusal explains the reason and offers a way back to their apps.</p>
-            <p class="small quiet">Passkeys and the portal are on main; they are not included in the alpha.1 archive.</p>
-          </div>
-          <div class="visitor-shots">
-            <figure class="product-shot"><img src="/shots/portal.jpg" width="840" height="702" loading="lazy" alt="Ana's portal lists the apps her account may open." /><figcaption>Ana's apps</figcaption></figure>
-            <figure class="product-shot"><img src="/shots/refused.jpg" width="840" height="702" loading="lazy" alt="Bob's refusal page names the reason and links back to his apps." /><figcaption>Bob's refusal</figcaption></figure>
-          </div>
-        </div>
-        <div class="product-panel developer-view">
-          <div class="product-copy">
-            <h3>One decision.<br /> An answer you can trace.</h3>
-            <p>Ask the policy engine about a person and a route. Read the stable decision code and its reason in the CLI, the console or the live demo above.</p>
-            <p><a class="text-link" href="#architecture">See the request pipeline <span aria-hidden="true">↓</span></a></p>
-          </div>
-          <div class="terminal" data-ui><pre><code>$ switchboard policy explain \
+        <div class="terminal" data-ui><pre><code>$ switchboard policy explain \
     -host grafana.acme.dev \
     -email bob@other.org -verified
 
@@ -119,29 +94,29 @@ policy    allowed_domains=[acme.dev]
 decision  denied
 code      domain_not_allowed
 reason    account's email domain
-          is not on the allowed list</code></pre><p class="small quiet">An example policy and identity, evaluated by Switchboard.</p></div>
-        </div>
+          is not on the allowed list</code></pre><p class="small quiet">Any decision can be traced from the CLI, the console's log or the live demo, with the same code.</p></div>
       </div>
     </section>
 
     <section id="tour" class="section frame" aria-labelledby="tour-title">
       <div class="section-intro">
-        <h2 id="tour-title">See it work, step by step.</h2>
-        <p>One story, five screens: an invitation, an allowed visit, a refusal and the log that explains both. Screens from a real edge with demo accounts.</p>
+        <h2 id="tour-title">See it work.</h2>
+        <p>One story in five screens: an invitation, an allowed visit, a refusal and the log that explains both. Real screens from a demo workspace.</p>
       </div>
-      <div class="tour">
-        <nav class="tour-rail" aria-label="Tour steps">{steps.map((st, i) => (
-          <a href={`#step-${i + 1}`}><span aria-hidden="true">{i + 1}</span>{st.t}</a>
-        ))}</nav>
-        <ol class="steps" data-tour>{steps.map((st, i) => (
-          <li class={`step${i === 0 ? " is-active" : ""}`} id={`step-${i + 1}`}>
-            <div class="step-copy"><span class="step-n" aria-hidden="true">{i + 1}</span><h3>{st.t}</h3><p>{st.d}</p></div>
-            <figure class={`step-shot ${st.narrow ? "step-narrow" : ""}`}><img src={`/shots/${st.img}.jpg`} width={st.w} height={st.h} loading="lazy" alt={st.alt} /></figure>
-          </li>
-        ))}</ol>
+      <div class="walk">
+        <fieldset class="walk-tabs">
+          <legend class="sr-only">Choose a step</legend>
+          {steps.map((st, i) => <label><input type="radio" name="walk" id={`walk-${i + 1}`} checked={i === 0} /><span><b>{i + 1}</b>{st.short}</span></label>)}
+        </fieldset>
+        {steps.map((st, i) => (
+          <article class="step" id={`step-${i + 1}`}>
+            <div class="step-copy"><h3>{st.t}</h3><p>{st.d}</p>{i < steps.length - 1 && <label class="walk-next" for={`walk-${i + 2}`}>Next: {steps[i + 1].short} <span aria-hidden="true">→</span></label>}</div>
+            <figure class={`step-shot ${st.narrow ? "step-narrow" : ""}`}><img src={`/shots/${st.img}.jpg`} width={st.w} height={st.h} loading={i === 0 ? "eager" : "lazy"} alt={st.alt} /></figure>
+          </article>
+        ))}
       </div>
       <details class="disclosure tour-log">
-        <summary>Read the access decisions from this tour</summary>
+        <summary>Read the access decisions from this story</summary>
         <div class="disclosure-body">
           <p class="quiet small">Recorded demo data. Open a row for the reason.</p>
           <div class="rows" data-ui>{board.map((r) => (
@@ -160,10 +135,6 @@ reason    account's email domain
         <article><h3>{w.t}</h3><p>{w.d}</p><p class="small quiet">{w.e}</p></article>
       ))}</div>
       <p class="scope-note"><strong>Still experimental.</strong> Outbound tunnels, rate limiting and Telegram alerts exist in the code and sit outside the alpha's promise. Account recovery requires the operator's local CLI.</p>
-      <details id="architecture" class="disclosure">
-        <summary>How a request moves through Switchboard</summary>
-        <div class="disclosure-body"><p class="quiet">The request pipeline keeps its checks in one order. Each stage below states its implementation status.</p><ol class="pipeline">{pipeline.map((p) => <li><div><strong>{p.s}</strong><span class={`small pipeline-state ${p.state}`}>{stateWord[p.state]}</span></div><p>{p.d}</p></li>)}</ol></div>
-      </details>
     </section>
 
     <section id="roadmap" class="section frame" aria-labelledby="roadmap-title">
@@ -174,7 +145,7 @@ reason    account's email domain
     </section>
 
     <section id="start" class="availability frame section" aria-labelledby="start-title">
-      <div><h2 id="start-title">Explore the alpha.</h2><p>{sourcePublic ? "Downloads for Linux, macOS and Windows, with a quickstart to route your first app." : "The repository and alpha downloads are currently private. You can try the policy engine here, watch the product tour or visit the maintainer's site to get in touch."}</p></div>
+      <div><h2 id="start-title">Explore the alpha.</h2><p>{sourcePublic ? "Downloads for Linux, macOS and Windows, with a quickstart to route your first app." : "The repository and alpha downloads are currently private. You can try the policy engine here, walk through the five screens or visit the maintainer's site to get in touch."}</p></div>
       <div class="availability-actions">{sourcePublic ? <a class="button button-brand" href={release}>Download alpha.1 <span aria-hidden="true">↗</span></a> : <a class="button button-brand" href="https://octaviosantacruz.com">Visit the maintainer's site <span aria-hidden="true">↗</span></a>}<a class="text-link" href="#engine">Back to the live demo ↑</a></div>
     </section>
   </main>

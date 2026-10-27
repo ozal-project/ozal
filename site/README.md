@@ -33,8 +33,13 @@ section comes into view) and copies the matching `wasm_exec.js`. Both are build 
 committed. `internal/policydemo` is the only code in between; it adds input checks, not policy, and a
 test compares its answer with `auth.NewReport`. The page states what it does not simulate.
 
-The first screen explains the gateway and runs the real policy demo. The product
-views use native radio controls with CSS, the walkthrough is five real screens in order (no video; the recorder still produces the stills), the roadmap lives at `/roadmap/` and is read from the trackers, and private downloads have no public CTA while `sourcePublic` is false.
+The first screen explains the gateway and runs the real policy demo. "One place decides"
+is an animated map (CSS only, still under reduced motion, a plain list under 640 px) of
+three people reaching Switchboard and four apps, with the request pipeline and a
+`policy explain` trace beside it. The walkthrough is five real console screens behind
+native radio tabs (no video; `scripts/demo/tour.mjs` regenerates the stills by signing
+in with a host login), the roadmap lives at `/roadmap/` and is read from the trackers,
+and private downloads have no public CTA while `sourcePublic` is false.
 
 Browser regression checks reuse the tour's existing Playwright dependency:
 
@@ -45,7 +50,7 @@ node scripts/demo/site-check.mjs --url http://127.0.0.1:4321 --chrome /path/to/c
 ```
 
 The check covers 1440/1024/768/390/320 px, horizontal overflow, visible navigation,
-keyboard product choices, live policy decisions, a failed WASM download and
+keyboard walkthrough tabs, live policy decisions, a failed WASM download and
 retry, Save-Data, and the page with JavaScript disabled. It does not publish the
 site or exercise a production sign-in. `scripts/verify.sh` remains the full gate;
 the browser check is separate because it requires an installed Chrome/Chromium.

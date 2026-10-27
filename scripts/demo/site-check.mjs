@@ -62,21 +62,22 @@ try {
     await decision(page, "context_rule_denied");
     await choose(page, "app", "blog"); await choose(page, "who", "none"); await decision(page, "allowed");
     await choose(page, "app", "grafana"); await decision(page, "authentication_required");
-    await page.locator("#view-operator").focus();
+    await page.locator("#walk-1").focus();
     await page.keyboard.press("ArrowRight");
-    assert.equal(await page.locator("#view-person").isChecked(), true, "native product radios must work from the keyboard");
-    assert.equal(await page.locator(".person-view").isVisible(), true);
-    await page.keyboard.press("ArrowRight");
-    assert.equal(await page.locator(".developer-view").isVisible(), true);
-    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${width}px developer view overflows`);
-    await page.locator('label:has(#view-operator)').click();
+    assert.equal(await page.locator("#walk-2").isChecked(), true, "native walkthrough radios must work from the keyboard");
+    assert.equal(await page.locator("#step-2").isVisible(), true);
+    assert.equal(await page.locator("#step-1").isVisible(), false, "only the chosen step is shown");
+    await page.locator('label[for="walk-3"]').click();
+    assert.equal(await page.locator("#step-3").isVisible(), true, "Next moves to the following step");
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${width}px walkthrough overflows`);
+    await page.locator("label:has(#walk-1)").click();
     assert.equal(await page.locator(".step").count(), 5, "the walkthrough lists five steps");
     assert.equal(await page.locator("video").count(), 0, "the page carries no video");
     await choose(page, "who", "ana");
     await page.evaluate(() => scrollTo(0, 0));
     if (output && [1440, 768, 390].includes(width)) await page.screenshot({ path: join(output, `${width}.png`), fullPage: true });
     await context.close();
-    console.log(`PASS ${width}px: geometry, navigation, keyboard views, walkthrough, and eight engine decisions`);
+    console.log(`PASS ${width}px: geometry, navigation, keyboard walkthrough, and eight engine decisions`);
   }
 
   const plain = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 390, height: 844 } });
@@ -84,11 +85,11 @@ try {
   await staticPage.goto(url);
   assert.equal(await staticPage.locator("[data-fallback]").isVisible(), true);
   assert.equal(await staticPage.locator("h1").isVisible(), true);
-  await staticPage.locator("label:has(#view-person)").click();
-  assert.equal(await staticPage.locator(".person-view").isVisible(), true);
+  await staticPage.locator("label:has(#walk-4)").click();
+  assert.equal(await staticPage.locator("#step-4").isVisible(), true);
   assert.equal(await staticPage.locator('a[href="/roadmap/"]').first().isVisible(), true);
   await plain.close();
-  console.log("PASS JavaScript disabled: explanation, recorded answer, product choices and walkthrough");
+  console.log("PASS JavaScript disabled: explanation, recorded answer and walkthrough steps");
 
   const roadmap = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const road = await roadmap.newPage(); checkPage(road);
