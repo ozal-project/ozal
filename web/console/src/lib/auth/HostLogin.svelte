@@ -39,8 +39,12 @@
     {/each}
   </div>
 </fieldset>
-<p class="text-muted-foreground mt-4 mb-2 text-sm">Run this on the host and open the link it prints:</p>
+<p class="text-muted-foreground mt-4 mb-2 text-sm">Run this on the host, replacing YOUR_NAME, and open the link it prints:</p>
 <CopyCommand {command} label="Copy login command" />
+<p class="text-muted-foreground mt-2 text-xs">
+  Needs <code class="font-mono">switchboard</code> on the host's PATH, which the installer and <code class="font-mono">sbctl</code> set up.
+  If it is not found, use the full path to the binary and add <code class="font-mono">-config /path/to/config.json</code>.
+</p>
 <form class="mt-5 flex items-center gap-2" onsubmit={unlock}>
   <label class="sr-only" for={`${uid}-token`}>Admin token</label>
   <input id={`${uid}-token`} bind:value={draft} type="password" autocomplete="off" spellcheck="false" placeholder="Or paste the admin token"
