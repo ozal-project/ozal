@@ -79,7 +79,7 @@ try {
   await ab("wait", "--text", "I reviewed the destination");
   await ab("check", 'input[type="checkbox"]');
   await ab("find", "role", "button", "click", "--name", "Save reviewed application", "--exact");
-  await ab("click", "dialog[open] button:last-child");
+  await ab("find", "role", "button", "click", "--name", "Save application", "--exact");
   await ab("wait", "--text", "Application saved.");
   const setup = await api("GET", "/_/api/setup");
   const added = setup.routes.find((r) => r.host === `extra.demo.localhost:${PORT}`);
@@ -89,11 +89,12 @@ try {
   const pack = join(root, "artifact"); await mkdir(pack);
   await writeFile(join(pack, "index.html"), "<!doctype html><title>Product acceptance</title><h1>Published from Applications</h1>");
   const archive = join(root, "artifact.tar.gz"); await exec("tar", ["-czf", archive, "-C", pack, "."]);
-  await ab("find", "text", "Publish an artifact to blog", "click", "--exact");
-  await ab("upload", 'details[open] input[type="file"]', archive);
+  await ab("find", "role", "button", "click", "--name", "Publish an artifact to blog", "--exact");
+  await ab("upload", 'dialog[open] input[type="file"]', archive);
   await ab("find", "role", "button", "click", "--name", "Review publication", "--exact");
-  await ab("click", "dialog[open] button:last-child");
+  await ab("find", "role", "button", "click", "--name", "Publish artifact", "--exact");
   await ab("wait", "--text", "is live. Check its content");
+  await ab("press", "Escape");
   let content = (await exec("curl", ["-fsS", "--max-time", "10", "-H", `Host: blog.demo.localhost:${PORT}`, `http://127.0.0.1:${PORT}/`])).stdout;
   assert(content.includes("Published from Applications"));
   await api("POST", "/_/api/sites/blog/rollback", { id: before });

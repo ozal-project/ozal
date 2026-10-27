@@ -2,6 +2,7 @@
   import { Button } from "$lib/components/ui/button";
   import ConfirmAction from "$lib/ConfirmAction.svelte";
   import { admin, askForToken } from "$lib/adminToken.svelte";
+  import TrashIcon from "@lucide/svelte/icons/trash";
   let { host, version, refreshed }: { host: string; version: string; refreshed: () => Promise<void> } = $props();
   let review = $state(false);
   let expected = $state("");
@@ -19,6 +20,6 @@
     finally { busy = false; }
   }
 </script>
-<Button size="sm" variant="ghost" aria-label={`Remove ${host}`} disabled={busy} onclick={prepare}>{busy ? "Removing…" : "Remove"}</Button>
+<Button size="icon-sm" variant="ghost" class="text-muted-foreground hover:text-destructive" aria-label={`Remove ${host}`} title="Remove" disabled={busy} onclick={prepare}><TrashIcon class="size-4" /></Button>
 {#if error}<p class="text-destructive basis-full text-sm" role="alert">{error}</p>{/if}
 <ConfirmAction bind:open={review} title="Remove this application hostname?" target={host} current="Configured route" requested="No route for this hostname" consequence="This hostname will stop forwarding or serving its site. Retained publications and application data are not deleted. DNS stays as it is." detail="The server refuses removal of the last route or a project’s last domain. Disconnect the publisher first when retiring that project." confirmLabel="Remove application" onConfirm={() => void remove()} />

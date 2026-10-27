@@ -17,7 +17,7 @@
       <h1 tabindex="-1" class="text-2xl leading-tight font-semibold tracking-tight outline-none">{title}</h1>
       <p class="text-muted-foreground mt-1.5 text-sm">{intro}</p>
     </div>
-    {@render children?.()}
+    {#if children}<div class="flex flex-wrap items-center gap-2">{@render children()}</div>{/if}
   </div>
   {#if tabs}
     <nav class="border-border mt-6 flex gap-6 border-b" aria-label={`${title} views`}>
