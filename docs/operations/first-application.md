@@ -213,3 +213,18 @@ login temporal, limpieza del fragmento, revisión/alta de app, cancelación y ca
 de membresía, estados de GitHub/conectores y tamaños móviles. No usa una instancia
 real ni imprime credenciales. Conserva capturas y elimina su estado descartable.
 La aceptación de una persona externa y un equipo distinto se registra aparte.
+
+Las passkeys de administradores tienen su propia prueba, con Playwright y un
+autenticador virtual de Chrome por dispositivo (ninguna credencial sale de la
+corrida):
+
+```sh
+SWITCHBOARD_BIN=/tmp/switchboard-product-candidate CHROME=/ruta/a/chrome \
+  node scripts/demo/passkey-acceptance.mjs
+```
+
+Comprueba que el enlace del primer administrador funciona una sola vez, que se
+entra con passkey después de salir, que el enlace para otro navegador agrega una
+passkey y no sirve dos veces, que una invitación con una sola herramienta da sólo
+esa, y que el reseteo de otro administrador corta su sesión abierta y deja inútil
+su passkey vieja. No prueba el vencimiento por inactividad (30 minutos) ni Firefox.
