@@ -6,10 +6,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/octaviosantacruz/switchboard/internal/config"
 )
 
 // Remote is the edge as the orchestration sees it. The SSH adapter implements
@@ -135,11 +138,32 @@ func Upgrade(ctx context.Context, out io.Writer, remote Remote, builder Builder,
 	}
 
 	step("validate the live config with the new binary")
-	checked, err := remote.Run(ctx, Quote(final)+" validate -config "+Quote(e.Config), nil)
+	liveConfig, err := remote.Run(ctx, "cat "+Quote(e.Config), nil)
+	if err != nil {
+		return err
+	}
+	check, split, err := RootCheck([]byte(liveConfig))
+	if err != nil {
+		return err
+	}
+	target := e.Config
+	if split {
+		target = e.Stage + "/config.check"
+		if _, err := remote.Run(ctx, "umask 077; cat > "+Quote(target), bytes.NewReader(check)); err != nil {
+			return err
+		}
+	}
+	checked, err := remote.Run(ctx, Quote(final)+" validate -config "+Quote(target), nil)
+	if split {
+		_, _ = remote.Run(context.WithoutCancel(ctx), "rm -f "+Quote(target), nil)
+	}
 	if err != nil {
 		return fmt.Errorf("the new binary refuses the live config: %w", err)
 	}
 	note("%s", strings.TrimSpace(checked))
+	if split {
+		note("routes live in the runtime file only the service account reads: the root step validates them before it stops anything")
+	}
 
 	step("switchboard upgrade on the edge as root (sudo asks for the password once)")
 	code, err := remote.Terminal(ctx, UpgradeCommand(e, final, want))
@@ -154,6 +178,27 @@ func Upgrade(ctx context.Context, out io.Writer, remote Remote, builder Builder,
 	_, _ = remote.Run(ctx, "rm -f "+Quote(final), nil)
 	step("%s is active with %s; previous binary kept as %s", e.Unit, bin.Commit, backup)
 	return nil
+}
+
+// RootCheck returns what the SSH user can validate of the live config. With
+// runtime_file, routes and projects live in a file only the service account
+// reads, so the copy leaves it out: the user checks listeners, TLS and
+// identity, and `switchboard upgrade` validates the whole config as root
+// before it stops anything. split is false when the live config is checked
+// as it is.
+func RootCheck(live []byte) (check []byte, split bool, err error) {
+	var cfg config.Config
+	decoder := json.NewDecoder(bytes.NewReader(live))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&cfg); err != nil {
+		return nil, false, fmt.Errorf("the live config does not parse: %w", err)
+	}
+	if cfg.RuntimeFile == "" {
+		return nil, false, nil
+	}
+	cfg.RuntimeFile = ""
+	check, err = marshal(cfg)
+	return check, true, err
 }
 
 // gzipBytes compresses at the best level with no timestamp, so the same

@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -109,6 +110,8 @@ type fakeBuilder struct {
 func (b fakeBuilder) Build(context.Context, string) (Binary, error) { return b.bin, b.err }
 
 type fakeRemote struct {
+	config    string // the live config file ("" reads as {})
+	checked   string // what the last validate was given, when staged
 	live      string
 	lock      string // reply to the lock command
 	uploadSHA string // hash the edge reports after an upload ("" = real)
@@ -129,6 +132,14 @@ func (f *fakeRemote) Run(_ context.Context, command string, stdin io.Reader) (st
 		f.uploaded = true
 		_, _ = io.Copy(io.Discard, stdin)
 		return f.uploadSHA + "  x\n", nil
+	case strings.HasPrefix(command, "cat '/etc/"):
+		if f.config == "" {
+			return "{}\n", nil
+		}
+		return f.config, nil
+	case strings.Contains(command, "cat > '/home/deploy/stage/config.check'"):
+		data, _ := io.ReadAll(stdin)
+		f.checked = string(data)
 	case strings.Contains(command, "validate -config"):
 		return "config valid\n", nil
 	}
@@ -193,6 +204,36 @@ func TestApplyOrderAndLockRelease(t *testing.T) {
 	}
 	if strings.Join(order, ",") != "mkdir '/home/deploy/lock',gzip -dc,validate -config,TERMINAL,rmdir" {
 		t.Fatalf("order: %v", order)
+	}
+}
+
+// The live config points runtime_file at the service account's directory:
+// the SSH user validates a copy without it instead of failing on a file it
+// cannot read, and never validates the live file directly.
+func TestUpgradeValidatesTheRootSettingsWhenRoutesAreTheServices(t *testing.T) {
+	r := &fakeRemote{live: "old", lock: "taken\n", uploadSHA: sha(data), terminal: true,
+		config: `{"listen":"127.0.0.1:8080","runtime_file":"/var/lib/switchboard/runtime.json"}`}
+	if err := Upgrade(context.Background(), io.Discard, r, fakeBuilder{bin: Binary{Data: data, Commit: "c"}}, newRun(true)); err != nil {
+		t.Fatal(err)
+	}
+	if r.checked == "" || strings.Contains(r.checked, "runtime_file") || !strings.Contains(r.checked, "127.0.0.1:8080") {
+		t.Fatalf("staged check = %q", r.checked)
+	}
+	for _, c := range r.ran {
+		if strings.Contains(c, "validate -config '/etc/switchboard/routing.json'") {
+			t.Fatal("validated the live config whose runtime file the SSH user cannot read")
+		}
+	}
+
+	plain := &fakeRemote{live: "old", lock: "taken\n", uploadSHA: sha(data), terminal: true, config: `{"listen":"127.0.0.1:8080"}`}
+	if err := Upgrade(context.Background(), io.Discard, plain, fakeBuilder{bin: Binary{Data: data, Commit: "c"}}, newRun(true)); err != nil {
+		t.Fatal(err)
+	}
+	if plain.checked != "" || !slices.ContainsFunc(plain.ran, func(c string) bool { return strings.Contains(c, "validate -config '/etc/switchboard/routing.json'") }) {
+		t.Fatal("a config without runtime_file was not validated as it is")
+	}
+	if _, _, err := RootCheck([]byte(`{"listen":"x","nope":1}`)); err == nil {
+		t.Fatal("an unknown field in the live config was accepted")
 	}
 }
 
