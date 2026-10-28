@@ -5,9 +5,9 @@ the table below). Phase 1 is implemented; see "Phase 1 as built". Tracker:
 `ID-003` (passkeys), `ID-005` (phase 2); later phases touch `ID-004`,
 `NTF-001` and `ID-001`. Not a release promise.
 
-Related: [identity integration](identity-integration.md) (`ARCH-009`, how an
+Related: [identity integration](../engineering.md#identidad-y-aplicaciones) (`ARCH-009`, how an
 application trusts the gateway), [design](design.md) (the `identify` stage),
-[tunnel visitor contract](tunnel-persistent.md), [stack](stack.md)
+[tunnel visitor contract](../engineering.md#tuneles), [stack](stack.md)
 (`go-webauthn/webauthn`).
 
 ## What this decides

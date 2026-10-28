@@ -114,7 +114,7 @@ upgrade/migration test failures are tracked separately as `REL-011`.
 
 ## Recovery is host-only; a sites-only admin token — 2026-10-21 (committed with this change)
 
-The [product/code/UX review](reviews/2026-10-21-product-code-ux.md) found the
+The [product/code/UX review](engineering.md#criterio-de-desarrollo-y-stack) found the
 admin API (and the console) accepting `recover`, while the identity model
 keeps recovery with the host's shell. The admin bearer also lived on the
 homelab, because `publish-site.py` needs it to deploy sites: whoever held
@@ -137,7 +137,7 @@ token on the edge is an operator step (server-ops `hetzner-public` runbook).
 
 ## BUG-009 — reconnecting no longer doubles the activity feed — 2026-10-21 (committed with this change)
 
-From the [product/code/UX review](reviews/2026-10-21-product-code-ux.md):
+From the [product/code/UX review](engineering.md#criterio-de-desarrollo-y-stack):
 after a disconnect the console received the whole history again and showed
 every event twice (4 → 8 rows, 1 → 2 refused).
 
@@ -157,7 +157,7 @@ Not exercised in a browser. Durable retention stays `AUD-001`/`AUD-002`.
 
 ## BUG-012 — a committed Pages switch never reports an error — 2026-10-21 (committed with this change)
 
-From the [product/code/UX review](reviews/2026-10-21-product-code-ux.md).
+From the [product/code/UX review](engineering.md#criterio-de-desarrollo-y-stack).
 Deploy and rollback read the deployment back after the commit and the live
 swap, under the request context: a client that dropped the connection got
 an error for a build that was already live. The row is now read inside the
@@ -172,7 +172,7 @@ canceled".
 
 ## BUG-010 + BUG-011 — console state that outlived its cause — 2026-10-21 (committed with this change)
 
-From the [product/code/UX review](reviews/2026-10-21-product-code-ux.md).
+From the [product/code/UX review](engineering.md#criterio-de-desarrollo-y-stack).
 
 - **BUG-010:** a simulator result keeps the inputs it answered
   (`web/console/src/lib/simulation.ts`). Once the form changes or a later run
@@ -191,7 +191,7 @@ session-requirements display the review also asks for in the simulator
 
 ## BUG-013 + site upload deadline — 2026-10-21 (`1d64165`, deployed)
 
-Found in the [product/code/UX review](reviews/2026-10-21-product-code-ux.md)
+Found in the [product/code/UX review](engineering.md#criterio-de-desarrollo-y-stack)
 and then observed live: two Portfolio deploys over the homelab tunnel were
 refused as `archive.invalid` ("archive ended inside a file"). The admin
 server cuts every request at 10 s and the upload took 5–8 s plus the rest.
@@ -421,7 +421,7 @@ changelog. `/dist/` is ignored.
 ## PAGES-003 — `_redirects` and `_headers` for deployed sites — 2026-10-20 (committed with this change)
 
 A deployment may carry Cloudflare Pages-style `_redirects` and `_headers` at
-its root (a subset; design in [pages-deploy.md](architecture/pages-deploy.md#rules-files-pages-003-2026-10-20)).
+its root (a subset; design in [pages-deploy.md](engineering.md#publicacion)).
 
 - **Core:** `pages.ParseRules` (pure): `SOURCE DESTINATION [301|302|303|307|308]`,
   `:name` segments and a final `*` (`:splat`); header blocks with
@@ -445,7 +445,7 @@ its root (a subset; design in [pages-deploy.md](architecture/pages-deploy.md#rul
 
 ## PAGES-002 — deployed static sites with history and rollback — 2026-10-20 (committed with this change)
 
-Design: [pages-deploy.md](architecture/pages-deploy.md). A route with `"site"`
+Design: [pages-deploy.md](engineering.md#publicacion). A route with `"site"`
 serves the live deployment of a site stored under `pages.dir`; `switchboard site
 deploy|list|rollback` drives the loopback admin API (`POST
 /_/api/sites/{site}/deployments` with a tar.gz body, `GET /_/api/sites`, `POST
@@ -706,7 +706,7 @@ and axe WCAG A/AA reported zero violations, with contrast of existing decorative
 marks left as manual-review items. No host services, VPS pilot, DNS or public
 listener were changed. TUN-002 remains open for visitor identity assertions
 and deployed acceptance; see the active tracker and
-[configuration contract](architecture/tunnel-persistent.md#normal-process-integration--2026-10-18-local-delivery).
+[configuration contract](engineering.md#tuneles).
 
 ## Worktree review corrections — 2026-10-18 (feature commits below)
 
@@ -863,7 +863,7 @@ unset (an exported `GOROOT` pointing to 1.27.1 breaks the new toolchain).
 
 ## Cloudflare coexistence decision — 2026-10-18 (working tree, no commit)
 
-Owner-approved [architecture decision](architecture/cloudflare-coexistence.md)
+Owner-approved [architecture decision](security.md#entrada-directa-o-detras-de-un-proxy)
 recorded: public Portfolio stays on Pages; a separate preview will validate
 Cloudflare exterior protection with Switchboard identity/policy and owned
 transport. Responsibilities, origin-bypass acceptance, evidence budgets and
@@ -1032,7 +1032,7 @@ lab identities were removed. Optional staticcheck/govulncheck are not installed.
 The first gate stopped at a concurrent unfinished rate-limit implementation; that work
 was preserved and later completed, after which the full gate was repeated green.
 No VPS, live credential, DNS change or deployment was needed. See the
-[lab guide and findings](architecture/tunnel-local-spike.md). Automatic reconnect,
+[lab guide and findings](engineering.md#tuneles). Automatic reconnect,
 configuration/enrolment/revocation and visitor attribution are residual TUN-002;
 actual public deployment remains EDGE-001. Code committed in `fd72b2c`; no push
 or public deployment made.
@@ -1146,7 +1146,7 @@ publication commit are reported with this change.
 
 ## Product positioning and portability documented — 2026-10-20
 
-The [positioning contract](architecture/positioning-and-portability.md) records
+The [positioning contract](engineering.md#publicacion-autonoma) records
 small-team private application access as the initial offering, DNS/ACME adapter
 boundaries, application versus volumetric protection, and the acceptance demo
 for direct and exterior-proxy ingress. VISION and the coexistence decision now

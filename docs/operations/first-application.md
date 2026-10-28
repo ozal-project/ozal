@@ -1,9 +1,7 @@
 # Primera aplicación y web existente
 
-Implementación local, 26/10/2026: `UI-006`, `PAGES-009`, `ID-013/014` y
-`UI-007`. La consola sigue siendo privada y self-hosted. No hay cuenta SaaS.
-La aceptación en otro equipo y una migración pública siguen siendo pruebas
-externas; no se deducen de un build correcto.
+Guía del checkout actual: consola privada, aplicaciones y acceso. Las notas
+de cada release delimitan qué incluye un binario distribuido.
 
 ## Probar con una aplicación que ya corre
 
@@ -214,7 +212,7 @@ Un rollback de Pages activa un artefacto retenido; **no** revierte DNS, una base
 de datos ni un cambio del backend.
 
 Switchboard no inicia ni instala tu aplicación. Si ya tiene login, conserva
-ese login hasta elegir y probar un contrato de [integración](../architecture/identity-integration.md).
+ese login hasta elegir y probar un contrato de [integración](../engineering.md#identidad-y-aplicaciones).
 No deshabilites permisos internos para ahorrar una pantalla.
 
 ## Personas, grupos y sesiones
@@ -242,56 +240,6 @@ Las cuentas y passkeys nativas se conservan. Las sesiones nativas con método
 `passkey` siguen vigentes; una sesión antigua sin método registrado requiere
 un nuevo login.
 
-Usa el procedimiento de [upgrade y backup](systemd.md) y aplica migraciones de
+Usa el procedimiento de [upgrade y backup](administration.md#servicio-y-propiedad-del-estado) y aplica migraciones de
 forma explícita. No uses una versión nueva contra una base sin migrar. Una
 reversión del binario tras migrar necesita además la copia previa de la base.
-
-## Aceptación reproducible
-
-Con Node, `agent-browser` y Chromium disponibles:
-
-```sh
-scripts/build-console.sh
-go build -o /tmp/switchboard-product-candidate ./cmd/switchboard
-SWITCHBOARD_BIN=/tmp/switchboard-product-candidate node scripts/demo/product-acceptance.mjs
-```
-
-El script inicia un edge local con datos ficticios y socket propio; comprueba
-login temporal, limpieza del fragmento, revisión/alta de app, cancelación y cambio
-de membresía, estados de GitHub/conectores y tamaños móviles. No usa una instancia
-real ni imprime credenciales. Conserva capturas y elimina su estado descartable.
-La aceptación de una persona externa y un equipo distinto se registra aparte.
-
-Las passkeys de administradores tienen su propia prueba, con Playwright y un
-autenticador virtual de Chrome por dispositivo (ninguna credencial sale de la
-corrida):
-
-```sh
-SWITCHBOARD_BIN=/tmp/switchboard-product-candidate CHROME=/ruta/a/chrome \
-  node scripts/demo/passkey-acceptance.mjs
-```
-
-Comprueba que el enlace del primer administrador funciona una sola vez, que se
-entra con passkey después de salir, que el enlace para otro navegador agrega una
-passkey y no sirve dos veces, que borrar desde "Your passkeys" la passkey de un
-dispositivo perdido cierra su sesión y la deja inútil (también desde el menú del
-celular), que una invitación con una sola herramienta da sólo
-esa, y que el reseteo de otro administrador corta su sesión abierta y deja inútil
-su passkey vieja. No prueba el vencimiento por inactividad (30 minutos) ni Firefox.
-
-Las apps privadas en otro dominio (sesiones por host, `ID-015`) tienen la suya,
-con dos apps en sitios distintos del login (`*.other.localhost`,
-`*.third.localhost`):
-
-```sh
-SWITCHBOARD_BIN=/tmp/switchboard-product-candidate CHROME=/ruta/a/chrome \
-  node scripts/demo/host-sessions-acceptance.mjs
-```
-
-Comprueba que con la sesión central abierta la app se abre sin pedir nada y en
-la ruta pedida, que su cookie es sólo de ese host y distinta de la central, que
-ninguna cookie de sesión llega al upstream, que la política de la app sigue
-decidiendo (403), que un código capturado no sirve en otro navegador y queda
-quemado, que entrar desde la app vuelve a ella, y que salir desde la app o desde
-el login cierra todo el login. Corre por HTTP en `localhost`: no prueba HTTPS,
-dominios reales ni Safari/Firefox.

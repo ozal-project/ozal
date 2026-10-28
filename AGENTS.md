@@ -117,6 +117,13 @@ adapters, tests, integration, documentation and verification.
 - Run `scripts/verify.sh` before reporting a change as complete.
 - Track work only in `docs/TO_IMPLEMENT.md` (active) and `docs/IMPLEMENTED.md`
   (closed, with commit). Do not create parallel roadmaps.
+- Keep customer docs to the guides linked from `docs/README.md`; configuration
+  and CLI details belong in `docs/reference.md`, implementation contracts and
+  verification in `docs/engineering.md`. Update the existing section rather
+  than creating a dated review, plan or delivery report for each task.
+- Keep temporary drafts, captures and historical review copies in ignored
+  `docs/local/` or `.local/docs-archive/`. They must never be build dependencies.
+  Preserve security contracts and canonical trackers in Git.
 - Report changed files, tests, tracker updates, blockers and whether the work
   is committed. Do not commit or push unless explicitly asked.
 

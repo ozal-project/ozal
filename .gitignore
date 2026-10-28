@@ -16,3 +16,7 @@ config.json
 # Release output (goreleaser)
 /dist/
 .commandcode/
+
+# Local documentation history, drafts and review artifacts; not product docs.
+/.local/docs-archive/
+/docs/local/

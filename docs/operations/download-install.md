@@ -35,14 +35,14 @@ verifica una copia privada del archivo y extrae solo el miembro regular
 `switchboard`, rechaza duplicados/enlaces y usa un enlace de destino exacto
 que también se niega a una creación concurrente. Su implementación es Linux.
 
-Para un servicio existente usa [upgrade](systemd.md), no elimines el binario
+Para un servicio existente usa [upgrade](administration.md#servicio-y-propiedad-del-estado), no elimines el binario
 actual para forzar al instalador. El helper necesita Bash, tar y sha256sum
 (o shasum). El servicio no necesita esas herramientas para ejecutar el gateway.
 
 ## Linux: instalar el servicio de una vez
 
 `scripts/release/install-service.sh` hace la instalación documentada en
-[systemd](systemd.md) en un solo paso: crea la cuenta `switchboard`, instala el
+[systemd](administration.md#servicio-y-propiedad-del-estado) en un solo paso: crea la cuenta `switchboard`, instala el
 binario y la config como `root`, genera un token de administración aleatorio
 (legible solo por root y la cuenta del servicio), migra el estado, inicializa
 el archivo operativo, habilita el servicio y espera a que la consola responda.
@@ -79,7 +79,7 @@ systemd y el socket Unix administrativo tienen un alcance distinto.
 
 ## Instalar un servicio y conservar el estado
 
-La [guía systemd](systemd.md) define binario/config root-owned, usuario de servicio,
+La [guía systemd](administration.md#servicio-y-propiedad-del-estado) define binario/config root-owned, usuario de servicio,
 estado privado y socket administrativo. Decide el dominio permanente, HTTPS,
 proveedor o passkeys, transporte al origen y backup antes de mover un sitio real.
 Sigue el recorrido de [primera aplicación](first-application.md).

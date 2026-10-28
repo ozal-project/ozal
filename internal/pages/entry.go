@@ -1,6 +1,6 @@
 // Package pages stores static-site deployments: archives uploaded through the
 // admin API are checked entry by entry, extracted into immutable directories
-// and made live with one atomic switch (docs/architecture/pages-deploy.md).
+// and made live with one atomic switch (docs/engineering.md#publicacion).
 //
 // CheckEntry is the pure core: it judges one archive entry with no I/O.
 // Extract is the adapter that applies it to a tar.gz stream.

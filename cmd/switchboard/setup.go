@@ -124,7 +124,7 @@ CLI with -token file:/absolute/path/to/admin.token. No build runs on the edge.
 
 Before real hosting: choose the permanent login domain and RP ID, HTTPS and
 cookie scope; credentials for localhost do not migrate to your public domain.
-Follow docs/operations/systemd.md and docs/operations/first-application.md.
+Follow docs/operations/administration.md and docs/operations/first-application.md.
 Do not expose port 9090. Use an SSH local forward to reach a remote console.
 
 Recovery: use user invite -recover through the host socket, then revoke lost

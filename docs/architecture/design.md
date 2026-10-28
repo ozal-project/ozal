@@ -116,19 +116,15 @@ Today's mapping: `auth/authz.go` → `policy`, `auth/principal.go` →
 health-aware upstream-index decision; the proxy advances a per-snapshot
 round-robin cursor across it.
 
-## Proposed extensions (not current behavior)
+## Implementation contracts
 
-These design records keep future work aligned with the pattern; none is
-implemented or a release promise:
-
-- [Durable audit contract](audit-contract.md): a separate append-only audit
-  writer and signed checkpoints, not `events.Broker`.
-- [Policy explain](policy-explain.md): a diagnostic CLI over the pure
-  `auth.Authorize`, with no second policy engine.
-- [Shield challenge](shield-challenge.md): a proof-of-work stage in the
-  `shield` position of the pipeline, with a signed clearance cookie.
-- [Identity integration](identity-integration.md): how an app behind the edge
-  trusts (or does not trust) the gateway's identity.
+Current contracts and their limits are grouped in [engineering](../engineering.md):
+audit is separate from live activity; policy explain uses the real pure engine;
+certificates and tunnels own bounded, cancellable lifecycles. Identity contracts
+remain in [identity-login](identity-login.md) and [host-sessions](host-sessions.md).
+Shield challenge and additional app identity integrations remain proposals.
+The tracker owns acceptance and pending work; this package map is not a release
+promise or a duplicate implementation history.
 
 `LAB-*` learning labs are tracked in [TO_IMPLEMENT](../TO_IMPLEMENT.md); they
 are experiments and artifacts, not commitments.

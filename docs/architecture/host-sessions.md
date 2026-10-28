@@ -1,6 +1,6 @@
 # Host sessions behind the central login (ID-015)
 
-Stage C of the [autonomous publication proposal](publicacion-autonoma.md#102-sesiones-por-host-y-login-central).
+Stage C of the [autonomous publication proposal](../engineering.md#publicacion-autonoma).
 A private application on a domain the login's cookie cannot reach
 (`app.other.org` while the login is `auth.example.com`) gets its own
 host-only session, issued after the central login vouches for the visitor.

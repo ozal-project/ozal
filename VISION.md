@@ -89,8 +89,8 @@ not an implementation inventory or a commitment to provider-wide parity.
 The owner now intends to move Portfolio out of Cloudflare Pages. This
 supersedes the 18/10 requirement to retain that hosting; migration and the
 operator's cutover remain pending, with no DNS or deployment action implied.
-The [positioning and portability contract](docs/architecture/positioning-and-portability.md)
-and [coexistence decision](docs/architecture/cloudflare-coexistence.md)
+The [positioning and portability contract](docs/engineering.md#publicacion-autonoma)
+and [coexistence decision](docs/security.md#entrada-directa-o-detras-de-un-proxy)
 define boundaries, demonstration and acceptance. Active work stays in
 EDGE-006/EDGE-001, the existing PAGES-* tasks and workspace CROSS-006.
 
@@ -172,7 +172,7 @@ The transparency log described here is not implemented yet. Current code has
 an optional local access-decision audit with a hash chain and manual signed
 checkpoints; the verifier reports `tamper_evident=false` because it cannot
 prove that a checkpoint was retained outside the host. See the partial scope
-in [the audit contract](docs/architecture/audit-contract.md) and tracker
+in [the audit contract](docs/engineering.md#auditoria) and tracker
 entries `AUD-001`/`AUD-002`.
 
 - Tiled, static, append-only Merkle log in the style of the Static CT API /

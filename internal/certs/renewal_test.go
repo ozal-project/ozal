@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// TestRenewalDue covers docs/architecture/certificate-renewal.md:
+// TestRenewalDue covers docs/engineering.md#certificados:
 // the boundary, unusable intervals and the clock-in-another-zone case.
 func TestRenewalDue(t *testing.T) {
 	start := time.Date(2026, time.October, 1, 0, 0, 0, 0, time.UTC)

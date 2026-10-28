@@ -1,6 +1,6 @@
 # Quickstart
 
-From a clean checkout to a routed app and the status page, with no TLS and no
+From a clean checkout to a routed app and a process check, with no TLS and no
 OIDC provider. Everything stays on loopback. You need Go (version in
 [`go.mod`](go.mod)), Python 3 for the demo upstream, and `curl`.
 
@@ -9,7 +9,7 @@ OIDC provider. Everything stays on loopback. You need Go (version in
 ```bash
 mkdir -p /tmp/switchboard-demo
 printf 'hello from the routed app\n' > /tmp/switchboard-demo/index.html
-python3 -m http.server 9000 --directory /tmp/switchboard-demo
+python3 -m http.server 9000 --bind 127.0.0.1 --directory /tmp/switchboard-demo
 ```
 
 ## 2. Switchboard — terminal 2
@@ -32,16 +32,16 @@ curl -s -H 'Host: nope.localhost:8888' http://127.0.0.1:8888/
 #   app.localhost:8888
 ```
 
-## 4. Status page
+## 4. Process readiness
 
 ```bash
-curl -s http://127.0.0.1:9090/_/status | head -n 3
-# <!doctype html>
-# <html lang="en">
-# <head>
+curl -fsS http://127.0.0.1:9090/_/healthz
+# ok
 ```
 
-Or open <http://127.0.0.1:9090/_/status> in a browser.
+Status and the administrative console require authentication, even on
+loopback. For a persistent console and passkey setup, follow
+[first application](docs/operations/first-application.md).
 
 ## 5. Stop
 
@@ -55,8 +55,8 @@ rm -rf /tmp/switchboard-demo
 
 - `*.localhost` resolves to `127.0.0.1` on most systems, so a browser can open
   <http://app.localhost:8888/> directly instead of sending a `Host` header.
-- `config.quickstart.json` leaves `admin.token` unset: the dashboard is
-  read-only and mutations answer `503`. See [README](README.md#secret-references)
+- `config.quickstart.json` leaves `admin.token` unset: this minimal trial does
+  not grant administrative access. See [secret references](docs/reference.md#secretos)
   for `env:`/`file:` token references.
 - The admin listener is loopback-only and rejects any other `Host` (421).
 - `dev_errors: true` is local-only: it prints upstream addresses and the route

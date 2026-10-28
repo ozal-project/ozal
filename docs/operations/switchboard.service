@@ -7,7 +7,7 @@ StartLimitBurst=5
 
 [Service]
 Type=simple
-# Example unit (docs/operations/systemd.md): the edge belongs to root and
+# Example unit (docs/operations/administration.md): the edge belongs to root and
 # runs as its own account. Code in /usr/local/lib and config in /etc are
 # root's; only the service writes its state. Operators change any of it
 # through sudo.

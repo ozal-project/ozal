@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Install Switchboard as a systemd service on Linux, following
-# docs/operations/systemd.md: code and config belong to root, state to its own
+# docs/operations/administration.md: code and config belong to root, state to its own
 # account, the console stays on loopback and nothing public is opened.
 #
 #   sudo scripts/release/install-service.sh --binary ./switchboard
@@ -61,7 +61,7 @@ fi
 # A previous installation is never overwritten: use `switchboard upgrade`.
 for path in "$config" "$lib/switchboard" "$unit" "$bin_link"; do
   if [[ -e "$path" ]]; then
-    echo "$path already exists. This installer only creates a new installation; use 'switchboard upgrade' (docs/operations/systemd.md)." >&2
+    echo "$path already exists. This installer only creates a new installation; use 'switchboard upgrade' (docs/operations/administration.md)." >&2
     exit 1
   fi
 done
@@ -162,5 +162,5 @@ Next
      give your name and email and create your passkey. No command is needed on the host.
        $link
   3. In the console, Applications: add your existing website and invite the first person.
-  4. Back up $state and $etc. Recovery and upgrades: docs/operations/systemd.md
+  4. Back up $state and $etc. Recovery and upgrades: docs/operations/administration.md
 EOF

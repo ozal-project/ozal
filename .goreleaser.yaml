@@ -44,11 +44,12 @@ archives:
       - config.example.json
       - config.quickstart.json
       - scripts/release/install.sh
+      - scripts/release/install-service.sh
       - docs/operations/download-install.md
       - docs/operations/first-application.md
-      - docs/operations/github-repositories.md
-      - docs/operations/connector-onboarding.md
-      - docs/operations/systemd.md
+      - docs/operations/administration.md
+      - docs/security.md
+      - docs/reference.md
       - docs/operations/switchboard.service
 
 checksum:
