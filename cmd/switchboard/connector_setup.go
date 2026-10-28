@@ -8,8 +8,8 @@ import (
 	"io"
 	"path/filepath"
 
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/tunnelrenew"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/tunnelrenew"
 )
 
 func runConnectorSetup(_ context.Context, args []string, out io.Writer) error {

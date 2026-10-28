@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/events"
-	"github.com/octaviosantacruz/switchboard/internal/notify"
+	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/notify"
 )
 
 // pairing is the Telegram chat pairing (notify.Pairer implements it): the

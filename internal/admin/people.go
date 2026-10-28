@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/events"
-	"github.com/octaviosantacruz/switchboard/internal/passkey"
-	"github.com/octaviosantacruz/switchboard/internal/store/sqlite"
+	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/passkey"
+	"github.com/switchboard-project/switchboard/internal/store/sqlite"
 )
 
 // people is the user and passkey store as the console needs it

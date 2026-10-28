@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/octaviosantacruz/switchboard/internal/policycontext"
+	"github.com/switchboard-project/switchboard/internal/policycontext"
 )
 
 type clientIPKey struct{}

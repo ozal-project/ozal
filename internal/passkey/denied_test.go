@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/octaviosantacruz/switchboard/internal/auth"
+	"github.com/switchboard-project/switchboard/internal/auth"
 )
 
 func denied(t testing.TB, h *harness, method, host string, p auth.Principal, code auth.DecisionCode) *httptest.ResponseRecorder {

@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/auth"
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/auth"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/events"
 )
 
 // identityStub records the keys it is charged with and answers with a

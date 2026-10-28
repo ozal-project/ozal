@@ -3,8 +3,8 @@ package tunnel
 import (
 	"bufio"
 	"context"
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/proxy"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/proxy"
 	"io"
 	"net"
 	"net/http"

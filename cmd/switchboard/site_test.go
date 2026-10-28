@@ -10,12 +10,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/octaviosantacruz/switchboard/internal/admin"
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/pages"
-	"github.com/octaviosantacruz/switchboard/internal/routemanager"
-	"github.com/octaviosantacruz/switchboard/internal/static"
-	"github.com/octaviosantacruz/switchboard/internal/store/sqlite"
+	"github.com/switchboard-project/switchboard/internal/admin"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/pages"
+	"github.com/switchboard-project/switchboard/internal/routemanager"
+	"github.com/switchboard-project/switchboard/internal/static"
+	"github.com/switchboard-project/switchboard/internal/store/sqlite"
 )
 
 // tokenOnlyManager is the smallest route manager the admin handler needs:

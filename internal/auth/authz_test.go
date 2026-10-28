@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/policycontext"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/policycontext"
 )
 
 func TestAuthorize(t *testing.T) {

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/octaviosantacruz/switchboard/internal/store/sqlite"
+	"github.com/switchboard-project/switchboard/internal/store/sqlite"
 )
 
 func prepareStateDatabase(t *testing.T, ctx context.Context, path string) {

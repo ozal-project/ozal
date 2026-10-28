@@ -10,7 +10,7 @@ import (
 	"encoding/json"
 	"syscall/js"
 
-	"github.com/octaviosantacruz/switchboard/internal/policydemo"
+	"github.com/switchboard-project/switchboard/internal/policydemo"
 )
 
 // commit is stamped at build time (-X main.commit=...) so the page can say

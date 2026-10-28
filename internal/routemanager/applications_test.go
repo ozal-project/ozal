@@ -3,7 +3,7 @@ package routemanager
 import (
 	"context"
 	"errors"
-	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/config"
 	"os"
 	"path/filepath"
 	"testing"

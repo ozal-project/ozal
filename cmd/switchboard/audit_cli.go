@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/audit"
-	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/audit"
+	"github.com/switchboard-project/switchboard/internal/config"
 )
 
 // runAudit dispatches offline audit maintenance commands. Local verification

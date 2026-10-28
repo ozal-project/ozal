@@ -15,14 +15,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/auth"
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/events"
-	"github.com/octaviosantacruz/switchboard/internal/healthcheck"
-	"github.com/octaviosantacruz/switchboard/internal/passkey"
-	"github.com/octaviosantacruz/switchboard/internal/pipeline"
-	"github.com/octaviosantacruz/switchboard/internal/proxy"
-	"github.com/octaviosantacruz/switchboard/internal/ratelimit"
+	"github.com/switchboard-project/switchboard/internal/auth"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/healthcheck"
+	"github.com/switchboard-project/switchboard/internal/passkey"
+	"github.com/switchboard-project/switchboard/internal/pipeline"
+	"github.com/switchboard-project/switchboard/internal/proxy"
+	"github.com/switchboard-project/switchboard/internal/ratelimit"
 )
 
 // Option configures the manager.

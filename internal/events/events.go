@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/policycontext"
+	"github.com/switchboard-project/switchboard/internal/policycontext"
 )
 
 // Type is a stable event name.

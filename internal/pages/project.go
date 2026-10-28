@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/pages/deployauth"
+	"github.com/switchboard-project/switchboard/internal/pages/deployauth"
 )
 
 // SourceMetadata records the first nonempty provenance of a content-addressed

@@ -14,9 +14,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/octaviosantacruz/switchboard/internal/audit"
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/audit"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/events"
 )
 
 func TestRequiresDurableAccessAudit(t *testing.T) {

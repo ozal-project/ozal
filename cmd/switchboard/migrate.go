@@ -10,7 +10,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/store/sqlite"
+	"github.com/switchboard-project/switchboard/internal/store/sqlite"
 )
 
 const defaultDBPath = "switchboard.db"

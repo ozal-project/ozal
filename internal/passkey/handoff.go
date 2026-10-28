@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/auth"
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/auth"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/events"
 )
 
 // Host sessions behind the central login (ID-015). A protected host the

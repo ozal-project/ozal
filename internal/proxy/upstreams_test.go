@@ -12,9 +12,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/octaviosantacruz/switchboard/internal/auth"
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/auth"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/events"
 )
 
 type targetChecker struct {

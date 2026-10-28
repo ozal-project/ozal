@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/octaviosantacruz/switchboard/internal/store/sqlite"
+	"github.com/switchboard-project/switchboard/internal/store/sqlite"
 )
 
 func runDB(ctx context.Context, args []string, out io.Writer) error {

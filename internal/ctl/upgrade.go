@@ -12,7 +12,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/config"
 )
 
 // Remote is the edge as the orchestration sees it. The SSH adapter implements

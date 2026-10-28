@@ -13,7 +13,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/config"
 )
 
 // ConfigPlan is what `sbctl edge config` would install. The operator keeps

@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/events"
-	"github.com/octaviosantacruz/switchboard/internal/pages"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/pages"
 )
 
 type deployConfigManager struct{ cfg config.Config }

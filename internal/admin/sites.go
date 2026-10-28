@@ -8,8 +8,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/events"
-	"github.com/octaviosantacruz/switchboard/internal/pages"
+	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/pages"
 )
 
 // deployments is the deployment store as the admin API needs it

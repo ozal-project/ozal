@@ -5,11 +5,11 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/octaviosantacruz/switchboard/internal/certs"
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/domaincheck"
-	"github.com/octaviosantacruz/switchboard/internal/domaincheck/probe"
-	"github.com/octaviosantacruz/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/certs"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/domaincheck"
+	"github.com/switchboard-project/switchboard/internal/domaincheck/probe"
+	"github.com/switchboard-project/switchboard/internal/events"
 )
 
 // domainService connects a configured hostname to this edge (UI-006): it

@@ -15,10 +15,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/events"
-	"github.com/octaviosantacruz/switchboard/internal/proxy"
-	"github.com/octaviosantacruz/switchboard/internal/tunnel"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/proxy"
+	"github.com/switchboard-project/switchboard/internal/tunnel"
 )
 
 // runTunnelSpike intentionally isolates TUN-001 from normal deployments. Its

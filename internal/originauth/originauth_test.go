@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/events"
 )
 
 type authority struct {

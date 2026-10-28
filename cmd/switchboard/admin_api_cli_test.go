@@ -12,12 +12,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/octaviosantacruz/switchboard/internal/admin"
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/events"
-	"github.com/octaviosantacruz/switchboard/internal/routemanager"
-	"github.com/octaviosantacruz/switchboard/internal/store/sqlite"
-	"github.com/octaviosantacruz/switchboard/internal/tunnel"
+	"github.com/switchboard-project/switchboard/internal/admin"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/routemanager"
+	"github.com/switchboard-project/switchboard/internal/store/sqlite"
+	"github.com/switchboard-project/switchboard/internal/tunnel"
 )
 
 // staticManager serves a fixed config to the admin handler.

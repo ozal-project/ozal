@@ -19,7 +19,7 @@ import (
 
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
-	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/config"
 )
 
 var ErrUnavailable = errors.New("GitHub metadata unavailable; check the installation, key reference, rate limit and selected repositories")

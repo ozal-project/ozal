@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/events"
 )
 
 func TestSignedCheckpointVerifiesPinnedChainPositionAndTail(t *testing.T) {

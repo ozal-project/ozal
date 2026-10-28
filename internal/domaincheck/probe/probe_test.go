@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/domaincheck"
+	"github.com/switchboard-project/switchboard/internal/domaincheck"
 )
 
 func TestTokensAnswerOnlyTheirHostUntilTheyExpire(t *testing.T) {

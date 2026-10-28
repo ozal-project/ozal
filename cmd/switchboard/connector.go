@@ -12,8 +12,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/events"
-	"github.com/octaviosantacruz/switchboard/internal/tunnel"
+	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/tunnel"
 )
 
 // runConnector implements `switchboard connector enroll|rotate|current|revoke|list`: manage

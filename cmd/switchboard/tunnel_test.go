@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/tunnel"
+	"github.com/switchboard-project/switchboard/internal/tunnel"
 )
 
 func TestPersistentTunnelPrivateNetworkOptIn(t *testing.T) {

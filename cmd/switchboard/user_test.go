@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/passkey"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/passkey"
 )
 
 func TestInviteReturnToMustBeAProtectedHost(t *testing.T) {

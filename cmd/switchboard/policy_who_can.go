@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/audit"
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/audit"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/events"
 )
 
 const maxPolicyReviewSubjects = 10_000

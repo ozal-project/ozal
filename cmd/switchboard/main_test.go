@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/config"
 )
 
 func TestStartPlainFailsSynchronouslyOnBusyPort(t *testing.T) {

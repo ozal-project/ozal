@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/config"
 )
 
 func runGitHub(ctx context.Context, args []string, out io.Writer) error {

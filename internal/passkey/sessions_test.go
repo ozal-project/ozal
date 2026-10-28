@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/auth"
-	"github.com/octaviosantacruz/switchboard/internal/store/sqlite"
+	"github.com/switchboard-project/switchboard/internal/auth"
+	"github.com/switchboard-project/switchboard/internal/store/sqlite"
 )
 
 func TestSessionHTTPBoundaryEnforcesOriginAndOwner(t *testing.T) {

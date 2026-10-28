@@ -6,7 +6,7 @@ import (
 	"errors"
 	"io"
 
-	"github.com/octaviosantacruz/switchboard/internal/upgrade"
+	"github.com/switchboard-project/switchboard/internal/upgrade"
 )
 
 func newUpgradeSystem(_, _, _ string, _ io.Writer) (upgrade.System, error) {

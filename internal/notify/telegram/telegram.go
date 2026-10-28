@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/notify"
+	"github.com/switchboard-project/switchboard/internal/notify"
 )
 
 const (

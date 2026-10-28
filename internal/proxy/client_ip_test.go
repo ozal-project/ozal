@@ -6,7 +6,7 @@ import (
 	"net/netip"
 	"testing"
 
-	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/config"
 )
 
 func TestTrustedProxyForwardsSelectedIPAndDropsSpoofedChains(t *testing.T) {

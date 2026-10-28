@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 
-	"github.com/octaviosantacruz/switchboard/internal/certs"
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/domaincheck"
+	"github.com/switchboard-project/switchboard/internal/certs"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/domaincheck"
 )
 
 // ErrNoProvider means no DNS provider is configured to create records.

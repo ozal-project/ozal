@@ -3,7 +3,7 @@ package sqlite
 import (
 	"context"
 	"errors"
-	"github.com/octaviosantacruz/switchboard/internal/auth"
+	"github.com/switchboard-project/switchboard/internal/auth"
 	"slices"
 	"testing"
 	"time"

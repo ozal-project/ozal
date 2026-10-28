@@ -19,7 +19,7 @@ package certs
 import (
 	"errors"
 
-	"github.com/octaviosantacruz/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/events"
 )
 
 // Event types published by the manager. Like every event type in the

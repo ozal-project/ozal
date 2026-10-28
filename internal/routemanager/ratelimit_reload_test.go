@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/config"
 )
 
 // A reload must never hand every client a fresh burst: the limiter buckets

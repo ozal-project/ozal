@@ -5,7 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"github.com/octaviosantacruz/switchboard/internal/auth"
+	"github.com/switchboard-project/switchboard/internal/auth"
 	"testing"
 	"time"
 )

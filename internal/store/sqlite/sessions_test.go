@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/auth"
+	"github.com/switchboard-project/switchboard/internal/auth"
 )
 
 // migratedSessions opens a real database file with every embedded migration

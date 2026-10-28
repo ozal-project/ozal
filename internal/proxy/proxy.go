@@ -16,13 +16,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/auth"
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/events"
-	"github.com/octaviosantacruz/switchboard/internal/pages"
-	"github.com/octaviosantacruz/switchboard/internal/pipeline"
-	"github.com/octaviosantacruz/switchboard/internal/routing"
-	"github.com/octaviosantacruz/switchboard/internal/static"
+	"github.com/switchboard-project/switchboard/internal/auth"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/pages"
+	"github.com/switchboard-project/switchboard/internal/pipeline"
+	"github.com/switchboard-project/switchboard/internal/routing"
+	"github.com/switchboard-project/switchboard/internal/static"
 )
 
 // Option configures the proxy handler.

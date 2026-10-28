@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/octaviosantacruz/switchboard/internal/policycontext"
+	"github.com/switchboard-project/switchboard/internal/policycontext"
 )
 
 // The client secret is a literal here on purpose: the test proves the command

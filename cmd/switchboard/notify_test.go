@@ -15,11 +15,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/admin"
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/events"
-	"github.com/octaviosantacruz/switchboard/internal/notify"
-	"github.com/octaviosantacruz/switchboard/internal/notify/telegram"
+	"github.com/switchboard-project/switchboard/internal/admin"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/notify"
+	"github.com/switchboard-project/switchboard/internal/notify/telegram"
 )
 
 // syncBuffer is a writer the test can read while the command under test is

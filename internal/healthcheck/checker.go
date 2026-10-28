@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/config"
 )
 
 const defaultPath = "/"

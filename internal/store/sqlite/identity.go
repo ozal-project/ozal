@@ -16,7 +16,7 @@ import (
 
 	"github.com/go-webauthn/webauthn/webauthn"
 
-	"github.com/octaviosantacruz/switchboard/internal/passkey"
+	"github.com/switchboard-project/switchboard/internal/passkey"
 )
 
 // Identity is the passkey directory over migration 004. It implements

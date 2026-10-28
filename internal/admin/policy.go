@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"slices"
 
-	"github.com/octaviosantacruz/switchboard/internal/auth"
-	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/auth"
+	"github.com/switchboard-project/switchboard/internal/config"
 )
 
 type explainRequest struct {

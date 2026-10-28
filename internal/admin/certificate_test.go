@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/config"
 )
 
 func TestStatusShowsCertificateLifecycle(t *testing.T) {

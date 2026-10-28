@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/notify"
+	"github.com/switchboard-project/switchboard/internal/notify"
 )
 
 // pairPoll is how often `notify pair` asks whether the chat answered.

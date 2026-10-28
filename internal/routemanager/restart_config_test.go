@@ -2,7 +2,7 @@ package routemanager
 
 import (
 	"context"
-	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/config"
 	"testing"
 	"time"
 )

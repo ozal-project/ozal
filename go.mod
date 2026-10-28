@@ -1,4 +1,4 @@
-module github.com/octaviosantacruz/switchboard
+module github.com/switchboard-project/switchboard
 
 go 1.26.0
 

@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/events"
-	"github.com/octaviosantacruz/switchboard/internal/tunnel"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/tunnel"
 )
 
 // configuredTunnel is the composition-root adapter for ordinary route snapshots.

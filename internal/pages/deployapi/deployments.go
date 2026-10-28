@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/events"
-	"github.com/octaviosantacruz/switchboard/internal/pages"
-	"github.com/octaviosantacruz/switchboard/internal/pages/deployauth"
+	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/pages"
+	"github.com/switchboard-project/switchboard/internal/pages/deployauth"
 )
 
 func (h *Handler) upload(w http.ResponseWriter, r *http.Request) {

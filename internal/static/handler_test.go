@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/octaviosantacruz/switchboard/internal/pages"
+	"github.com/switchboard-project/switchboard/internal/pages"
 )
 
 // newSite builds a site directory next to a secret file it must never serve.

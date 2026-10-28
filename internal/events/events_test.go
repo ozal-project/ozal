@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/policycontext"
+	"github.com/switchboard-project/switchboard/internal/policycontext"
 )
 
 func TestSlogSinkEmitsOneJSONRecordPerEvent(t *testing.T) {

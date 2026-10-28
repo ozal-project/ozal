@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/config"
 )
 
 // The HTTP-01 listener follows the route table: a hostname added in the

@@ -14,12 +14,12 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/events"
-	"github.com/octaviosantacruz/switchboard/internal/pages"
-	"github.com/octaviosantacruz/switchboard/internal/pages/deployauth"
-	"github.com/octaviosantacruz/switchboard/internal/pipeline"
-	"github.com/octaviosantacruz/switchboard/internal/ratelimit"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/pages"
+	"github.com/switchboard-project/switchboard/internal/pages/deployauth"
+	"github.com/switchboard-project/switchboard/internal/pipeline"
+	"github.com/switchboard-project/switchboard/internal/ratelimit"
 )
 
 type Store interface {

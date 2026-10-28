@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/config"
 )
 
 // The live edge as Server Ops rendered it: one file with routes inside.

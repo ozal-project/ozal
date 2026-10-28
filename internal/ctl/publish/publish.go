@@ -19,8 +19,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/ctl"
-	"github.com/octaviosantacruz/switchboard/internal/pages"
+	"github.com/switchboard-project/switchboard/internal/ctl"
+	"github.com/switchboard-project/switchboard/internal/pages"
 )
 
 // Tunnel opens a local address forwarded to an address on the edge.

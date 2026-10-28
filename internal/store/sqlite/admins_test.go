@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-webauthn/webauthn/webauthn"
 
-	"github.com/octaviosantacruz/switchboard/internal/adminid"
+	"github.com/switchboard-project/switchboard/internal/adminid"
 )
 
 func enrolledAdmin(t *testing.T) (*Admins, adminid.Account) {

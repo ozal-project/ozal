@@ -4,10 +4,10 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/events"
-	"github.com/octaviosantacruz/switchboard/internal/pages/deployapi"
-	"github.com/octaviosantacruz/switchboard/internal/pipeline"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/pages/deployapi"
+	"github.com/switchboard-project/switchboard/internal/pipeline"
 )
 
 type publicConfigManager interface {

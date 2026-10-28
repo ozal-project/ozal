@@ -10,8 +10,8 @@ import (
 
 	"github.com/go-webauthn/webauthn/webauthn"
 
-	"github.com/octaviosantacruz/switchboard/internal/auth"
-	"github.com/octaviosantacruz/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/auth"
+	"github.com/switchboard-project/switchboard/internal/events"
 )
 
 // selfServiceMaxAge is how recent the passkey proof behind a session must be

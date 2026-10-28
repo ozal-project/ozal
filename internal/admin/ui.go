@@ -3,7 +3,7 @@ package admin
 import (
 	"embed"
 	"fmt"
-	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/config"
 	"html/template"
 	"net/http"
 	"strings"

@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/events"
-	"github.com/octaviosantacruz/switchboard/internal/healthcheck"
-	"github.com/octaviosantacruz/switchboard/internal/routemanager"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/healthcheck"
+	"github.com/switchboard-project/switchboard/internal/routemanager"
 )
 
 // readToken is the admin token of tests whose config does not set its own.

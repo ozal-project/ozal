@@ -5,8 +5,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/policycontext"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/policycontext"
 )
 
 // ContextRuleEvaluation is the pure result of evaluating a context rule. Its

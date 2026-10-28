@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/ctl"
+	"github.com/switchboard-project/switchboard/internal/ctl"
 )
 
 // Remote runs commands on an edge through the system ssh client. The

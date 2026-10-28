@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/config"
 )
 
 // runValidate loads and validates a candidate config without binding

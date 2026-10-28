@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/admin"
-	"github.com/octaviosantacruz/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/admin"
+	"github.com/switchboard-project/switchboard/internal/events"
 )
 
 // auditFailureReporter keeps audit failures visible through the independent

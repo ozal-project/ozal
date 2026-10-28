@@ -12,10 +12,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/events"
-	"github.com/octaviosantacruz/switchboard/internal/proxy"
-	"github.com/octaviosantacruz/switchboard/internal/tunnel"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/proxy"
+	"github.com/switchboard-project/switchboard/internal/tunnel"
 )
 
 // runTunnel is the persistent, registry-backed slice of TUN-002.

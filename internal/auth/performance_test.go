@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/config"
 )
 
 func BenchmarkAuthorizeEmailAndGroup(b *testing.B) {

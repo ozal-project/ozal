@@ -9,9 +9,9 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/octaviosantacruz/switchboard/internal/admin"
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/routemanager"
+	"github.com/switchboard-project/switchboard/internal/admin"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/routemanager"
 )
 
 // socketPath returns a short socket path: sun_path is 104 bytes on macOS and

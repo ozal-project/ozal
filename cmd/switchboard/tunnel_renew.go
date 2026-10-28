@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/octaviosantacruz/switchboard/internal/tunnelrenew"
+	"github.com/switchboard-project/switchboard/internal/tunnelrenew"
 )
 
 func runTunnelRenew(ctx context.Context, args []string, out io.Writer) error {

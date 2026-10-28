@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/events"
 )
 
 // stubIssuer scripts issuance outcomes and counts calls, so the manager's

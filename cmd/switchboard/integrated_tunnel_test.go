@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/admin"
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/events"
-	"github.com/octaviosantacruz/switchboard/internal/proxy"
-	"github.com/octaviosantacruz/switchboard/internal/routemanager"
-	"github.com/octaviosantacruz/switchboard/internal/tunnel"
+	"github.com/switchboard-project/switchboard/internal/admin"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/proxy"
+	"github.com/switchboard-project/switchboard/internal/routemanager"
+	"github.com/switchboard-project/switchboard/internal/tunnel"
 )
 
 func TestIntegratedTunnelRoutesReloadAndPreserveVisitorIP(t *testing.T) {

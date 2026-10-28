@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/certs"
+	"github.com/switchboard-project/switchboard/internal/certs"
 )
 
 // DNS is the part of the Cloudflare client a cutover uses.

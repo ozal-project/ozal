@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/octaviosantacruz/switchboard/internal/certs"
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/domaincheck"
-	"github.com/octaviosantacruz/switchboard/internal/domaincheck/probe"
-	"github.com/octaviosantacruz/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/certs"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/domaincheck"
+	"github.com/switchboard-project/switchboard/internal/domaincheck/probe"
+	"github.com/switchboard-project/switchboard/internal/events"
 )
 
 // applicationManager accepts saved applications like the route manager does.

@@ -18,8 +18,8 @@ import (
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 
-	"github.com/octaviosantacruz/switchboard/internal/adminid"
-	"github.com/octaviosantacruz/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/adminid"
+	"github.com/switchboard-project/switchboard/internal/events"
 )
 
 // Administrative identity (UI-007): the people who run the console sign in

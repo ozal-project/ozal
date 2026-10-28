@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/audit"
-	"github.com/octaviosantacruz/switchboard/internal/events"
-	"github.com/octaviosantacruz/switchboard/internal/policycontext"
+	"github.com/switchboard-project/switchboard/internal/audit"
+	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/policycontext"
 )
 
 func TestPolicyReplayRunsShadowRuleOnlyOnMatchingVerifiedEvents(t *testing.T) {

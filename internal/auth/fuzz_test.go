@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/config"
 )
 
 // FuzzSafeReturnTo checks the open-redirect guard: anything returned must be

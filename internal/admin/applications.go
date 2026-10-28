@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/octaviosantacruz/switchboard/internal/certs"
-	"github.com/octaviosantacruz/switchboard/internal/config"
-	"github.com/octaviosantacruz/switchboard/internal/events"
-	"github.com/octaviosantacruz/switchboard/internal/routemanager"
+	"github.com/switchboard-project/switchboard/internal/certs"
+	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/routemanager"
 )
 
 type applicationWriter interface {

@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/tunnel"
+	"github.com/switchboard-project/switchboard/internal/tunnel"
 )
 
 func TestLabAddressAndRouteRestrictions(t *testing.T) {

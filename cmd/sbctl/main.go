@@ -17,10 +17,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/certs"
-	"github.com/octaviosantacruz/switchboard/internal/ctl"
-	"github.com/octaviosantacruz/switchboard/internal/ctl/publish"
-	"github.com/octaviosantacruz/switchboard/internal/ctl/sshexec"
+	"github.com/switchboard-project/switchboard/internal/certs"
+	"github.com/switchboard-project/switchboard/internal/ctl"
+	"github.com/switchboard-project/switchboard/internal/ctl/publish"
+	"github.com/switchboard-project/switchboard/internal/ctl/sshexec"
 )
 
 const usage = `usage:

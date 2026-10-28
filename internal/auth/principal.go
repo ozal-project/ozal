@@ -3,7 +3,7 @@ package auth
 import (
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/config"
 )
 
 // Principal is the identity Switchboard trusts for a request, regardless of

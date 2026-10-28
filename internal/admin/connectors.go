@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/octaviosantacruz/switchboard/internal/events"
-	"github.com/octaviosantacruz/switchboard/internal/tunnel"
+	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/switchboard-project/switchboard/internal/tunnel"
 )
 
 // connectors is the tunnel connector registry (tunnel.Registry implements

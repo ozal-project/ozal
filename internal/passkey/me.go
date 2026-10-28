@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/octaviosantacruz/switchboard/internal/auth"
-	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/switchboard-project/switchboard/internal/auth"
+	"github.com/switchboard-project/switchboard/internal/config"
 )
 
 // The portal (ID-012) is what a person who uses the applications sees: who
