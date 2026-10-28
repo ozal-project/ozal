@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"strings"
 
 	"github.com/octaviosantacruz/switchboard/internal/certs"
 	"github.com/octaviosantacruz/switchboard/internal/config"
@@ -35,7 +36,33 @@ func (h *Handler) setupStatus(w http.ResponseWriter, r *http.Request) {
 		"pages_enabled": cfg.Pages != nil, "tls_enabled": cfg.TLS.Enabled,
 		"routes": cfg.Routes, "login_url": loginURL(cfg),
 		"admin_socket_configured": cfg.Admin.Socket != "",
+		"tls_mode":                tlsMode(cfg), "dns": dnsSettings(cfg),
 	})
+}
+
+// tlsMode says how this edge gets certificates: "off" (plain HTTP, TLS in
+// front of it), "automatic" (HTTP-01 for every configured route) or "dns01"
+// (one managed certificate whose names bound the hostnames it serves).
+func tlsMode(cfg config.Config) string {
+	switch {
+	case !cfg.TLS.Enabled:
+		return "off"
+	case cfg.TLS.DNS01 != nil:
+		return "dns01"
+	default:
+		return "automatic"
+	}
+}
+
+func dnsSettings(cfg config.Config) map[string]any {
+	settings := map[string]any{"target": "", "proxied": false, "provider": ""}
+	if cfg.DNS != nil {
+		settings["target"], settings["proxied"] = cfg.DNS.Target, cfg.DNS.Proxied
+		if cfg.DNS.Cloudflare != nil {
+			settings["provider"] = "cloudflare"
+		}
+	}
+	return settings
 }
 
 func loginURL(cfg config.Config) string {
@@ -112,6 +139,12 @@ func tlsCoverage(cfg config.Config, host string) string {
 			return "configured_coverage_certificate_not_probed"
 		}
 	}
+	// HTTP-01: the listener orders a certificate for any configured route on
+	// its first visit (routeHostPolicy), so only names a public CA would
+	// refuse, or routes on another port, stay uncovered.
+	if cfg.TLS.DNS01 == nil && certs.PublicName(name) && (name == host || strings.HasSuffix(host, ":443")) {
+		return "automatic_on_first_visit"
+	}
 	return "not_covered"
 }
 
@@ -126,7 +159,7 @@ func (h *Handler) saveApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if tlsCoverage(cfg, req.Route.Host) == "not_covered" {
-		writeError(w, 422, "hostname is not covered by tls.domains; prepare its certificate before adding it")
+		writeError(w, 422, "this edge cannot get a certificate for this hostname: use a name its certificate covers (tls.domains) or a public hostname")
 		return
 	}
 	writer, ok := h.manager.(applicationWriter)

@@ -101,3 +101,45 @@ func StorageKey(certName string) string {
 	}
 	return certName
 }
+
+// AutomaticName reports whether the HTTP-01 listener may ask its CA for a
+// certificate for serverName: one covered by a configured certificate name,
+// or exactly the hostname of a configured route. routeHosts is the current
+// (reloaded) route table, so a hostname added in the console is eligible on
+// its first visit and a removed one stops being eligible. A route with a
+// port other than 443 is never served by that listener. IP literals,
+// single-label names and .localhost are refused: a public CA rejects them,
+// and asking anyway only spends the account's rate limit.
+func AutomaticName(serverName string, configured, routeHosts []string) bool {
+	name := strings.ToLower(strings.TrimSuffix(serverName, "."))
+	if !PublicName(name) {
+		return false
+	}
+	if CoversAny(configured, name) {
+		return true
+	}
+	for _, host := range routeHosts {
+		hostname, port := host, ""
+		if i := strings.LastIndexByte(host, ':'); i >= 0 && !strings.HasSuffix(host, "]") {
+			hostname, port = host[:i], host[i+1:]
+		}
+		if (port == "" || port == "443") && strings.EqualFold(hostname, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// PublicName reports whether name could hold a publicly trusted certificate:
+// a valid plain hostname with at least two labels, not an IP literal and not
+// under .localhost.
+func PublicName(name string) bool {
+	if IsWildcard(name) || ValidateName(name) != nil || !strings.Contains(name, ".") {
+		return false
+	}
+	if name == "localhost" || strings.HasSuffix(name, ".localhost") {
+		return false
+	}
+	last := name[strings.LastIndexByte(name, '.')+1:]
+	return strings.Trim(last, "0123456789") != ""
+}

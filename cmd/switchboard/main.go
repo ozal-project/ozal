@@ -31,6 +31,7 @@ import (
 	"github.com/octaviosantacruz/switchboard/internal/auth"
 	"github.com/octaviosantacruz/switchboard/internal/certs"
 	"github.com/octaviosantacruz/switchboard/internal/config"
+	"github.com/octaviosantacruz/switchboard/internal/domaincheck/probe"
 	"github.com/octaviosantacruz/switchboard/internal/events"
 	"github.com/octaviosantacruz/switchboard/internal/githubapp"
 	"github.com/octaviosantacruz/switchboard/internal/notify"
@@ -299,6 +300,10 @@ func main() {
 		log.Printf("  %s -> %s", r.Host, r.Destination())
 	}
 
+	// UI-006: the console checks that a hostname reaches this edge with a
+	// one-time token the public listener answers before routing.
+	probeTokens := probe.NewTokens(nil)
+	adminOpts = append(adminOpts, admin.WithDomains(probe.NewService(probeTokens)))
 	adminServer, err := startAdmin(&cfg, manager, sink, broker, certificateStatus(certificateManager), adminOpts...)
 	if err != nil {
 		log.Fatalf("admin listener: %v", err)
@@ -308,8 +313,9 @@ func main() {
 	if err != nil {
 		log.Fatal("public deploy handler could not be configured")
 	}
+	publicHandler = probe.Handler(probeTokens, publicHandler)
 	if cfg.TLS.Enabled {
-		tlsServers, err := startTLS(&cfg, publicHandler, sink, certificateManager)
+		tlsServers, err := startTLS(&cfg, publicHandler, sink, certificateManager, manager.Config)
 		if err != nil {
 			log.Fatalf("public listener: %v", err)
 		}
@@ -586,11 +592,29 @@ func startCertificateManager(ctx context.Context, cfg *config.Config, sink event
 // startTLS serves public HTTPS. The autocert path also binds :80 for HTTP-01
 // challenges; the DNS-01 path binds only :443, because validation never
 // reaches this host.
-func startTLS(cfg *config.Config, handler http.Handler, sink events.Sink, certificateManager *certs.Manager) ([]*http.Server, error) {
+func startTLS(cfg *config.Config, handler http.Handler, sink events.Sink, certificateManager *certs.Manager, current func() config.Config) ([]*http.Server, error) {
 	if cfg.TLS.DNS01 != nil {
 		return startManagedTLS(cfg, handler, sink, certificateManager)
 	}
-	return startAutocertTLS(cfg, handler, sink)
+	return startAutocertTLS(cfg, handler, sink, current)
+}
+
+// routeHostPolicy allows a certificate request only for a configured
+// certificate name or the exact hostname of a route in the current
+// configuration. Anything else is refused before the CA is contacted, so a
+// visitor cannot make the edge order certificates for names it does not serve.
+func routeHostPolicy(configured []string, current func() config.Config) autocert.HostPolicy {
+	return func(_ context.Context, host string) error {
+		routes := current().Routes
+		hosts := make([]string, 0, len(routes))
+		for _, route := range routes {
+			hosts = append(hosts, route.Host)
+		}
+		if !certs.AutomaticName(host, configured, hosts) {
+			return fmt.Errorf("certificate for %q is not allowed: no configured route serves it", host)
+		}
+		return nil
+	}
 }
 
 // startManagedTLS serves :443 with the configured DNS-01 manager. The client
@@ -632,12 +656,13 @@ func startManagedTLS(cfg *config.Config, handler http.Handler, sink events.Sink,
 // startAutocertTLS is the HTTP-01 path: HTTPS on :443 with autocert, plus a
 // plain HTTP server on :80 that answers challenges and redirects everything
 // else. Both ports bind synchronously: an occupied port must fail startup,
-// not a goroutine.
-func startAutocertTLS(cfg *config.Config, handler http.Handler, sink events.Sink) ([]*http.Server, error) {
+// not a goroutine. Certificates follow the current route table (UI-006): a
+// hostname added in the console gets one on its first visit, no restart.
+func startAutocertTLS(cfg *config.Config, handler http.Handler, sink events.Sink, current func() config.Config) ([]*http.Server, error) {
 	manager := &autocert.Manager{
 		Cache:      autocert.DirCache(cfg.TLS.CacheDir),
 		Prompt:     autocert.AcceptTOS,
-		HostPolicy: autocert.HostWhitelist(cfg.TLS.Domains...),
+		HostPolicy: routeHostPolicy(cfg.TLS.Domains, current),
 		Email:      cfg.TLS.Email,
 	}
 

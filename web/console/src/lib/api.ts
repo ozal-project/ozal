@@ -248,7 +248,7 @@ export async function setGroups(token: string, email: string, expected: string[]
 }
 
 export type ApplicationRoute = { host: string; target?: string; upstreams?: string[]; connector?: string; site?: string; root?: string; spa?: boolean; health_path?: string; auth_required?: boolean; access?: Record<string, unknown>; resource?: Record<string, unknown>; audit_mode?: string };
-export type SetupStatus = { config_sha256: string; methods: string[]; pages_enabled: boolean; tls_enabled: boolean; login_url: string; admin_socket_configured: boolean; routes: ApplicationRoute[] };
+export type SetupStatus = { config_sha256: string; methods: string[]; pages_enabled: boolean; tls_enabled: boolean; tls_mode: "off" | "automatic" | "dns01"; dns: { target: string; proxied: boolean; provider: "" | "cloudflare" }; login_url: string; admin_socket_configured: boolean; routes: ApplicationRoute[] };
 export type ApplicationDraft = { route: ApplicationRoute; expected: string; access_mode: "private" | "public" };
 export type ApplicationPlan = ApplicationDraft & { url: string; dns: string; tls: string; checks: string[] };
 export async function setupStatus(token: string, signal?: AbortSignal): Promise<SetupStatus> {
@@ -258,6 +258,26 @@ export async function setupStatus(token: string, signal?: AbortSignal): Promise<
 }
 export const planApplication = (token: string, draft: ApplicationDraft, signal?: AbortSignal) => adminPost<ApplicationPlan>(token, "/_/api/apps/plan", draft, signal);
 export const saveApplication = (token: string, draft: ApplicationDraft, signal?: AbortSignal) => adminPost(token, "/_/api/apps", draft, signal);
+
+// UI-006: is a hostname connected to this edge, and which record does it need?
+export type CheckState = "ok" | "wait" | "bad";
+export type DNSRecord = { type: string; name: string; content: string; proxied: boolean };
+export type Connection = { host: string; connected: boolean; dns: { state: CheckState; detail: string }; certificate: { state: CheckState; detail: string }; reach: { state: CheckState; detail: string }; record?: DNSRecord; provider?: "cloudflare"; addresses: string[] };
+export async function checkConnection(token: string, host: string, signal?: AbortSignal): Promise<Connection> {
+  // A check resolves DNS and makes one public request: allow it longer than an API call.
+  const limit = AbortSignal.timeout(30_000);
+  const res = await fetch(`/_/api/apps/${encodeURIComponent(host)}/check`, { method: "POST", cache: "no-store", headers: { Authorization: `Bearer ${token}` }, signal: signal ? AbortSignal.any([signal, limit]) : limit });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ?? `The connection could not be checked (HTTP ${res.status}).`);
+  return body as Connection;
+}
+export const createRecord = (token: string, host: string, signal?: AbortSignal) => adminPost<DNSRecord>(token, `/_/api/apps/${encodeURIComponent(host)}/dns`, undefined, signal);
+export async function deploySite(token: string, site: string, file: File): Promise<{ id: string }> {
+  const res = await fetch(`/_/api/sites/${encodeURIComponent(site)}/deployments`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/gzip" }, body: file, signal: AbortSignal.timeout(600_000) });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ?? `Publish failed (HTTP ${res.status}).`);
+  return body;
+}
 
 export type Repository = { id: number; owner: { id: number }; full_name: string; default_branch: string; private: boolean };
 export type Repositories = { configured: boolean; repositories: Repository[]; page?: number; more?: boolean };

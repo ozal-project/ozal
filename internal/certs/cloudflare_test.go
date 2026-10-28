@@ -88,6 +88,17 @@ func (f *fakeCloudflare) handle(w http.ResponseWriter, r *http.Request) {
 		f.records[id] = map[string]string{"name": body.Name, "content": body.Content, "type": body.Type}
 		f.created++
 		writeFakeCloudflare(w, http.StatusOK, map[string]string{"id": id})
+	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/zones/") && strings.HasSuffix(r.URL.Path, "/dns_records"):
+		name := r.URL.Query().Get("name")
+		f.mu.Lock()
+		result := []map[string]string{}
+		for id, record := range f.records {
+			if record["name"] == name {
+				result = append(result, map[string]string{"id": id, "type": record["type"], "name": record["name"], "content": record["content"]})
+			}
+		}
+		f.mu.Unlock()
+		writeFakeCloudflare(w, http.StatusOK, result)
 	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/zones/") && strings.Contains(r.URL.Path, "/dns_records/"):
 		id := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
 		f.mu.Lock()

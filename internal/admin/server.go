@@ -52,6 +52,7 @@ type Handler struct {
 	people                 people
 	connectors             connectors
 	pairing                pairing
+	domains                domainService
 	mux                    *http.ServeMux
 }
 
@@ -72,6 +73,8 @@ func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 	h.mux.HandleFunc("POST /_/api/apps/plan", h.requireTool("applications", h.planApplication))
 	h.mux.HandleFunc("DELETE /_/api/apps/{host}", h.requireTool("applications", h.removeApplication))
 	h.mux.HandleFunc("POST /_/api/apps", h.requireTool("applications", h.saveApplication))
+	h.mux.HandleFunc("POST /_/api/apps/{host}/check", h.requireTool("applications", h.checkApplication))
+	h.mux.HandleFunc("POST /_/api/apps/{host}/dns", h.requireTool("applications", h.createApplicationRecord))
 	h.mux.HandleFunc("PUT /_/api/github", h.requireLocal(h.configureGitHub))
 	h.mux.HandleFunc("GET /_/api/github/repositories", h.requireTool("publishing", h.githubRepositories))
 	h.mux.HandleFunc("POST /_/api/projects", h.requireTool("publishing", h.saveGitHubProject))

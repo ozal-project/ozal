@@ -38,7 +38,7 @@ implica que esa persona pueda administrar Switchboard.
 
 Para un sitio estático, usa `setup -dir ./my-site -site portfolio`. La
 configuración ya tiene persistencia y Pages. La primera publicación aún falta:
-sube un tar.gz del contenido de `dist` en **Applications → Publish an artifact**,
+sube un tar.gz del contenido de `dist` en **Applications → Publish** (o al agregarla con **Add website**),
 o usa `site deploy` con el token mediante su referencia a archivo. La web del
 proyecto se construye fuera del edge.
 
@@ -122,30 +122,64 @@ Abre el enlace en el navegador del equipo que tiene el forward. No publiques
 el listener administrativo en Internet ni lo pongas como upstream de una
 ruta pública. El bootstrap no convierte al primer visitante en dueño.
 
-## Incorporar una web existente desde Applications
+## Agregar una web desde Applications
 
-1. Lee la instalación con la sesión del operador y pulsa **Add existing website**.
-2. Usa primero un hostname temporal. Elige aplicación en ejecución, artefacto
-   estático o aplicación mediante un conector ya enrolado.
-3. Elige acceso explícito: un grupo, cualquier persona autenticada o público.
-   Por defecto se pide un grupo. Varios grupos requeridos significan **todos**,
-   no cualquiera de ellos. Sin identidad configurada no puede guardarse una
-   política privada que dependa de ella.
-4. Revisa el plan. No modifica DNS ni el runtime; indica cobertura TLS configurada
-   y comprobaciones pendientes. Un listener con TLS se niega a guardar un host
-   que no esté cubierto por `tls.domains`. Esa cobertura no prueba que el
-   certificado ya esté emitido o servido. Con TLS externo, su verificación queda
-   declarada pendiente.
-5. Confirma las consecuencias y guarda. El servidor vuelve a comprobar el digest
-   de configuración bajo la misma exclusión que la mutación. Si alguien cambió
-   la config, refresca y revisa; no se sobreescribe silenciosamente.
-6. Prueba contenido, recursos, callbacks de login, cargas y WebSockets que use
-   la app. Prueba una persona permitida y otra sin permiso; busca sus decisiones
-   en Access log y reproduce la regla en el simulador.
-7. Solo después prepara el dominio final y cambia DNS manualmente. Conserva
-   hosting y registros anteriores durante la ventana de reversión. Si el origen
-   antiguo sigue abierto, **todavía puede eludirse la nueva política**: bloquéalo
-   antes de considerar privada la aplicación.
+**Add website** es un solo recorrido en la consola (`UI-006`, 28/10/2026):
+
+1. **Dirección y origen.** El hostname (nuevo o el que mudas) y qué la sirve:
+   una aplicación en ejecución (URL privada), archivos estáticos o una app detrás
+   de un conector ya enrolado. Con archivos estáticos subes el `tar.gz` de
+   `dist` en el mismo paso: el nombre del sitio sale de la dirección (se puede
+   cambiar) y la primera publicación crea el sitio. Switchboard no compila.
+2. **Quién entra.** Un grupo, cualquier persona autenticada o público. Por
+   defecto se pide un grupo; varios grupos significan **todos**. Opcionalmente
+   escribes correos para invitar: cada persona recibe un enlace de un solo uso
+   para crear su passkey y queda en esos grupos.
+3. **Revisión.** Muestra destino, acceso, invitaciones y certificado. Nada cambia
+   hasta guardar; la confirmación vuelve a comprobar el digest de la config.
+4. **Conectar.** Al guardar se publica el build, se guarda la ruta y se crean las
+   invitaciones (sus enlaces se copian ahí, solo esa vez). El panel muestra el
+   **único registro DNS** que falta y lo comprueba cada pocos segundos:
+   DNS → certificado → una petición pública con un token de un solo uso que solo
+   este edge responde (`/.well-known/switchboard-probe/…`, antes del pipeline).
+   El mismo panel se abre en cada fila con el botón de globo.
+
+Si la petición llega a otro servidor, el DNS todavía apunta al hosting anterior.
+Si el proxy de Cloudflare responde 52x, no pudo hablar con el origen: revisa
+Origin Pulls y el modo SSL. Prueba siempre una persona permitida y otra sin
+permiso antes de mover un dominio en uso, y bloquea el origen antiguo: mientras
+siga abierto, **todavía puede eludirse la nueva política**.
+
+### Qué hace falta en la configuración
+
+- **Certificados.** Con TLS por HTTP-01 (sin `tls.dns01`), cualquier ruta guardada
+  obtiene su certificado en la primera visita, sin editar `tls.domains` ni
+  reiniciar; el listener solo pide certificados para rutas configuradas. Con
+  `tls.dns01` el certificado gestionado define los nombres posibles (un wildcard
+  cubre sus subdominios); un hostname fuera de ellos se rechaza al guardar.
+- **DNS.** `dns.target` es la dirección pública del edge: una IP (registro A o
+  AAAA) o un hostname (CNAME). Sin ella el panel igual verifica, pero no puede
+  escribir el registro exacto. `dns.proxied` marca el registro como proxied.
+- **Cloudflare (opcional).** `dns.cloudflare.token` (`file:` o `env:`) con permiso
+  *Zone · DNS · Edit* sobre las zonas servidas habilita **Create it in
+  Cloudflare**. Nunca reemplaza un registro existente (puede ser el hosting
+  vivo); si ya hay uno, hay que cambiarlo a mano. Sin token, el registro se
+  copia y se crea en cualquier proveedor.
+
+```json
+"dns": { "target": "203.0.113.10", "proxied": true,
+         "cloudflare": { "token": "file:/etc/switchboard/cloudflare-dns.token" } }
+```
+
+- **Origin Pulls a nivel de zona.** Detrás del proxy de Cloudflare, activa
+  *Authenticated Origin Pulls* para toda la zona con el mismo certificado
+  cliente (cuya CA está en `tls.origin_client_ca_file`). Así un hostname nuevo no
+  necesita una asociación por hostname. Es un ajuste único en el panel de
+  Cloudflare; el edge no cambia.
+- **Apps privadas en otro dominio.** La sesión de visitante usa
+  `auth.cookie_domain`: una app privada debe estar bajo ese dominio. Una app
+  **pública** en otro dominio funciona; una privada en otro dominio se rechaza
+  al revisar hasta que exista login por dominio.
 
 La ficha reúne destino y acceso, enlace al simulador, publicación de artefactos
 y acceso a versiones/rollback. **Configure** conserva campos avanzados cuando

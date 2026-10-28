@@ -205,3 +205,66 @@ func (c *CloudflareClient) zoneFor(ctx context.Context, name string) (string, er
 	}
 	return "", fmt.Errorf("%w: no Cloudflare zone covers %q", ErrDNS, name)
 }
+
+// SiteRecord is a visitor-facing address record (A, AAAA or CNAME) that the
+// console creates for a new hostname (UI-006).
+type SiteRecord struct {
+	ID      string `json:"id,omitempty"`
+	Type    string `json:"type"`
+	Name    string `json:"name"`
+	Content string `json:"content"`
+	Proxied bool   `json:"proxied"`
+}
+
+// ErrRecordExists means the name already has an address record. The console
+// never replaces one: it may be the live hosting the operator is moving from.
+var ErrRecordExists = errors.New("cloudflare: the hostname already has an address record")
+
+// SiteRecords lists the A, AAAA and CNAME records at exactly name.
+func (c *CloudflareClient) SiteRecords(ctx context.Context, name string) ([]SiteRecord, error) {
+	zoneID, err := c.zoneFor(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	var records []SiteRecord
+	query := url.Values{"name": {name}}.Encode()
+	if err := c.call(ctx, http.MethodGet, "/zones/"+url.PathEscape(zoneID)+"/dns_records?"+query, nil, &records); err != nil {
+		return nil, err
+	}
+	out := records[:0]
+	for _, r := range records {
+		if (r.Type == "A" || r.Type == "AAAA" || r.Type == "CNAME") && strings.EqualFold(r.Name, name) {
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
+// CreateSiteRecord adds record only when its name has no address record yet.
+// The check and the create are two calls, so a record created in between by
+// someone else is reported by Cloudflare as a conflict rather than replaced.
+func (c *CloudflareClient) CreateSiteRecord(ctx context.Context, record SiteRecord) (SiteRecord, error) {
+	if record.Type != "A" && record.Type != "AAAA" && record.Type != "CNAME" {
+		return SiteRecord{}, fmt.Errorf("%w: refusing record type %q", ErrDNS, record.Type)
+	}
+	existing, err := c.SiteRecords(ctx, record.Name)
+	if err != nil {
+		return SiteRecord{}, err
+	}
+	if len(existing) > 0 {
+		return SiteRecord{}, ErrRecordExists
+	}
+	zoneID, err := c.zoneFor(ctx, record.Name)
+	if err != nil {
+		return SiteRecord{}, err
+	}
+	payload := map[string]any{"type": record.Type, "name": record.Name, "content": record.Content, "proxied": record.Proxied, "ttl": 1}
+	var created SiteRecord
+	if err := c.call(ctx, http.MethodPost, "/zones/"+url.PathEscape(zoneID)+"/dns_records", payload, &created); err != nil {
+		return SiteRecord{}, err
+	}
+	if created.ID == "" {
+		return SiteRecord{}, fmt.Errorf("%w: the API returned no record ID for %s", ErrAmbiguous, record.Name)
+	}
+	return created, nil
+}

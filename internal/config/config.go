@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -169,6 +170,25 @@ type DNS01 struct {
 	DNSToken             string `json:"dns_token"`
 }
 
+// DNS describes how visitors' DNS reaches this edge, so the console can name
+// the one record a new hostname needs and check it (UI-006). Target is this
+// edge's public address: an IPv4/IPv6 address (A/AAAA record) or a hostname
+// (CNAME). Proxied marks records created through the provider as going
+// through its proxy. Cloudflare is optional: with it the console can create a
+// missing record; without it every record is added by hand.
+type DNS struct {
+	Target     string         `json:"target,omitempty"`
+	Proxied    bool           `json:"proxied,omitempty"`
+	Cloudflare *DNSCloudflare `json:"cloudflare,omitempty"`
+}
+
+// DNSCloudflare holds a secret reference (file: or env:) to a token limited
+// to DNS edit on the zones it serves. It is resolved only when a record is
+// created and never written back.
+type DNSCloudflare struct {
+	Token string `json:"token"`
+}
+
 type Auth struct {
 	Issuer       string `json:"issuer,omitempty"`
 	ClientID     string `json:"client_id,omitempty"`
@@ -295,6 +315,7 @@ type Config struct {
 	Audit     *AuditConfig `json:"audit,omitempty"`
 	Tunnel    *Tunnel      `json:"tunnel,omitempty"`
 	Pages     *Pages       `json:"pages,omitempty"`
+	DNS       *DNS         `json:"dns,omitempty"`
 	Projects  []Project    `json:"projects,omitempty"`
 	// UpstreamTimeoutSeconds is how long an upstream may take to start
 	// answering before the visitor gets a 504. Zero means the default (60);
@@ -594,6 +615,10 @@ func Validate(cfg Config) (*Config, error) {
 		return nil, fmt.Errorf("config: tls.origin_client_ca_file requires tls.enabled")
 	} else if cfg.TLS.DNS01 != nil {
 		return nil, fmt.Errorf("config: tls.dns01 requires tls.enabled")
+	}
+
+	if err := normalizeDNS(cfg.DNS); err != nil {
+		return nil, err
 	}
 
 	if err := ValidateSecretReference("admin.token", cfg.Admin.Token); err != nil {
@@ -1107,6 +1132,14 @@ func Clone(source Config) Config {
 		dns01 := *source.TLS.DNS01
 		clone.TLS.DNS01 = &dns01
 	}
+	if source.DNS != nil {
+		dns := *source.DNS
+		if source.DNS.Cloudflare != nil {
+			cloudflare := *source.DNS.Cloudflare
+			dns.Cloudflare = &cloudflare
+		}
+		clone.DNS = &dns
+	}
 	clone.TrustedProxies = slices.Clone(source.TrustedProxies)
 	if source.Notify != nil {
 		notifyCopy := *source.Notify
@@ -1183,4 +1216,39 @@ func cloneBool(value *bool) *bool {
 	}
 	copy := *value
 	return &copy
+}
+
+// normalizeDNS checks the dns section: the target is an address or a plain
+// hostname (no port, no wildcard), and a provider needs both a target to
+// point records at and a token reference.
+func normalizeDNS(dns *DNS) error {
+	if dns == nil {
+		return nil
+	}
+	if dns.Target != "" {
+		if addr, err := netip.ParseAddr(dns.Target); err == nil {
+			if addr.IsUnspecified() || addr.Zone() != "" {
+				return fmt.Errorf("config: dns.target %q is not a usable public address", dns.Target)
+			}
+			dns.Target = addr.String()
+		} else {
+			host, err := normalizeHostname(dns.Target)
+			if err != nil || strings.ContainsAny(host, ":*[") {
+				return fmt.Errorf("config: dns.target must be an IP address or a hostname without port")
+			}
+			dns.Target = host
+		}
+	}
+	if dns.Cloudflare != nil {
+		if dns.Target == "" {
+			return fmt.Errorf("config: dns.cloudflare requires dns.target, the address its records point at")
+		}
+		if strings.TrimSpace(dns.Cloudflare.Token) == "" {
+			return fmt.Errorf("config: dns.cloudflare.token is required")
+		}
+		if err := ValidateSecretReference("dns.cloudflare.token", dns.Cloudflare.Token); err != nil {
+			return fmt.Errorf("config: %w", err)
+		}
+	}
+	return nil
 }

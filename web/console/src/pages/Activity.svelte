@@ -31,7 +31,7 @@
     "operator.signed_in": "Signed in to the console", "operator.signed_out": "Signed out of the console", "operator.login_issued": "Host login issued", "operator.revoked": "Console session ended",
     "admin.invited": "Administrator invited", "admin.enrolment_issued": "Setup link issued", "admin.recovery_issued": "Recovery link issued", "admin.device_link_issued": "Link for another browser issued",
     "admin.passkey_registered": "Administrator passkey created", "admin.passkey_added": "Administrator passkey added", "admin.sign_in_failed": "Console sign-in failed", "session.revoked": "Session ended",
-    "pages.deployed": "Site deployed", "pages.rolled_back": "Site rolled back", "pages.refused": "Deployment refused", "pages.deploy_refused": "Project deployment refused", "pages.failed": "Deployment failed",
+    "pages.deployed": "Site deployed", "dns.record_created": "DNS record created", "pages.rolled_back": "Site rolled back", "pages.refused": "Deployment refused", "pages.deploy_refused": "Project deployment refused", "pages.failed": "Deployment failed",
   };
   const categories = [
     { value: "all", label: "All events" }, { value: "access", label: "Access decisions" }, { value: "login", label: "Logins" },

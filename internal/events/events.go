@@ -42,6 +42,9 @@ const (
 	PagesRefused       Type = "pages.refused"
 	PagesFailed        Type = "pages.failed"
 	PagesDeployRefused Type = "pages.deploy_refused"
+	// The console created a hostname's DNS record through the configured
+	// provider (UI-006). Host is the hostname; Code is the record type.
+	DNSRecordCreated Type = "dns.record_created"
 	// A user enrolled a passkey (ID-003). Code is "synced" or "device_bound".
 	PasskeyRegistered Type = "passkey.registered"
 	// A passkey was revoked, by its user from a session (ID-008) or by the
