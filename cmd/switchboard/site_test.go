@@ -111,8 +111,8 @@ func TestPackSiteRefusesSymlinks(t *testing.T) {
 	if err := os.Symlink(os.TempDir(), filepath.Join(dir, "escape")); err != nil {
 		t.Skipf("symlinks unavailable here: %v", err)
 	}
-	if _, err := packSite(dir); err == nil || !strings.Contains(err.Error(), "symlink") {
-		t.Fatalf("packSite followed or kept a symlink: %v", err)
+	if _, err := pages.Pack(dir); err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("Pack followed or kept a symlink: %v", err)
 	}
 }
 

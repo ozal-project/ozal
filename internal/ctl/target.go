@@ -10,6 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/netip"
 	"path"
 	"regexp"
 	"sort"
@@ -47,6 +49,17 @@ type Edge struct {
 	// `switchboard` command runs from any directory.
 	CommandLink string `json:"command_link,omitempty"`
 	Keep        int    `json:"keep,omitempty"`
+	// Socket is the edge's admin Unix socket. `edge config` reads the
+	// digest in effect there as root, with no token.
+	Socket string `json:"socket,omitempty"`
+	// Admin is the edge's loopback admin listener (host:port on the edge);
+	// `site publish` reaches it through an SSH tunnel.
+	Admin string `json:"admin,omitempty"`
+	// SitesToken is a file on the operator's machine holding the edge's
+	// admin.sites_token, which can publish and roll back sites and nothing
+	// else. It is read when needed and never printed or sent to the edge
+	// on a command line.
+	SitesToken string `json:"sites_token,omitempty"`
 }
 
 var (
@@ -82,6 +95,17 @@ func (t Target) Validate() error {
 	if t.Edge.CommandLink != "" {
 		if err := plainAbsolute(t.Edge.CommandLink); err != nil {
 			return fmt.Errorf("edge.command_link: %w", err)
+		}
+	}
+	if t.Edge.Socket != "" {
+		if err := plainAbsolute(t.Edge.Socket); err != nil {
+			return fmt.Errorf("edge.socket: %w", err)
+		}
+	}
+	if t.Edge.Admin != "" {
+		host, port, err := net.SplitHostPort(t.Edge.Admin)
+		if addr, perr := netip.ParseAddr(host); err != nil || perr != nil || !addr.IsLoopback() || port == "" {
+			return errors.New("edge.admin must be a loopback host:port on the edge, such as 127.0.0.1:9091")
 		}
 	}
 	if t.Edge.Keep < 0 || t.Edge.Keep > 20 {

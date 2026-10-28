@@ -8,10 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/octaviosantacruz/switchboard/internal/ctl"
 )
@@ -131,4 +133,67 @@ func (b GitBuilder) Build(ctx context.Context, ref string) (ctl.Binary, error) {
 		return ctl.Binary{}, err
 	}
 	return ctl.Binary{Data: data, Commit: commit}, nil
+}
+
+// Forward implements publish.Tunnel: `ssh -N -L` from a free loopback port to
+// remote, an address on the edge. It returns once the port accepts
+// connections; stop ends the tunnel.
+func (s Remote) Forward(ctx context.Context, remote string) (string, func(), error) {
+	probe, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return "", nil, err
+	}
+	local := probe.Addr().String()
+	probe.Close()
+	tunnelCtx, cancel := context.WithCancel(ctx)
+	cmd := exec.CommandContext(tunnelCtx, "ssh", s.base("-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", "-N", "-L", local+":"+remote)...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		cancel()
+		return "", nil, err
+	}
+	exited := make(chan struct{})
+	go func() { _ = cmd.Wait(); close(exited) }()
+	stop := func() { cancel(); <-exited }
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		select {
+		case <-exited:
+			cancel()
+			return "", nil, fmt.Errorf("ssh tunnel ended: %s", strings.TrimSpace(stderr.String()))
+		default:
+		}
+		if conn, err := net.DialTimeout("tcp", local, 300*time.Millisecond); err == nil {
+			conn.Close()
+			return local, stop, nil
+		}
+		if time.Now().After(deadline) {
+			stop()
+			return "", nil, errors.New("ssh tunnel did not come up within 15 seconds")
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+}
+
+// ReadToken reads a token file on the operator's machine (~ expanded),
+// refusing one other users can read.
+func ReadToken(path string) (string, error) {
+	path = expandHome(path)
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", err
+	}
+	if info.Mode().Perm()&0o077 != 0 {
+		return "", fmt.Errorf("%s is readable by other users; chmod 600 it", path)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	token := strings.TrimSpace(string(data))
+	if token == "" {
+		return "", fmt.Errorf("%s is empty", path)
+	}
+	return token, nil
 }

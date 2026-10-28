@@ -5,7 +5,7 @@ name: site
 # only this file, in this repository, on main, run by a push or by hand, through
 # a GitHub OIDC token: no deploy secret is stored here. Renaming this file or the
 # branch stops deployments until the edge's project trust is updated
-# (server-ops render-preview-config.py).
+# (its project, kept in the edge's runtime file: CI projects in the console).
 on:
   push:
     branches: [main]

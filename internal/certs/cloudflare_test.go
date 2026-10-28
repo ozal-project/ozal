@@ -88,6 +88,27 @@ func (f *fakeCloudflare) handle(w http.ResponseWriter, r *http.Request) {
 		f.records[id] = map[string]string{"name": body.Name, "content": body.Content, "type": body.Type}
 		f.created++
 		writeFakeCloudflare(w, http.StatusOK, map[string]string{"id": id})
+	case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/dns_records/batch"):
+		var body struct {
+			Deletes []struct{ ID string } `json:"deletes"`
+			Posts   []map[string]any      `json:"posts"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		f.mu.Lock()
+		for _, d := range body.Deletes {
+			delete(f.records, d.ID)
+			f.deleted++
+		}
+		for _, p := range body.Posts {
+			f.nextID++
+			f.records["record-"+string(rune('0'+f.nextID))] = map[string]string{"name": p["name"].(string), "content": p["content"].(string), "type": p["type"].(string)}
+			f.created++
+		}
+		f.mu.Unlock()
+		writeFakeCloudflare(w, http.StatusOK, map[string]any{})
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/zones/") && strings.HasSuffix(r.URL.Path, "/dns_records"):
 		name := r.URL.Query().Get("name")
 		f.mu.Lock()

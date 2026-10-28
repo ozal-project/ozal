@@ -52,8 +52,8 @@ func TestAuditTargetCannotChangeOnReload(t *testing.T) {
 	before.Audit = &config.AuditConfig{Dir: "/var/lib/switchboard/audit", Include: []string{"access"}}
 	after := config.Clone(before)
 	after.Audit.Dir = "/var/lib/switchboard/new-audit"
-	if sameServerConfig(before, after) {
-		t.Fatal("sameServerConfig accepted a changed audit directory")
+	if config.SameServer(before, after) {
+		t.Fatal("SameServer accepted a changed audit directory")
 	}
 }
 

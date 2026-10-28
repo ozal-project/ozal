@@ -268,3 +268,24 @@ func (c *CloudflareClient) CreateSiteRecord(ctx context.Context, record SiteReco
 	}
 	return created, nil
 }
+
+// ReplaceSiteRecords swaps a name's address records in one DNS batch:
+// Cloudflare applies the deletes and the create together or not at all, so
+// the name is never left without an answer (a gap would be cached as
+// NXDOMAIN). This is the one call that replaces records; it exists for an
+// operator moving a live name (sbctl site cutover), never for the console.
+func (c *CloudflareClient) ReplaceSiteRecords(ctx context.Context, name string, remove []SiteRecord, add SiteRecord) error {
+	zoneID, err := c.zoneFor(ctx, name)
+	if err != nil {
+		return err
+	}
+	deletes := make([]map[string]string, 0, len(remove))
+	for _, r := range remove {
+		if r.ID == "" || !strings.EqualFold(r.Name, name) {
+			return fmt.Errorf("%w: refusing to delete an unidentified record", ErrDNS)
+		}
+		deletes = append(deletes, map[string]string{"id": r.ID})
+	}
+	post := map[string]any{"type": add.Type, "name": name, "content": add.Content, "proxied": add.Proxied, "ttl": 1}
+	return c.call(ctx, http.MethodPost, "/zones/"+url.PathEscape(zoneID)+"/dns_records/batch", map[string]any{"deletes": deletes, "posts": []any{post}}, nil)
+}

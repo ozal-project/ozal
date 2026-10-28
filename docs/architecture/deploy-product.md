@@ -247,6 +247,13 @@ migration.
 
 ## Retiring `publish-site.py`
 
+**2026-10-28:** the script left Server Ops with the rest of the edge's
+deployment tooling. What the phases below do not cover yet is `sbctl`:
+`edge config` for the host settings (routes and projects live in the edge's
+`runtime_file`), `site publish` for an upload through the SSH tunnel, and
+`site cutover` for moving a live name, including the Portfolio apex
+([guide](../operations/sbctl.md)).
+
 | Script step | Replaced by | Phase |
 |---|---|---|
 | Build | GitHub Actions workflow template | `PAGES-004` |

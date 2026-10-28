@@ -25,6 +25,9 @@ func goodTarget() Target {
 func TestValidateRefusesUnsafeValues(t *testing.T) {
 	for name, mutate := range map[string]func(*Target){
 		"relative binary":  func(x *Target) { x.Edge.Binary = "bin/switchboard" },
+		"public admin":     func(x *Target) { x.Edge.Admin = "0.0.0.0:9091" },
+		"admin by name":    func(x *Target) { x.Edge.Admin = "edge.example.net:9091" },
+		"relative socket":  func(x *Target) { x.Edge.Socket = "run/admin.sock" },
 		"dotdot path":      func(x *Target) { x.Edge.Config = "/etc/../tmp/x" },
 		"newline in stage": func(x *Target) { x.Edge.Stage = "/a\nb" },
 		"bad host":         func(x *Target) { x.SSH.Target = "host; reboot" },

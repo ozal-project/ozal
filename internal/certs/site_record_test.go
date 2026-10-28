@@ -56,3 +56,29 @@ func TestAutomaticNameFollowsRoutesAndRefusesUnissuableNames(t *testing.T) {
 		t.Error("with no routes and no configured names nothing is eligible")
 	}
 }
+
+func TestReplaceSiteRecordsSwapsInOneBatchAndRefusesUnknownRecords(t *testing.T) {
+	fake, api := newFakeCloudflare(t, map[string]string{"example.com": "zone-1"})
+	client := testCloudflareClient(t, api)
+	ctx := context.Background()
+	if _, err := client.CreateSiteRecord(ctx, SiteRecord{Type: "CNAME", Name: "example.com", Content: "site.pages.dev", Proxied: true}); err != nil {
+		t.Fatal(err)
+	}
+	current, err := client.SiteRecords(ctx, "example.com")
+	if err != nil || len(current) != 1 {
+		t.Fatalf("records = %+v, %v", current, err)
+	}
+	if err := client.ReplaceSiteRecords(ctx, "example.com", current, SiteRecord{Type: "A", Content: "203.0.113.10", Proxied: true}); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := client.SiteRecords(ctx, "example.com")
+	if len(after) != 1 || after[0].Type != "A" || fake.deleted != 1 {
+		t.Fatalf("after = %+v, deleted %d", after, fake.deleted)
+	}
+	if err := client.ReplaceSiteRecords(ctx, "example.com", []SiteRecord{{Name: "example.com"}}, SiteRecord{Type: "A", Content: "203.0.113.11"}); err == nil {
+		t.Fatal("a record without ID was accepted for deletion")
+	}
+	if err := client.ReplaceSiteRecords(ctx, "example.com", []SiteRecord{{ID: "x", Name: "other.example.com"}}, SiteRecord{Type: "A", Content: "203.0.113.11"}); err == nil {
+		t.Fatal("a record of another name was accepted for deletion")
+	}
+}

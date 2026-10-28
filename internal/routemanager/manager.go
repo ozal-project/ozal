@@ -9,7 +9,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"reflect"
 	"slices"
 	"sort"
 	"sync"
@@ -419,7 +418,7 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 	if err != nil {
 		return nil, err
 	}
-	if current := m.current.Load(); current != nil && !sameServerConfig(current.cfg, *cfg) {
+	if current := m.current.Load(); current != nil && !config.SameServer(current.cfg, *cfg) {
 		return nil, fmt.Errorf("listen, admin listen, TLS, tunnel, and notification settings cannot change without restarting Switchboard")
 	}
 
@@ -712,21 +711,6 @@ func protectedRouteHosts(routes []config.Route) []string {
 	}
 	sort.Strings(hosts)
 	return hosts
-}
-
-func sameServerConfig(a, b config.Config) bool {
-	return a.RuntimeFile == b.RuntimeFile && a.Listen == b.Listen &&
-		a.Admin.Listen == b.Admin.Listen &&
-		a.TLS.Enabled == b.TLS.Enabled &&
-		a.TLS.CacheDir == b.TLS.CacheDir &&
-		a.TLS.Email == b.TLS.Email &&
-		a.TLS.OriginClientCAFile == b.TLS.OriginClientCAFile &&
-		reflect.DeepEqual(a.TLS.DNS01, b.TLS.DNS01) &&
-		reflect.DeepEqual(a.Notify, b.Notify) &&
-		reflect.DeepEqual(a.Audit, b.Audit) &&
-		reflect.DeepEqual(a.Tunnel, b.Tunnel) &&
-		reflect.DeepEqual(a.Pages, b.Pages) &&
-		slices.Equal(a.TLS.Domains, b.TLS.Domains)
 }
 
 // buildOIDCGate builds the upstream provider's login. The secret is resolved
