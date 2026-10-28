@@ -32,6 +32,10 @@ const (
 type Session struct {
 	Principal Principal
 	ExpiresAt time.Time
+	// Audience is the one host a host session is valid on (ID-015). An
+	// empty audience is a central session: valid on the login host and the
+	// hosts auth.cookie_domain covers.
+	Audience string
 }
 
 // Lifetime bounds a session two ways: Idle ends a session nobody has used
@@ -80,10 +84,28 @@ type SessionBackend interface {
 	// Get returns the session for id, or ok=false when it does not exist or
 	// has expired. An expired session is evicted on lookup.
 	Get(ctx context.Context, id string) (Session, bool)
-	// Delete removes the session for id; deleting a missing session is fine.
+	// Delete removes the session for id, and the host sessions it approved
+	// when it is a central one; deleting a missing session is fine.
 	Delete(ctx context.Context, id string)
-	// Sweep removes expired sessions in bulk.
+	// Sweep removes expired sessions in bulk, and host sessions whose
+	// central session is gone.
 	Sweep(ctx context.Context)
+}
+
+// LinkedSessions issues host sessions under a central one (ID-015): a
+// private app on a domain the central cookie cannot reach gets its own
+// host-only session once the central login vouches for the visitor. Both
+// backends implement it.
+type LinkedSessions interface {
+	// CreateLinked stores a session valid only on audience, with the
+	// principal copied from the central session parentID. It expires no
+	// later than its parent, and a lookup refuses it once the parent is
+	// gone or expired. It returns ErrSessionNotFound when parentID is not a
+	// live central session.
+	CreateLinked(ctx context.Context, parentID, audience string) (string, Principal, error)
+	// DeleteLogin ends the whole login id belongs to: its central session
+	// and every host session that central session approved.
+	DeleteLogin(ctx context.Context, id string)
 }
 
 // NewSessionID returns the opaque session identifier: 256 bits from
@@ -131,9 +153,17 @@ type storedSession struct {
 	principal Principal
 	created   time.Time
 	lastSeen  time.Time
+	// Host sessions only: the host, the central session's ID and the
+	// parent's expiry when the host session was issued.
+	audience string
+	parent   string
+	deadline time.Time
 }
 
-var _ SessionBackend = (*SessionStore)(nil)
+var (
+	_ SessionBackend = (*SessionStore)(nil)
+	_ LinkedSessions = (*SessionStore)(nil)
+)
 
 func NewSessionStore(lifetime Lifetime) *SessionStore {
 	return &SessionStore{lifetime: lifetime, now: time.Now, sessions: make(map[string]storedSession)}
@@ -166,10 +196,40 @@ func (s *SessionStore) Sweep(ctx context.Context) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for id, sess := range s.sessions {
-		if !now.Before(expiry(sess.created, sess.lastSeen, s.lifetime)) {
+		if !now.Before(s.expiresAt(sess)) {
 			delete(s.sessions, id)
 		}
 	}
+	for id, sess := range s.sessions {
+		if _, ok := s.sessions[sess.parent]; sess.parent != "" && !ok {
+			delete(s.sessions, id)
+		}
+	}
+}
+
+// expiresAt is expiry under the store's lifetime, capped for a host
+// session by its parent's expiry at issue.
+func (s *SessionStore) expiresAt(sess storedSession) time.Time {
+	deadline := expiry(sess.created, sess.lastSeen, s.lifetime)
+	if !sess.deadline.IsZero() && sess.deadline.Before(deadline) {
+		return sess.deadline
+	}
+	return deadline
+}
+
+// live reports whether id is unexpired at now and, for a host session,
+// whether its central session is too. The caller holds the lock.
+func (s *SessionStore) live(id string, now time.Time) (storedSession, bool) {
+	sess, ok := s.sessions[id]
+	if !ok || !now.Before(s.expiresAt(sess)) {
+		return storedSession{}, false
+	}
+	if sess.parent != "" {
+		if _, ok := s.live(sess.parent, now); !ok {
+			return storedSession{}, false
+		}
+	}
+	return sess, true
 }
 
 // Get returns the session for id, or ok=false if it doesn't exist or has
@@ -181,12 +241,9 @@ func (s *SessionStore) Get(ctx context.Context, id string) (Session, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	sess, ok := s.sessions[id]
-	if !ok {
-		return Session{}, false
-	}
 	now := s.now()
-	if !now.Before(expiry(sess.created, sess.lastSeen, s.lifetime)) {
+	sess, ok := s.live(id, now)
+	if !ok {
 		delete(s.sessions, id)
 		return Session{}, false
 	}
@@ -194,7 +251,59 @@ func (s *SessionStore) Get(ctx context.Context, id string) (Session, bool) {
 		sess.lastSeen = now
 		s.sessions[id] = sess
 	}
-	return Session{Principal: clonePrincipal(sess.principal), ExpiresAt: expiry(sess.created, sess.lastSeen, s.lifetime)}, true
+	// Using an app counts as using the login that approved it.
+	if parent, ok := s.sessions[sess.parent]; ok && now.Sub(parent.lastSeen) >= TouchInterval {
+		parent.lastSeen = now
+		s.sessions[sess.parent] = parent
+	}
+	return Session{Principal: clonePrincipal(sess.principal), ExpiresAt: s.expiresAt(sess), Audience: sess.audience}, true
+}
+
+// CreateLinked stores a host session under the central session parentID.
+func (s *SessionStore) CreateLinked(ctx context.Context, parentID, audience string) (string, Principal, error) {
+	if err := ctx.Err(); err != nil {
+		return "", Principal{}, err
+	}
+	id, err := NewSessionID()
+	if err != nil {
+		return "", Principal{}, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.now()
+	parent, ok := s.live(parentID, now)
+	if !ok || parent.audience != "" || audience == "" {
+		return "", Principal{}, ErrSessionNotFound
+	}
+	if len(s.sessions) >= MaxSessions {
+		return "", Principal{}, ErrStoreFull
+	}
+	s.sessions[id] = storedSession{principal: clonePrincipal(parent.principal), created: now, lastSeen: now,
+		audience: audience, parent: parentID, deadline: s.expiresAt(parent)}
+	return id, clonePrincipal(parent.principal), nil
+}
+
+// DeleteLogin removes id's central session and every host session under it.
+func (s *SessionStore) DeleteLogin(ctx context.Context, id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	root := id
+	if sess, ok := s.sessions[id]; ok && sess.parent != "" {
+		root = sess.parent
+	}
+	delete(s.sessions, id)
+	s.deleteFamily(root)
+}
+
+// deleteFamily removes a central session and its host sessions. The
+// caller holds the lock.
+func (s *SessionStore) deleteFamily(root string) {
+	delete(s.sessions, root)
+	for id, sess := range s.sessions {
+		if sess.parent == root {
+			delete(s.sessions, id)
+		}
+	}
 }
 
 func clonePrincipal(principal Principal) Principal {
@@ -210,9 +319,9 @@ func clonePrincipal(principal Principal) Principal {
 	return principal
 }
 
-// Delete removes a session by ID.
+// Delete removes a session by ID, with the host sessions under it.
 func (s *SessionStore) Delete(ctx context.Context, id string) {
 	s.mu.Lock()
-	delete(s.sessions, id)
+	s.deleteFamily(id)
 	s.mu.Unlock()
 }

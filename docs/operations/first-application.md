@@ -189,10 +189,11 @@ siga abierto, **todavía puede eludirse la nueva política**.
   cliente (cuya CA está en `tls.origin_client_ca_file`). Así un hostname nuevo no
   necesita una asociación por hostname. Es un ajuste único en el panel de
   Cloudflare; el edge no cambia.
-- **Apps privadas en otro dominio.** La sesión de visitante usa
-  `auth.cookie_domain`: una app privada debe estar bajo ese dominio. Una app
-  **pública** en otro dominio funciona; una privada en otro dominio se rechaza
-  al revisar hasta que exista login por dominio.
+- **Apps privadas en otro dominio.** Con el login de passkeys, una app privada
+  fuera de `auth.cookie_domain` recibe su propia sesión del host después del
+  login central (un código de un solo uso, ver
+  [sesiones por host](../architecture/host-sessions.md)). Con sólo OIDC
+  externo sigue rechazándose al revisar.
 
 La ficha reúne destino y acceso, enlace al simulador, publicación de artefactos
 y acceso a versiones/rollback. **Configure** conserva campos avanzados cuando
@@ -277,3 +278,20 @@ dispositivo perdido cierra su sesión y la deja inútil (también desde el menú
 celular), que una invitación con una sola herramienta da sólo
 esa, y que el reseteo de otro administrador corta su sesión abierta y deja inútil
 su passkey vieja. No prueba el vencimiento por inactividad (30 minutos) ni Firefox.
+
+Las apps privadas en otro dominio (sesiones por host, `ID-015`) tienen la suya,
+con dos apps en sitios distintos del login (`*.other.localhost`,
+`*.third.localhost`):
+
+```sh
+SWITCHBOARD_BIN=/tmp/switchboard-product-candidate CHROME=/ruta/a/chrome \
+  node scripts/demo/host-sessions-acceptance.mjs
+```
+
+Comprueba que con la sesión central abierta la app se abre sin pedir nada y en
+la ruta pedida, que su cookie es sólo de ese host y distinta de la central, que
+ninguna cookie de sesión llega al upstream, que la política de la app sigue
+decidiendo (403), que un código capturado no sirve en otro navegador y queda
+quemado, que entrar desde la app vuelve a ella, y que salir desde la app o desde
+el login cierra todo el login. Corre por HTTP en `localhost`: no prueba HTTPS,
+dominios reales ni Safari/Firefox.

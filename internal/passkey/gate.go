@@ -49,8 +49,13 @@ type Gate struct {
 	// when a sign-in or enrolment has no destination to return to.
 	protected  []string
 	ceremonies *ceremonies
-	sink       events.Sink
-	now        func() time.Time
+	// handoffHosts are the protected hosts the session cookie cannot reach:
+	// they get host sessions through handoffs (ID-015).
+	handoffHosts map[string]bool
+	handoffs     *handoffs
+	linked       auth.LinkedSessions
+	sink         events.Sink
+	now          func() time.Time
 	// oidc is the upstream login offered beside passkeys, if any.
 	oidc     OIDCLogin
 	oidcName string
@@ -101,6 +106,7 @@ func NewGate(cfg config.Auth, protectedHosts []string, dir Directory, sessions a
 		return nil, fmt.Errorf("passkey: %w", err)
 	}
 	hosts := map[string]bool{loginHost: true}
+	handoffHosts := map[string]bool{}
 	var protected []string
 	for _, h := range protectedHosts {
 		host, err := config.NormalizeHost(h)
@@ -110,9 +116,16 @@ func NewGate(cfg config.Auth, protectedHosts []string, dir Directory, sessions a
 		hosts[host] = true
 		if host != loginHost {
 			protected = append(protected, login.Scheme+"://"+host+"/")
+			if cfg.CookieDomain == "" || !config.CookieDomainCovers(host, cfg.CookieDomain) {
+				handoffHosts[host] = true
+			}
 		}
 	}
 	sort.Strings(protected)
+	linked, _ := sessions.(auth.LinkedSessions)
+	if len(handoffHosts) > 0 && linked == nil {
+		return nil, errors.New("passkey: protected hosts outside cookie_domain need a session store with host sessions")
+	}
 	return &Gate{
 		webauthn:     wa,
 		dir:          dir,
@@ -125,6 +138,9 @@ func NewGate(cfg config.Auth, protectedHosts []string, dir Directory, sessions a
 		allowedHosts: hosts,
 		protected:    protected,
 		ceremonies:   newCeremonies(time.Now),
+		handoffHosts: handoffHosts,
+		handoffs:     newHandoffs(time.Now),
+		linked:       linked,
 		sink:         sink,
 		now:          time.Now,
 	}, nil
@@ -139,7 +155,9 @@ func (g *Gate) Authenticate(r *http.Request) (auth.Principal, bool) {
 		return auth.Principal{}, false
 	}
 	session, ok := g.sessions.Get(r.Context(), cookie.Value)
-	if !ok {
+	// A session is valid only on its audience: a central one on the login
+	// host and cookie_domain hosts, a host session on its own host.
+	if !ok || session.Audience != g.audience(r) {
 		return auth.Principal{}, false
 	}
 	if session.Principal.Method == auth.MethodOIDC {
@@ -169,14 +187,25 @@ func (g *Gate) Authenticate(r *http.Request) (auth.Principal, bool) {
 // there for a step-up, and the page says so instead of explaining
 // invitations; the flag only changes wording, never what the login checks.
 func (g *Gate) RedirectToLogin(w http.ResponseWriter, r *http.Request) {
-	scheme := "http"
-	if r.TLS != nil || g.secure {
-		scheme = "https"
-	}
-	returnTo := scheme + "://" + r.Host + r.URL.RequestURI()
-	target := g.origin + "/_/auth/login?return_to=" + url.QueryEscape(returnTo)
+	reason := ""
 	if _, ok := g.Authenticate(r); ok {
-		target += "&reauth=1"
+		reason = "reauth=1"
+	}
+	g.redirect(w, r, reason)
+}
+
+// redirect sends the browser to sign in with the login page's reason
+// query: straight to the login page from a host the central cookie
+// reaches, through a handoff transaction from any other.
+func (g *Gate) redirect(w http.ResponseWriter, r *http.Request, reason string) {
+	if host, ok := g.handoffHost(r); ok {
+		g.beginHandoff(w, r, host, reason)
+		return
+	}
+	returnTo := g.scheme(r) + "://" + r.Host + r.URL.RequestURI()
+	target := g.origin + "/_/auth/login?return_to=" + url.QueryEscape(returnTo)
+	if reason != "" {
+		target += "&" + reason
 	}
 	http.Redirect(w, r, target, http.StatusFound)
 }
@@ -186,24 +215,16 @@ func (g *Gate) RedirectToLogin(w http.ResponseWriter, r *http.Request) {
 // can offer the right way in; the names only change wording and which
 // buttons show, never what the login checks.
 func (g *Gate) RedirectToStepUp(w http.ResponseWriter, r *http.Request, code auth.DecisionCode, methods []string) {
-	var reason string
 	switch code {
 	case auth.CodeDeviceBoundRequired:
-		reason = "&reauth=device"
+		g.redirect(w, r, "reauth=device")
 	case auth.CodeMethodNotAllowed:
-		reason = "&reauth=method&methods=" + url.QueryEscape(strings.Join(methods, ","))
+		g.redirect(w, r, "reauth=method&methods="+url.QueryEscape(strings.Join(methods, ",")))
 	case auth.CodeContextStepUpRequired:
-		reason = "&reauth=method&methods=" + url.QueryEscape(auth.MethodPasskey)
+		g.redirect(w, r, "reauth=method&methods="+url.QueryEscape(auth.MethodPasskey))
 	default:
 		g.RedirectToLogin(w, r)
-		return
 	}
-	scheme := "http"
-	if r.TLS != nil || g.secure {
-		scheme = "https"
-	}
-	returnTo := scheme + "://" + r.Host + r.URL.RequestURI()
-	http.Redirect(w, r, g.origin+"/_/auth/login?return_to="+url.QueryEscape(returnTo)+reason, http.StatusFound)
 }
 
 // OIDCLogin is the upstream provider's login, offered next to passkeys
@@ -226,7 +247,16 @@ func (g *Gate) WithOIDC(login OIDCLogin, name string) *Gate {
 // ServeAuthEndpoint handles the passkey pages and API under /_/auth/. It
 // reports false for any other path, which then belongs to the route.
 func (g *Gate) ServeAuthEndpoint(w http.ResponseWriter, r *http.Request) bool {
+	if host, ok := g.handoffHost(r); ok {
+		return g.serveHandoffHost(w, r, host)
+	}
 	switch r.URL.Path {
+	case continuePath:
+		host, err := config.NormalizeHost(r.Host)
+		if err != nil || host != g.loginHost {
+			return false
+		}
+		g.serveContinue(w, r)
 	case "/_/auth/oidc/start", "/_/auth/callback":
 		if g.oidc == nil {
 			return false
@@ -581,6 +611,25 @@ func (g *Gate) takeCeremony(w http.ResponseWriter, r *http.Request, kind ceremon
 	return g.ceremonies.take(cookie.Value, kind)
 }
 
+// serveHandoffHost is ServeAuthEndpoint on a handoff host: the handoff and
+// logout endpoints, and the login host's pages by redirect. Its API is not
+// served there: every ceremony runs on the login origin.
+func (g *Gate) serveHandoffHost(w http.ResponseWriter, r *http.Request, host string) bool {
+	switch {
+	case r.URL.Path == handoffPath:
+		g.serveHandoff(w, r, host)
+	case r.URL.Path == "/_/auth/logout":
+		g.logout(w, r)
+	case !strings.HasPrefix(r.URL.Path, "/_/auth/"):
+		return false
+	case r.Method == http.MethodGet || r.Method == http.MethodHead:
+		http.Redirect(w, r, g.origin+r.URL.RequestURI(), http.StatusFound)
+	default:
+		http.NotFound(w, r)
+	}
+	return true
+}
+
 func (g *Gate) logout(w http.ResponseWriter, r *http.Request) {
 	// A GET would let any page log the user out with an image tag.
 	if r.Method != http.MethodPost {
@@ -588,10 +637,21 @@ func (g *Gate) logout(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if cookie, err := r.Cookie(auth.SessionCookieName); err == nil {
-		g.sessions.Delete(r.Context(), cookie.Value)
+	// The central session ends with every host session it approved; a
+	// logout on an app's host ends that whole login too (ID-015).
+	_, onHandoffHost := g.handoffHost(r)
+	domain := g.cookieDomain
+	if onHandoffHost {
+		domain = ""
 	}
-	http.SetCookie(w, &http.Cookie{Name: auth.SessionCookieName, Value: "", Domain: g.cookieDomain, Path: "/", MaxAge: -1, HttpOnly: true, Secure: g.secure, SameSite: http.SameSiteLaxMode})
+	if cookie, err := r.Cookie(auth.SessionCookieName); err == nil {
+		if onHandoffHost {
+			g.linked.DeleteLogin(r.Context(), cookie.Value)
+		} else {
+			g.sessions.Delete(r.Context(), cookie.Value)
+		}
+	}
+	http.SetCookie(w, &http.Cookie{Name: auth.SessionCookieName, Value: "", Domain: domain, Path: "/", MaxAge: -1, HttpOnly: true, Secure: g.secure, SameSite: http.SameSiteLaxMode})
 	http.Redirect(w, r, g.origin+"/_/auth/login", http.StatusSeeOther)
 }
 

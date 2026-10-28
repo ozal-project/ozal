@@ -133,6 +133,12 @@ func normalizeCookieDomain(raw string) (string, error) {
 	return domain, nil
 }
 
+// CookieDomainCovers reports whether a cookie for the normalized domain is
+// sent to host (a port is ignored).
+func CookieDomainCovers(host, domain string) bool {
+	return cookieDomainCovers(host, domain)
+}
+
 func cookieDomainCovers(host, domain string) bool {
 	hostname := hostnameOnly(host)
 	return hostname == domain || strings.HasSuffix(hostname, "."+domain)

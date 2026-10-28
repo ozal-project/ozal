@@ -9,7 +9,7 @@ import (
 )
 
 func (s *Sessions) ListOwned(ctx context.Context, subject string) ([]auth.SessionInfo, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id_hash, created_at, last_seen_at, expires_at, amr FROM sessions WHERE subject = ? ORDER BY created_at DESC, id_hash`, subject)
+	rows, err := s.db.QueryContext(ctx, `SELECT id_hash, created_at, last_seen_at, expires_at, amr FROM sessions WHERE subject = ? AND parent_hash IS NULL ORDER BY created_at DESC, id_hash`, subject)
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +40,8 @@ func (s *Sessions) RevokeOwned(ctx context.Context, subject, id string, all bool
 	if err != nil || len(raw) != 32 {
 		return auth.ErrSessionNotFound
 	}
-	result, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE subject = ? AND id_hash = ?`, subject, raw)
+	// A login's host sessions end with it (ID-015).
+	result, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE subject = ?1 AND (id_hash = ?2 OR parent_hash = ?2)`, subject, raw)
 	if err != nil {
 		return err
 	}

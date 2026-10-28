@@ -44,15 +44,14 @@ func TestPasskeysRefuseUnsafeSettings(t *testing.T) {
 		mutate func(*Config)
 		want   string
 	}{
-		"plain HTTP":           {func(c *Config) { c.Auth.Passkeys.LoginURL = "http://auth.example.com" }, "https"},
-		"login outside rp_id":  {func(c *Config) { c.Auth.Passkeys.LoginURL = "https://auth.example.net" }, "not rp_id"},
-		"suffix trick":         {func(c *Config) { c.Auth.Passkeys.LoginURL = "https://authexample.com" }, "not rp_id"},
-		"path in login_url":    {func(c *Config) { c.Auth.Passkeys.LoginURL = "https://auth.example.com/login" }, "origin"},
-		"query in login_url":   {func(c *Config) { c.Auth.Passkeys.LoginURL = "https://auth.example.com/?x=1" }, "origin"},
-		"IP as rp_id":          {func(c *Config) { c.Auth.Passkeys.RPID = "192.0.2.1" }, "DNS name"},
-		"partial OIDC beside":  {func(c *Config) { c.Auth.Issuer = "https://accounts.google.com" }, "needs issuer"},
-		"cookie misses route":  {func(c *Config) { c.Routes[0].Host = "app.example.org" }, "does not cover"},
-		"no cookie, two hosts": {func(c *Config) { c.Auth.CookieDomain = "" }, "different host"},
+		"plain HTTP":          {func(c *Config) { c.Auth.Passkeys.LoginURL = "http://auth.example.com" }, "https"},
+		"login outside rp_id": {func(c *Config) { c.Auth.Passkeys.LoginURL = "https://auth.example.net" }, "not rp_id"},
+		"suffix trick":        {func(c *Config) { c.Auth.Passkeys.LoginURL = "https://authexample.com" }, "not rp_id"},
+		"path in login_url":   {func(c *Config) { c.Auth.Passkeys.LoginURL = "https://auth.example.com/login" }, "origin"},
+		"query in login_url":  {func(c *Config) { c.Auth.Passkeys.LoginURL = "https://auth.example.com/?x=1" }, "origin"},
+		"IP as rp_id":         {func(c *Config) { c.Auth.Passkeys.RPID = "192.0.2.1" }, "DNS name"},
+		"partial OIDC beside": {func(c *Config) { c.Auth.Issuer = "https://accounts.google.com" }, "needs issuer"},
+		"cookie misses login": {func(c *Config) { c.Auth.CookieDomain = "app.example.com" }, "does not cover"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			cfg := passkeyConfig()
@@ -60,6 +59,26 @@ func TestPasskeysRefuseUnsafeSettings(t *testing.T) {
 			_, err := Validate(cfg)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("err = %v, want it to mention %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// ID-015: with the passkey login, a protected host the session cookie
+// cannot reach is valid: it gets its own host session from the login.
+func TestPasskeysAcceptProtectedHostsOutsideTheCookie(t *testing.T) {
+	for name, mutate := range map[string]func(*Config){
+		"other domain":     func(c *Config) { c.Routes[0].Host = "app.example.org" },
+		"no cookie_domain": func(c *Config) { c.Auth.CookieDomain = "" },
+		"both kinds at once": func(c *Config) {
+			c.Routes = append(c.Routes, Route{Host: "docs.other.net", Target: "http://127.0.0.1:9001", Access: &AccessPolicy{}})
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg := passkeyConfig()
+			mutate(&cfg)
+			if _, err := Validate(cfg); err != nil {
+				t.Fatal(err)
 			}
 		})
 	}

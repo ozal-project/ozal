@@ -146,7 +146,9 @@ func (g *Gate) Authenticate(r *http.Request) (Principal, bool) {
 		return Principal{}, false
 	}
 	session, ok := g.sessions.Get(r.Context(), cookie.Value)
-	if !ok || !g.AcceptsPrincipal(session.Principal) {
+	// This gate issues no host sessions: one copied here from a passkey
+	// installation's app is not valid on these hosts.
+	if !ok || session.Audience != "" || !g.AcceptsPrincipal(session.Principal) {
 		return Principal{}, false
 	}
 	return session.Principal, true

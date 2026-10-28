@@ -901,10 +901,13 @@ them:
 }
 ```
 
-Without `cookie_domain`, Switchboard refuses to start if any protected route
-is on a host other than `redirect_url`'s — that combination silently loops
-back to login forever otherwise, and it's better to fail at startup than
-discover it live.
+With only an external OIDC login, Switchboard refuses to start if
+`cookie_domain` does not cover every protected route's host — that
+combination silently loops back to login forever otherwise, and it's better
+to fail at startup than discover it live. With the passkey login, a
+protected host the cookie cannot reach (another domain) instead gets its own
+host-only session from the login host through a one-time code; see
+[host sessions](docs/architecture/host-sessions.md).
 
 `allowed_emails` and `allowed_domains` are alternative ways to pass the
 identity allowlist; `required_groups` is additionally enforced and every

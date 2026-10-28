@@ -57,7 +57,9 @@ function archive(dir, files) {
   return new Uint8Array(execFileSync("tar", ["-czf", "-", "-C", dir, "."], { maxBuffer: 1 << 24 }));
 }
 
-export async function startDemoEdge({ binary, dir = join(homedir(), ".cache", "switchboard-demo"), adminSocket = false } = {}) {
+// extraRoutes are appended to the demo routes, for scripts that need a host
+// the demo does not have (an app on another domain, for instance).
+export async function startDemoEdge({ binary, dir = join(homedir(), ".cache", "switchboard-demo"), adminSocket = false, extraRoutes = [] } = {}) {
   if (!binary || !existsSync(binary)) throw new Error("pass the switchboard binary (--binary)");
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(join(dir, "sites"), { recursive: true });
@@ -75,6 +77,7 @@ export async function startDemoEdge({ binary, dir = join(homedir(), ".cache", "s
       { host: `docs.${DOMAIN}:${PORT}`, site: "docs" },
       // Nothing listens here: the console should say so.
       { host: `reports.${DOMAIN}:${PORT}`, target: "http://127.0.0.1:19199", health_path: "/" },
+      ...extraRoutes,
     ],
   };
   writeFileSync(join(dir, "config.json"), JSON.stringify(config, null, 2));

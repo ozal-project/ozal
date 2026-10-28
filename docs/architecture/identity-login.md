@@ -79,7 +79,8 @@ credential as first-seen, while later sessions record false.
 - **RP ID** (the domain a passkey belongs to) is the parent domain,
   `octaviosantacruz.com`, so one passkey works on every protected subdomain.
   The login pages live on one host, `auth.octaviosantacruz.com`, and the
-  session cookie uses the existing `cookie_domain`.
+  session cookie uses the existing `cookie_domain`. Protected hosts outside
+  it get host-only sessions from that login ([host sessions](host-sessions.md), ID-015).
 
 Migration 012 ends legacy OIDC sessions, which held only raw `sub`, rather
 than guessing their issuer. It preserves native credentials and sessions that record the passkey method;

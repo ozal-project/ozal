@@ -202,11 +202,13 @@ type Auth struct {
 
 	// CookieDomain, if set, shares the session cookie across every
 	// subdomain of it (e.g. ".example.com" covers magiclink.example.com
-	// and auditanchor.example.com alike). Required if a protected route is
-	// on a different host than redirect_url's —
-	// otherwise the session set during the OIDC callback (which always
-	// happens on redirect_url's host) won't be sent back on the other
-	// hosts' requests, and they'll redirect to login in a loop.
+	// and auditanchor.example.com alike). With an external OIDC login only,
+	// it is required if a protected route is on a different host than
+	// redirect_url's — otherwise the session set during the OIDC callback
+	// (which always happens on redirect_url's host) won't be sent back on
+	// the other hosts' requests, and they'll redirect to login in a loop.
+	// With the passkey login, a protected host it does not cover gets its
+	// own host session from the login instead (ID-015).
 	CookieDomain string `json:"cookie_domain,omitempty"`
 
 	// ProviderName labels the OIDC button on the passkey login page when both
@@ -699,7 +701,7 @@ func Validate(cfg Config) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err := checkSessionHosts(&cfg, loginHost, "auth.passkeys.login_url"); err != nil {
+		if err := checkSessionHosts(&cfg, loginHost, "auth.passkeys.login_url", true); err != nil {
 			return nil, err
 		}
 	} else if anyProtectedRoute {
@@ -727,7 +729,7 @@ func Validate(cfg Config) (*Config, error) {
 		if err != nil {
 			return nil, fmt.Errorf("config: auth.redirect_url is not a valid URL: %w", err)
 		}
-		if err := checkSessionHosts(&cfg, redirectHost, "auth.redirect_url"); err != nil {
+		if err := checkSessionHosts(&cfg, redirectHost, "auth.redirect_url", false); err != nil {
 			return nil, err
 		}
 	}
@@ -873,8 +875,10 @@ func IsSupportedHTTPMethod(method string) bool {
 
 // checkSessionHosts makes sure the session cookie set on loginHost (where
 // the login finishes) is sent back on every protected route, and normalizes
-// cookie_domain. field names the setting that chose loginHost.
-func checkSessionHosts(cfg *Config, loginHost, field string) error {
+// cookie_domain. field names the setting that chose loginHost. With
+// handoff (the passkey login, ID-015) a protected host the cookie cannot
+// reach is allowed: it gets its own host session after the central login.
+func checkSessionHosts(cfg *Config, loginHost, field string, handoff bool) error {
 	if cfg.Auth.CookieDomain != "" {
 		cookieDomain, err := normalizeCookieDomain(cfg.Auth.CookieDomain)
 		if err != nil {
@@ -887,6 +891,9 @@ func checkSessionHosts(cfg *Config, loginHost, field string) error {
 			)
 		}
 		cfg.Auth.CookieDomain = cookieDomain
+		if handoff {
+			return nil
+		}
 		for _, r := range cfg.Routes {
 			if r.RequiresAuth() && !cookieDomainCovers(r.Host, cookieDomain) {
 				return fmt.Errorf(
@@ -895,6 +902,9 @@ func checkSessionHosts(cfg *Config, loginHost, field string) error {
 				)
 			}
 		}
+		return nil
+	}
+	if handoff {
 		return nil
 	}
 	for _, r := range cfg.Routes {

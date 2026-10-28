@@ -48,6 +48,13 @@ type harness struct {
 
 func newHarness(t testing.TB) *harness {
 	t.Helper()
+	return newHarnessFor(t, appHost)
+}
+
+// newHarnessFor builds the gate with these protected hosts; the ones
+// outside example.test get host sessions through handoffs (ID-015).
+func newHarnessFor(t testing.TB, protected ...string) *harness {
+	t.Helper()
 	ctx := context.Background()
 	db, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "state.db"))
 	if err != nil {
@@ -67,7 +74,7 @@ func newHarness(t testing.TB) *harness {
 		Passkeys:     &config.Passkeys{RPID: "example.test", LoginURL: loginOrigin, DisplayName: "Switchboard"},
 	}
 	rec := &recorder{}
-	gate, err := passkey.NewGate(cfg, []string{appHost}, identity, sqlite.NewSessions(db, auth.SessionLifetime(cfg)), rec)
+	gate, err := passkey.NewGate(cfg, protected, identity, sqlite.NewSessions(db, auth.SessionLifetime(cfg)), rec)
 	if err != nil {
 		t.Fatal(err)
 	}
