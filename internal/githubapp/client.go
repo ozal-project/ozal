@@ -53,33 +53,12 @@ func (c *Client) Repositories(ctx context.Context, cfg config.GitHubApp, page in
 	if page < 1 || page > 1000 {
 		return Listing{}, ErrUnavailable
 	}
-	secret, err := config.ResolveSecret(cfg.PrivateKey)
+	token, err := c.installationToken(ctx, cfg, 0)
 	if err != nil {
-		return Listing{}, ErrUnavailable
-	}
-	key, err := parseKey([]byte(secret))
-	if err != nil {
-		return Listing{}, ErrUnavailable
-	}
-	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: key}, (&jose.SignerOptions{}).WithType("JWT"))
-	if err != nil {
-		return Listing{}, ErrUnavailable
-	}
-	now := c.Now()
-	token, err := jwt.Signed(signer).Claims(jwt.Claims{Issuer: strconv.FormatInt(cfg.AppID, 10), IssuedAt: jwt.NewNumericDate(now.Add(-time.Minute)), Expiry: jwt.NewNumericDate(now.Add(5 * time.Minute))}).Serialize()
-	if err != nil {
-		return Listing{}, ErrUnavailable
-	}
-	// Even if the installed App has broader permissions, this token asks only
-	// for metadata. It stays in memory and is never sent to the browser.
-	var installation struct {
-		Token string `json:"token"`
-	}
-	if err := c.call(ctx, http.MethodPost, fmt.Sprintf("/app/installations/%d/access_tokens", cfg.InstallationID), token, []byte(`{"permissions":{"metadata":"read"}}`), &installation); err != nil || installation.Token == "" {
 		return Listing{}, ErrUnavailable
 	}
 	var listing Listing
-	if err := c.call(ctx, http.MethodGet, fmt.Sprintf("/installation/repositories?per_page=100&page=%d", page), installation.Token, nil, &listing); err != nil {
+	if err := c.call(ctx, http.MethodGet, fmt.Sprintf("/installation/repositories?per_page=100&page=%d", page), token, nil, &listing); err != nil {
 		return Listing{}, ErrUnavailable
 	}
 	for _, repo := range listing.Repositories {
@@ -93,6 +72,45 @@ func (c *Client) Repositories(ctx context.Context, cfg config.GitHubApp, page in
 	listing.Page = page
 	listing.More = page*100 < listing.Total
 	return listing, nil
+}
+
+// installationToken requests only the permissions needed for the operation. A
+// write token is restricted to the one repository selected by the operator.
+func (c *Client) installationToken(ctx context.Context, cfg config.GitHubApp, repositoryID int64) (string, error) {
+	secret, err := config.ResolveSecret(cfg.PrivateKey)
+	if err != nil {
+		return "", ErrUnavailable
+	}
+	key, err := parseKey([]byte(secret))
+	if err != nil {
+		return "", ErrUnavailable
+	}
+	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: key}, (&jose.SignerOptions{}).WithType("JWT"))
+	if err != nil {
+		return "", ErrUnavailable
+	}
+	now := c.Now()
+	token, err := jwt.Signed(signer).Claims(jwt.Claims{Issuer: strconv.FormatInt(cfg.AppID, 10), IssuedAt: jwt.NewNumericDate(now.Add(-time.Minute)), Expiry: jwt.NewNumericDate(now.Add(5 * time.Minute))}).Serialize()
+	if err != nil {
+		return "", ErrUnavailable
+	}
+	var request any = map[string]any{"permissions": map[string]string{"metadata": "read"}}
+	if repositoryID > 0 {
+		request = map[string]any{"repository_ids": []int64{repositoryID}, "permissions": map[string]string{"metadata": "read", "contents": "write", "workflows": "write", "pull_requests": "write"}}
+	} else if repositoryID < 0 {
+		return "", ErrUnavailable
+	}
+	body, err := json.Marshal(request)
+	if err != nil {
+		return "", ErrUnavailable
+	}
+	var installation struct {
+		Token string `json:"token"`
+	}
+	if err := c.call(ctx, http.MethodPost, fmt.Sprintf("/app/installations/%d/access_tokens", cfg.InstallationID), token, body, &installation); err != nil || installation.Token == "" {
+		return "", ErrUnavailable
+	}
+	return installation.Token, nil
 }
 func validFullName(value string) bool {
 	if strings.Count(value, "/") != 1 || strings.HasPrefix(value, "/") || strings.HasSuffix(value, "/") {

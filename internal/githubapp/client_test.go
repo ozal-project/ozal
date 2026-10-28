@@ -84,3 +84,30 @@ func TestDiscoveryErrorsAreRedactedAndKeyReferenceRequired(t *testing.T) {
 		t.Fatal("invalid page accepted")
 	}
 }
+
+func TestWriteTokenIsRestrictedToSelectedRepository(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TEST_GITHUB_APP_KEY", string(pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			RepositoryIDs []int64           `json:"repository_ids"`
+			Permissions   map[string]string `json:"permissions"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if len(body.RepositoryIDs) != 1 || body.RepositoryIDs[0] != 123 || len(body.Permissions) != 4 || body.Permissions["metadata"] != "read" || body.Permissions["contents"] != "write" || body.Permissions["workflows"] != "write" || body.Permissions["pull_requests"] != "write" {
+			t.Errorf("incorrect token scope: %+v", body)
+		}
+		w.Write([]byte(`{"token":"test-installation-token"}`))
+	}))
+	defer server.Close()
+	client := New()
+	client.BaseURL = server.URL
+	if _, err := client.installationToken(context.Background(), config.GitHubApp{AppID: 7, InstallationID: 42, PrivateKey: "env:TEST_GITHUB_APP_KEY"}, 123); err != nil {
+		t.Fatal(err)
+	}
+}
