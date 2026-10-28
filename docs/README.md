@@ -9,6 +9,9 @@
 
 ## Direction
 
+- [Evaluación de desarrollo y stack — 2026-10-27](reviews/2026-10-27-development-and-stack.md)
+  — criterio sobre Go, Svelte, SQLite y arquitectura; evidencias de implementación,
+  límites de CI/capacidad y prioridades de consolidación.
 - [Experiencia completa del producto](architecture/product-experience.md)
   — revisión en español: instalación, primera app y migración de una web
   existente, servidores, consola self-hosted, GitHub, identidad y grupos;

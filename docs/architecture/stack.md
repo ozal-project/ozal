@@ -7,6 +7,12 @@ project.
 
 **Last reviewed:** 2026-10-19
 
+The [development and stack review — 2026-10-27](../reviews/2026-10-27-development-and-stack.md)
+recommends retaining Go, Svelte/Vite and SQLite for the self-hosted edge, with
+mandatory frontend CI, measured capacity and operator recovery acceptance.
+It records source observations and recommendations, not a new dependency
+decision, vulnerability scan or production acceptance.
+
 ## Decided
 
 | Area | Choice | Why |
