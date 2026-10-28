@@ -100,6 +100,17 @@ Step-up, private remote access and the remaining UI/API redesign are pending.
 
 ### Product scope and portability evidence — 2026-10-20
 
+**Owner-requested proposal, 2026-10-27 (America/Asuncion):**
+[Publicación autónoma](architecture/publicacion-autonoma.md) details integrated
+hostnames, HTTPS, owned public connectors, optional self-hosted authoritative
+DNS and an invited-participant URL service. It is a proposal for review, not an
+accepted scope expansion or deployment authorization. Existing scope and
+exposure gates remain authoritative until a stage is accepted.
+
+| ID | Task | State | Done when |
+|---|---|---|---|
+| `ARCH-010` | Review the [autonomous publication proposal](architecture/publicacion-autonoma.md): integrated naming/DNS, certificates, public connector lifecycle, multi-domain sessions, recovery and an optional operator-provided URL service. Reuses EDGE-006/007/002, TUN-002/003/004, PAGES-009 and UI-006 rather than duplicating their implementation work. | **Owner decision 2026-10-28: the MVP is stages A + B + C**, because depending on Cloudflare for the basic circuit is the dependency the product exists to remove: A direct profile (wildcard DNS once at any provider, HTTP-01 per configured name, names under the operator's zone), B public connector without a VPN, C central login with per-host sessions so private apps work on independent domains. Order: **C first** (it unblocks private apps on another domain and opens no new listener), then A's remaining acceptance, then B. D (self-hosted authoritative DNS) and F/G (URLs for other people) are out of the MVP; E only as the pilot's own migration (Portfolio). The publication state machine of section 12 waits until an external step needs durable state; `runtime_file` stays the single authority for routes. Exposure gates (SEC-*) still apply before direct public exposure. | Owner chooses stages and hosting/authority boundaries; accepted decisions reconcile VISION/stack and refine the existing tracker with implementation tasks and acceptance criteria. Provider-free public acceptance, multi-domain security, restoration and any participant isolation remain unclaimed until exercised. |
+
 The [contract](architecture/positioning-and-portability.md) records the initial
 user, offering, capability boundaries and demo. `EDGE-006` remains open for
 the two ingress modes and provider-switch evidence; `EDGE-007`/`EDGE-002`
