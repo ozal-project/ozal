@@ -60,9 +60,9 @@ export function explainPasskeyError(e: unknown, phase: "sign-in" | "create" = "c
       : "The passkey prompt was closed or timed out before a passkey was saved. Try again.";
   }
   if (error?.name === "InvalidStateError") return "This browser already has a passkey for this account. Sign in with it instead.";
-  if (error?.name === "SecurityError") return "This browser refused the passkey for this address. Open the console as http://localhost (not an IP address) and try again.";
+  if (error?.name === "SecurityError") return "This browser refused the passkey for this address. Open the console as http://switchboard.localhost (not an IP address) and try again.";
   if (error?.name === "NotSupportedError") return "This browser cannot create this kind of passkey. Update it, or use another browser or your phone.";
-  if (typeof DOMException !== "undefined" && e instanceof DOMException) return `This browser could not use a passkey here (${error.name}). Open the console as http://localhost and try again.`;
+  if (typeof DOMException !== "undefined" && e instanceof DOMException) return `This browser could not use a passkey here (${error.name}). Open the console as http://switchboard.localhost and try again.`;
   return error?.message || "Something went wrong.";
 }
 
@@ -142,4 +142,12 @@ export type EnrolInfo = { kind: "bootstrap" | "invite" | "recover" | "device"; e
 // What the link already fixes, so the form asks only for what is missing.
 export async function enrolInfo(token: string): Promise<EnrolInfo> {
   return api<EnrolInfo>("/_/api/admin/enrol/info", { token });
+}
+
+// New enrolment, recovery and device links use the console's preferred name,
+// including when issued from a legacy localhost session.
+export function consoleOrigin(origin: string): string {
+  const url = new URL(origin);
+  url.hostname = "switchboard.localhost";
+  return url.origin;
 }

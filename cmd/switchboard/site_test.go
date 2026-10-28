@@ -118,14 +118,17 @@ func TestPackSiteRefusesSymlinks(t *testing.T) {
 
 func TestAdminBaseKeepsTheTokenOffTheNetwork(t *testing.T) {
 	for raw, ok := range map[string]bool{
-		"http://127.0.0.1:9090":    true,
-		"http://localhost:9091/":   true,
-		"http://[::1]:9090":        true,
-		"https://edge.example.com": true,
-		"http://10.8.0.1:9091":     false,
-		"http://edge.example.com":  false,
-		"ftp://127.0.0.1":          false,
-		"127.0.0.1:9090":           false,
+		"http://127.0.0.1:9090":                          true,
+		"http://localhost:9091/":                         true,
+		"http://switchboard.localhost:9091":              true,
+		"http://other.localhost:9091":                    false,
+		"http://switchboard.localhost.evil.example:9091": false,
+		"http://[::1]:9090":                              true,
+		"https://edge.example.com":                       true,
+		"http://10.8.0.1:9091":                           false,
+		"http://edge.example.com":                        false,
+		"ftp://127.0.0.1":                                false,
+		"127.0.0.1:9090":                                 false,
 	} {
 		if _, err := adminBase(raw); (err == nil) != ok {
 			t.Errorf("adminBase(%q) error = %v, want ok=%v", raw, err, ok)

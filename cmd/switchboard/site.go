@@ -113,7 +113,7 @@ func adminBase(raw string) (string, error) {
 	}
 	if u.Scheme == "http" {
 		ip := net.ParseIP(u.Hostname())
-		if !strings.EqualFold(u.Hostname(), "localhost") && (ip == nil || !ip.IsLoopback()) {
+		if !strings.EqualFold(u.Hostname(), "localhost") && !strings.EqualFold(u.Hostname(), "switchboard.localhost") && (ip == nil || !ip.IsLoopback()) {
 			return "", fmt.Errorf("-admin %q: plain http only on loopback (use an SSH tunnel for a remote edge)", raw)
 		}
 	}

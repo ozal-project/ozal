@@ -65,7 +65,7 @@ func runConsole(ctx context.Context, args []string, out io.Writer) error {
 		if kind == "recover" {
 			what = "replace the passkeys of " + *email + " (the old ones stop working)"
 		}
-		fmt.Fprintf(out, "Open once within ten minutes in your browser to %s. Passkeys need the name localhost, so the link uses it:\n%s/overview#enrol=%s\n", what, passkeyOrigin(base), url.QueryEscape(answer.Token))
+		fmt.Fprintf(out, "Open once within ten minutes in your browser to %s. Passkeys use switchboard.localhost:\n%s/overview#enrol=%s\n", what, passkeyOrigin(base), url.QueryEscape(answer.Token))
 		fmt.Fprint(out, sshHint(os.Getenv("SSH_CONNECTION"), invokingUser(), base))
 	case "login":
 		if strings.TrimSpace(*name) == "" {
@@ -123,18 +123,19 @@ func splitTools(v string) []string {
 	return out
 }
 
-// passkeyOrigin rewrites a loopback address to the name localhost: WebAuthn
+// passkeyOrigin rewrites loopback IPs and the legacy localhost name to
+// switchboard.localhost: WebAuthn
 // binds a passkey to a domain name and refuses an IP address.
 func passkeyOrigin(base string) string {
 	u, err := url.Parse(base)
 	if err != nil {
 		return base
 	}
-	if ip := net.ParseIP(u.Hostname()); ip != nil && ip.IsLoopback() {
+	if ip := net.ParseIP(u.Hostname()); strings.EqualFold(u.Hostname(), "localhost") || (ip != nil && ip.IsLoopback()) {
 		if port := u.Port(); port != "" {
-			u.Host = "localhost:" + port
+			u.Host = "switchboard.localhost:" + port
 		} else {
-			u.Host = "localhost"
+			u.Host = "switchboard.localhost"
 		}
 	}
 	return u.String()
@@ -145,9 +146,9 @@ func passkeyOrigin(base string) string {
 func forwardedURL(listen string) string {
 	_, port, err := net.SplitHostPort(listen)
 	if err != nil || port == "" {
-		return "http://127.0.0.1:9090"
+		return "http://switchboard.localhost:9090"
 	}
-	return "http://127.0.0.1:" + port
+	return "http://switchboard.localhost:" + port
 }
 
 // invokingUser is the person at the keyboard, not root under sudo.

@@ -74,6 +74,7 @@ func WithIdentities(store identities) Option {
 type pendingCeremony struct {
 	enrol     bool
 	kind      string
+	origin    string
 	session   webauthn.SessionData
 	tokenHash []byte
 	account   adminid.Account
@@ -188,12 +189,12 @@ func (b *ceremonyBook) put(c pendingCeremony) (string, error) {
 	return id, nil
 }
 
-func (b *ceremonyBook) take(id string, enrol bool) (pendingCeremony, bool) {
+func (b *ceremonyBook) take(id string, enrol bool, origin string) (pendingCeremony, bool) {
 	b.mu.Lock()
 	c, ok := b.pending[id]
 	delete(b.pending, id)
 	b.mu.Unlock()
-	if !ok || c.enrol != enrol || !b.now().Before(c.expires) {
+	if !ok || c.enrol != enrol || c.origin != origin || !b.now().Before(c.expires) {
 		return pendingCeremony{}, false
 	}
 	return c, true
@@ -231,7 +232,8 @@ func (h *Handler) registerIdentities() {
 
 // relyingParty derives the WebAuthn relying party from the page's own origin.
 // A passkey is bound to a registrable name, never to an IP address, so the
-// console must be opened as localhost (the SSH tunnel's local end).
+// console uses switchboard.localhost (the SSH tunnel's local end). The legacy
+// localhost origin stays available for registering a passkey on the new name.
 func (h *Handler) relyingParty(r *http.Request) (*webauthn.WebAuthn, error) {
 	scheme := "http"
 	if r.TLS != nil {
@@ -245,11 +247,12 @@ func (h *Handler) relyingParty(r *http.Request) (*webauthn.WebAuthn, error) {
 	if err != nil {
 		hostname = r.Host
 	}
-	if !strings.EqualFold(hostname, "localhost") {
-		return nil, errors.New("passkeys need the console opened as localhost (for example http://localhost:9091), not by IP address")
+	hostname = strings.ToLower(hostname)
+	if hostname != "switchboard.localhost" && hostname != "localhost" {
+		return nil, errors.New("passkeys need the console opened as switchboard.localhost (for example http://switchboard.localhost:9091), not by IP address")
 	}
 	return webauthn.New(&webauthn.Config{
-		RPID:          "localhost",
+		RPID:          hostname,
 		RPDisplayName: "Switchboard console",
 		RPOrigins:     []string{origin},
 		AuthenticatorSelection: protocol.AuthenticatorSelection{
@@ -450,7 +453,7 @@ func (h *Handler) enrolBegin(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "adding a passkey could not start")
 			return
 		}
-		ceremony, err := h.ceremonies.put(pendingCeremony{enrol: true, kind: "device", session: *session, tokenHash: hash[:], account: account})
+		ceremony, err := h.ceremonies.put(pendingCeremony{origin: r.Header.Get("Origin"), enrol: true, kind: "device", session: *session, tokenHash: hash[:], account: account})
 		if err != nil {
 			writeError(w, http.StatusTooManyRequests, "too many sign-ins in progress; try again shortly")
 			return
@@ -498,7 +501,7 @@ func (h *Handler) enrolBegin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "enrolment could not start")
 		return
 	}
-	id, err := h.ceremonies.put(pendingCeremony{enrol: true, kind: enrolment.Kind, session: *session, tokenHash: hash[:], account: account})
+	id, err := h.ceremonies.put(pendingCeremony{origin: r.Header.Get("Origin"), enrol: true, kind: enrolment.Kind, session: *session, tokenHash: hash[:], account: account})
 	if err != nil {
 		writeError(w, http.StatusTooManyRequests, "too many sign-ins in progress; try again shortly")
 		return
@@ -513,7 +516,7 @@ func (h *Handler) enrolFinish(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	pending, ok := h.ceremonies.take(r.Header.Get(adminCeremony), true)
+	pending, ok := h.ceremonies.take(r.Header.Get(adminCeremony), true, r.Header.Get("Origin"))
 	if !ok {
 		h.failedSignIn(r, "ceremony_unknown", nil)
 		writeError(w, http.StatusUnauthorized, "this step expired; start again")
@@ -566,7 +569,7 @@ func (h *Handler) adminLoginBegin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "sign-in could not start")
 		return
 	}
-	id, err := h.ceremonies.put(pendingCeremony{session: *session})
+	id, err := h.ceremonies.put(pendingCeremony{origin: r.Header.Get("Origin"), session: *session})
 	if err != nil {
 		writeError(w, http.StatusTooManyRequests, "too many sign-ins in progress; try again shortly")
 		return
@@ -581,7 +584,7 @@ func (h *Handler) adminLoginFinish(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	pending, ok := h.ceremonies.take(r.Header.Get(adminCeremony), false)
+	pending, ok := h.ceremonies.take(r.Header.Get(adminCeremony), false, r.Header.Get("Origin"))
 	if !ok {
 		h.failedSignIn(r, "ceremony_unknown", nil)
 		writeError(w, http.StatusUnauthorized, "this step expired; start again")
@@ -817,7 +820,7 @@ func (h *Handler) addPasskeyBegin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "adding a passkey could not start")
 		return
 	}
-	id, err := h.ceremonies.put(pendingCeremony{enrol: true, kind: "add", session: *session, account: account})
+	id, err := h.ceremonies.put(pendingCeremony{origin: r.Header.Get("Origin"), enrol: true, kind: "add", session: *session, account: account})
 	if err != nil {
 		writeError(w, http.StatusTooManyRequests, "too many sign-ins in progress; try again shortly")
 		return
@@ -828,7 +831,7 @@ func (h *Handler) addPasskeyBegin(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) addPasskeyFinish(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	self := h.callerAccount(r)
-	pending, ok := h.ceremonies.take(r.Header.Get(adminCeremony), true)
+	pending, ok := h.ceremonies.take(r.Header.Get(adminCeremony), true, r.Header.Get("Origin"))
 	if self == "" || !ok || pending.kind != "add" || pending.account.ID != self {
 		h.failedSignIn(r, "add_passkey_unknown", nil)
 		writeError(w, http.StatusUnauthorized, "this step expired; start again")

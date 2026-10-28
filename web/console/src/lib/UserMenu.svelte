@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { consoleOrigin } from "$lib/passkey";
   import { tick } from "svelte";
   import { admin, tools, signOut } from "$lib/adminToken.svelte";
   import { addPasskey, explainPasskeyError, issueDeviceLink } from "$lib/passkey";
@@ -39,7 +40,7 @@
     notice = ""; device = null;
     try {
       const made = await issueDeviceLink(admin.token.trim());
-      device = { link: `${location.origin}/overview#enrol=${encodeURIComponent(made.token)}`, until: new Date(made.expires).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) };
+      device = { link: `${consoleOrigin(location.origin)}/overview#enrol=${encodeURIComponent(made.token)}`, until: new Date(made.expires).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) };
     } catch (e) { notice = (e as Error).message; }
   }
 

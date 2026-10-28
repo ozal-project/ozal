@@ -144,7 +144,7 @@ func setSecurityHeaders(w http.ResponseWriter, r *http.Request) {
 }
 
 // loopbackHost reports whether an admin Host header names only the local
-// machine: an IP in 127.0.0.0/8 or ::1, or the localhost name.
+// machine: an IP in 127.0.0.0/8 or ::1, or one of the two console names.
 func loopbackHost(host string) bool {
 	if host == "" {
 		return false
@@ -154,7 +154,7 @@ func loopbackHost(host string) bool {
 	}
 	host = strings.TrimSuffix(host, ".")
 	host = strings.TrimPrefix(strings.TrimSuffix(host, "]"), "[")
-	if strings.EqualFold(host, "localhost") {
+	if strings.EqualFold(host, "localhost") || strings.EqualFold(host, "switchboard.localhost") {
 		return true
 	}
 	ip := net.ParseIP(host)

@@ -16,7 +16,7 @@ const exec = promisify(execFile);
 const binary = process.env.SWITCHBOARD_BIN;
 const chrome = process.env.CHROME;
 if (!binary || !chrome) throw new Error("Set SWITCHBOARD_BIN and CHROME");
-const consoleURL = `http://localhost:${ADMIN_PORT}`;
+const consoleURL = `http://switchboard.localhost:${ADMIN_PORT}`;
 const root = await mkdtemp(join(tmpdir(), "sb-passkeys-"));
 let edge, browser, step = "start";
 const errors = [];

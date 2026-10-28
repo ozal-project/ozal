@@ -32,10 +32,10 @@ func TestEnvironmentConfigBeatsLocalAndInstalledButNotTheFlag(t *testing.T) {
 }
 
 func TestForwardedURLFollowsTheAdminPort(t *testing.T) {
-	if got := forwardedURL("127.0.0.1:9091"); got != "http://127.0.0.1:9091" {
+	if got := forwardedURL("127.0.0.1:9091"); got != "http://switchboard.localhost:9091" {
 		t.Fatal(got)
 	}
-	if got := forwardedURL(""); got != "http://127.0.0.1:9090" {
+	if got := forwardedURL(""); got != "http://switchboard.localhost:9090" {
 		t.Fatal(got)
 	}
 }
@@ -71,7 +71,7 @@ func TestEnrolCommandIsShortOnlyWhenItIsTrue(t *testing.T) {
 
 func TestFirstRunNoticeCarriesTheLinkAndThePort(t *testing.T) {
 	got := firstRunNotice("127.0.0.1:9091", "TOKEN")
-	for _, want := range []string{"http://localhost:9091/overview#enrol=TOKEN", "ssh -N -L 9091:127.0.0.1:9091"} {
+	for _, want := range []string{"http://switchboard.localhost:9091/overview#enrol=TOKEN", "ssh -N -L 9091:127.0.0.1:9091"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("missing %q in %q", want, got)
 		}

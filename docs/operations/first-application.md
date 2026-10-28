@@ -63,8 +63,21 @@ navegador que tiene el túnel; pide nombre completo y correo (no se envía
 ningún mensaje) y crea el passkey. Esa persona queda como la primera
 administradora, con todas las herramientas. Desde entonces la consola ofrece
 «Sign in with your passkey». Un passkey queda atado al nombre del sitio, y
-WebAuthn no admite direcciones IP: abre la consola como `http://localhost:PUERTO`
+WebAuthn no admite direcciones IP: abre la consola como `http://switchboard.localhost:PUERTO`
 (el extremo local del túnel), nunca como `127.0.0.1`.
+
+`switchboard.localhost` resuelve al equipo desde el navegador; no necesita un
+registro DNS público ni cambiar el túnel SSH o el puerto del listener. Si otra
+herramienta usa el DNS del sistema y no resuelve el nombre, puedes añadir
+`127.0.0.1 switchboard.localhost` al archivo `hosts` de tu equipo. El navegador
+permite las passkeys en este contexto local sin instalar un certificado TLS.
+
+**Pasar desde localhost:** las passkeys están vinculadas al nombre y no se
+copian al nuevo dominio. Inicia sesión en `http://localhost:PUERTO`, abre tu
+menú y elige **Sign in on another browser**. El enlace ya usa
+`switchboard.localhost`: ábrelo y crea una passkey para la misma cuenta.
+Las passkeys anteriores siguen sirviendo en `localhost`. Si ya no puedes
+usarlas, recurre a la recuperación del host, que sí reemplaza las anteriores.
 
 Si pierdes el dispositivo, el host emite una recuperación:
 `sudo switchboard console recover -email tu@correo`. Revoca los passkeys
@@ -75,7 +88,7 @@ no son usuarios de aplicaciones: un passkey de visitante no abre la consola.
 Desde la consola, **Administrators** permite invitar a otra persona por correo con
 una parte de tus herramientas (nunca más de las que tú tienes), y deshabilitarla;
 sus sesiones abiertas terminan al instante. La invitación sirve una vez durante
-24 horas y la persona la abre como `localhost` por su propio túnel SSH.
+24 horas y la persona la abre como `switchboard.localhost` por su propio túnel SSH.
 
 `console login` y el token de admin siguen disponibles como vía de emergencia
 y automatización.

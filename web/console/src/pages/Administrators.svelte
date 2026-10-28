@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { consoleOrigin } from "$lib/passkey";
   import { onMount } from "svelte";
   import PageHeader from "$lib/PageHeader.svelte";
   import Modal from "$lib/Modal.svelte";
@@ -59,7 +60,7 @@
     busy = true; formError = "";
     try {
       const made = await inviteAdmin(admin.token.trim(), email.trim(), picked, name.trim() || undefined);
-      invitation = { link: `${location.origin}/overview#enrol=${encodeURIComponent(made.token)}`, email: made.email, expires: made.expires };
+      invitation = { link: `${consoleOrigin(location.origin)}/overview#enrol=${encodeURIComponent(made.token)}`, email: made.email, expires: made.expires };
       await load();
     } catch (e) { formError = (e as Error).message; }
     finally { busy = false; }
@@ -69,7 +70,7 @@
     notices = { ...notices, [account.id]: "" }; recovery = null;
     try {
       const made = await recoverAdmin(admin.token.trim(), account.id);
-      recovery = { link: `${location.origin}/overview#enrol=${encodeURIComponent(made.token)}`, email: made.email, expires: made.expires };
+      recovery = { link: `${consoleOrigin(location.origin)}/overview#enrol=${encodeURIComponent(made.token)}`, email: made.email, expires: made.expires };
       recoveryOpen = true;
     } catch (e) { notices = { ...notices, [account.id]: (e as Error).message }; }
   }
@@ -143,7 +144,7 @@
     <div class="grid gap-2" aria-live="polite">
       <p class="text-sm font-medium">Invitation for {invitation.email}</p>
       <CopyCommand command={invitation.link} label="Copy invitation link" />
-      <p class="text-muted-foreground text-xs">Works once, until {when(invitation.expires)}. They open it as <span class="font-mono">localhost</span> through their own SSH tunnel to this console, give their name and create a passkey. Shown only now.</p>
+      <p class="text-muted-foreground text-xs">Works once, until {when(invitation.expires)}. They open it as <span class="font-mono">switchboard.localhost</span> through their own SSH tunnel to this console, give their name and create a passkey. Shown only now.</p>
       <div class="mt-3 flex justify-end gap-2">
         <Button variant="ghost" onclick={startAdd}>Add another</Button>
         <Button onclick={() => (addOpen = false)}>Done</Button>
