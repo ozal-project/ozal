@@ -33,5 +33,23 @@ jobs:
         run: |
           go install honnef.co/go/tools/cmd/staticcheck@v0.8.2
           go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+      # REL-014: the console's embedded build and the project page are
+      # checked from a clean checkout, not only where node_modules exists.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: startsWith(matrix.os, 'ubuntu')
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: |
+            web/console/package-lock.json
+            site/package-lock.json
+      - name: Install frontend dependencies
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          npm ci --prefix web/console --no-audit --no-fund
+          npm ci --prefix site --no-audit --no-fund
       - name: Gate
+        env:
+          # Required on Linux; macOS runs the Go gate only.
+          SWITCHBOARD_REQUIRE_FRONTEND: ${{ startsWith(matrix.os, 'ubuntu') && '1' || '' }}
         run: scripts/verify.sh

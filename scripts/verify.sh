@@ -5,6 +5,17 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+# CI and release set SWITCHBOARD_REQUIRE_FRONTEND=1 (REL-014): a frontend
+# check that cannot run is then a failure, not a skipped step.
+require_frontend="${SWITCHBOARD_REQUIRE_FRONTEND:-}"
+skipped() {
+  if [[ -n "$require_frontend" ]]; then
+    echo "$1 (required: SWITCHBOARD_REQUIRE_FRONTEND is set)" >&2
+    exit 1
+  fi
+  echo "  $1"
+}
+
 echo "[1/7] gofmt"
 unformatted="$(gofmt -l .)"
 if [[ -n "$unformatted" ]]; then
@@ -58,7 +69,7 @@ if [[ -d web/console/node_modules ]]; then
     exit 1
   fi
 else
-  echo "  console toolchain not installed (scripts/build-console.sh); embedded build used as is"
+  skipped "console toolchain not installed (cd web/console && npm ci); embedded build used as is"
 fi
 
 if command -v node >/dev/null 2>&1; then
@@ -69,7 +80,7 @@ if command -v node >/dev/null 2>&1; then
   echo "[6e] site: tracker parser and demo logic"
   node --test site/src/lib/*.test.ts
 else
-  echo "  node not installed: passkey page script, console logic and site parser not exercised"
+  skipped "node not installed: passkey page script, console logic and site parser not exercised"
 fi
 
 # The project page reads the trackers at build time: a tracker edit that the
@@ -80,7 +91,7 @@ if [[ -d site/node_modules ]]; then
   node scripts/test-site-engine.mjs
   (cd site && npm run build >/dev/null)
 else
-  echo "  site toolchain not installed (cd site && npm ci); site build not exercised"
+  skipped "site toolchain not installed (cd site && npm ci); site build not exercised"
 fi
 
 echo "[6g] Linux release installer"
