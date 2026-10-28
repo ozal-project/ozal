@@ -1,10 +1,24 @@
 # Implemented — Switchboard
 
-**Last review:** 2026-10-25
+**Last review:** 2026-10-28
 **Code reviewed up to:** baseline `0ddb606`; feature commits listed below.
 
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
+
+## REL-015 — consolidated product documentation — 2026-10-28 (`85c3d32`)
+
+Reduced docs from 38 to 14 Markdown files and the root README to 64 lines.
+Customer guides, configuration reference and engineering contracts have one
+entry point; 28 retired originals remain in an ignored local archive. Identity
+contracts and the trackers required by clean builds remain versioned. Release
+and installer references follow the new paths; maintenance rules prevent
+per-task report sprawl.
+
+Evidence: local links/anchors, tracker parsing, release paths and site build
+checked; the full repository gate passed for the consolidation before this
+closure (recorded in `da3d0e6`). This closes documentation organization only;
+it does not close publication, HTTPS or operator acceptance of product features.
 
 ## PAGES-008 — authenticated project deploy endpoint — 2026-10-25 (`adbc3d1`, `627f2b4`)
 
@@ -70,7 +84,7 @@ the public deploy endpoint and actual project-token use remain `PAGES-008`.
 
 ## Platform-aware migration and upgrade test fixtures — 2026-10-21 (committed with this change)
 
-[Run 39711694730](https://github.com/octaviosantacruz/switchboard/actions/runs/39711694730)
+[Run 39711694730](https://github.com/switchboard-project/switchboard/actions/runs/39711694730)
 on `9701fa4` exposed two new Windows test assumptions after `REL-009` passed:
 the migration backup test required Unix `0600` mode bits, and upgrade flag
 tests used Unix paths that `filepath.IsAbs` rejects on Windows.
@@ -90,7 +104,7 @@ is tracked as `REL-011`. No push, CI rerun or deployment.
 
 ## REL-009 — native-path assertions for tunnel renewal — 2026-10-21 (`7e039c7`)
 
-The Windows job in [CI run 39706919346](https://github.com/octaviosantacruz/switchboard/actions/runs/39706919346)
+The Windows job in [CI run 39706919346](https://github.com/switchboard-project/switchboard/actions/runs/39706919346)
 failed `TestEdgeConnectorChangesGoThroughTheAdminSocket`: `filepath.Join`
 produced `\edge\config.integrated.json`, but the test expected
 `/edge/config.integrated.json`. Linux and macOS passed on the same `aa32c4c`.
@@ -108,7 +122,7 @@ reachable vulnerabilities, console check/rebuild, passkey script and 11
 console state tests). The test package and CLI cross-compiled to Windows/amd64
 PE executables. Those Windows executables were not run during that local
 verification. Subsequent hosted acceptance was observed on `7e039c7`: [run
-39709670078](https://github.com/octaviosantacruz/switchboard/actions/runs/39709670078)
+39709670078](https://github.com/switchboard-project/switchboard/actions/runs/39709670078)
 passed on Linux, macOS and Windows. This closes `REL-009`; the later
 upgrade/migration test failures are tracked separately as `REL-011`.
 
