@@ -236,6 +236,7 @@ go test -race ./internal/auth ./internal/proxy ./internal/tunnel
 node scripts/demo/product-acceptance.mjs
 node scripts/demo/passkey-acceptance.mjs
 node scripts/demo/host-sessions-acceptance.mjs
+CHROME=/ruta/chrome node scripts/demo/https-host-sessions-acceptance.mjs
 node scripts/demo/site-check.mjs
 python3 scripts/smoke-tunnel-configured.py --binary /ruta/binario-de-prueba
 ```
@@ -244,6 +245,40 @@ Los demos necesitan sus dependencias y navegador; usa `SWITCHBOARD_BIN` y
 `CHROME` cuando corresponda, consulta el script para prerrequisitos. Ejecutan
 fixtures locales; HTTP localhost no acredita HTTPS público ni otros navegadores.
 No instales herramientas adicionales implícitamente por un ejemplo.
+
+La aceptación HTTPS de ID-015 requiere Linux, Go, `agent-browser` con soporte
+`--ca-cert`, `certutil` (paquete `libnss3-tools`) y el `playwright-core` ya fijado
+en `scripts/demo`. Compila un ejecutable de test de `cmd/switchboard`, usa la
+configuración autocert de producción con hojas locales precargadas, el routing
+real, WebAuthn y SQLite migrado. Todos los listeners usan puertos efímeros en
+loopback; la administración del fixture existe solo en `_test.go`. Cierra stdin
+para detenerlo y borra estado/certificados temporales al terminar. La CA solo
+se importa en el NSS temporal de esa sesión de agent-browser; no se modifica
+la confianza del usuario y no se ignoran errores TLS.
+
+Comprueba que Chrome rechaza primero la CA no confiable y, tras confiar en ella,
+acepta login y dos apps de sitios distintos: cookies host-only `Secure`,
+`HttpOnly`, `SameSite=Lax`, binding del navegador, audiencia del código, código
+robado y consumido, política denegada, cookies retiradas antes del upstream,
+logout en ambos extremos, usuario deshabilitado, revocación y expiración del
+padre. La expiración se provoca solo en filas del fixture; no se acortan reglas
+de producción. Incluye viewport móvil con toque y conserva la sesión compartida
+de un host bajo `cookie_domain`. Emulación móvil no acredita un teléfono real.
+Dos pestañas del mismo host inician handoffs a la vez y canjean sus códigos en
+orden inverso: cada una conserva su destino y solo borra su cookie de vínculo.
+El driver aborta la navegación interceptada antes de canjear el código, sin
+crear documentos artificiales ni bloquear favicons. Comprueba además que un
+binding copiado con `Path=/` tampoco llega al upstream. Las regresiones Go
+reproducen el conflicto original y prueban que fallar un canje no impide al
+otro terminar, junto al filtrado de cookies en rutas directas y por conector.
+
+El test normal `TestDirectHTTPSProfileWithoutCloudflare` valida la plantilla
+directa y sirve un certificado desde caché con confianza TLS comprobada. Estos
+ensayos **no emiten ni renuevan certificados públicos**, no prueban propagación
+DNS ni firewall, no arrancan el binario de distribución completo y no cierran
+ID-015/ARCH-010. La aceptación exterior sigue requiriendo CA pública, otra red,
+teléfono, renovación, reinicio y recuperación; el conector público de etapa B
+conserva su tarea separada.
 
 Para browser QA: 1440/1024/390/320 px, teclado, foco/Escape, cancelación sin
 mutación, errores/retry, datos viejos y logout sin datos residuales. Probar

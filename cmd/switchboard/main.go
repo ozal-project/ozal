@@ -659,30 +659,10 @@ func startManagedTLS(cfg *config.Config, handler http.Handler, sink events.Sink,
 // not a goroutine. Certificates follow the current route table (UI-006): a
 // hostname added in the console gets one on its first visit, no restart.
 func startAutocertTLS(cfg *config.Config, handler http.Handler, sink events.Sink, current func() config.Config) ([]*http.Server, error) {
-	manager := &autocert.Manager{
-		Cache:      autocert.DirCache(cfg.TLS.CacheDir),
-		Prompt:     autocert.AcceptTOS,
-		HostPolicy: routeHostPolicy(cfg.TLS.Domains, current),
-		Email:      cfg.TLS.Email,
-	}
-
-	tlsConfig := manager.TLSConfig()
-	if cfg.TLS.OriginClientCAFile != "" {
-		// Fail closed at startup: an unreadable or empty bundle must stop the
-		// listener, never leave it open.
-		bundle, err := os.ReadFile(cfg.TLS.OriginClientCAFile)
-		if err != nil {
-			return nil, fmt.Errorf("read tls.origin_client_ca_file: %w", err)
-		}
-		roots, err := originauth.LoadPool(bundle)
-		if err != nil {
-			return nil, fmt.Errorf("tls.origin_client_ca_file: %w", err)
-		}
-		// autocert may answer a tls-alpn-01 challenge, which cannot present
-		// a client certificate: opt into the exact exemption here, never in
-		// the DNS-01 path.
-		tlsConfig = originauth.ServerTLS(tlsConfig, roots, sink, originauth.AllowACMEValidation())
-		handler = originauth.RequireVerified(handler)
+	manager := newAutocertManager(cfg, current)
+	tlsConfig, handler, err := autocertTLSConfig(cfg, handler, sink, manager)
+	if err != nil {
+		return nil, err
 	}
 
 	httpsListener, err := net.Listen("tcp", ":443")
@@ -726,6 +706,40 @@ func startAutocertTLS(cfg *config.Config, handler http.Handler, sink events.Sink
 	}()
 
 	return []*http.Server{httpsServer, challengeServer}, nil
+}
+
+// newAutocertManager shares the HTTP-01 certificate policy and cache wiring.
+func newAutocertManager(cfg *config.Config, current func() config.Config) *autocert.Manager {
+	return &autocert.Manager{
+		Cache:      autocert.DirCache(cfg.TLS.CacheDir),
+		Prompt:     autocert.AcceptTOS,
+		HostPolicy: routeHostPolicy(cfg.TLS.Domains, current),
+		Email:      cfg.TLS.Email,
+	}
+}
+
+// autocertTLSConfig applies origin trust to the HTTP-01 listener.
+func autocertTLSConfig(cfg *config.Config, handler http.Handler, sink events.Sink, manager *autocert.Manager) (*tls.Config, http.Handler, error) {
+	tlsConfig := manager.TLSConfig()
+	if cfg.TLS.OriginClientCAFile != "" {
+		// Fail closed at startup: an unreadable or empty bundle must stop the
+		// listener, never leave it open.
+		bundle, err := os.ReadFile(cfg.TLS.OriginClientCAFile)
+		if err != nil {
+			return nil, nil, fmt.Errorf("read tls.origin_client_ca_file: %w", err)
+		}
+		roots, err := originauth.LoadPool(bundle)
+		if err != nil {
+			return nil, nil, fmt.Errorf("tls.origin_client_ca_file: %w", err)
+		}
+		// autocert may answer a tls-alpn-01 challenge, which cannot present
+		// a client certificate: opt into the exact exemption here, never in
+		// the DNS-01 path.
+		tlsConfig = originauth.ServerTLS(tlsConfig, roots, sink, originauth.AllowACMEValidation())
+		handler = originauth.RequireVerified(handler)
+	}
+
+	return tlsConfig, handler, nil
 }
 
 // managedTLSConfig applies the origin trust boundary without an ALPN exception.

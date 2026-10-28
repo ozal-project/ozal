@@ -130,6 +130,69 @@ func (b *jarBrowser) cookie(rawURL, name string) *http.Cookie {
 
 func isHandoff(loc string) bool { return strings.Contains(loc, "/_/auth/handoff?code=") }
 
+// Two tabs can start before either callback completes. Cookie scope must
+// isolate the transactions even when the callbacks return in reverse order.
+func TestConcurrentHandoffsOnOneHost(t *testing.T) {
+	h := newHarnessFor(t, docsHost)
+	b := h.jarBrowser(t)
+	b.signIn(t, "ana@example.com")
+	first := b.get(t, "https://"+docsHost+"/first?q=1")
+	second := b.get(t, "https://"+docsHost+"/second?q=2")
+	one, two := first.Result().Cookies()[0], second.Result().Cookies()[0]
+	if one.Name == two.Name || one.Value == two.Value {
+		t.Fatal("parallel transactions share a binding cookie")
+	}
+	for _, binding := range []*http.Cookie{one, two} {
+		if !strings.HasPrefix(binding.Name, "sb_handoff_") || binding.Path != "/_/auth/handoff" || binding.Domain != "" || !binding.Secure || !binding.HttpOnly || binding.SameSite != http.SameSiteLaxMode {
+			t.Fatal("transaction cookie lost its scope or security flags")
+		}
+	}
+	codeOne := b.get(t, first.Header().Get("Location")).Header().Get("Location")
+	codeTwo := b.get(t, second.Header().Get("Location")).Header().Get("Location")
+	for _, tc := range []struct{ code, path, binding string }{
+		{codeTwo, "/second?q=2", two.Name}, {codeOne, "/first?q=1", one.Name},
+	} {
+		res := b.get(t, tc.code)
+		if res.Code != http.StatusSeeOther || res.Header().Get("Location") != tc.path {
+			t.Fatalf("parallel handoff to %s returned %d", tc.path, res.Code)
+		}
+		if b.cookie("https://"+docsHost+"/_/auth/handoff", tc.binding) != nil {
+			t.Fatal("redeemed transaction left its binding cookie")
+		}
+		if tc.binding == two.Name && b.cookie("https://"+docsHost+"/_/auth/handoff", one.Name) == nil {
+			t.Fatal("redeeming one transaction cleared the other tab's binding")
+		}
+	}
+	if _, ok := b.authenticatedOn(docsHost); !ok {
+		t.Fatal("parallel handoffs left the browser signed out")
+	}
+}
+
+func TestFailedHandoffOnlyClearsItsOwnBinding(t *testing.T) {
+	h := newHarnessFor(t, docsHost)
+	b := h.jarBrowser(t)
+	b.signIn(t, "ana@example.com")
+	first := b.get(t, "https://"+docsHost+"/first")
+	second := b.get(t, "https://"+docsHost+"/second")
+	one, two := first.Result().Cookies()[0], second.Result().Cookies()[0]
+	codeOne := b.get(t, first.Header().Get("Location")).Header().Get("Location")
+	codeTwo := b.get(t, second.Header().Get("Location")).Header().Get("Location")
+	one.Value = strings.Repeat("A", 43)
+	b.keep("https://"+docsHost+"/_/auth/handoff", one)
+	if res := b.get(t, codeOne); res.Code != http.StatusBadRequest {
+		t.Fatalf("wrong binding returned %d", res.Code)
+	}
+	if b.cookie("https://"+docsHost+"/_/auth/handoff", one.Name) != nil {
+		t.Fatal("failed redemption left its binding")
+	}
+	if b.cookie("https://"+docsHost+"/_/auth/handoff", two.Name) == nil {
+		t.Fatal("failed redemption cleared another transaction's binding")
+	}
+	if res := b.get(t, codeTwo); res.Code != http.StatusSeeOther || res.Header().Get("Location") != "/second" {
+		t.Fatalf("other tab could not finish: %d", res.Code)
+	}
+}
+
 // ID-015: a signed-in visitor opens a private app on another domain and
 // lands where they were going with a host-only session; the central cookie
 // never travels there.
@@ -144,7 +207,7 @@ func TestHandoffSignsIntoAnotherDomain(t *testing.T) {
 		t.Fatalf("first visit = %d %q", first.Code, loc)
 	}
 	binding := first.Result().Cookies()[0]
-	if binding.Name != "sb_handoff" || binding.Path != "/_/auth/handoff" || binding.Domain != "" || !binding.HttpOnly || !binding.Secure || binding.SameSite != http.SameSiteLaxMode {
+	if binding.Name != auth.HandoffCookiePrefix+mustParse(t, loc).Query().Get("tx") || binding.Path != "/_/auth/handoff" || binding.Domain != "" || !binding.HttpOnly || !binding.Secure || binding.SameSite != http.SameSiteLaxMode {
 		t.Fatalf("binding cookie = %+v", binding)
 	}
 
@@ -178,14 +241,16 @@ func TestHandoffSignsIntoAnotherDomain(t *testing.T) {
 // transaction, is consumed by the first attempt, and only opens its own host.
 func TestHandoffRefusesStolenInjectedAndCrossHostCodes(t *testing.T) {
 	h := newHarnessFor(t, appHost, docsHost, wikiHost)
-	stopAtCode := func(b *jarBrowser, host string) string {
-		rec, _ := b.follow(t, "https://"+host+"/", isHandoff)
-		return rec.Header().Get("Location")
+	stopAtCode := func(b *jarBrowser, host string) (string, *http.Cookie) {
+		begin := b.get(t, "https://"+host+"/")
+		binding := begin.Result().Cookies()[0]
+		rec, _ := b.follow(t, begin.Header().Get("Location"), isHandoff)
+		return rec.Header().Get("Location"), binding
 	}
 
 	victim := h.jarBrowser(t)
 	victim.signIn(t, "ana@example.com")
-	stolen := stopAtCode(victim, docsHost)
+	stolen, _ := stopAtCode(victim, docsHost)
 
 	// Stolen: another browser has no binding for this transaction, and its
 	// attempt burns the code.
@@ -204,9 +269,9 @@ func TestHandoffRefusesStolenInjectedAndCrossHostCodes(t *testing.T) {
 	}
 
 	// Cross host: a code for docs, presented on wiki by the same browser.
-	forDocs := stopAtCode(victim, docsHost)
+	forDocs, forDocsBinding := stopAtCode(victim, docsHost)
 	onWiki := strings.Replace(forDocs, docsHost, wikiHost, 1)
-	victim.keep("https://"+wikiHost+"/_/auth/handoff", victim.cookie("https://"+docsHost+"/_/auth/handoff", "sb_handoff"))
+	victim.keep("https://"+wikiHost+"/_/auth/handoff", forDocsBinding)
 	if rec := victim.get(t, onWiki); rec.Code != http.StatusBadRequest || !h.events.has(events.LoginFailed, "handoff_wrong_host") {
 		t.Fatalf("cross-host code = %d", rec.Code)
 	}
@@ -215,12 +280,19 @@ func TestHandoffRefusesStolenInjectedAndCrossHostCodes(t *testing.T) {
 	// the resulting code; the victim's binding is not the attacker's.
 	attacker := h.jarBrowser(t)
 	attacker.signIn(t, "mallory@example.com")
-	injected := stopAtCode(attacker, docsHost)
-	if rec := victim.get(t, injected); rec.Code != http.StatusBadRequest || !h.events.has(events.LoginFailed, "handoff_binding_mismatch") {
+	injected, _ := stopAtCode(attacker, docsHost)
+	if rec := victim.get(t, injected); rec.Code != http.StatusBadRequest || !h.events.has(events.LoginFailed, "handoff_binding_missing") {
 		t.Fatalf("injected code = %d", rec.Code)
 	}
 	if got, ok := victim.authenticatedOn(docsHost); ok {
 		t.Fatalf("victim signed in as %s", got.Email)
+	}
+	// Knowing the transaction/cookie name is insufficient without its secret.
+	another, wrongBinding := stopAtCode(attacker, docsHost)
+	wrongBinding.Value = strings.Repeat("A", 43)
+	victim.keep("https://"+docsHost+"/_/auth/handoff", wrongBinding)
+	if rec := victim.get(t, another); rec.Code != http.StatusBadRequest || !h.events.has(events.LoginFailed, "handoff_binding_mismatch") {
+		t.Fatalf("wrong binding = %d", rec.Code)
 	}
 
 	// Garbage and missing codes.

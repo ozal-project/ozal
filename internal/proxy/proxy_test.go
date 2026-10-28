@@ -715,6 +715,19 @@ func TestStripCookie(t *testing.T) {
 	}
 }
 
+func TestStripAccessCookies(t *testing.T) {
+	for _, tc := range []struct{ header, want string }{
+		{"sb_handoff_one=a; sb_handoff_two=b; app=1", "app=1"},
+		{"sb_handoff=old; sb_session=edge; sb_handoff_new=b", ""},
+		{" sb_handoff_one =a ; app_session=a=b ; sb_session=x", "app_session=a=b"},
+		{"sb_handoffapp=1; sb_session_extra=2; theme=dark", "sb_handoffapp=1; sb_session_extra=2; theme=dark"},
+	} {
+		if got := stripAccessCookies(tc.header); got != tc.want {
+			t.Fatalf("cookie filtering = %q, want %q", got, tc.want)
+		}
+	}
+}
+
 func TestPublicRouteStripsSessionCookie(t *testing.T) {
 	session := auth.SessionCookieName
 
@@ -733,7 +746,7 @@ func TestPublicRouteStripsSessionCookie(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "http://public.localhost/", nil)
 		req.Host = "public.localhost"
-		req.Header.Set("Cookie", session+"=edge-session; theme=dark")
+		req.Header.Set("Cookie", session+"=edge-session; sb_handoff=legacy-binding; sb_handoff_transaction=binding; theme=dark")
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 

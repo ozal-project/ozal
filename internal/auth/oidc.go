@@ -26,6 +26,9 @@ const (
 	// SessionCookieName is Switchboard's session cookie. The proxy strips it
 	// from every request so an upstream never receives the edge session.
 	SessionCookieName = "sb_session"
+	// HandoffCookiePrefix reserves a browser-binding cookie per transaction.
+	// The proxy removes the whole namespace before forwarding to an app.
+	HandoffCookiePrefix = "sb_handoff_"
 	// LoginCookieName carries a signed, short-lived login attempt (state,
 	// PKCE verifier, return_to). The server keeps no pending-login store:
 	// the cookie is the state, signed and bound to the browser.

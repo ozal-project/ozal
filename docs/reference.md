@@ -136,6 +136,42 @@ redirección; DNS debe llegar a ese servidor. Conserva `tls.cache_dir` persisten
 La política HTTP-01 sigue rutas configuradas: añadir un host autorizado no
 emite certificados para cualquier SNI ni exige reiniciar la whitelist de rutas.
 
+### Perfil directo sin Cloudflare
+
+[config.direct.example.json](../config.direct.example.json) es una plantilla
+para un edge público propio con login passkey y dos apps privadas, una en otro
+dominio. Reemplaza dominios, email y destinos antes de usarla. No requiere
+`dns.cloudflare`, `tls.dns01`, `trusted_proxies` ni un certificado de Origin Pulls.
+`listen` solo corresponde al modo HTTP sin TLS: con TLS se usan :80 y :443.
+
+En cualquier proveedor DNS, crea A/AAAA de `edge.example.com` hacia la IP del
+edge y un CNAME `*.example.com` hacia ese nombre. El wildcard DNS permite
+añadir subdominios sin crear otro registro; **no es un certificado wildcard**:
+HTTP-01 obtiene una hoja por nombre configurado. El apex y registros existentes
+necesitan revisión propia; un wildcard no los reemplaza. Para una app en otra
+zona, su propietario crea el A/AAAA/CNAME correspondiente hacia el mismo edge.
+No publiques un AAAA si IPv6 no llega al servidor. DNS debe resolver directamente
+al edge, con TCP 80/443 accesibles y sin otro proceso ocupándolos; comprueba
+también CAA si tu zona restringe las CA autorizadas.
+
+Instala siguiendo la guía de servicio y aplica la plantilla como configuración
+del host, con permisos y directorios del instalador. Inicializa una sola vez
+`runtime_file` con `switchboard runtime init -config /etc/switchboard/config.json`,
+migra SQLite y arranca con `-config /etc/switchboard/config.json
+-db /var/lib/switchboard/state.db`. Completa el bootstrap administrativo por
+el transporte privado e invita al email permitido. Conserva el estado ACME y
+SQLite en backups. La consola continúa en loopback/socket; el ejemplo no la
+expone por HTTPS público.
+
+Para una migración desde un proxy, prepara este perfil por separado: no retires
+la autenticación de origen del servicio activo como mecanismo de fallback.
+Antes del corte, verifica desde otra red DNS/TLS, acceso permitido y denegado,
+IP real, revocación y reinicio. Conserva el servicio anterior hasta esa aceptación;
+volver al perfil y DNS previos es el rollback. El ejemplo no cambia firewall ni
+DNS y no acredita los controles de [exposición directa](security.md#entrada-directa-o-detras-de-un-proxy).
+
+### DNS-01
+
 DNS-01 usa `tls.domains` y un bloque `tls.dns01`:
 
 ```json

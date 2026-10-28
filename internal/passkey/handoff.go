@@ -25,9 +25,6 @@ import (
 const (
 	continuePath = "/_/auth/continue"
 	handoffPath  = "/_/auth/handoff"
-	// bindingCookie holds the browser's binding secret on the app host. Its
-	// path keeps it on the handoff endpoint, which the upstream never sees.
-	bindingCookie = "sb_handoff"
 	// transactionTTL covers a login or an enrolment done on the way.
 	transactionTTL = 10 * time.Minute
 	// codeTTL is how long a code may travel from the login host to the app.
@@ -45,6 +42,9 @@ type transaction struct {
 	host     string
 	returnTo string // a path on host
 	binding  [32]byte
+	// bindingID gives each pending transaction its own cookie. It is the
+	// public transaction ID, never the binding secret or the approval code.
+	bindingID string
 	// reason is the login page's step-up query ("reauth=1", ...); with one
 	// set, only a central login newer than created approves the transaction.
 	reason  string
@@ -108,6 +108,7 @@ func (h *handoffs) begin(t transaction) (string, error) {
 	now := h.now()
 	t.created = now.Truncate(time.Second) // auth times are stored in seconds
 	t.expires = now.Add(transactionTTL)
+	t.bindingID = id
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if !h.room(now) {
@@ -195,18 +196,10 @@ func (g *Gate) scheme(r *http.Request) string {
 // beginHandoff starts a transaction for a visitor of a handoff host and
 // sends the browser to the login host's continue endpoint.
 func (g *Gate) beginHandoff(w http.ResponseWriter, r *http.Request, host, reason string) {
-	binding := ""
-	if c, err := r.Cookie(bindingCookie); err == nil && len(c.Value) == 43 {
-		if _, err := base64.RawURLEncoding.DecodeString(c.Value); err == nil {
-			binding = c.Value
-		}
-	}
-	if binding == "" {
-		var err error
-		if binding, err = randomToken(); err != nil {
-			http.Error(w, "Something went wrong on the server.", http.StatusInternalServerError)
-			return
-		}
+	binding, err := randomToken()
+	if err != nil {
+		http.Error(w, "Something went wrong on the server.", http.StatusInternalServerError)
+		return
 	}
 	returnTo := r.URL.RequestURI()
 	if !strings.HasPrefix(returnTo, "/") || strings.HasPrefix(returnTo, "//") || strings.HasPrefix(returnTo, "/\\") {
@@ -219,7 +212,7 @@ func (g *Gate) beginHandoff(w http.ResponseWriter, r *http.Request, host, reason
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
-		Name:     bindingCookie,
+		Name:     auth.HandoffCookiePrefix + id,
 		Value:    binding,
 		Path:     handoffPath,
 		MaxAge:   int(transactionTTL.Seconds()),
@@ -299,7 +292,11 @@ func (g *Gate) serveHandoff(w http.ResponseWriter, r *http.Request, host string)
 		refuse("handoff_wrong_host")
 		return
 	}
-	binding, err := r.Cookie(bindingCookie)
+	// Only clear this transaction's cookie. Another tab may still need its
+	// own binding, whether this redemption succeeds or fails.
+	name := auth.HandoffCookiePrefix + c.bindingID
+	http.SetCookie(w, &http.Cookie{Name: name, Path: handoffPath, MaxAge: -1, HttpOnly: true, Secure: g.secure, SameSite: http.SameSiteLaxMode})
+	binding, err := r.Cookie(name)
 	if err != nil {
 		refuse("handoff_binding_missing")
 		return

@@ -529,6 +529,18 @@ func emitAccessEvent(w http.ResponseWriter, r *http.Request, cfg options, event 
 // the other pairs in order. It returns "" when nothing is left; the caller
 // decides whether that means removing the header.
 func stripCookie(header, name string) string {
+	return stripCookies(header, func(cookieName string) bool { return cookieName == name })
+}
+
+// stripAccessCookies also removes scoped handoff bindings if a client sends
+// them outside their browser-enforced path, including the legacy shared name.
+func stripAccessCookies(header string) string {
+	return stripCookies(header, func(name string) bool {
+		return name == auth.SessionCookieName || name == "sb_handoff" || strings.HasPrefix(name, auth.HandoffCookiePrefix)
+	})
+}
+
+func stripCookies(header string, remove func(string) bool) string {
 	var kept []string
 	for _, pair := range strings.Split(header, ";") {
 		pair = strings.TrimSpace(pair)
@@ -536,7 +548,7 @@ func stripCookie(header, name string) string {
 			continue
 		}
 		cookieName, _, _ := strings.Cut(pair, "=")
-		if strings.TrimSpace(cookieName) == name {
+		if remove(strings.TrimSpace(cookieName)) {
 			continue
 		}
 		kept = append(kept, pair)
@@ -592,8 +604,8 @@ func upstreamHandler(r config.Route, devErrors, assertVisitor bool, transport ht
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			// The identify stage already read the session cookie; the outbound
 			// request is where it stops, so no upstream ever sees the edge
-			// session. Other cookies are preserved.
-			if cookie := stripCookie(pr.Out.Header.Get("Cookie"), auth.SessionCookieName); cookie != "" {
+			// session or handoff binding. Other cookies are preserved.
+			if cookie := stripAccessCookies(pr.Out.Header.Get("Cookie")); cookie != "" {
 				pr.Out.Header.Set("Cookie", cookie)
 			} else {
 				pr.Out.Header.Del("Cookie")

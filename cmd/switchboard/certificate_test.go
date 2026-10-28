@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"io"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -21,6 +22,59 @@ import (
 	"github.com/switchboard-project/switchboard/internal/config"
 	"github.com/switchboard-project/switchboard/internal/events"
 )
+
+// ARCH-010 A: the documented direct profile needs no DNS-provider token,
+// trusted proxy or origin client certificate. Exercise the same autocert TLS
+// configuration as production using a cached, locally signed certificate.
+func TestDirectHTTPSProfileWithoutCloudflare(t *testing.T) {
+	data, err := os.ReadFile("../../config.direct.example.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Parse(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.TLS.Enabled || cfg.TLS.DNS01 != nil || cfg.TLS.OriginClientCAFile != "" || len(cfg.TrustedProxies) != 0 || cfg.DNS.Cloudflare != nil {
+		t.Fatal("direct profile acquired a proxy or DNS-provider dependency")
+	}
+	cfg.TLS.CacheDir = t.TempDir()
+	manager := newAutocertManager(cfg, func() config.Config { return *cfg })
+	ca, cached := acceptanceCertificate(t, []string{"auth.example.com", "notes.example.com"})
+	for _, name := range []string{"auth.example.com", "notes.example.com"} {
+		if err := manager.Cache.Put(context.Background(), name, cached); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tlsConfig, handler, err := autocertTLSConfig(cfg, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }), nil, manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewUnstartedServer(handler)
+	server.TLS = tlsConfig
+	server.StartTLS()
+	defer server.Close()
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(ca) {
+		t.Fatal("invalid fixture CA")
+	}
+	transport := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: roots, ServerName: "notes.example.com", MinVersion: tls.VersionTLS12}}
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport, Timeout: 5 * time.Second}
+	res, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatalf("direct TLS with trusted CA: %v", err)
+	}
+	_, _ = io.Copy(io.Discard, res.Body)
+	res.Body.Close()
+	if res.StatusCode != http.StatusNoContent {
+		t.Fatalf("direct TLS returned %d", res.StatusCode)
+	}
+	// A name that is neither fixed nor a route cannot start issuance.
+	if err := manager.HostPolicy(context.Background(), "unknown.example.com"); err == nil {
+		t.Fatal("unconfigured SNI allowed")
+	}
+}
 
 type cleanupWorker struct {
 	started   chan struct{}
