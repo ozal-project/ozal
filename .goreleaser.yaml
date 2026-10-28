@@ -73,7 +73,7 @@ changelog:
 
 release:
   github:
-    owner: octaviosantacruz
+    owner: switchboard-project
     name: switchboard
   # Published by hand after reading the notes and checking the artifacts.
   draft: true
