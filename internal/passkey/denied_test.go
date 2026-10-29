@@ -37,6 +37,20 @@ func TestTheRefusalPageExplainsAndOffersTheWayBack(t *testing.T) {
 	}
 }
 
+func TestRefusalOffersExplicitPostToSignOutBeforeTryingAnotherAccount(t *testing.T) {
+	h := newHarness(t)
+	rec := denied(t, h, http.MethodGet, appHost, auth.Principal{Email: "bob@other.org"}, auth.CodeDomainNotAllowed)
+	body := rec.Body.String()
+	for _, want := range []string{`<form method="post" action="/_/auth/logout">`, "Sign out and try another account", "ends your current sign-in", "Your passkeys stay registered"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the account-switch action lacks %q", want)
+		}
+	}
+	if !strings.Contains(rec.Header().Get("Content-Security-Policy"), "form-action 'self'") {
+		t.Fatal("the logout form is not constrained to this host")
+	}
+}
+
 // Anyone who can sign in could read the policy from this page, so it states
 // the person's own situation and nothing about what the policy lists.
 func TestTheRefusalPageNeverReadsOutThePolicy(t *testing.T) {

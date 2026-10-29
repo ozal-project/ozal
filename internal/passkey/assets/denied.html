@@ -20,6 +20,10 @@
   <h1>You can't open <span class="host">{{.Host}}</span></h1>
   <p>You are signed in as <strong class="email">{{.Email}}</strong>. {{.Why}}</p>
   <a class="action" href="{{.Portal}}">See the apps you can open</a>
+  <form method="post" action="/_/auth/logout">
+    <button class="link-button" type="submit">Sign out and try another account</button>
+  </form>
+  <p class="hint">This ends your current sign-in and its linked app sessions. Your passkeys stay registered.</p>
   <p class="hint">If you think this is a mistake, ask the person who runs it to give you access, and tell them the reference below.</p>
   <p class="reference">Reference: {{.Reference}}</p>
 </main>
