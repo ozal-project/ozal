@@ -216,8 +216,7 @@ aceptación adicionales; no es parte del adaptador de metadatos.
 El endpoint de deploy tiene hostname HTTPS dedicado y alcance reducido.
 El workflow pide OIDC con la audiencia del edge, y deben coincidir repo,
 propietario, ref, workflow y evento autorizados. Usa acciones fijadas y
-`id-token: write` solo donde se despliega. Reutiliza
-[scripts/pages](../../scripts/pages) y consulta
+`id-token: write` solo donde se despliega. Usa `ozalctl site check|pack|deploy|accept` (Go nativo) y consulta
 [el contrato de publicación](../engineering.md#publicacion).
 Los secretos de build no deben terminar en `dist`; los de runtime siguen en
 el host de la aplicación.
@@ -238,6 +237,7 @@ antes de aplicar. Usa un archivo de targets privado —
 cuenta, socket, lock y archivo del token de publicación limitado.
 
 ```sh
+go build -o ./ozalctl ./cmd/ozalctl  # binario separado en la máquina operadora
 ozalctl edge upgrade [-ref REF] [-apply]
 ozalctl edge config -base FILE [-cloudflare-ranges] [-apply]
 ozalctl site publish -site NAME -dir DIST [-host HOST] [-apply]
@@ -284,6 +284,28 @@ existente: si ya hay uno, espera a que coincida. Sin `dns.cloudflare` se niega
 antes de cambiar nada; con `-manual-dns` guarda la ruta y muestra el registro
 que falta. Se repite sin riesgo. Si el binario del edge es anterior, el comando
 se detiene antes de ejecutar nada y pide `edge upgrade`.
+
+Cloudflare es opcional y tiene dos operaciones explícitas, separadas de DNS:
+
+```sh
+ozalctl cloudflare origin-pull -host NEW.example.com -like OLD.example.com -token-file TOKEN_FILE
+ozalctl cloudflare deploy-rule -host deploy.example.com -token-file TOKEN_FILE
+# Revisar el plan; agregar -apply para escribir y comprobar por lectura.
+```
+
+El archivo de token debe ser privado; los permisos de Origin Pulls y de
+Configuration Rules son distintos de DNS Edit. `origin-pull` copia solamente la
+asociación habilitada de un certificado existente en la misma zona: no exporta
+claves, crea certificados ni sustituye asociaciones distintas. `deploy-rule`
+ajusta sólo la regla gestionada del hostname exacto; no reemplaza el ruleset,
+no altera reglas ajenas y se niega ante alcance ambiguo o parámetros adicionales.
+Antes de escribir guarda metadatos 0600 en `~/.local/state/ozalctl/` (o
+`-backup NEW_FILE`), vuelve a leer y verifica el resultado. Un fallo después de
+escribir requiere consultar de nuevo al proveedor antes de repetir o revertir;
+el backup no contiene credenciales ni toda la configuración de la zona.
+Las escrituras se probaron contra una API local. Los planes nativos también
+confirmaron por lectura el Origin Pulls del hostname Ozal y la regla de deploy
+existentes; no se hicieron cambios en Cloudflare.
 
 Cutover es una integración **actualmente específica de Cloudflare**, con
 cambios de DNS y evidencia para restaurar. Un dominio asociado a Pages puede

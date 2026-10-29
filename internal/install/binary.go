@@ -122,6 +122,9 @@ func Binary(out io.Writer, r BinaryRequest) error {
 			return errors.New("release binary is truncated")
 		}
 	}
+	if _, err := io.Copy(io.Discard, bounded); err != nil {
+		return errors.New("release gzip is corrupt or truncated")
+	}
 	if count != 1 || bounded.N <= 0 {
 		return errors.New("release needs exactly one regular ozal member within the archive limit")
 	}

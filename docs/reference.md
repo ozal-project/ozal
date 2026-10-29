@@ -18,6 +18,53 @@ ozal completion bash  # también zsh, fish, powershell
 `init -config FILE` crea un archivo privado nuevo; `setup -dir DIR` prepara una
 instalación local completa. Ambos rechazan sobrescrituras.
 
+## Instalación y publicación en Go
+
+```sh
+ozal install binary -archive FILE.tar.gz -sha256 TRUSTED_HEX -destination NEW_FILE [-apply]
+ozal install service [-binary VERIFIED_ELF | -archive FILE.tar.gz -sha256 TRUSTED_HEX] [-target URL] [-group members] [-root STAGING_DIR] [-apply]
+ozal install service -print-unit
+
+ozalctl site check -dir DIST
+ozalctl site pack -dir DIST -out NEW_ARCHIVE
+ozalctl site deploy -endpoint HTTPS_ORIGIN -project NAME -archive FILE -result NEW_RECEIPT [-apply]
+ozalctl site accept -url HTTPS_ORIGIN -dir DIST [-attempts 10] [-wait 3s]
+ozalctl cloudflare origin-pull -host HOST -like REFERENCE -token-file FILE [-backup NEW_FILE] [-apply]
+ozalctl cloudflare deploy-rule -host HOST -token-file FILE [-backup NEW_FILE] [-apply]
+```
+
+`install` y `site deploy` muestran plan por defecto. El instalador de servicio
+usa el propio ejecutable si se omite `-binary`; es exclusivo de Linux/systemd.
+El escáner reconoce nombres privados y patrones conocidos; no demuestra ausencia
+de cualquier secreto. `site check/pack/accept` no usan targets ni credenciales; pack crea un archivo
+nuevo 0600. Deploy usa las variables de Actions `ACTIONS_ID_TOKEN_REQUEST_URL`
+y `ACTIONS_ID_TOKEN_REQUEST_TOKEN` sólo con `-apply`; `DEPLOY_ENDPOINT` y
+`DEPLOY_PROJECT` son defaults opcionales. No imprime ni guarda el JWT. El recibo
+nuevo 0600 contiene sólo proyecto, ID, live y commit. Si queda `confirmed:false`
+o hay error de red, consulta el estado antes de repetir: no hay reintento ciego.
+En Actions emite `live=true` en `GITHUB_OUTPUT` después del 201 validado para que
+el workflow pueda restaurar el último build aceptado incluso si falla el GET
+posterior. La aceptación compara un asset con SHA-256, exige 404 para rutas
+privadas/desconocidas y redirección HTTP a HTTPS del mismo host. Un sitio sin
+assets usa su index como prueba y por tanto exige HTML idéntico.
+
+## Autoridad local de túneles
+
+```sh
+ozal tunnel ca init -dir NEW_PRIVATE_DIR [-days 366] [-apply]
+ozal tunnel identity prepare -role edge -dir NEW_PRIVATE_DIR [-apply]
+ozal tunnel identity sign -role edge -ca CA_DIRECTORY -csr PUBLIC_CSR -out NEW_CERT [-apply]
+ozal tunnel identity check -role edge -dir IDENTITY_DIRECTORY -ca PUBLIC_CA_FILE
+```
+
+El rol también puede ser `connector`. Claves locales 0600, directorios nuevos
+0700 y sin sobrescrituras. Firmar sólo acepta un CSR público acotado y fija
+SAN/EKU al rol; no acepta identidades elegidas por el CSR. La CA debe ser vigente,
+aptamente marcada y conservar más de 37 días de vida. Crear una CA no despliega
+confianza, no enrola conectores ni automatiza el rollover. Usa `connector` para
+el enrolamiento y `tunnel renew` para el flujo operativo existente. Los pilotos
+históricos no son scripts requeridos por estos comandos.
+
 ## Configuración base
 
 Ejemplo de proxy HTTP local público, sin login:

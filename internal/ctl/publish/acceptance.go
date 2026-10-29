@@ -115,7 +115,7 @@ func Accept(ctx context.Context, out io.Writer, r Acceptance) error {
 	if last != nil {
 		return last
 	}
-	fmt.Fprintln(out, "Public home and asset match the build.")
+	fmt.Fprintln(out, "Public home answers 200; asset matches the build.")
 	for _, path := range []string{"/_headers", "/.env", "/no-such-file-deploy-check.js", "/no-such-page-deploy-check"} {
 		status, _, _, e := publicGet(ctx, client, base+path)
 		if e != nil || status != 404 {
@@ -138,6 +138,6 @@ func Accept(ctx context.Context, out io.Writer, r Acceptance) error {
 			return errors.New("plain HTTP did not redirect to this HTTPS origin")
 		}
 	}
-	fmt.Fprintln(out, "Public paths and HTTP redirect checks passed.")
+	fmt.Fprintln(out, "Public refusal and applicable HTTPS redirect checks passed.")
 	return nil
 }

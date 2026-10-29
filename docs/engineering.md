@@ -176,6 +176,24 @@ internas/secretos rechazados, manifest inmutable y activación atómica. Site
 rollback activa un artefacto retenido, no cambia DNS ni DB. `_headers` y
 `_redirects` se validan/aplican pero no se sirven como archivos públicos.
 
+El operador reutiliza `internal/ctl/artifact`: empaqueta una instantánea
+acotada con `pages.Pack`, valida con `pages.Extract`, rechaza nombres privados,
+enlaces y patrones conocidos de credenciales antes de solicitar OIDC.
+`internal/ctl/publish.CI` separa el puerto `TokenSource` del adaptador HTTPS de
+Actions; niega redirects autenticados, limita respuestas y nunca reintenta una
+subida incierta. La aceptación pública compara bytes de un asset estable y
+rechaza fallback SPA en rutas desconocidas. El workflow usa comandos Go;
+`scripts/pages` conserva sólo wrappers de compatibilidad.
+
+`internal/install` contiene planes y adaptadores de filesystem/systemd; el unit
+se embebe y coincide con el ejemplo documentado. La prueba de staging instala
+el ELF real bajo un prefijo sin cuentas, permisos root ni servicio en ejecución.
+Los scripts de release sólo traducen argumentos al Go confiable indicado por
+`OZAL_BIN`. `internal/cloudflare` contiene planes puros y `certs` el adaptador
+HTTP; las mutaciones son por hostname/regla específica, con backup privado y
+lectura antes/después. Las pruebas usan proveedores locales y no autorizan
+cambios reales de infraestructura.
+
 Snapshots de confianza de un upload en curso pueden sobrevivir al disconnect;
 no fingir que cancelarlo desde el navegador revierte el servidor. Un intent sin
 outcome significa resultado desconocido, no éxito ni rollback probado.

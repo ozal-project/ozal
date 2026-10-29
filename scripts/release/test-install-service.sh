@@ -10,6 +10,7 @@ if [[ -z "$bin" ]]; then
   bin=$work/ozal
   (cd "$root" && go build -o "$bin" ./cmd/ozal)
 fi
+export OZAL_BIN=$bin
 install=$root/scripts/release/install-service.sh
 
 # Dry run changes nothing.
@@ -23,7 +24,7 @@ p=$work/stage
 # The command is a link to the installed binary, so upgrades keep it current.
 [[ -L $p/usr/local/bin/ozal && $(readlink "$p/usr/local/bin/ozal") == /usr/local/lib/ozal/ozal ]]
 [[ -s $p/etc/ozal/config.json && -s $p/etc/systemd/system/ozal.service ]]
-grep -q '"required_groups": \["staff"\]' "$p/etc/ozal/config.json"
+grep -q '"staff"' "$p/etc/ozal/config.json"
 grep -q 'http://127.0.0.1:4000' "$p/etc/ozal/config.json"
 # No secret in the config, and the token is private to its owner and group.
 if grep -qE 'token": "[^f]' "$p/etc/ozal/config.json"; then echo 'config embeds a token' >&2; exit 1; fi
@@ -37,7 +38,7 @@ printf '{}\n' > "$work/legacy/etc/switchboard/config.json"
 if OZAL_INSTALL_PREFIX=$work/legacy "$install" --binary "$bin" >"$work/legacy-refusal" 2>&1; then
   echo 'installed beside legacy Switchboard state' >&2; exit 1
 fi
-grep -q 'Legacy Switchboard installation' "$work/legacy-refusal"
+grep -qi 'legacy Switchboard installation' "$work/legacy-refusal"
 [[ ! -e "$work/legacy/etc/ozal" && ! -e "$work/legacy/var/lib/ozal" ]]
 # Bad input is refused before anything is written.
 for bad in "--group Bad;Group" "--target file:///etc/passwd" ; do

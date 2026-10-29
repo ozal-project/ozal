@@ -54,10 +54,12 @@ func NewCloudflareClient(cfg CloudflareConfig) (*CloudflareClient, error) {
 	if cfg.HTTPClient == nil {
 		cfg.HTTPClient = &http.Client{Timeout: 15 * time.Second}
 	}
+	client := *cfg.HTTPClient
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return &CloudflareClient{
 		token: cfg.Token,
 		base:  strings.TrimSuffix(cfg.BaseURL, "/"),
-		http:  cfg.HTTPClient,
+		http:  &client,
 		zones: map[string]string{},
 	}, nil
 }
@@ -149,7 +151,7 @@ func (c *CloudflareClient) call(ctx context.Context, method, path string, payloa
 		// failure on a create.
 		return fmt.Errorf("%w: %s %s: server error %d: %s", ErrAmbiguous, method, path, res.StatusCode, firstCloudflareMessage(envelope))
 	}
-	if !envelope.Success {
+	if res.StatusCode < 200 || res.StatusCode >= 300 || !envelope.Success {
 		return fmt.Errorf("cloudflare: %s %s: API error %d: %s", method, path, res.StatusCode, firstCloudflareMessage(envelope))
 	}
 	if out != nil {

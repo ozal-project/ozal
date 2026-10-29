@@ -32,6 +32,7 @@ go test -race -count=1 ./...
 
 echo "[4/7] go build"
 go build -o /dev/null ./cmd/ozal
+go build -o /dev/null ./cmd/ozalctl
 
 # Short fuzz pass: the seed corpus runs in the normal test step above; this
 # keeps the fuzz targets alive without turning the gate into a long run.

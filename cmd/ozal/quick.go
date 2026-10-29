@@ -158,7 +158,7 @@ var completionScripts = map[string]string{
 	"bash": `# Add to ~/.bashrc: eval "$(ozal completion bash)"
 _ozal_complete() {
   local current="${COMP_WORDS[COMP_CWORD]}"
-  local commands="audit completion console db doctor github init migrate notify policy project runtime schema setup site tunnel tunnel-spike upgrade user validate version connector"
+  local commands="audit completion console db doctor github init install migrate notify policy project runtime schema setup site tunnel tunnel-spike upgrade user validate version connector"
   if (( COMP_CWORD == 1 )); then
     COMPREPLY=( $(compgen -W "$commands" -- "$current") )
     return
@@ -168,6 +168,7 @@ _ozal_complete() {
       audit) COMPREPLY=( $(compgen -W "keygen checkpoint repair verify" -- "$current") ) ;;
       console) COMPREPLY=( $(compgen -W "login list revoke" -- "$current") ) ;;
       connector) COMPREPLY=( $(compgen -W "prepare sign check enroll rotate current revoke list" -- "$current") ) ;;
+      install) COMPREPLY=( $(compgen -W "binary service" -- "$current") ) ;;
       github) COMPREPLY=( $(compgen -W "connect disconnect" -- "$current") ) ;;
       project) COMPREPLY=( $(compgen -W "trust" -- "$current") ) ;;
       runtime) COMPREPLY=( $(compgen -W "init" -- "$current") ) ;;
@@ -175,7 +176,7 @@ _ozal_complete() {
       migrate) COMPREPLY=( $(compgen -W "up status" -- "$current") ) ;;
       policy) COMPREPLY=( $(compgen -W "explain replay who-can review" -- "$current") ) ;;
       site) COMPREPLY=( $(compgen -W "deploy list rollback" -- "$current") ) ;;
-      tunnel) COMPREPLY=( $(compgen -W "edge connect renew" -- "$current") ) ;;
+      tunnel) COMPREPLY=( $(compgen -W "edge connect renew ca identity" -- "$current") ) ;;
       tunnel-spike) COMPREPLY=( $(compgen -W "init edge connect" -- "$current") ) ;;
     esac
   fi
@@ -194,6 +195,7 @@ _ozal() {
     'db:backup and restore state'
     'doctor:check config and state'
     'init:create a starter config'
+    'install:install a verified binary or Linux service'
     'migrate:inspect or apply database migrations'
     'notify:notification commands'
     'policy:policy commands'
@@ -215,13 +217,14 @@ _ozal() {
     audit) _values 'audit action' keygen checkpoint repair verify ;;
     console) _values 'console action' login list revoke ;;
     connector) _values 'connector action' prepare sign check enroll rotate current revoke list ;;
+    install) _values 'install action' binary service ;;
     github) _values 'github action' connect disconnect ;;
     db) _values 'db action' backup restore ;;
     migrate) _values 'migration action' up status ;;
     project) _values 'project action' trust ;;
     runtime) _values 'runtime action' init ;;
     site) _values 'site action' deploy list rollback ;;
-    tunnel) _values 'tunnel action' edge connect renew ;;
+    tunnel) _values 'tunnel action' edge connect renew ca identity ;;
     tunnel-spike) _values 'tunnel-spike action' init edge connect ;;
     policy) _values 'policy action' explain replay who-can review ;;
   esac
@@ -229,8 +232,9 @@ _ozal() {
 compdef _ozal ozal
 `,
 	"fish": `# Save as ~/.config/fish/completions/ozal.fish:
-complete -c ozal -f -n '__fish_use_subcommand' -a 'audit completion console db doctor github init migrate notify policy project runtime schema setup site tunnel tunnel-spike upgrade user validate version connector'
+complete -c ozal -f -n '__fish_use_subcommand' -a 'audit completion console db doctor github init install migrate notify policy project runtime schema setup site tunnel tunnel-spike upgrade user validate version connector'
 complete -c ozal -f -n '__fish_seen_subcommand_from console' -a 'login list revoke'
+complete -c ozal -f -n '__fish_seen_subcommand_from install' -a 'binary service'
 complete -c ozal -f -n '__fish_seen_subcommand_from github' -a 'connect disconnect'
 complete -c ozal -f -n '__fish_seen_subcommand_from project' -a 'trust'
 complete -c ozal -f -n '__fish_seen_subcommand_from runtime' -a 'init'
@@ -240,18 +244,19 @@ complete -c ozal -f -n '__fish_seen_subcommand_from db' -a 'backup restore'
 complete -c ozal -f -n '__fish_seen_subcommand_from migrate' -a 'up status'
 complete -c ozal -f -n '__fish_seen_subcommand_from policy' -a 'explain replay who-can review'
 complete -c ozal -f -n '__fish_seen_subcommand_from site' -a 'deploy list rollback'
-complete -c ozal -f -n '__fish_seen_subcommand_from tunnel' -a 'edge connect renew'
+complete -c ozal -f -n '__fish_seen_subcommand_from tunnel' -a 'edge connect renew ca identity'
 complete -c ozal -f -n '__fish_seen_subcommand_from tunnel-spike' -a 'init edge connect'
 `,
 	"powershell": `# Add to $PROFILE:
 Register-ArgumentCompleter -Native -CommandName ozal -ScriptBlock {
   param($wordToComplete, $commandAst, $cursorPosition)
-  $words = @('audit','completion','console','db','doctor','github','init','migrate','notify','policy','project','runtime','schema','setup','site','tunnel','tunnel-spike','upgrade','user','validate','version','connector')
+  $words = @('audit','completion','console','db','doctor','github','init','install','migrate','notify','policy','project','runtime','schema','setup','site','tunnel','tunnel-spike','upgrade','user','validate','version','connector')
   $tokens = $commandAst.CommandElements | ForEach-Object { $_.ToString() }
   if ($tokens.Count -gt 1) {
     switch ($tokens[1]) {
       'audit' { $words = @('keygen','checkpoint','repair','verify') }
       'console' { $words = @('login','list','revoke') }
+      'install' { $words = @('binary','service') }
       'github' { $words = @('connect','disconnect') }
       'db' { $words = @('backup','restore') }
       'migrate' { $words = @('up','status') }
@@ -260,7 +265,7 @@ Register-ArgumentCompleter -Native -CommandName ozal -ScriptBlock {
       'connector' { $words = @('prepare','sign','check','enroll','rotate','current','revoke','list') }
       'policy' { $words = @('explain','replay','who-can','review') }
       'site' { $words = @('deploy','list','rollback') }
-      'tunnel' { $words = @('edge','connect','renew') }
+      'tunnel' { $words = @('edge','connect','renew','ca','identity') }
       'tunnel-spike' { $words = @('init','edge','connect') }
       default { $words = @() }
     }

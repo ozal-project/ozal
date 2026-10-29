@@ -3,6 +3,12 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 work=$(mktemp -d)
 trap 'rm -rf -- "$work"' EXIT
+helper=${OZAL_TEST_BINARY:-}
+if [[ -z "$helper" ]]; then
+  helper=$work/helper
+  (cd "$root" && go build -o "$helper" ./cmd/ozal)
+fi
+export OZAL_BIN=$helper
 mkdir "$work/pack"
 printf '%s\n' '#!/bin/sh' 'echo fixture-version' > "$work/pack/ozal"
 tar -czf "$work/release.tar.gz" -C "$work/pack" ozal

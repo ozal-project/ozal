@@ -31,6 +31,9 @@ const usage = `usage:
       CI upload with GitHub Actions OIDC; credentials stay in memory.
   ozalctl site accept -url HTTPS_URL -dir DIST [-http-url HTTP_URL]
       Check public content hashes, hidden paths and the HTTPS redirect.
+  ozalctl cloudflare origin-pull -host HOST -like SOURCE -token-file FILE [-backup FILE] [-apply]
+  ozalctl cloudflare deploy-rule -host HOST -token-file FILE [-backup FILE] [-apply]
+      Plan a scoped optional provider operation; back up metadata before apply.
   ozalctl project trust -project NAME -repository-id ID -owner-id ID -workflow-ref WORKFLOW [-ref REF] [-apply]
       Migrate an existing GitHub publisher through the edge's private socket.
       The default is a plan; -apply keeps previous trust metadata on the edge.
@@ -79,16 +82,18 @@ func run(args []string) int {
 		return 2
 	}
 	commands := map[string]func([]string) int{
-		"edge upgrade":  edgeUpgrade,
-		"edge config":   edgeConfig,
-		"site publish":  sitePublish,
-		"app alias":     appAlias,
-		"project trust": projectTrust,
-		"site check":    func(args []string) int { return siteSnapshot(args, false) },
-		"site pack":     func(args []string) int { return siteSnapshot(args, true) },
-		"site deploy":   siteDeploy,
-		"site accept":   siteAccept,
-		"site cutover":  siteCutover,
+		"edge upgrade":           edgeUpgrade,
+		"edge config":            edgeConfig,
+		"site publish":           sitePublish,
+		"app alias":              appAlias,
+		"project trust":          projectTrust,
+		"site check":             func(args []string) int { return siteSnapshot(args, false) },
+		"site pack":              func(args []string) int { return siteSnapshot(args, true) },
+		"site deploy":            siteDeploy,
+		"site accept":            siteAccept,
+		"cloudflare origin-pull": func(args []string) int { return cloudflareOperation(args, "origin-pull") },
+		"cloudflare deploy-rule": func(args []string) int { return cloudflareOperation(args, "deploy-rule") },
+		"site cutover":           siteCutover,
 	}
 	command, ok := commands[args[0]+" "+args[1]]
 	if !ok {

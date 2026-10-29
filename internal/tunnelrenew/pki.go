@@ -98,6 +98,9 @@ func issue(caDirectory, role, request string, now time.Time) (string, error) {
 	if ca.NotAfter.Sub(now) <= 37*day {
 		return "", errors.New("CA expires within 37 days; planned trust-anchor rollover required")
 	}
+	if !ca.IsCA || !ca.BasicConstraintsValid || ca.KeyUsage&x509.KeyUsageCertSign == 0 || now.Before(ca.NotBefore) {
+		return "", errors.New("local signer is not a currently valid certificate authority")
+	}
 	keyData, err := os.ReadFile(filepath.Join(caDirectory, "ca.key"))
 	if err != nil {
 		return "", err
