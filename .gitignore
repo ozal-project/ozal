@@ -22,3 +22,4 @@ config.json
 # Local documentation history, drafts and review artifacts; not product docs.
 /.local/docs-archive/
 /docs/local/
+/.local/
