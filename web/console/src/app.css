@@ -8,39 +8,47 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Ozal identity (UI-005): dark graphite with one cyan brand colour.
-   Green, red and amber keep one meaning each: allowed, refused, waiting. The
-   marketing site (site/src/styles.css) uses the same tokens. Fonts are bundled
-   (OFL): no third-party requests. */
+/* Ozal identity (SITE-005, Marfil): warm ink with three brand colours, each
+   with one meaning and never decoration.
+     ivory   (primary)    Ozal itself: actions, the current place, focus
+     camel   (signal)     what is live: a signal on a cord, a connection up
+     graphite (depth)     depth: the door leaf of the mark, quiet surfaces
+   States stay out of the brand range: green allowed, red refused, blue
+   waiting (a check or decision under way), amber only for warnings that need
+   the operator's attention. The project page (site/src/styles.css) and the
+   sign-in pages (internal/passkey/assets) use the same values. Fonts are
+   bundled (OFL): no third-party requests. */
 :root {
   --radius: 0.75rem;
-  --background: #0c0c0e;
-  --foreground: #ededef;
-  --card: #16161a;
-  --card-foreground: #ededef;
-  --popover: #1c1c21;
-  --popover-foreground: #ededef;
-  --primary: #3ec5d6;
-  --primary-foreground: #0c0c0e;
-  --secondary: #1c1c21;
-  --secondary-foreground: #ededef;
-  --muted: #1c1c21;
-  --muted-foreground: #8b8b95;
-  --accent: #22222a;
-  --accent-foreground: #ededef;
-  --destructive: #f0685c;
-  --border: #26262d;
-  --input: #34343c;
-  --ring: #8fe3ee;
-  --success: #5fcf80;
+  --background: #0e0e0d;
+  --foreground: #f1ede6;
+  --card: #171716;
+  --card-foreground: #f1ede6;
+  --popover: #1f1f1d;
+  --popover-foreground: #f1ede6;
+  --primary: #f1ece2;
+  --primary-foreground: #0e0e0d;
+  --secondary: #1f1f1d;
+  --secondary-foreground: #f1ede6;
+  --muted: #1f1f1d;
+  --muted-foreground: #a19d96;
+  --accent: #262624;
+  --accent-foreground: #f1ede6;
+  --destructive: #ee6b5e;
+  --border: #2a2927;
+  --input: #3a3833;
+  --ring: #c4a17c;
+  --success: #78cc8a;
   --warning: #e0a84a;
-  /* The brand colour, for marks and emphasis. */
-  --signal: #8fe3ee;
-  --sidebar: #111114;
-  --sidebar-foreground: #ededef;
-  --sidebar-border: #26262d;
-  --sidebar-accent: #1c1c21;
-  --sidebar-accent-foreground: #ededef;
+  --waiting: #86b3e6;
+  /* Camel: what is live. Graphite: depth. */
+  --signal: #c4a17c;
+  --depth: #55514a;
+  --sidebar: #121211;
+  --sidebar-foreground: #f1ede6;
+  --sidebar-border: #2a2927;
+  --sidebar-accent: #1f1f1d;
+  --sidebar-accent-foreground: #f1ede6;
 }
 
 @theme inline {
@@ -70,7 +78,9 @@
   --color-ring: var(--ring);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-waiting: var(--waiting);
   --color-signal: var(--signal);
+  --color-depth: var(--depth);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-border: var(--sidebar-border);
@@ -103,7 +113,7 @@
     @apply text-muted-foreground font-mono text-[0.72rem] font-medium tracking-wide uppercase;
   }
   .plate b { @apply text-signal font-semibold; }
-  /* A state dot: green allowed, red refused, amber waiting, grey idle. */
+  /* A state dot: green allowed, red refused, blue waiting, amber warning, grey idle. */
   .lamp {
     @apply inline-block size-2 shrink-0 rounded-full;
     background: var(--lamp, var(--muted-foreground));
@@ -111,8 +121,9 @@
   }
   .lamp-on { --lamp: var(--success); }
   .lamp-off { --lamp: var(--destructive); }
-  .lamp-wait { --lamp: var(--warning); animation: lamp-pulse 1.6s ease-in-out infinite; }
-  .lamp-idle { --lamp: #34343c; box-shadow: none; }
+  .lamp-wait { --lamp: var(--waiting); animation: lamp-pulse 1.6s ease-in-out infinite; }
+  .lamp-warn { --lamp: var(--warning); }
+  .lamp-idle { --lamp: #3a3833; box-shadow: none; }
   .lamp-lg { @apply size-3; }
   /* A group name; as a button it adds or removes the group. */
   .chip {
@@ -125,26 +136,22 @@
   }
   .panel-head { @apply flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3; }
   /* A connecting line, as a divider next to labels. */
-  .cord { stroke: #6b6b76; fill: none; stroke-linecap: round; }
+  .cord { stroke: #6e6a63; fill: none; stroke-linecap: round; }
 }
 
 @keyframes lamp-pulse { 50% { opacity: 0.45; } }
 
 /* Identity motion. Every animation here stops under prefers-reduced-motion
    (rule above); none is needed to read or use a page. */
-.logo-live .logo-cord { stroke-dasharray: 1; stroke-dashoffset: 1; animation: cord-draw 0.9s 0.15s cubic-bezier(0.6, 0, 0.2, 1) forwards; }
-.logo-live .logo-from { animation: jack-pop 0.35s ease-out both; }
-.logo-live .logo-to { transform-box: fill-box; transform-origin: center; animation: jack-pop 0.35s 0.95s ease-out both; }
-.logo-signal { offset-path: path("M6 10.5 C6 19, 20 7, 20 15.5"); offset-rotate: 0deg; opacity: 0; animation: signal-run 3.2s 1.4s ease-in-out infinite; }
+.logo-live .logo-light { transform-box: fill-box; transform-origin: left center; animation: door-open 0.7s 0.2s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+@keyframes door-open { from { opacity: 0; transform: scaleX(0); } }
 @keyframes cord-draw { to { stroke-dashoffset: 0; } }
-@keyframes jack-pop { from { opacity: 0; transform: scale(0.4); } }
-@keyframes signal-run { 0% { offset-distance: 0%; opacity: 0; } 10% { opacity: 1; } 45% { offset-distance: 100%; opacity: 1; } 55%, 100% { offset-distance: 100%; opacity: 0; } }
 
 .patchbay { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.55; mask-image: radial-gradient(70% 70% at 50% 45%, black, transparent); }
 .patch-jack { fill: color-mix(in srgb, var(--muted-foreground) 35%, transparent); }
 .patch-cord { fill: none; stroke: color-mix(in srgb, var(--muted-foreground) 45%, transparent); stroke-width: 1.4; stroke-dasharray: 1; stroke-dashoffset: 1; animation: cord-draw 1.6s cubic-bezier(0.6, 0, 0.2, 1) forwards; }
-.patch-signal { fill: none; stroke: var(--primary); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 0.06 0.94; stroke-dashoffset: 1; opacity: 0; animation: patch-signal 5s ease-in-out infinite; filter: drop-shadow(0 0 4px var(--primary)); }
-.patch-lit { fill: none; stroke: var(--primary); stroke-width: 1.4; opacity: 0; animation: patch-lit 5s ease-in-out infinite; }
+.patch-signal { fill: none; stroke: var(--signal); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 0.06 0.94; stroke-dashoffset: 1; opacity: 0; animation: patch-signal 5s ease-in-out infinite; filter: drop-shadow(0 0 4px var(--signal)); }
+.patch-lit { fill: none; stroke: var(--signal); stroke-width: 1.4; opacity: 0; animation: patch-lit 5s ease-in-out infinite; }
 .patch-cord-1 { animation-delay: 0.3s, 0.3s; } .patch-cord-1.patch-signal, .patch-cord-1.patch-lit { animation-delay: 2.1s; }
 .patch-cord-0.patch-signal, .patch-cord-0.patch-lit { animation-delay: 1.4s; }
 .patch-cord-2 { animation-delay: 0.6s; } .patch-cord-2.patch-signal, .patch-cord-2.patch-lit { animation-delay: 3.2s; }
@@ -172,14 +179,15 @@
 .edgemap { font-family: inherit; }
 .em-node { fill: var(--card); stroke: var(--border); }
 .em-hub { fill: color-mix(in srgb, var(--primary) 10%, var(--card)); stroke: color-mix(in srgb, var(--primary) 45%, transparent); }
-.em-dot { fill: var(--foreground); }
 .em-dot-primary { fill: var(--primary); }
+.em-depth { fill: var(--depth); }
+.em-light { fill: var(--signal); }
 .em-glyph { fill: var(--muted-foreground); }
 .em-glyph-line { fill: none; stroke: var(--muted-foreground); stroke-width: 1.8; stroke-linecap: round; }
 .em-label { fill: var(--muted-foreground); font-size: 12px; }
 .em-cord { fill: none; stroke: color-mix(in srgb, var(--muted-foreground) 40%, transparent); stroke-width: 1.4; }
 .em-cord-bad { stroke: color-mix(in srgb, var(--destructive) 70%, transparent); stroke-dasharray: 4 5; }
-.em-signal { fill: none; stroke: var(--primary); stroke-width: 2.2; stroke-linecap: round; stroke-dasharray: 0.08 0.92; stroke-dashoffset: 1; opacity: 0; animation: em-run 3.6s ease-in-out infinite; filter: drop-shadow(0 0 3px var(--primary)); }
+.em-signal { fill: none; stroke: var(--signal); stroke-width: 2.2; stroke-linecap: round; stroke-dasharray: 0.08 0.92; stroke-dashoffset: 1; opacity: 0; animation: em-run 3.6s ease-in-out infinite; filter: drop-shadow(0 0 3px var(--primary)); }
 .em-d1 { animation-delay: 1.2s; } .em-d2 { animation-delay: 1.6s; } .em-d3 { animation-delay: 2.1s; } .em-d4 { animation-delay: 2.5s; }
 .em-d5 { animation-delay: 2.9s; } .em-d6 { animation-delay: 3.3s; } .em-d7 { animation-delay: 0.6s; } .em-d8 { animation-delay: 0.9s; }
 @keyframes em-run { 0% { stroke-dashoffset: 1; opacity: 0; } 10% { opacity: 1; } 55% { stroke-dashoffset: 0.08; opacity: 1; } 65%, 100% { stroke-dashoffset: 0.08; opacity: 0; } }

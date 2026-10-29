@@ -244,7 +244,7 @@
           </div>
           <div class="flex min-w-0 flex-wrap items-center gap-1.5 pl-12 text-xs md:pl-0">
             {#if !isPrivate(app)}
-              <span class="text-warning flex items-center gap-1.5"><span class="lamp lamp-wait" aria-hidden="true"></span>Public · no login</span>
+              <span class="text-warning flex items-center gap-1.5"><span class="lamp lamp-warn" aria-hidden="true"></span>Public · no login</span>
             {:else if needs.length}
               <span class="text-muted-foreground flex items-center gap-1.5"><span class="lamp lamp-on" aria-hidden="true"></span>Members of</span>
               {#each needs as group (group)}<button class="chip" title="Open groups" onclick={() => navigate("/groups")}>{group}</button>{/each}

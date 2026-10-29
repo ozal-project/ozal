@@ -41,9 +41,11 @@
     </g>
     <g transform={`translate(330 ${mid})`}>
       <rect x="-42" y="-26" width="84" height="52" rx="14" class="em-hub" />
-      <circle cx="-14" cy="-7" r="4.5" class="em-dot" />
-      <circle cx="14" cy="8" r="4.5" class="em-dot-primary" />
-      <path d="M-14 -2 C-14 10, 14 -4, 14 3" class="em-glyph-line" />
+      <g transform="translate(-14 -15) scale(0.875)">
+        <path d="M5 30V14.5A11 11 0 0 1 27 14.5V30H21.6V14.8A5.6 5.6 0 0 0 10.4 14.8V30Z" class="em-dot-primary" />
+        <path d="M10.4 30V14.8A5.6 5.6 0 0 1 16 9.2V30Z" class="em-depth" />
+        <path d="M16 9.2A5.6 5.6 0 0 1 21.6 14.8V30H16Z" class="em-light" />
+      </g>
       <text y="46" text-anchor="middle" class="em-label">Ozal</text>
     </g>
     {#each shown as r, i (r.host)}

@@ -39,7 +39,7 @@ const overlay = () => {
     bar.style.cssText = "position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:2147483647;max-width:min(880px,92vw);padding:12px 20px;border-radius:999px;background:rgba(17,17,20,.94);color:#ededef;font:500 17px/1.35 system-ui,sans-serif;border:1px solid #34343c;box-shadow:0 12px 40px rgba(0,0,0,.5);opacity:0;transition:opacity .35s;pointer-events:none;text-align:center";
     const dot = document.createElement("div");
     dot.id = "tour-pointer";
-    dot.style.cssText = "position:fixed;left:-40px;top:-40px;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;border:2px solid #8fe3ee;background:rgba(62,197,214,.28);z-index:2147483647;pointer-events:none;transition:transform .12s";
+    dot.style.cssText = "position:fixed;left:-40px;top:-40px;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;border:2px solid #c4a17c;background:rgba(196,161,124,.28);z-index:2147483647;pointer-events:none;transition:transform .12s";
     document.documentElement.append(bar, dot);
     addEventListener("mousemove", (e) => { dot.style.left = e.clientX + "px"; dot.style.top = e.clientY + "px"; }, true);
     addEventListener("mousedown", () => (dot.style.transform = "scale(.7)"), true);

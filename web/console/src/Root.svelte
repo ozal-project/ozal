@@ -70,7 +70,7 @@
     <div class="animate-in fade-in-0 duration-300 motion-reduce:animate-none"><Console /></div>
     {#if warning}
       <div class="bg-popover border-warning/40 animate-in slide-in-from-bottom-4 fixed right-4 bottom-4 z-50 flex max-w-sm items-center gap-3 rounded-xl border px-4 py-3 text-sm shadow-2xl" role="status">
-        <span class="lamp lamp-wait" aria-hidden="true"></span>
+        <span class="lamp lamp-warn" aria-hidden="true"></span>
         <span class="flex-1">{admin.renewable ? "Your session ends in under two minutes." : "This host login ends in under two minutes; ask for a new one to continue."}</span>
         {#if admin.renewable}<button type="button" class="text-primary font-medium" onclick={() => { active(); void renew(); }}>Stay signed in</button>{/if}
       </div>

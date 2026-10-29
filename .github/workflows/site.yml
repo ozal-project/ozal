@@ -1,6 +1,6 @@
 name: site
 
-# Builds the public project page and publishes it to switchboard.octaviosantacruz.com
+# Builds the public project page and publishes it to ozal.octaviosantacruz.com
 # through this edge's own deploy endpoint (PAGES-004/PAGES-008). The edge trusts
 # only this file, in this repository, on main, run by a push or by hand, through
 # a GitHub OIDC token: no deploy secret is stored here. Renaming this file or the
@@ -25,7 +25,7 @@ concurrency:
 env:
   DEPLOY_ENDPOINT: https://deploy.octaviosantacruz.com
   DEPLOY_PROJECT: switchboard-site
-  SITE_URL: https://switchboard.octaviosantacruz.com
+  SITE_URL: https://ozal.octaviosantacruz.com
 
 jobs:
   deploy:

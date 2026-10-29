@@ -3,7 +3,7 @@ import tailwindcss from "@tailwindcss/vite";
 
 // Pure static output: Ozal Pages serves dist/ as files, no runtime.
 export default defineConfig({
-  site: "https://switchboard.octaviosantacruz.com",
+  site: "https://ozal.octaviosantacruz.com",
   output: "static",
   build: { inlineStylesheets: "never" },
   // The page reads ../docs (the trackers) at build time; the dev server must be

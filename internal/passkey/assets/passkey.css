@@ -1,22 +1,23 @@
 /* Ozal identity, shared with the admin console (web/console) and the
-   project page (site/): dark graphite with one cyan brand colour. Green and
-   red keep one meaning each: done and refused. Geist is bundled locally (OFL,
+   project page (site/): warm ink with an ivory primary, a camel signal and
+   graphite depth (Marfil). Green and red keep one meaning each: done and refused. Geist is bundled locally (OFL,
    see OFL.txt) so the sign-in pages make no third-party request. */
 @font-face { font-family: "Geist"; src: url("/_/auth/geist-400.woff2") format("woff2"); font-weight: 400 500; font-display: swap; }
 @font-face { font-family: "Geist"; src: url("/_/auth/geist-600.woff2") format("woff2"); font-weight: 600 800; font-display: swap; }
 :root {
   color-scheme: dark;
-  --bg: #0c0c0e;
-  --card: #16161a;
-  --raised: #1c1c21;
-  --fg: #ededef;
-  --muted: #8b8b95;
-  --border: #26262d;
-  --accent: #3ec5d6;
-  --accent-fg: #0c0c0e;
-  --lamp: #8fe3ee;
-  --ok: #5fcf80;
-  --err: #f0685c;
+  --bg: #0e0e0d;
+  --card: #171716;
+  --raised: #1f1f1d;
+  --fg: #f1ede6;
+  --muted: #a19d96;
+  --border: #2a2927;
+  --accent: #f1ece2;
+  --accent-fg: #0e0e0d;
+  --lamp: #c4a17c;
+  --depth: #55514a;
+  --ok: #78cc8a;
+  --err: #ee6b5e;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 * { box-sizing: border-box; }
@@ -28,9 +29,9 @@ body {
 }
 .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; }
 .brand svg { width: 28px; height: 28px; flex: none; }
-.brand .dot-a { fill: var(--fg); }
-.brand .dot-b { fill: var(--accent); }
-.brand .cord { fill: none; stroke: var(--fg); stroke-linecap: round; }
+.brand .arch { fill: var(--accent); }
+.brand .leaf { fill: var(--depth); }
+.brand .light { fill: var(--lamp); }
 .brand .name { display: block; font-weight: 600; font-size: 1rem; line-height: 1; letter-spacing: -0.01em; }
 .brand .sub { display: block; margin-top: 5px; font: 0.68rem/1 var(--mono); color: var(--muted); }
 main { width: 100%; max-width: 420px; background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 28px 24px; box-shadow: 0 30px 80px -40px color-mix(in srgb, var(--accent) 35%, transparent); }
@@ -71,6 +72,7 @@ button:disabled { opacity: 0.55; cursor: progress; }
 .devices li button { grid-column: 3; grid-row: 1; width: auto; padding: 4px 10px; border-radius: 8px; background: transparent; color: var(--err); border: 1px solid color-mix(in srgb, var(--err) 45%, transparent); font-size: 0.8rem; }
 .devices li button:disabled { opacity: 0.35; cursor: not-allowed; }
 footer { font-size: 0.75rem; color: var(--muted); text-align: center; }
+a { color: var(--fg); text-underline-offset: 3px; }
 footer a { color: inherit; }
 
 /* The refusal page (CTX-007): the way forward is the one strong button. */
