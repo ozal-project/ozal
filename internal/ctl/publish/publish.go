@@ -140,19 +140,6 @@ func accept(ctx context.Context, req Request, proof artifact.Proof, note func(st
 	return err
 }
 
-func get(ctx context.Context, client *http.Client, target string) (int, string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
-	if err != nil {
-		return 0, "", err
-	}
-	res, err := client.Do(req)
-	if err != nil {
-		return 0, "", err
-	}
-	res.Body.Close()
-	return res.StatusCode, res.Header.Get("Location"), nil
-}
-
 func fetch(ctx context.Context, client *http.Client, target string) (int, []byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {

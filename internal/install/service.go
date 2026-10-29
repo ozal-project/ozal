@@ -140,7 +140,7 @@ func Service(ctx context.Context, out io.Writer, host ServiceHost, r ServiceRequ
 	}
 	for _, p := range []string{"/etc/switchboard/config.json", "/etc/systemd/system/switchboard.service", "/usr/local/lib/switchboard/switchboard"} {
 		if _, err := os.Lstat(mapped(r.Root, p)); !os.IsNotExist(err) {
-			return errors.New("Legacy Switchboard installation found; upgrade it in place instead of creating parallel state")
+			return errors.New("legacy Switchboard installation found; upgrade it in place instead of creating parallel state")
 		}
 	}
 	fmt.Fprintf(out, "Install root-owned code/config, private service state and loopback listeners (apply=%t, staging=%t).\n", r.Apply, r.Root != "")
