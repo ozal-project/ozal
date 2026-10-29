@@ -81,7 +81,7 @@ func TestIntegratedTunnelRoutesReloadAndPreserveVisitorIP(t *testing.T) {
 	var requests atomic.Int64
 	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
-		_ = json.NewEncoder(w).Encode(map[string]string{"ip": r.Header.Get("X-Forwarded-For"), "internal": r.Header.Get("X-Switchboard-Visitor-IP"), "identity": r.Header.Get("X-Auth-Request-Email"), "cookie": r.Header.Get("Cookie")})
+		_ = json.NewEncoder(w).Encode(map[string]string{"ip": r.Header.Get("X-Forwarded-For"), "internal": r.Header.Get("X-Ozal-Visitor-IP"), "identity": r.Header.Get("X-Auth-Request-Email"), "cookie": r.Header.Get("Cookie")})
 	}))
 	defer origin.Close()
 	connectorHandler, err := proxy.New([]config.Route{{Host: "app.localhost", Target: origin.URL}}, nil, nil, proxy.WithAuthenticatedTunnelTrust())
@@ -124,7 +124,7 @@ func TestIntegratedTunnelRoutesReloadAndPreserveVisitorIP(t *testing.T) {
 		}
 		request.Host = "app.localhost"
 		request.Header.Set("CF-Connecting-IP", "203.0.113.47")
-		request.Header.Set("X-Switchboard-Visitor-IP", "6.6.6.6")
+		request.Header.Set("X-Ozal-Visitor-IP", "6.6.6.6")
 		request.Header.Set("X-Auth-Request-Email", "forged@example.com")
 		request.Header.Set("Cookie", "sb_session=forged; harmless=kept")
 		response, err := public.Client().Do(request)

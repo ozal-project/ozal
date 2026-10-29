@@ -16,7 +16,7 @@ import (
 
 const (
 	checkpointVersion = 1
-	checkpointDomain  = "switchboard-audit-checkpoint-v1\x00"
+	checkpointDomain  = "ozal-audit-checkpoint-v1\x00"
 	maxKeyIDLength    = 64
 )
 

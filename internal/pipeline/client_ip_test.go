@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"strings"
 	"testing"
 )
 
@@ -158,7 +159,7 @@ func TestAuthenticatedTunnelTakesVisitorIPFromTheEdgeAssertion(t *testing.T) {
 	t.Run("underscore alias rejects the whole claim", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "http://app.localhost/", nil)
 		req.RemoteAddr = "10.8.0.1:51000"
-		req.Header["X_Switchboard_Visitor_Ip"] = []string{"198.51.100.23"}
+		req.Header["X_Ozal_Visitor_Ip"] = []string{"198.51.100.23"}
 		req.Header[VisitorIPHeader] = []string{"198.51.100.23"}
 		var got string
 		TrustAuthenticatedTunnel()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -184,7 +185,7 @@ func TestVisitorAssertionIsNeverTrustedOnOrdinaryListeners(t *testing.T) {
 			req := httptest.NewRequest("GET", "http://app.localhost/", nil)
 			req.RemoteAddr = "203.0.113.9:1234"
 			req.Header[VisitorIPHeader] = []string{"198.51.100.23"}
-			req.Header["X_Switchboard_Visitor_Ip"] = []string{"198.51.100.23"}
+			req.Header["X_Ozal_Visitor_Ip"] = []string{"198.51.100.23"}
 			var got string
 			var remaining []string
 			stage(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -201,5 +202,37 @@ func TestVisitorAssertionIsNeverTrustedOnOrdinaryListeners(t *testing.T) {
 				t.Errorf("assertion headers reached the handler: %v", remaining)
 			}
 		})
+	}
+}
+
+// The header names from before the rename are not ours any more, but a
+// client can still send them: they are stripped like any other forwarding
+// claim, on every listener, and never believed behind a tunnel either.
+func TestLegacyVisitorHeaderSpellingsAreStrippedAsClientInput(t *testing.T) {
+	for _, name := range []string{"X-Switchboard-Visitor-IP", "X_Switchboard_Visitor_Ip", "X-Switchboard-Visitor-User", "X-Switchboard-Visitor-Email"} {
+		for stageName, stage := range map[string]Stage{"ordinary": Trust, "tunnel": TrustAuthenticatedTunnel()} {
+			t.Run(stageName+"/"+name, func(t *testing.T) {
+				req := httptest.NewRequest("GET", "http://app.localhost/", nil)
+				req.RemoteAddr = "203.0.113.9:1234"
+				req.Header[name] = []string{"198.51.100.23"}
+				var got string
+				var remaining []string
+				stage(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					ip, _ := ClientIP(r.Context())
+					got = ip.String()
+					for header := range r.Header {
+						remaining = append(remaining, header)
+					}
+				})).ServeHTTP(httptest.NewRecorder(), req)
+				if got == "198.51.100.23" {
+					t.Errorf("client IP = %s: a legacy header spelling was believed", got)
+				}
+				for _, header := range remaining {
+					if strings.Contains(strings.ToLower(header), "visitor") {
+						t.Errorf("legacy header %q reached the application", header)
+					}
+				}
+			})
+		}
 	}
 }

@@ -104,7 +104,7 @@ credenciales/path/query. El edge nunca elige un origen arbitrario. El lab
 `tunnel-spike` usa identidades efímeras y puertos loopback; no es un producto
 de ingreso público ni reemplaza credenciales persistentes.
 
-IP y sujeto/email viajan como `X-Switchboard-Visitor-*` solo dentro de mTLS.
+IP y sujeto/email viajan como `X-Ozal-Visitor-*` solo dentro de mTLS.
 `TrustAuthenticatedTunnel` valida valores y los convierte en identidad upstream;
 listeners ordinarios eliminan toda afirmación del cliente y la cookie de sesión.
 Son afirmaciones autenticadas por el túnel, no firmas verificables por la app.
@@ -191,13 +191,13 @@ según modo. `required` espera append+sync antes de reenviar o mutar; fallo 503.
 
 Formato v1: cada record incluye `v`, `log_id`, `seq`, `time`, `type`, campos
 seguros y `prev`/`hash`. Se hashéan bytes exactos, no JSON canónico universal.
-Dominio `switchboard-audit-v1\x00`, secuencia uint64 big endian, prev decodificado,
+Dominio `ozal-audit-v1\x00`, secuencia uint64 big endian, prev decodificado,
 longitud uint64 big endian y JSON compacto sin el campo hash final. El código
 de [audit](../internal/audit) y sus tests fijan la codificación interoperable.
 No registrar cookies, secretos, cuerpos, desafíos ni errores crudos.
 
 Checkpoint Ed25519 firma payload v1 con dominio
-`switchboard-audit-checkpoint-v1\x00` y orden `v, log_id, seq, hash, time, key_id`.
+`ozal-audit-checkpoint-v1\x00` y orden `v, log_id, seq, hash, time, key_id`.
 Se necesita checkpoint y clave pública fijada fuera de la autoridad del host;
 la herramienta verifica firma/cadena, no acredita esa independencia por sí sola.
 No llamarlo transparencia pública ni protección contra un root comprometido.

@@ -25,7 +25,7 @@ const (
 // VisitorIPHeader carries the visitor's address from the tunnel edge to the
 // connector, inside the mutually authenticated tunnel. It is believed only by
 // TrustAuthenticatedTunnel; every other stage strips it as client input.
-const VisitorIPHeader = "X-Switchboard-Visitor-IP"
+const VisitorIPHeader = "X-Ozal-Visitor-IP"
 
 // Stage is one middleware step of the inbound pipeline.
 type Stage func(http.Handler) http.Handler

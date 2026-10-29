@@ -43,7 +43,7 @@ type Callback struct {
 // separator, so the token is never used directly as a second protocol's key
 // and rotating the bot token invalidates every outstanding button.
 func CallbackKey(token string) []byte {
-	sum := sha256.Sum256([]byte("switchboard/notify-callback/v1\x00" + token))
+	sum := sha256.Sum256([]byte("ozal/notify-callback/v1\x00" + token))
 	return sum[:]
 }
 

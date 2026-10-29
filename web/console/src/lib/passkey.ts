@@ -20,7 +20,7 @@ const encode = (buffer: ArrayBuffer): string => {
 async function api<T>(path: string, body: unknown, ceremony?: string, bearer?: string): Promise<T> {
   const res = await fetch(path, {
     method: "POST", cache: "no-store", signal: AbortSignal.timeout(300_000),
-    headers: { "Content-Type": "application/json", ...(ceremony ? { "X-Switchboard-Ceremony": ceremony } : {}), ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}) },
+    headers: { "Content-Type": "application/json", ...(ceremony ? { "X-Ozal-Ceremony": ceremony } : {}), ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}) },
     body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));

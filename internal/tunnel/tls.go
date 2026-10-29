@@ -10,7 +10,7 @@ import (
 	"slices"
 )
 
-const ALPN = "switchboard-tunnel-spike/1"
+const ALPN = "ozal-tunnel-spike/1"
 
 // AuthorizeConnector is deliberately exact: a certificate from our CA does
 // not authorize every connector, and wildcard DNS identities are not accepted.

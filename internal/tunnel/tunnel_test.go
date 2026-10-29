@@ -420,7 +420,7 @@ func TestVisitorAddressCrossesTheTunnelAndCannotBeForged(t *testing.T) {
 	req := httptest.NewRequest("GET", "http://portfolio.localhost/", nil)
 	req.RemoteAddr = "198.51.100.7:4242"
 	req.Header.Set(pipeline.VisitorIPHeader, "203.0.113.99")
-	req.Header.Set("X_Switchboard_Visitor_Ip", "203.0.113.99")
+	req.Header.Set("X_Ozal_Visitor_Ip", "203.0.113.99")
 	req.Header.Set("X-Forwarded-For", "203.0.113.99")
 	rec := httptest.NewRecorder()
 	edge.ServeHTTP(rec, req)

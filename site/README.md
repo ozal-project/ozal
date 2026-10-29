@@ -1,7 +1,8 @@
 # Ozal project page
 
-Static site for `switchboard.octaviosantacruz.com`, built with Astro and served by
-Ozal Pages. Its tokens (dark graphite, cyan brand, Geist) are shared with the
+Static site for `ozal.octaviosantacruz.com` (the old `switchboard.` hostname stays as an
+alias), built with Astro and served by Ozal Pages. Its tokens (warm graphite, Marfil
+ivory and camel, Geist) are shared with the
 console (`UI-005`).
 
 The roadmap and changelog are not written here: `src/lib/tracker.ts` parses
@@ -11,7 +12,8 @@ as done only when `IMPLEMENTED.md` names it and `TO_IMPLEMENT.md` no longer list
 Publishing is CI: a push to `main` that touches `site/`, a tracker or
 `scripts/pages/` runs `.github/workflows/site.yml`, which builds, refuses secrets
 in `dist/`, uploads through the deploy endpoint with a GitHub OIDC token (project
-`switchboard-site`), checks the public page and rolls back to the last good build
+`switchboard-site`, the project id the edge already trusts; renaming it is an edge
+operation, not a rename here), checks the public page and rolls back to the last good build
 if that check fails. The explanation, walkthrough tabs and roadmap work without JavaScript.
 Only the optional live engine and progressive entrance motion use client scripts;
 all content is visible if those scripts fail.
@@ -51,7 +53,7 @@ Browser regression checks reuse the tour's existing Playwright dependency:
 ```bash
 # From the repository root, after building site/ and serving site/dist on loopback:
 npm --prefix scripts/demo ci
-node scripts/demo/site-check.mjs --url http://127.0.0.1:4321 --chrome /path/to/chrome --out /tmp/switchboard-site-check
+node scripts/demo/site-check.mjs --url http://127.0.0.1:4321 --chrome /path/to/chrome --out /tmp/ozal-site-check
 ```
 
 The check covers 1440/1024/768/390/320 px, horizontal overflow, visible navigation,

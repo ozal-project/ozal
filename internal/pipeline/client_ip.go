@@ -181,6 +181,8 @@ func stripForwardingHeaders(h http.Header) {
 		}
 		switch normalized {
 		case "forwarded", "x-real-ip", "true-client-ip", "cf-connecting-ip", "cf-connecting-ipv6", "cf-pseudo-ipv4",
+			"x-ozal-visitor-ip", "x-ozal-visitor-user", "x-ozal-visitor-email",
+			// Spellings from before the rename are still client input, never ours.
 			"x-switchboard-visitor-ip", "x-switchboard-visitor-user", "x-switchboard-visitor-email":
 			delete(h, name)
 		}

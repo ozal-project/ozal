@@ -374,7 +374,7 @@ type loginPayload struct {
 // key of a second protocol. Rotating the client secret invalidates only
 // in-flight logins (minutes), never established sessions.
 func loginCookieKey(clientSecret string) []byte {
-	sum := sha256.Sum256([]byte("switchboard/login-cookie/v1\x00" + clientSecret))
+	sum := sha256.Sum256([]byte("ozal/login-cookie/v1\x00" + clientSecret))
 	return sum[:]
 }
 

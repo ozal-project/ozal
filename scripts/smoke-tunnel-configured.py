@@ -41,7 +41,7 @@ def main():
         def do_GET(self):
             body = json.dumps({"source": "disposable-origin", "ip": self.headers.get("X-Forwarded-For"),
                                "identity": self.headers.get("X-Auth-Request-Email"),
-                               "internal": self.headers.get("X-Switchboard-Visitor-IP"),
+                               "internal": self.headers.get("X-Ozal-Visitor-IP"),
                                "cookie": self.headers.get("Cookie")}).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -131,7 +131,7 @@ def main():
 
             def fetch(address, path="/", host="app.localhost", extra=None):
                 request = urllib.request.Request("http://" + address + path, headers={**(extra or {}), "Host": host,
-                    "CF-Connecting-IP": "203.0.113.47", "X-Switchboard-Visitor-IP": "6.6.6.6",
+                    "CF-Connecting-IP": "203.0.113.47", "X-Ozal-Visitor-IP": "6.6.6.6",
                     "X-Auth-Request-Email": "forged@example.test", "Cookie": "sb_session=forged; harmless=kept"})
                 try:
                     with urllib.request.urlopen(request, timeout=3) as response:

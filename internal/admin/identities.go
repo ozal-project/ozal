@@ -33,7 +33,7 @@ const (
 	enrolRecover   = "recover"
 	enrolInvite    = "invite"
 	enrolmentTTL   = 10 * time.Minute
-	adminCeremony  = "X-Switchboard-Ceremony"
+	adminCeremony  = "X-Ozal-Ceremony"
 )
 
 // identities is what the sign-in flows need from storage; the SQLite adapter

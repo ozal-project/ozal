@@ -90,7 +90,7 @@ func TestConnectorRouteIdentityCannotBeForged(t *testing.T) {
 	t.Run("anonymous route", func(t *testing.T) {
 		edge := edgeThroughConnector(t, config.Route{Host: "app.localhost"}, nil, app)
 		req := httptest.NewRequest(http.MethodGet, "http://app.localhost/", nil)
-		for _, name := range []string{pipeline.IdentityUserHeader, pipeline.IdentityEmailHeader, pipeline.VisitorUserHeader, pipeline.VisitorEmailHeader, "X-Switchboard-Visitor_User"} {
+		for _, name := range []string{pipeline.IdentityUserHeader, pipeline.IdentityEmailHeader, pipeline.VisitorUserHeader, pipeline.VisitorEmailHeader, "X-Ozal-Visitor_User"} {
 			req.Header[name] = []string{"forged"}
 		}
 		edge.ServeHTTP(httptest.NewRecorder(), req)

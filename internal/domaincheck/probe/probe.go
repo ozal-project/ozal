@@ -23,7 +23,7 @@ import (
 )
 
 // Path is the prefix the public listener answers before any routing.
-const Path = "/.well-known/switchboard-probe/"
+const Path = "/.well-known/ozal-probe/"
 
 const (
 	tokenTTL  = 2 * time.Minute

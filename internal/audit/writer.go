@@ -34,7 +34,7 @@ const (
 	MaxRecordBytes     = 1 << 20
 	segmentPrefix      = "audit-"
 	segmentSuffix      = ".jsonl"
-	hashDomain         = "switchboard-audit-v1\x00"
+	hashDomain         = "ozal-audit-v1\x00"
 	appendQueueSize    = 256
 	appendBatchMax     = 64
 	appendBatchWindow  = 250 * time.Microsecond

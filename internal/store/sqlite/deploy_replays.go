@@ -26,7 +26,7 @@ func (s *DeployReplays) Consume(ctx context.Context, jti string, expires time.Ti
 	if jti == "" || len(jti) > 256 || !expires.After(now) || expires.Sub(now) > 10*time.Minute {
 		return false, errors.New("invalid deploy replay window")
 	}
-	digest := sha256.Sum256([]byte("switchboard-deploy-jti-v1\x00" + jti))
+	digest := sha256.Sum256([]byte("ozal-deploy-jti-v1\x00" + jti))
 	key := hex.EncodeToString(digest[:])
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

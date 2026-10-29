@@ -12,8 +12,8 @@ import (
 // them; every stage strips them as client input, and they never reach an
 // application: the connector turns them back into the identity headers.
 const (
-	VisitorUserHeader  = "X-Switchboard-Visitor-User"
-	VisitorEmailHeader = "X-Switchboard-Visitor-Email"
+	VisitorUserHeader  = "X-Ozal-Visitor-User"
+	VisitorEmailHeader = "X-Ozal-Visitor-Email"
 )
 
 // maxVisitorField bounds each asserted value. OIDC subjects are at most 255

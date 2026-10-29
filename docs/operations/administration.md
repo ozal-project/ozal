@@ -67,11 +67,22 @@ en `ozal.localhost` para registrar una passkey nueva para la misma cuenta.
 El cambio de nombre no permite usar una credencial de un RP ID en otro.
 Las sesiones de consola en memoria terminan al reiniciar, como antes.
 
-Cookies `sb_*`, sujetos nativos `sb:`, cabeceras `X-Switchboard-*`, ALPN del
-túnel, derivaciones criptográficas, ruta del probe y migraciones SQL mantienen
-sus identificadores de protocolo. Son contratos de compatibilidad, no marca
-visible: cambiarlos invalidaría estado o impediría mezclar versiones durante
-una actualización. Los filtros de identidad y cookies siguen aplicándose.
+Los identificadores de protocolo también pasan a Ozal: cabeceras `X-Ozal-*`,
+ALPN del túnel (`ozal-tunnel-spike/1`), ruta del probe (`/.well-known/ozal-probe/`)
+y los dominios de las derivaciones criptográficas (cookie de login, callback de
+Telegram, replay de deploy y cadena del audit log). **No es retrocompatible**:
+
+- Edge y conector deben actualizarse juntos; con versiones mezcladas el túnel
+  no negocia ALPN.
+- Las cookies de login OIDC emitidas antes del cambio dejan de validar: los
+  visitantes entran de nuevo.
+- Un log de auditoría escrito antes del cambio **no verifica** con el binario
+  nuevo (el dominio entra en cada hash). Archívalo con su binario anterior y
+  empieza un log nuevo; no lo reescribas.
+- Las cabeceras `X-Switchboard-Visitor-*` y sus variantes con `_` se siguen
+  eliminando como entrada de cliente, pero ya no significan nada para Ozal.
+- Se conservan: cookies `sb_*`, sujetos nativos `sb:`, migraciones SQL (con su
+  checksum) y las variables, rutas y nombres de host anteriores listados arriba.
 
 El repositorio remoto, módulo Go y URL pública conservan sus destinos actuales
 hasta confirmar dominio y organización. El renombrado local no registra un

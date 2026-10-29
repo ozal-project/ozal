@@ -35,7 +35,7 @@ completa de una instalación.
 | Auditoría → evidencia externa | Cadena y checkpoints firmados | Copia y clave pública fijadas fuera del control del host |
 
 El cliente no puede crear identidad confiable con `X-Auth-Request-*`,
-`X-Switchboard-Visitor-*` ni variantes con guiones bajos. El túnel transporta
+`X-Ozal-Visitor-*` (ni la grafía anterior `X-Switchboard-Visitor-*`) ni variantes con guiones bajos. El túnel transporta
 afirmaciones autenticadas por mTLS; no son JWT verificables por cualquier app.
 Conservar un login propio de la app es coexistencia, no SSO automático.
 Ver [identidad](architecture/identity-login.md) y

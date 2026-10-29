@@ -152,7 +152,7 @@ ruta pública. El bootstrap no convierte al primer visitante en dueño.
    invitaciones (sus enlaces se copian ahí, solo esa vez). El panel muestra el
    **único registro DNS** que falta y lo comprueba cada pocos segundos:
    DNS → certificado → una petición pública con un token de un solo uso que solo
-   este edge responde (`/.well-known/switchboard-probe/…`, antes del pipeline).
+   este edge responde (`/.well-known/ozal-probe/…`, antes del pipeline).
    El mismo panel se abre en cada fila con el botón de globo.
 
 Si la petición llega a otro servidor, el DNS todavía apunta al hosting anterior.
