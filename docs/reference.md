@@ -292,6 +292,40 @@ identifica por valor dentro del RRSet). El TTL se fija en 60 s, el mínimo.
 escriben los TXT; se envían entre comillas y esa decisión vive en un solo
 lugar (`hetznerTXTValue`). Hasta esa prueba, usa el proveedor en staging.
 
+#### Delegar el desafío por CNAME (cualquier proveedor DNS)
+
+Si tu dominio vive en un DNS sin adaptador (un registrador como DonDominio o
+Porkbun, o cualquier otro), no hace falta uno. Crea **una vez, a mano**, un
+CNAME y deja que Ozal escriba los TXT en una zona que sí controla:
+
+```
+_acme-challenge.example.com.   CNAME   example-com.acme.delegated.net.
+```
+
+```json
+"dns01": {
+  "state_dir": "/var/lib/ozal/origin-cert",
+  "directory_url": "https://acme-v02.api.letsencrypt.org/directory",
+  "dns_provider": "hetzner",
+  "hetzner": {"zone": "delegated.net", "token": "file:/etc/ozal/hetzner-dns.token"},
+  "challenge_delegation": {"example.com": "example-com.acme.delegated.net"}
+}
+```
+
+Cada clave es el dominio base de un nombre de `tls.domains` (un wildcard y su
+ápice comparten base) y su valor el nombre donde se escribe el TXT. La zona del
+proveedor debe contener ese destino, no el dominio. Antes de crear ningún
+registro, Ozal comprueba que `_acme-challenge.<dominio>` sea un CNAME hacia el
+destino exacto; si no lo es, falla con un mensaje que nombra el CNAME que falta
+y no deja nada creado. La espera de propagación consulta el nombre que ve la CA,
+o sea a través del CNAME. Un solo salto: una cadena de CNAME no se acepta.
+
+**Quien controle la zona de destino puede obtener certificados para el
+dominio.** Usa una zona dedicada y una credencial limitada a ella. Esto
+desacopla los certificados del proveedor; no cambia quién sirve el DNS de tu
+dominio ni quién te protege de DDoS. Sin wildcard no necesitas nada de esto:
+HTTP-01 del [perfil directo](#perfil-directo-sin-cloudflare) no usa DNS.
+
 Staging usa otra carpeta y roots explícitos por `certificate_roots_file`,
 que reemplazan los roots de validación de esa emisión; no usarlo para debilitar
 producción. La renovación conserva el certificado válido y sin él falla TLS.
@@ -369,6 +403,17 @@ Se admiten redirects 301/302/303/307/308; no rewrites 200 ni reglas 404/410.
 No se permite usar reglas de archivos para saltar políticas. Un rollback activa
 contenido retenido y no cambia DB, DNS o backend. CI necesita proyecto y hostname
 dedicado de deploy; [configuración y desconexión](operations/administration.md#github-y-publicacion).
+
+`POST /_/api/projects/{name}/workflow` requiere la herramienta `publishing`.
+Por defecto devuelve un plan sin escrituras: `directory` (p. ej. `.`), `output`
+(p. ej. `dist`), `hostname` (uno público del proyecto; vacío elige el primero)
+y `page` (página de repositorios de la instalación; default 1). La respuesta
+incluye `plan.content`, `plan.digest`, `plan.branch`, `plan.path` y `expected`
+(digest de configuración). Repite esos mismos campos con `apply: true`,
+`digest: plan.digest` y `expected` para proponer el PR. Un cambio de contenido
+o configuración exige revisar otra vez. Un 201 devuelve `pull_request` con
+`url`, `number` y `branch`; errores de escritura incluyen la rama de propuesta
+para reconciliar en GitHub. Nunca envíes claves o tokens de la App al navegador.
 
 ## Administración y auditoría
 

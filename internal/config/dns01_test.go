@@ -320,3 +320,64 @@ func TestDNS01HetznerAndProviderExclusivity(t *testing.T) {
 		}
 	}
 }
+
+func delegatedTLS(provider, extra string) string {
+	return `{
+		"enabled": true,
+		"domains": ["*.example.com", "example.com"],
+		"email": "ops@example.com",
+		"dns01": {
+			"state_dir": "/var/lib/ozal/certs",
+			"directory_url": "https://acme-v02.api.letsencrypt.org/directory",
+			` + provider + `,
+			"challenge_delegation": {"Example.COM": "example-com.acme.delegated.net."` + extra + `}
+		}
+	}`
+}
+
+const hetznerForDelegated = `"dns_provider": "hetzner", "hetzner": {"zone": "delegated.net", "token": "env:T"}`
+
+func TestDNS01ChallengeDelegationDecouplesTheZone(t *testing.T) {
+	skipOnWindows(t, "POSIX absolute-path fixtures")
+	// The certificate names live in example.com, but the provider only has
+	// delegated.net: valid because the challenge is written to the target.
+	cfg := dns01Config(t, delegatedTLS(hetznerForDelegated, ""))
+	got := cfg.TLS.DNS01.ChallengeDelegation
+	if len(got) != 1 || got["example.com"] != "example-com.acme.delegated.net" {
+		t.Fatalf("delegation = %v, want normalized", got)
+	}
+	clone := Clone(*cfg)
+	clone.TLS.DNS01.ChallengeDelegation["example.com"] = "elsewhere.test"
+	if cfg.TLS.DNS01.ChallengeDelegation["example.com"] != "example-com.acme.delegated.net" {
+		t.Fatal("Clone shares the delegation map")
+	}
+}
+
+func TestDNS01ChallengeDelegationRefusals(t *testing.T) {
+	skipOnWindows(t, "POSIX absolute-path fixtures")
+	load := func(tlsJSON string) error {
+		path := writeConfig(t, `{"listen": ":8888", "tls": `+tlsJSON+`, "routes": [{"host": "a.localhost", "target": "http://localhost:9000"}]}`)
+		_, err := Load(path)
+		return err
+	}
+	cloudflare := `"dns_token": "env:T"`
+	cases := map[string]struct{ tls, want string }{
+		"base is not a certificate name": {strings.Replace(delegatedTLS(cloudflare, ""), `"Example.COM"`, `"other.org"`, 1), "challenge_delegation"},
+		"wildcard base":                  {strings.Replace(delegatedTLS(cloudflare, ""), `"Example.COM"`, `"*.example.com"`, 1), "challenge_delegation"},
+		"empty target":                   {strings.Replace(delegatedTLS(cloudflare, ""), `"example-com.acme.delegated.net."`, `""`, 1), "challenge_delegation"},
+		"target is the challenge name":   {strings.Replace(delegatedTLS(cloudflare, ""), `"example-com.acme.delegated.net."`, `"_acme-challenge.example.com"`, 1), "challenge_delegation"},
+		"invalid target":                 {strings.Replace(delegatedTLS(cloudflare, ""), `"example-com.acme.delegated.net."`, `"bad name.net"`, 1), "challenge_delegation"},
+		"zone does not contain target":   {strings.Replace(delegatedTLS(hetznerForDelegated, ""), `"example-com.acme.delegated.net."`, `"x.other.org"`, 1), "zone"},
+	}
+	for name, tc := range cases {
+		err := load(tc.tls)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: err = %v, want mention of %q", name, err, tc.want)
+		}
+	}
+	// Without a delegation the same provider/zone mismatch is still refused.
+	plain := strings.Replace(delegatedTLS(hetznerForDelegated, ""), `"challenge_delegation": {"Example.COM": "example-com.acme.delegated.net."}`, `"challenge_delegation": {}`, 1)
+	if err := load(plain); err == nil || !strings.Contains(err.Error(), "zone") {
+		t.Errorf("provider zone must still have to contain the names: %v", err)
+	}
+}

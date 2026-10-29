@@ -43,7 +43,13 @@ type ACMEConfig struct {
 	// the system resolver.
 	Resolver TXTResolver
 	// HTTPClient talks to the ACME directory; nil selects a bounded default.
-	HTTPClient          *http.Client
+	HTTPClient *http.Client
+	// Delegations maps a domain (the base of a certificate name) to the
+	// name where its challenge TXT is written instead. The operator creates
+	// one CNAME, _acme-challenge.<domain> -> target, at whatever DNS serves
+	// the domain; from then on only the zone holding the target needs an
+	// adapter. The CNAME is verified before any record is created.
+	Delegations         map[string]string
 	PropagationTimeout  time.Duration
 	PropagationInterval time.Duration
 	CleanupTimeout      time.Duration
@@ -79,6 +85,20 @@ func NewACMEIssuer(cfg ACMEConfig, state *FileStore) (*ACMEIssuer, error) {
 	}
 	if cfg.HTTPClient == nil {
 		cfg.HTTPClient = &http.Client{Timeout: defaultACMEHTTPTimeout}
+	}
+	delegations, err := normalizeDelegations(cfg.Delegations)
+	if err != nil {
+		return nil, err
+	}
+	cfg.Delegations = delegations
+	if len(delegations) > 0 {
+		resolver := cfg.Resolver
+		if resolver == nil {
+			resolver = net.DefaultResolver
+		}
+		if _, ok := resolver.(CNAMEResolver); !ok {
+			return nil, errors.New("certs: challenge delegation needs a resolver that can read CNAME records")
+		}
 	}
 	if cfg.PropagationTimeout <= 0 {
 		cfg.PropagationTimeout = defaultPropagationTimeout
@@ -172,8 +192,15 @@ func (i *ACMEIssuer) authorize(ctx context.Context, client *acme.Client, names [
 	if index < 0 {
 		return fmt.Errorf("%w: the CA authorized %q, which is not one of %v", ErrDNS, got, names)
 	}
-	fqdn := ChallengeFQDN(names[index])
-	record, intentID, err := i.present(ctx, fqdn, value)
+	fqdn := ChallengeFQDN(names[index]) // the name the CA queries
+	target := fqdn                      // the name the record is written to
+	if delegated, ok := i.cfg.Delegations[baseOf(names[index])]; ok {
+		if err := i.checkDelegation(ctx, fqdn, delegated); err != nil {
+			return err
+		}
+		target = delegated
+	}
+	record, intentID, err := i.present(ctx, target, value)
 	if err != nil {
 		return err
 	}
@@ -190,6 +217,18 @@ func (i *ACMEIssuer) authorize(ctx context.Context, client *acme.Client, names [
 	}
 	if _, err := client.WaitAuthorization(ctx, authz.URI); err != nil {
 		return classifyACME(ctx, "wait authorization", err)
+	}
+	return nil
+}
+
+// checkDelegation proves the CNAME the operator was asked to create is in
+// place, before any record is written. A missing or wrong CNAME would
+// otherwise surface only as a validation failure at the CA, after a record
+// was created in a zone the CA never reads.
+func (i *ACMEIssuer) checkDelegation(ctx context.Context, fqdn, target string) error {
+	canonical, err := i.resolver().(CNAMEResolver).LookupCNAME(ctx, fqdn)
+	if err != nil || strings.TrimSuffix(strings.ToLower(canonical), ".") != target {
+		return fmt.Errorf("%w: %s must be a CNAME to %s before the challenge can be delegated; create it at the DNS that serves the domain and retry", ErrDNS, fqdn, target)
 	}
 	return nil
 }
@@ -432,4 +471,38 @@ func classifyACME(ctx context.Context, stage string, err error) error {
 		return fmt.Errorf("acme: %s: %w", stage, ctxErr)
 	}
 	return fmt.Errorf("acme: %s: %w", stage, err)
+}
+
+// CNAMEResolver reads CNAME records. *net.Resolver satisfies it; tests use a
+// fake so no test ever depends on public DNS.
+type CNAMEResolver interface {
+	LookupCNAME(ctx context.Context, host string) (string, error)
+}
+
+// normalizeDelegations lower-cases and validates the delegation table. The
+// target must be a plain host name that is not, and is not under, the name
+// the CNAME lives at: a delegation to itself can never resolve.
+func normalizeDelegations(in map[string]string) (map[string]string, error) {
+	if len(in) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]string, len(in))
+	for base, target := range in {
+		base = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(base)), ".")
+		target = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(target)), ".")
+		if base == "" || strings.HasPrefix(base, "*.") || target == "" {
+			return nil, errors.New("certs: a challenge delegation needs a domain and a target name")
+		}
+		for _, name := range []string{base, target} {
+			if _, err := wireName(name); err != nil || strings.ContainsAny(name, " *") {
+				return nil, fmt.Errorf("certs: challenge delegation name %q is not a valid host name", name)
+			}
+		}
+		source := "_acme-challenge." + base
+		if target == source || strings.HasSuffix(target, "."+source) {
+			return nil, fmt.Errorf("certs: challenge delegation for %s cannot point at itself", base)
+		}
+		out[base] = target
+	}
+	return out, nil
 }

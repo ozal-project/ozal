@@ -555,6 +555,7 @@ func startCertificateManager(ctx context.Context, cfg *config.Config, sink event
 		DirectoryURL: cfg.TLS.DNS01.DirectoryURL,
 		Email:        cfg.TLS.Email,
 		DNS:          dnsProvider,
+		Delegations:  cfg.TLS.DNS01.ChallengeDelegation,
 	}, state)
 	if err != nil {
 		closeState()

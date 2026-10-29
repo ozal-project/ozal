@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/netip"
 	"net/url"
@@ -176,6 +177,12 @@ type DNS01 struct {
 	DNSToken             string        `json:"dns_token,omitempty"`
 	RFC2136              *DNS01RFC2136 `json:"rfc2136,omitempty"`
 	Hetzner              *DNS01Hetzner `json:"hetzner,omitempty"`
+	// ChallengeDelegation maps a certificate domain to the name where its
+	// DNS-01 TXT is written. The operator creates one CNAME,
+	// _acme-challenge.<domain> -> target, at whatever DNS serves the domain;
+	// only the zone holding the target then needs a provider. Whoever
+	// controls the target zone can obtain certificates for the domain.
+	ChallengeDelegation map[string]string `json:"challenge_delegation,omitempty"`
 }
 
 // DNS01Hetzner selects the Hetzner Cloud DNS API for one explicit zone.
@@ -1115,7 +1122,58 @@ func normalizeDNS01(tls *TLS) error {
 	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
 		return fmt.Errorf("config: tls.dns01 directory_url %q must be an absolute https URL", dns01.DirectoryURL)
 	}
+	if err := normalizeChallengeDelegation(tls); err != nil {
+		return err
+	}
 	return normalizeDNS01Provider(tls)
+}
+
+// normalizeChallengeDelegation validates the delegation table: every key is
+// the base of a configured certificate name and every target a host name that
+// is not the challenge name itself or under it.
+func normalizeChallengeDelegation(tls *TLS) error {
+	dns01 := tls.DNS01
+	if len(dns01.ChallengeDelegation) == 0 {
+		dns01.ChallengeDelegation = nil
+		return nil
+	}
+	bases := map[string]bool{}
+	for _, domain := range tls.Domains {
+		bases[strings.TrimPrefix(domain, "*.")] = true
+	}
+	out := make(map[string]string, len(dns01.ChallengeDelegation))
+	for base, target := range dns01.ChallengeDelegation {
+		base = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(base)), ".")
+		target = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(target)), ".")
+		if !bases[base] {
+			return fmt.Errorf("config: tls.dns01.challenge_delegation key %q is not the base of a tls.domains entry", base)
+		}
+		if target == "" {
+			return fmt.Errorf("config: tls.dns01.challenge_delegation target for %q is empty", base)
+		}
+		host, err := NormalizeHost(target)
+		if err != nil || host != target || strings.Contains(target, "*") {
+			return fmt.Errorf("config: tls.dns01.challenge_delegation target %q is not a valid host name", target)
+		}
+		source := "_acme-challenge." + base
+		if target == source || strings.HasSuffix(target, "."+source) {
+			return fmt.Errorf("config: tls.dns01.challenge_delegation for %q cannot point at itself", base)
+		}
+		out[base] = target
+	}
+	dns01.ChallengeDelegation = out
+	return nil
+}
+
+// challengeHome is the name whose zone must accept the TXT record for a
+// certificate name: the delegation target when there is one, else the
+// domain itself.
+func challengeHome(tls *TLS, domain string) string {
+	base := strings.TrimPrefix(domain, "*.")
+	if target, ok := tls.DNS01.ChallengeDelegation[base]; ok {
+		return target
+	}
+	return base
 }
 
 // normalizeDNS01Provider validates the DNS adapter selection. Each provider
@@ -1174,9 +1232,9 @@ func normalizeHetzner(tls *TLS) error {
 		return fmt.Errorf("config: %w", err)
 	}
 	for _, domain := range tls.Domains {
-		base := strings.TrimPrefix(domain, "*.")
-		if base != h.Zone && !strings.HasSuffix(base, "."+h.Zone) {
-			return fmt.Errorf("config: tls.dns01.hetzner.zone %q does not contain tls.domains entry %q", h.Zone, domain)
+		home := challengeHome(tls, domain)
+		if home != h.Zone && !strings.HasSuffix(home, "."+h.Zone) {
+			return fmt.Errorf("config: tls.dns01.hetzner.zone %q does not contain the challenge name for tls.domains entry %q (%s)", h.Zone, domain, home)
 		}
 	}
 	return nil
@@ -1230,9 +1288,9 @@ func normalizeRFC2136(tls *TLS) error {
 	// The challenge of every certificate name lives at _acme-challenge.<name>:
 	// the zone must contain it, or issuance would fail at the first renewal.
 	for _, domain := range tls.Domains {
-		base := strings.TrimPrefix(domain, "*.")
-		if base != r.Zone && !strings.HasSuffix(base, "."+r.Zone) {
-			return fmt.Errorf("config: tls.dns01.rfc2136.zone %q does not contain tls.domains entry %q", r.Zone, domain)
+		home := challengeHome(tls, domain)
+		if home != r.Zone && !strings.HasSuffix(home, "."+r.Zone) {
+			return fmt.Errorf("config: tls.dns01.rfc2136.zone %q does not contain the challenge name for tls.domains entry %q (%s)", r.Zone, domain, home)
 		}
 	}
 	return nil
@@ -1285,6 +1343,7 @@ func Clone(source Config) Config {
 			rfc2136 := *source.TLS.DNS01.RFC2136
 			dns01.RFC2136 = &rfc2136
 		}
+		dns01.ChallengeDelegation = maps.Clone(source.TLS.DNS01.ChallengeDelegation)
 		if source.TLS.DNS01.Hetzner != nil {
 			hetzner := *source.TLS.DNS01.Hetzner
 			dns01.Hetzner = &hetzner
