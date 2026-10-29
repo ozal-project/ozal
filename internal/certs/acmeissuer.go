@@ -49,12 +49,25 @@ type ACMEConfig struct {
 	// one CNAME, _acme-challenge.<domain> -> target, at whatever DNS serves
 	// the domain; from then on only the zone holding the target needs an
 	// adapter. The CNAME is verified before any record is created.
-	Delegations         map[string]string
+	Delegations map[string]string
+	// ExternalAccount binds the new ACME account to one already held at the
+	// CA (RFC 8555 section 7.3.4). Google Trust Services and ZeroSSL require
+	// it; Let's Encrypt does not. It is used only when an account is first
+	// registered: the persisted account does not need it again.
+	ExternalAccount     *ExternalAccount
 	PropagationTimeout  time.Duration
 	PropagationInterval time.Duration
 	CleanupTimeout      time.Duration
 	Now                 func() time.Time
 	Logger              *slog.Logger
+}
+
+// ExternalAccount is the key identifier and the shared HMAC key a CA hands
+// out for external account binding. HMACKey is the decoded key and never
+// appears in logs or errors.
+type ExternalAccount struct {
+	KeyID   string
+	HMACKey []byte
 }
 
 // ACMEIssuer speaks RFC 8555 DNS-01 through the existing x/crypto/acme
@@ -85,6 +98,11 @@ func NewACMEIssuer(cfg ACMEConfig, state *FileStore) (*ACMEIssuer, error) {
 	}
 	if cfg.HTTPClient == nil {
 		cfg.HTTPClient = &http.Client{Timeout: defaultACMEHTTPTimeout}
+	}
+	if ea := cfg.ExternalAccount; ea != nil {
+		if strings.TrimSpace(ea.KeyID) == "" || len(ea.HMACKey) == 0 {
+			return nil, errors.New("certs: external account binding needs both the key ID and the HMAC key")
+		}
 	}
 	delegations, err := normalizeDelegations(cfg.Delegations)
 	if err != nil {
@@ -373,7 +391,11 @@ func (i *ACMEIssuer) clientFor(ctx context.Context) (*acme.Client, error) {
 			return nil, fmt.Errorf("certs: generate acme account key: %w", err)
 		}
 		client := &acme.Client{Key: key, DirectoryURL: i.cfg.DirectoryURL, HTTPClient: i.cfg.HTTPClient, RetryBackoff: acmeRetryBackoff}
-		registered, err := client.Register(ctx, &acme.Account{Contact: []string{"mailto:" + i.cfg.Email}}, acme.AcceptTOS)
+		registration := &acme.Account{Contact: []string{"mailto:" + i.cfg.Email}}
+		if ea := i.cfg.ExternalAccount; ea != nil {
+			registration.ExternalAccountBinding = &acme.ExternalAccountBinding{KID: ea.KeyID, Key: ea.HMACKey}
+		}
+		registered, err := client.Register(ctx, registration, acme.AcceptTOS)
 		if err != nil && !errors.Is(err, acme.ErrAccountAlreadyExists) {
 			return nil, classifyACME(ctx, "register account", err)
 		}

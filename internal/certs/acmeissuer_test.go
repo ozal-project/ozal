@@ -146,9 +146,10 @@ type fakeACME struct {
 	nonces   int
 	authz    []string // per name: pending | valid | invalid
 	reject   bool
-	retry    int // when set, new-order answers 429 with this Retry-After
-	accounts int // new-account calls observed
-	orders   int // new-order calls observed
+	retry    int    // when set, new-order answers 429 with this Retry-After
+	accounts int    // new-account calls observed
+	binding  []byte // raw externalAccountBinding of the last new-account call
+	orders   int    // new-order calls observed
 	caKey    *ecdsa.PrivateKey
 	caCert   *x509.Certificate
 
@@ -206,8 +207,15 @@ func (f *fakeACME) handle(w http.ResponseWriter, r *http.Request) {
 	case "/new-nonce":
 		w.WriteHeader(http.StatusOK)
 	case "/new-account":
+		var registration struct {
+			Binding json.RawMessage `json:"externalAccountBinding"`
+		}
+		if payload, err := jwsPayload(r); err == nil {
+			_ = json.Unmarshal(payload, &registration)
+		}
 		f.mu.Lock()
 		f.accounts++
+		f.binding = registration.Binding
 		f.mu.Unlock()
 		w.Header().Set("Location", f.base+"/acct/1")
 		writeJSON(w, http.StatusCreated, map[string]any{"status": "valid", "contact": []string{}})

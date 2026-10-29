@@ -234,6 +234,41 @@ nombres puede incluir wildcard de un nivel y apex adicional. TLS-ALPN/HTTP no
 son necesarios para esa emisión. El estado guarda cuenta, generaciones y cleanup;
 un segundo escritor se rechaza. Cambiar estas opciones requiere reinicio.
 
+#### Otra CA: cuenta externa (EAB) y Google Trust Services
+
+`directory_url` admite cualquier CA ACME. Algunas (Google Trust Services,
+ZeroSSL) no abren cuentas anónimas: exigen *external account binding*
+(RFC 8555 §7.3.4), una clave e identificador emitidos antes en la cuenta del
+operador con esa CA.
+
+```json
+"dns01": {
+  "state_dir": "/var/lib/ozal/origin-cert",
+  "directory_url": "https://dv.acme-v02.api.pki.goog/directory",
+  "external_account": {"key_id": "KEY_ID_DE_LA_CA", "hmac_key": "file:/etc/ozal/eab.key"}
+}
+```
+
+`hmac_key` es siempre una referencia `file:` o `env:`, nunca el valor. Acepta
+la clave en base64url como la entrega Google (`b64MacKey`); también la forma
+estándar y con relleno. Solo se lee al registrar la cuenta: la cuenta queda en
+`state_dir` y las renovaciones no la vuelven a usar. Se admite con cualquier
+`dns_provider`.
+
+Google Trust Services: producción
+`https://dv.acme-v02.api.pki.goog/directory`, pruebas
+`https://dv.acme-v02.test-api.pki.goog/directory`. La clave se pide con
+`gcloud publicca external-account-keys create` (API `publicca.googleapis.com`,
+rol `roles/publicca.externalAccountKeyCreator`; `keyId` y `b64MacKey` en la
+salida). **Una clave sirve para registrar una sola cuenta y caduca a los 7 días
+sin usar.** Las de pruebas se piden contra el endpoint de preproducción
+(`gcloud config set api_endpoint_overrides/publicca https://preprod-publicca.googleapis.com/`).
+Como `ozal dns01 try` trabaja en un directorio temporal, **cada ensayo registra
+una cuenta nueva y consume una clave EAB**: pide una de pruebas por ensayo. Si
+la CA acepta el registro y falla el guardado local, la clave queda gastada y hay
+que pedir otra. Cambiar de CA es cambiar `directory_url` (y `state_dir` o dejar
+que el almacén separe cuentas por directorio); no hay otro estado compartido.
+
 #### Proveedor DNS independiente (RFC 2136)
 
 Para no depender de la API de un proveedor, `dns_provider: "rfc2136"` crea y
@@ -355,6 +390,11 @@ ns1.example.net.                 A      203.0.113.7                      ; pegam
 acme.example.net.                NS     ns1.example.net.                 ; delega la zona a Ozal
 _acme-challenge.example.com.     CNAME  example-com.acme.example.net.    ; un CNAME por dominio
 ```
+
+Sin wildcard, cada nombre de `tls.domains` necesita su propio CNAME
+`_acme-challenge.<nombre>` y su entrada en `challenge_delegation`; el wildcard y su
+ápice comparten uno. Con el servidor propio ese CNAME sigue siendo un paso manual
+una vez por nombre (o automatizable donde el proveedor tenga API).
 
 Comprueba la cadena antes de activar nada, con `dig`:
 

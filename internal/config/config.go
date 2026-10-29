@@ -186,6 +186,18 @@ type DNS01 struct {
 	// Builtin configures Ozal's own authoritative DNS server, used with
 	// dns_provider "builtin": no provider account or API token is involved.
 	Builtin *DNS01Builtin `json:"builtin,omitempty"`
+	// ExternalAccount carries the credentials some CAs (Google Trust
+	// Services, ZeroSSL) require to register an ACME account.
+	ExternalAccount *DNS01ExternalAccount `json:"external_account,omitempty"`
+}
+
+// DNS01ExternalAccount is the ACME external account binding (RFC 8555
+// section 7.3.4). HMACKey is an env: or file: reference to the base64url key
+// the CA issued with KeyID; the value never reaches config. It is read only
+// when the account is first registered.
+type DNS01ExternalAccount struct {
+	KeyID   string `json:"key_id"`
+	HMACKey string `json:"hmac_key"`
 }
 
 // DNS01Builtin makes Ozal answer DNS for one zone that only holds challenge
@@ -1140,7 +1152,28 @@ func normalizeDNS01(tls *TLS) error {
 	if err := normalizeChallengeDelegation(tls); err != nil {
 		return err
 	}
+	if err := normalizeExternalAccount(dns01); err != nil {
+		return err
+	}
 	return normalizeDNS01Provider(tls)
+}
+
+func normalizeExternalAccount(dns01 *DNS01) error {
+	ea := dns01.ExternalAccount
+	if ea == nil {
+		return nil
+	}
+	ea.KeyID = strings.TrimSpace(ea.KeyID)
+	if ea.KeyID == "" {
+		return fmt.Errorf("config: tls.dns01.external_account requires key_id")
+	}
+	if !strings.HasPrefix(ea.HMACKey, "env:") && !strings.HasPrefix(ea.HMACKey, "file:") {
+		return fmt.Errorf("config: tls.dns01.external_account.hmac_key must be an env: or file: reference, not an inline value")
+	}
+	if err := ValidateSecretReference("tls.dns01.external_account.hmac_key", ea.HMACKey); err != nil {
+		return fmt.Errorf("config: %w", err)
+	}
+	return nil
 }
 
 // normalizeChallengeDelegation validates the delegation table: every key is
@@ -1437,6 +1470,10 @@ func Clone(source Config) Config {
 		if source.TLS.DNS01.Hetzner != nil {
 			hetzner := *source.TLS.DNS01.Hetzner
 			dns01.Hetzner = &hetzner
+		}
+		if source.TLS.DNS01.ExternalAccount != nil {
+			ea := *source.TLS.DNS01.ExternalAccount
+			dns01.ExternalAccount = &ea
 		}
 		clone.TLS.DNS01 = &dns01
 	}

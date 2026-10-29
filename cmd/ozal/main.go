@@ -564,11 +564,17 @@ func startCertificateManager(ctx context.Context, cfg *config.Config, sink event
 	}
 	// The DNS server lives exactly as long as the state it answers for.
 	closeState := func() { stopDNS(); state.Close() }
+	account, err := externalAccount(cfg.TLS.DNS01)
+	if err != nil {
+		closeState()
+		return nil, nil, err
+	}
 	issuer, err := certs.NewACMEIssuer(certs.ACMEConfig{
-		DirectoryURL: cfg.TLS.DNS01.DirectoryURL,
-		Email:        cfg.TLS.Email,
-		DNS:          dnsProvider,
-		Delegations:  cfg.TLS.DNS01.ChallengeDelegation,
+		DirectoryURL:    cfg.TLS.DNS01.DirectoryURL,
+		Email:           cfg.TLS.Email,
+		DNS:             dnsProvider,
+		Delegations:     cfg.TLS.DNS01.ChallengeDelegation,
+		ExternalAccount: account,
 	}, state)
 	if err != nil {
 		closeState()
@@ -852,6 +858,29 @@ func writeSetupLink(path, text string) error {
 // newDNSProvider builds the DNS-01 adapter the configuration selects. Both
 // adapters satisfy certs.DNSProvider, so the ACME flow is the same; secrets
 // are resolved here, at composition time, and never stored in the config.
+// externalAccount resolves the CA's external account binding, if configured.
+// CAs deliver the HMAC key base64url-encoded (gcloud's b64MacKey); standard
+// and padded forms are accepted too. Errors never carry the key.
+func externalAccount(dns01 *config.DNS01) (*certs.ExternalAccount, error) {
+	ea := dns01.ExternalAccount
+	if ea == nil {
+		return nil, nil
+	}
+	secret, err := config.ResolveSecret(ea.HMACKey)
+	if err != nil {
+		return nil, fmt.Errorf("tls.dns01.external_account.hmac_key: %w", err)
+	}
+	secret = strings.TrimRight(strings.TrimSpace(secret), "=")
+	key, err := base64.RawURLEncoding.DecodeString(secret)
+	if err != nil {
+		key, err = base64.RawStdEncoding.DecodeString(secret)
+	}
+	if err != nil || len(key) == 0 {
+		return nil, errors.New("tls.dns01.external_account.hmac_key is not valid base64")
+	}
+	return &certs.ExternalAccount{KeyID: ea.KeyID, HMACKey: key}, nil
+}
+
 func newDNSProvider(dns01 *config.DNS01) (certs.DNSProvider, error) {
 	switch dns01.DNSProvider {
 	case "rfc2136":

@@ -107,11 +107,16 @@ func tryDNS01(ctx context.Context, cfg *config.Config, allowProduction bool, tim
 		}
 	}
 
+	account, err := externalAccount(cfg.TLS.DNS01)
+	if err != nil {
+		return err
+	}
 	issuer, err := newIssuer(certs.ACMEConfig{
-		DirectoryURL: cfg.TLS.DNS01.DirectoryURL,
-		Email:        cfg.TLS.Email,
-		DNS:          dnsProvider,
-		Delegations:  cfg.TLS.DNS01.ChallengeDelegation,
+		DirectoryURL:    cfg.TLS.DNS01.DirectoryURL,
+		Email:           cfg.TLS.Email,
+		DNS:             dnsProvider,
+		Delegations:     cfg.TLS.DNS01.ChallengeDelegation,
+		ExternalAccount: account,
 	}, state)
 	if err != nil {
 		return err
