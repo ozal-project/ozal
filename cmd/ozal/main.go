@@ -50,6 +50,7 @@ const auditStartupFailure = "durable audit journal unavailable; verify with 'oza
 // gets a context that SIGINT/SIGTERM cancel, so none can outlive a stop signal.
 func subcommands() map[string]func(context.Context, []string, io.Writer) error {
 	return map[string]func(context.Context, []string, io.Writer) error{
+		"app":          runApp,
 		"audit":        runAudit,
 		"completion":   runCompletion,
 		"console":      runConsole,

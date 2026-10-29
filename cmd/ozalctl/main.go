@@ -36,6 +36,14 @@ const usage = `usage:
       with the sites token; with -host, check the public answer and roll back
       on failure. Add the address itself once in the console (Add website).
 
+  ozalctl app alias -from HOST -to HOST [-manual-dns] [-wait 90s] [-targets FILE] [-target NAME] [-apply]
+      Serve an existing public site at a second hostname: the edge saves the
+      route with the reviewed digest, creates the proxied DNS record with its
+      own provider credential (dns.cloudflare) and waits until dns,
+      certificate and reach are ok. The previous hostname is never changed and
+      an existing record is never replaced. Runs "ozal app alias" on the edge as
+      its service account through sudo, so it needs your terminal.
+
   ozalctl site cutover -host HOST -to IP -cloudflare-token FILE [-dir DIST] [-apply]
   ozalctl site cutover -host HOST -back EVIDENCE -cloudflare-token FILE [-apply]
       Move a live hostname (for example an apex served by Cloudflare Pages) to
@@ -64,6 +72,7 @@ func run(args []string) int {
 		"edge upgrade": edgeUpgrade,
 		"edge config":  edgeConfig,
 		"site publish": sitePublish,
+		"app alias":    appAlias,
 		"site cutover": siteCutover,
 	}
 	command, ok := commands[args[0]+" "+args[1]]
@@ -225,6 +234,23 @@ func sitePublish(args []string) int {
 
 const pagesHint = "if the name is a custom domain of a Cloudflare Pages project, Cloudflare keeps sending it to Pages whatever the DNS says: remove the custom domain in Pages (Workers & Pages → project → Custom domains) now"
 
+func appAlias(args []string) int {
+	fs := flag.NewFlagSet("app alias", flag.ContinueOnError)
+	from := fs.String("from", "", "hostname of the existing public site")
+	to := fs.String("to", "", "new hostname that serves the same site")
+	manual := fs.Bool("manual-dns", false, "save the route and check it, leaving the DNS record to you")
+	wait := fs.Duration("wait", 90*time.Second, "how long the edge waits for the hostname to connect")
+	apply := fs.Bool("apply", false, "do it (default: print the plan)")
+	c, ok := setup(fs, args)
+	if !ok {
+		return 2
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return finish(ctl.Alias(ctx, os.Stdout, c.remote, ctl.AliasRequest{Name: c.name, Target: c.target,
+		From: *from, To: *to, ManualDNS: *manual, Wait: *wait, Apply: *apply}))
+}
+
 func siteCutover(args []string) int {
 	fs := flag.NewFlagSet("site cutover", flag.ContinueOnError)
 	host := fs.String("host", "", "hostname to move")
@@ -276,7 +302,19 @@ func defaultTargets(home string) string {
 	if _, err := os.Stat("ozalctl.json"); err == nil {
 		return "ozalctl.json"
 	}
-	return filepath.Join(home, ".config", "ozalctl", "targets.json")
+	current := filepath.Join(home, ".config", "ozalctl", "targets.json")
+	if _, err := os.Stat(current); err != nil {
+		// Read the file the tool had before its rename; nothing is moved.
+		if old := filepath.Join(home, ".config", "sbctl", "targets.json"); fileExists(old) {
+			return old
+		}
+	}
+	return current
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 func isTerminal(f *os.File) bool {

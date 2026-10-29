@@ -329,3 +329,55 @@ func TestRootScriptChecksHashRunsCopyAndLinks(t *testing.T) {
 		t.Fatal("link created after a failed upgrade")
 	}
 }
+
+func aliasRequest(apply bool) AliasRequest {
+	target := goodTarget()
+	target.Edge.Socket = "/run/ozal/admin.sock"
+	return AliasRequest{Name: "a", Target: target, From: "old.example.com", To: "new.example.com", Apply: apply}
+}
+
+func TestAliasRunsAsTheServiceAccountOnTheAdminSocket(t *testing.T) {
+	r := &fakeRemote{terminal: true}
+	if err := Alias(context.Background(), io.Discard, r, aliasRequest(true)); err != nil {
+		t.Fatal(err)
+	}
+	e := aliasRequest(true).Target.Edge
+	want := "sudo -u " + Quote(e.ServiceUser) + " " + Quote(e.Binary) + " 'app' 'alias' '-admin' 'unix:" + e.Socket + "' '-from' 'old.example.com' '-to' 'new.example.com' '-apply'"
+	if len(r.ran) != 1 || !strings.HasSuffix(r.ran[0], want) || !strings.Contains(r.ran[0], "grep -qaF 'ozal app alias'") {
+		t.Fatalf("ran %q", r.ran)
+	}
+}
+
+func TestAliasPlanNeverPassesApply(t *testing.T) {
+	r := &fakeRemote{terminal: true}
+	if err := Alias(context.Background(), io.Discard, r, aliasRequest(false)); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(r.ran[0], "-apply") {
+		t.Fatalf("plan must not apply: %s", r.ran[0])
+	}
+}
+
+func TestAliasQuotesHostileHostnames(t *testing.T) {
+	r := &fakeRemote{terminal: true}
+	req := aliasRequest(true)
+	req.To = "x'; touch /tmp/pwned; echo '"
+	if err := Alias(context.Background(), io.Discard, r, req); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(r.ran[0], `'x'\''; touch /tmp/pwned; echo '\'''`) {
+		t.Fatalf("hostname was not quoted as one word: %s", r.ran[0])
+	}
+}
+
+func TestAliasOldBinaryAndMissingTerminal(t *testing.T) {
+	if err := Alias(context.Background(), io.Discard, &fakeRemote{terminal: true, code: ExitNoAlias}, aliasRequest(true)); err == nil || !strings.Contains(err.Error(), "edge upgrade") {
+		t.Fatalf("err=%v", err)
+	}
+	if err := Alias(context.Background(), io.Discard, &fakeRemote{}, aliasRequest(true)); err == nil || !strings.Contains(err.Error(), "terminal") {
+		t.Fatalf("err=%v", err)
+	}
+	if err := Alias(context.Background(), io.Discard, &fakeRemote{terminal: true, code: 1}, aliasRequest(true)); err == nil {
+		t.Fatal("a failing alias must be an error")
+	}
+}

@@ -230,6 +230,7 @@ cuenta, socket, lock y archivo del token de publicación limitado.
 ozalctl edge upgrade [-ref REF] [-apply]
 ozalctl edge config -base FILE [-cloudflare-ranges] [-apply]
 ozalctl site publish -site NAME -dir DIST [-host HOST] [-apply]
+ozalctl app alias -from HOST -to HOST [-manual-dns] [-wait 90s] [-apply]
 ozalctl site cutover -host HOST -to IP -cloudflare-token FILE [-dir DIST] [-apply]
 ozalctl site cutover -host HOST -back EVIDENCE -cloudflare-token FILE [-apply]
 ```
@@ -242,6 +243,18 @@ las rutas desde la consola a partir de entonces.
 
 Publish empaqueta archivos regulares, publica por el admin privado y comprueba
 el contenido cuando se pide `-host`; un fallo revierte al artefacto anterior.
+`app alias` da a un sitio público existente un segundo hostname sin tocar el
+primero. `ozalctl` ejecuta `ozal app alias` en el edge como su cuenta de
+servicio (`sudo`, con tu terminal), así que usa el socket admin local y no hay
+token nuevo en tu máquina. El edge guarda la ruta con el digest revisado, crea
+el registro A proxied con su propia credencial (`dns.cloudflare.token`, un token
+de Zone DNS Edit; puede ser el archivo que ya usa `tls.dns01`) y espera a que
+`dns`, `certificate` y `reach` estén en `ok`. Nunca reemplaza un registro
+existente: si ya hay uno, espera a que coincida. Sin `dns.cloudflare` se niega
+antes de cambiar nada; con `-manual-dns` guarda la ruta y muestra el registro
+que falta. Se repite sin riesgo. Si el binario del edge es anterior, el comando
+se detiene antes de ejecutar nada y pide `edge upgrade`.
+
 Cutover es una integración **actualmente específica de Cloudflare**, con
 cambios de DNS y evidencia para restaurar. Un dominio asociado a Pages puede
 requerir retirada manual allí. Consulta el plan y conserva evidencia; rollback
