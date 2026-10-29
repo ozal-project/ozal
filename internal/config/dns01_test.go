@@ -381,3 +381,77 @@ func TestDNS01ChallengeDelegationRefusals(t *testing.T) {
 		t.Errorf("provider zone must still have to contain the names: %v", err)
 	}
 }
+
+func builtinTLS(mutate func(string) string) string {
+	base := `{
+		"enabled": true,
+		"domains": ["*.example.com", "example.com"],
+		"email": "ops@example.com",
+		"dns01": {
+			"state_dir": "/var/lib/ozal/certs",
+			"directory_url": "https://acme-v02.api.letsencrypt.org/directory",
+			"dns_provider": "builtin",
+			"builtin": {"zone": "Acme.Example.NET.", "listen": "203.0.113.7:53", "nameservers": ["ns1.example.net."]},
+			"challenge_delegation": {"example.com": "example-com.acme.example.net"}
+		}
+	}`
+	if mutate != nil {
+		return mutate(base)
+	}
+	return base
+}
+
+func TestDNS01ConfigAcceptsBuiltin(t *testing.T) {
+	skipOnWindows(t, "POSIX absolute-path fixtures")
+	cfg := dns01Config(t, builtinTLS(nil))
+	b := cfg.TLS.DNS01.Builtin
+	if cfg.TLS.DNS01.DNSProvider != "builtin" || b == nil {
+		t.Fatalf("dns01 = %+v", cfg.TLS.DNS01)
+	}
+	if b.Zone != "acme.example.net" || b.Listen != "203.0.113.7:53" || len(b.Nameservers) != 1 || b.Nameservers[0] != "ns1.example.net" {
+		t.Fatalf("builtin = %+v, want normalized", b)
+	}
+	clone := Clone(*cfg)
+	clone.TLS.DNS01.Builtin.Zone = "elsewhere.test"
+	clone.TLS.DNS01.Builtin.Nameservers[0] = "ns9.test"
+	if cfg.TLS.DNS01.Builtin.Zone != "acme.example.net" || cfg.TLS.DNS01.Builtin.Nameservers[0] != "ns1.example.net" {
+		t.Fatal("Clone shares the builtin block")
+	}
+}
+
+func TestDNS01BuiltinRefusals(t *testing.T) {
+	skipOnWindows(t, "POSIX absolute-path fixtures")
+	load := func(tlsJSON string) error {
+		path := writeConfig(t, `{"listen": ":8888", "tls": `+tlsJSON+`, "routes": [{"host": "a.localhost", "target": "http://localhost:9000"}]}`)
+		_, err := Load(path)
+		return err
+	}
+	replace := func(old, new string) string {
+		return builtinTLS(func(s string) string { return strings.Replace(s, old, new, 1) })
+	}
+	cases := map[string]struct{ tls, want string }{
+		"block missing":       {replace(`"builtin": {"zone": "Acme.Example.NET.", "listen": "203.0.113.7:53", "nameservers": ["ns1.example.net."]},`, ""), "builtin"},
+		"wildcard listen":     {replace(`203.0.113.7:53`, `:53`), "listen"},
+		"unspecified address": {replace(`203.0.113.7:53`, `0.0.0.0:53`), "listen"},
+		"hostname as listen":  {replace(`203.0.113.7:53`, `ns1.example.net:53`), "listen"},
+		"port zero":           {replace(`203.0.113.7:53`, `203.0.113.7:0`), "listen"},
+		"no nameservers":      {replace(`["ns1.example.net."]`, `[]`), "nameservers"},
+		"invalid nameserver":  {replace(`"ns1.example.net."`, `"bad ns"`), "nameserver"},
+		"single-label zone":   {replace(`"Acme.Example.NET."`, `"net"`), "zone"},
+		"no delegation": {replace(`,
+			"challenge_delegation": {"example.com": "example-com.acme.example.net"}`, ``), "challenge_delegation"},
+		"target outside zone":     {replace(`"example-com.acme.example.net"`, `"x.other.org"`), "zone"},
+		"target is the apex":      {replace(`"example-com.acme.example.net"`, `"acme.example.net"`), "zone"},
+		"uncovered domain":        {replace(`"domains": ["*.example.com", "example.com"]`, `"domains": ["*.example.com", "example.com", "example.org"]`), "example.org"},
+		"with a cloudflare token": {replace(`"dns_provider": "builtin",`, `"dns_provider": "builtin", "dns_token": "env:T",`), "dns_token"},
+		"cloudflare with builtin": {replace(`"dns_provider": "builtin",`, `"dns_token": "env:T",`), "builtin"},
+		"hetzner with builtin":    {replace(`"dns_provider": "builtin",`, `"dns_provider": "hetzner", "hetzner": {"zone": "example.net", "token": "env:T"},`), "builtin"},
+		"builtin with hetzner":    {replace(`"builtin": {`, `"hetzner": {"zone": "example.net", "token": "env:T"}, "builtin": {`), "hetzner"},
+	}
+	for name, tc := range cases {
+		err := load(tc.tls)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: err = %v, want mention of %q", name, err, tc.want)
+		}
+	}
+}

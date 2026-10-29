@@ -326,6 +326,66 @@ desacopla los certificados del proveedor; no cambia quién sirve el DNS de tu
 dominio ni quién te protege de DDoS. Sin wildcard no necesitas nada de esto:
 HTTP-01 del [perfil directo](#perfil-directo-sin-cloudflare) no usa DNS.
 
+#### Servidor DNS propio (`builtin`): sin cuenta ni API de nadie
+
+Con `dns_provider: "builtin"`, Ozal responde él mismo, como servidor DNS
+autoritativo, por una zona que solo contiene los TXT del desafío. No hay token,
+cuenta ni API: el registro se publica en memoria y desaparece al terminar la
+emisión. Es el patrón de acme-dns, dentro del mismo proceso.
+
+```json
+"dns01": {
+  "state_dir": "/var/lib/ozal/origin-cert",
+  "directory_url": "https://acme-v02.api.letsencrypt.org/directory",
+  "dns_provider": "builtin",
+  "builtin": {
+    "zone": "acme.example.net",
+    "listen": "203.0.113.7:53",
+    "nameservers": ["ns1.example.net"]
+  },
+  "challenge_delegation": {"example.com": "example-com.acme.example.net"}
+}
+```
+
+Hacen falta **tres registros estáticos**, creados una vez a mano, en el DNS que
+sirva cada dominio (cualquier proveedor o registrador, sin API):
+
+```
+ns1.example.net.                 A      203.0.113.7                      ; pegamento, sin proxy
+acme.example.net.                NS     ns1.example.net.                 ; delega la zona a Ozal
+_acme-challenge.example.com.     CNAME  example-com.acme.example.net.    ; un CNAME por dominio
+```
+
+Comprueba la cadena antes de activar nada, con `dig`:
+
+```
+dig +short NS acme.example.net
+dig @203.0.113.7 acme.example.net SOA +norecurse
+dig +short CNAME _acme-challenge.example.com
+```
+
+`listen` es una IP:puerto explícita (no se admite `0.0.0.0` ni un nombre: en
+Linux un bind comodín choca con el stub local `127.0.0.53`). El puerto 53 exige
+`CAP_NET_BIND_SERVICE` o una redirección; abre **UDP y TCP** en el firewall del
+host y del proveedor. Si no puede abrir el puerto, Ozal falla al arrancar en
+lugar de quedar con un certificado que nunca valida.
+
+Contrato del servidor: solo responde por su zona (TXT, SOA y NS) y contesta
+`REFUSED` a todo lo demás, sin recursión; `ANY` y los tipos no soportados
+devuelven "sin datos", para que un origen falsificado no obtenga amplificación;
+nunca responde a un mensaje que ya sea una respuesta; trunca por UDP lo que
+pase de 512 bytes; limita 20 consultas por segundo por origen y descarta el
+exceso sin contestar; sirve hasta 8 consultas por conexión TCP con plazo de 5 s
+y 64 conexiones a la vez. Un dominio de `tls.domains` sin entrada en
+`challenge_delegation` se rechaza al cargar la configuración, porque este
+servidor no puede escribir fuera de su zona. Mantén la zona dedicada: **quien la
+controle puede emitir certificados para los dominios que la delegan**.
+
+Esto independiza la emisión de certificados de cualquier proveedor DNS; no
+cambia quién sirve el DNS de tu dominio, ni quién es tu registrador, ni quién
+te protege de DDoS, y el pegamento y la delegación `NS` siguen viviendo en la
+zona padre.
+
 Staging usa otra carpeta y roots explícitos por `certificate_roots_file`,
 que reemplazan los roots de validación de esa emisión; no usarlo para debilitar
 producción. La renovación conserva el certificado válido y sin él falla TLS.

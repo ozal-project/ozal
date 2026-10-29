@@ -27,6 +27,7 @@ import (
 
 	"golang.org/x/crypto/acme/autocert"
 
+	"github.com/ozal-project/ozal/internal/acmedns"
 	"github.com/ozal-project/ozal/internal/admin"
 	"github.com/ozal-project/ozal/internal/audit"
 	"github.com/ozal-project/ozal/internal/auth"
@@ -542,15 +543,26 @@ func formatTime(t time.Time) string {
 // directory, so a second process pointed at the same state fails here
 // instead of racing on the account, the generations or the DNS intents.
 func startCertificateManager(ctx context.Context, cfg *config.Config, sink events.Sink) (*certs.Manager, func(), error) {
-	dnsProvider, err := newDNSProvider(cfg.TLS.DNS01)
+	var (
+		dnsProvider certs.DNSProvider
+		stopDNS     = func() {}
+		err         error
+	)
+	if cfg.TLS.DNS01.DNSProvider == "builtin" {
+		dnsProvider, stopDNS, err = startBuiltinDNS(ctx, cfg.TLS.DNS01)
+	} else {
+		dnsProvider, err = newDNSProvider(cfg.TLS.DNS01)
+	}
 	if err != nil {
 		return nil, nil, err
 	}
 	state, err := certs.OpenFileStore(cfg.TLS.DNS01.StateDir, cfg.TLS.DNS01.DirectoryURL)
 	if err != nil {
+		stopDNS()
 		return nil, nil, err
 	}
-	closeState := func() { state.Close() }
+	// The DNS server lives exactly as long as the state it answers for.
+	closeState := func() { stopDNS(); state.Close() }
 	issuer, err := certs.NewACMEIssuer(certs.ACMEConfig{
 		DirectoryURL: cfg.TLS.DNS01.DirectoryURL,
 		Email:        cfg.TLS.Email,
@@ -861,6 +873,8 @@ func newDNSProvider(dns01 *config.DNS01) (certs.DNSProvider, error) {
 			return nil, fmt.Errorf("tls.dns01.hetzner.token: %w", err)
 		}
 		return certs.NewHetznerClient(certs.HetznerConfig{Token: token, Zone: h.Zone})
+	case "builtin":
+		return nil, errors.New("tls.dns01 builtin starts its own server and is not built here")
 	case "", "cloudflare":
 		token, err := config.ResolveSecret(dns01.DNSToken)
 		if err != nil {
@@ -870,4 +884,26 @@ func newDNSProvider(dns01 *config.DNS01) (certs.DNSProvider, error) {
 	default:
 		return nil, fmt.Errorf("tls.dns01 dns_provider %q is not supported", dns01.DNSProvider)
 	}
+}
+
+// startBuiltinDNS binds Ozal's own authoritative server for the challenge
+// zone and returns the certificate adapter that publishes into it. Binding
+// failures surface here, at startup, rather than as a certificate that never
+// validates. The returned function stops the server.
+func startBuiltinDNS(ctx context.Context, dns01 *config.DNS01) (certs.DNSProvider, func(), error) {
+	b := dns01.Builtin
+	zone, err := acmedns.NewZone(b.Zone, b.Nameservers, b.Contact, uint32(time.Now().Unix()))
+	if err != nil {
+		return nil, nil, err
+	}
+	store := acmedns.NewStore(zone)
+	provider, err := certs.NewBuiltinDNS(store)
+	if err != nil {
+		return nil, nil, err
+	}
+	server, err := acmedns.Start(ctx, acmedns.Config{Zone: zone, Store: store, Addr: b.Listen})
+	if err != nil {
+		return nil, nil, err
+	}
+	return provider, func() { server.Close() }, nil
 }

@@ -183,6 +183,21 @@ type DNS01 struct {
 	// only the zone holding the target then needs a provider. Whoever
 	// controls the target zone can obtain certificates for the domain.
 	ChallengeDelegation map[string]string `json:"challenge_delegation,omitempty"`
+	// Builtin configures Ozal's own authoritative DNS server, used with
+	// dns_provider "builtin": no provider account or API token is involved.
+	Builtin *DNS01Builtin `json:"builtin,omitempty"`
+}
+
+// DNS01Builtin makes Ozal answer DNS for one zone that only holds challenge
+// records. The parent zone delegates it with NS records, and each domain
+// points its _acme-challenge name at a name inside it with one CNAME.
+// Listen is an explicit IP:port (53 for public use); Nameservers are the host
+// names the parent zone delegates to.
+type DNS01Builtin struct {
+	Zone        string   `json:"zone"`
+	Listen      string   `json:"listen"`
+	Nameservers []string `json:"nameservers"`
+	Contact     string   `json:"contact,omitempty"`
 }
 
 // DNS01Hetzner selects the Hetzner Cloud DNS API for one explicit zone.
@@ -1193,6 +1208,9 @@ func normalizeDNS01Provider(tls *TLS) error {
 		if dns01.Hetzner != nil {
 			return fmt.Errorf("config: tls.dns01.hetzner requires dns_provider \"hetzner\"")
 		}
+		if dns01.Builtin != nil {
+			return fmt.Errorf("config: tls.dns01.builtin requires dns_provider \"builtin\"")
+		}
 		if strings.TrimSpace(dns01.DNSToken) == "" {
 			return fmt.Errorf("config: tls.dns01 requires dns_token")
 		}
@@ -1204,9 +1222,70 @@ func normalizeDNS01Provider(tls *TLS) error {
 		return normalizeRFC2136(tls)
 	case "hetzner":
 		return normalizeHetzner(tls)
+	case "builtin":
+		return normalizeBuiltin(tls)
 	default:
-		return fmt.Errorf("config: tls.dns01 dns_provider %q is not supported (cloudflare, rfc2136 or hetzner)", dns01.DNSProvider)
+		return fmt.Errorf("config: tls.dns01 dns_provider %q is not supported (cloudflare, rfc2136, hetzner or builtin)", dns01.DNSProvider)
 	}
+}
+
+func normalizeBuiltin(tls *TLS) error {
+	dns01 := tls.DNS01
+	if dns01.DNSToken != "" {
+		return fmt.Errorf("config: tls.dns01 dns_token belongs to the cloudflare provider; builtin needs no credential")
+	}
+	if dns01.RFC2136 != nil {
+		return fmt.Errorf("config: tls.dns01.rfc2136 requires dns_provider \"rfc2136\"")
+	}
+	if dns01.Hetzner != nil {
+		return fmt.Errorf("config: tls.dns01.hetzner requires dns_provider \"hetzner\"")
+	}
+	b := dns01.Builtin
+	if b == nil {
+		return fmt.Errorf("config: tls.dns01 dns_provider \"builtin\" requires the builtin block")
+	}
+	b.Zone = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(b.Zone)), ".")
+	if host, err := NormalizeHost(b.Zone); err != nil || host != b.Zone || !strings.Contains(b.Zone, ".") || strings.Contains(b.Zone, "*") {
+		return fmt.Errorf("config: tls.dns01.builtin.zone %q must be a domain name with at least two labels", b.Zone)
+	}
+	host, port, err := net.SplitHostPort(strings.TrimSpace(b.Listen))
+	addr, parseErr := netip.ParseAddr(host)
+	if err != nil || parseErr != nil || addr.IsUnspecified() {
+		return fmt.Errorf("config: tls.dns01.builtin.listen must be an explicit IP:port (not a wildcard address or a host name)")
+	}
+	if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
+		return fmt.Errorf("config: tls.dns01.builtin.listen port is not valid")
+	}
+	b.Listen = net.JoinHostPort(addr.String(), port)
+	if len(b.Nameservers) == 0 || len(b.Nameservers) > 8 {
+		return fmt.Errorf("config: tls.dns01.builtin.nameservers takes 1 to 8 host names")
+	}
+	for i, ns := range b.Nameservers {
+		ns = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(ns)), ".")
+		if host, err := NormalizeHost(ns); err != nil || host != ns || strings.Contains(ns, "*") {
+			return fmt.Errorf("config: tls.dns01.builtin.nameservers[%d] %q is not a valid host name", i, ns)
+		}
+		b.Nameservers[i] = ns
+	}
+	if b.Contact = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(b.Contact)), "."); b.Contact != "" {
+		if host, err := NormalizeHost(b.Contact); err != nil || host != b.Contact {
+			return fmt.Errorf("config: tls.dns01.builtin.contact is not a valid DNS name")
+		}
+	}
+	if len(dns01.ChallengeDelegation) == 0 {
+		return fmt.Errorf("config: tls.dns01 dns_provider \"builtin\" requires challenge_delegation: the server only answers for %s", b.Zone)
+	}
+	for base, target := range dns01.ChallengeDelegation {
+		if target == b.Zone || !strings.HasSuffix(target, "."+b.Zone) {
+			return fmt.Errorf("config: tls.dns01.challenge_delegation target %q for %q must be a name below the builtin zone %q", target, base, b.Zone)
+		}
+	}
+	for _, domain := range tls.Domains {
+		if _, ok := dns01.ChallengeDelegation[strings.TrimPrefix(domain, "*.")]; !ok {
+			return fmt.Errorf("config: tls.domains entry %q has no challenge_delegation: the builtin server cannot write records outside its zone", domain)
+		}
+	}
+	return nil
 }
 
 func normalizeHetzner(tls *TLS) error {
@@ -1216,6 +1295,9 @@ func normalizeHetzner(tls *TLS) error {
 	}
 	if dns01.RFC2136 != nil {
 		return fmt.Errorf("config: tls.dns01.rfc2136 requires dns_provider \"rfc2136\"")
+	}
+	if dns01.Builtin != nil {
+		return fmt.Errorf("config: tls.dns01.builtin requires dns_provider \"builtin\"")
 	}
 	h := dns01.Hetzner
 	if h == nil {
@@ -1247,6 +1329,9 @@ func normalizeRFC2136(tls *TLS) error {
 	}
 	if dns01.Hetzner != nil {
 		return fmt.Errorf("config: tls.dns01.hetzner requires dns_provider \"hetzner\"")
+	}
+	if dns01.Builtin != nil {
+		return fmt.Errorf("config: tls.dns01.builtin requires dns_provider \"builtin\"")
 	}
 	r := dns01.RFC2136
 	if r == nil {
@@ -1344,6 +1429,11 @@ func Clone(source Config) Config {
 			dns01.RFC2136 = &rfc2136
 		}
 		dns01.ChallengeDelegation = maps.Clone(source.TLS.DNS01.ChallengeDelegation)
+		if source.TLS.DNS01.Builtin != nil {
+			builtin := *source.TLS.DNS01.Builtin
+			builtin.Nameservers = slices.Clone(builtin.Nameservers)
+			dns01.Builtin = &builtin
+		}
 		if source.TLS.DNS01.Hetzner != nil {
 			hetzner := *source.TLS.DNS01.Hetzner
 			dns01.Hetzner = &hetzner

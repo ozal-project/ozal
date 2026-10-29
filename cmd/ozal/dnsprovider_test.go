@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -87,5 +89,43 @@ func TestNewDNSProviderHetzner(t *testing.T) {
 	}
 	if _, err := newDNSProvider(&config.DNS01{DNSProvider: "hetzner", Hetzner: &config.DNS01Hetzner{Zone: "example.test", Token: "env:OZAL_TEST_HZ_UNSET"}}); err == nil {
 		t.Fatal("an unset token was accepted")
+	}
+}
+
+func TestStartBuiltinDNSServesPublishedChallengesAndStops(t *testing.T) {
+	dns01 := &config.DNS01{DNSProvider: "builtin", Builtin: &config.DNS01Builtin{
+		Zone: "acme.example.test", Listen: "127.0.0.1:0", Nameservers: []string{"ns1.example.test"},
+	}}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	provider, stop, err := startBuiltinDNS(ctx, dns01)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, err := provider.CreateTXT(ctx, "x.acme.example.test", "challenge-value")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.ID == "" || rec.Name != "x.acme.example.test" {
+		t.Fatalf("record = %+v", rec)
+	}
+	if err := provider.DeleteTXT(ctx, rec); err != nil {
+		t.Fatal(err)
+	}
+	stop()
+	stop() // closing twice must be harmless: error paths call it too
+}
+
+func TestStartBuiltinDNSFailsAtStartupWhenTheAddressIsTaken(t *testing.T) {
+	taken, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer taken.Close()
+	dns01 := &config.DNS01{DNSProvider: "builtin", Builtin: &config.DNS01Builtin{
+		Zone: "acme.example.test", Listen: taken.LocalAddr().String(), Nameservers: []string{"ns1.example.test"},
+	}}
+	if _, _, err := startBuiltinDNS(context.Background(), dns01); err == nil {
+		t.Fatal("a certificate that can never validate must fail at startup, not later")
 	}
 }

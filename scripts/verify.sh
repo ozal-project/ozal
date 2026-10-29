@@ -40,6 +40,7 @@ echo "[5/7] fuzz (short)"
 go test ./internal/config -run '^$' -fuzz '^FuzzParse$' -fuzztime=1s
 go test ./internal/config -run '^$' -fuzz '^FuzzNormalizeHost$' -fuzztime=1s
 go test ./internal/certs -run '^$' -fuzz '^FuzzVerifyTSIGResponse$' -fuzztime=1s
+go test ./internal/acmedns -run '^$' -fuzz '^FuzzRespond$' -fuzztime=1s
 go test ./internal/auth -run '^$' -fuzz '^FuzzSafeReturnTo$' -fuzztime=1s
 go test ./internal/proxy -run '^$' -fuzz '^FuzzStripCookie$' -fuzztime=1s
 go test ./internal/pages -run '^$' -fuzz '^FuzzCheckEntry$' -fuzztime=1s
