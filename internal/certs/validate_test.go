@@ -24,7 +24,7 @@ func testGeneration(t *testing.T, host string, notBefore, notAfter time.Time, al
 	}
 	caTemplate := &x509.Certificate{
 		SerialNumber:          big.NewInt(1),
-		Subject:               pkix.Name{CommonName: "switchboard test CA"},
+		Subject:               pkix.Name{CommonName: "ozal test CA"},
 		NotBefore:             notBefore.Add(-time.Hour),
 		NotAfter:              notAfter.Add(time.Hour),
 		IsCA:                  true,

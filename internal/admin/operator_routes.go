@@ -1,7 +1,7 @@
 package admin
 
 import (
-	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/ozal-project/ozal/internal/config"
 	"net/http"
 )
 

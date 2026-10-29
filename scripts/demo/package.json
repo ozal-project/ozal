@@ -1,5 +1,5 @@
 {
-  "name": "switchboard-demo",
+  "name": "ozal-demo",
   "private": true,
   "type": "module",
   "description": "Records the product tour (SITE-004) and the page screenshots from a real edge with demo data. Build-time tool only.",

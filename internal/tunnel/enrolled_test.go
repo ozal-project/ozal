@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/ozal-project/ozal/internal/events"
 )
 
 // enrolledLab is an edge in registry mode whose Serve can be stopped and

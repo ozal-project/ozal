@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/ozal-project/ozal/internal/config"
 )
 
 // The live edge as Server Ops rendered it: one file with routes inside.
@@ -112,7 +112,7 @@ func (f *configRemote) Run(_ context.Context, command string, stdin io.Reader) (
 		_, _ = io.Copy(io.Discard, stdin)
 	}
 	switch {
-	case strings.HasPrefix(command, "cat '/etc/switchboard/routing.json'"):
+	case strings.HasPrefix(command, "cat '/etc/ozal/routing.json'"):
 		return f.live, nil
 	case strings.Contains(command, "mkdir '/home/deploy/lock'"):
 		return "taken\n", nil
@@ -129,7 +129,7 @@ func (f *configRemote) Terminal(_ context.Context, command string) (int, error) 
 
 func configTarget() Target {
 	t := goodTarget()
-	t.Edge.Socket = "/run/switchboard/admin.sock"
+	t.Edge.Socket = "/run/ozal/admin.sock"
 	return t
 }
 
@@ -191,7 +191,7 @@ else sha256sum "$FAKE_CONFIG" | cut -d' ' -f1 > "$STATE/active"; fi`,
 		"install": `mode=644
 while [ $# -gt 2 ]; do case $1 in -o|-g) shift 2;; -m) mode=$2; shift 2;; *) break;; esac; done
 cp "$1" "$2" && chmod "$mode" "$2"`,
-		"switchboard": `[ -e "$STATE/invalid" ] && { echo "config: nope" >&2; exit 1; }; echo ok`,
+		"ozal": `[ -e "$STATE/invalid" ] && { echo "config: nope" >&2; exit 1; }; echo ok`,
 	} {
 		if err := os.WriteFile(filepath.Join(h.bin, name), []byte("#!/bin/sh\n"+body+"\n"), 0o755); err != nil {
 			t.Fatal(err)
@@ -225,8 +225,8 @@ func (h *rootHost) run(candidate, seed []byte, staleSHA bool) int {
 		want = sha([]byte("other"))
 	}
 	cmd := exec.Command("sh", "-c", ConfigRootScript, "config", staged, want, h.config, seedPath, sha(seed), h.runtime,
-		"switchboard", "switchboard", "restart", filepath.Join(h.dir, "admin.sock"), "s1", filepath.Join(h.bin, "switchboard"))
-	cmd.Env = append(cmd.Environ(), "PATH="+h.bin+":"+os.Getenv("PATH"), "STATE="+h.dir, "FAKE_CONFIG="+h.config, "FAKE_RUNTIME="+h.runtime, "SBCTL_WAIT=2")
+		"ozal", "ozal", "restart", filepath.Join(h.dir, "admin.sock"), "s1", filepath.Join(h.bin, "ozal"))
+	cmd.Env = append(cmd.Environ(), "PATH="+h.bin+":"+os.Getenv("PATH"), "STATE="+h.dir, "FAKE_CONFIG="+h.config, "FAKE_RUNTIME="+h.runtime, "OZALCTL_WAIT=2")
 	out, err := cmd.CombinedOutput()
 	var exit *exec.ExitError
 	if errors.As(err, &exit) {

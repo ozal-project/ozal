@@ -42,7 +42,7 @@ def main():
             time.sleep(0.05)
         raise AssertionError("local smoke condition timed out")
 
-    with tempfile.TemporaryDirectory(prefix="switchboard-tunnel-smoke-") as scratch:
+    with tempfile.TemporaryDirectory(prefix="ozal-tunnel-smoke-") as scratch:
         directory = Path(scratch)
         pki = directory / "pki"
         subprocess.run([binary, "tunnel-spike", "init", "-pki", str(pki)], check=True, capture_output=True)

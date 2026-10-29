@@ -137,7 +137,7 @@ func SweepLoop(ctx context.Context, backend SessionBackend, interval time.Durati
 }
 
 // SessionStore is the in-memory, single-instance SessionBackend. Sessions
-// don't survive a restart and aren't shared across multiple Switchboard
+// don't survive a restart and aren't shared across multiple Ozal
 // processes. It stays the default so a deployment without a state database
 // keeps working; pass a persistent backend to make sessions outlive a
 // restart.

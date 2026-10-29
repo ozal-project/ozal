@@ -12,7 +12,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/ozal-project/ozal/internal/config"
 )
 
 // Remote is the edge as the orchestration sees it. The SSH adapter implements
@@ -26,7 +26,7 @@ type Remote interface {
 	Terminal(ctx context.Context, command string) (int, error)
 }
 
-// Binary is a built Switchboard executable.
+// Binary is a built Ozal executable.
 type Binary struct {
 	Data   []byte
 	Commit string
@@ -37,13 +37,13 @@ type Builder interface {
 	Build(ctx context.Context, ref string) (Binary, error)
 }
 
-// UpgradeRequest is one run of `sbctl edge upgrade`.
+// UpgradeRequest is one run of `ozalctl edge upgrade`.
 type UpgradeRequest struct {
 	Name   string
 	Target Target
 	Ref    string
 	Apply  bool
-	// Owner names this run in the edge lock ("sbctl on host pid N since T").
+	// Owner names this run in the edge lock ("ozalctl on host pid N since T").
 	Owner string
 }
 
@@ -86,7 +86,7 @@ func Upgrade(ctx context.Context, out io.Writer, remote Remote, builder Builder,
 		step("the edge already runs this binary: nothing to do")
 		return nil
 	}
-	backup := BackupName(liveSHA[0])
+	backup := BackupName(e.Binary, liveSHA[0])
 	if !req.Apply {
 		step("plan: install %s (%s), keep %s, restart %s", bin.Commit, want[:12], backup, e.Unit)
 		note("re-run with -apply to do it")
@@ -117,9 +117,9 @@ func Upgrade(ctx context.Context, out io.Writer, remote Remote, builder Builder,
 		}
 	}
 	if staged == want {
-		step("switchboard.next already staged with this hash: no upload")
+		step("ozal.next already staged with this hash: no upload")
 	} else {
-		step("upload switchboard.next")
+		step("upload ozal.next")
 		packed, err := gzipBytes(bin.Data)
 		if err != nil {
 			return err
@@ -165,7 +165,7 @@ func Upgrade(ctx context.Context, out io.Writer, remote Remote, builder Builder,
 		note("routes live in the runtime file only the service account reads: the root step validates them before it stops anything")
 	}
 
-	step("switchboard upgrade on the edge as root (sudo asks for the password once)")
+	step("ozal upgrade on the edge as root (sudo asks for the password once)")
 	code, err := remote.Terminal(ctx, UpgradeCommand(e, final, want))
 	if err != nil {
 		step("staged and validated; no terminal for sudo, so nothing was migrated, swapped or restarted")
@@ -183,7 +183,7 @@ func Upgrade(ctx context.Context, out io.Writer, remote Remote, builder Builder,
 // RootCheck returns what the SSH user can validate of the live config. With
 // runtime_file, routes and projects live in a file only the service account
 // reads, so the copy leaves it out: the user checks listeners, TLS and
-// identity, and `switchboard upgrade` validates the whole config as root
+// identity, and `ozal upgrade` validates the whole config as root
 // before it stops anything. split is false when the live config is checked
 // as it is.
 func RootCheck(live []byte) (check []byte, split bool, err error) {

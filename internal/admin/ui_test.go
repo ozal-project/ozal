@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/config"
-	"github.com/switchboard-project/switchboard/internal/events"
-	"github.com/switchboard-project/switchboard/internal/healthcheck"
-	"github.com/switchboard-project/switchboard/internal/routemanager"
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/healthcheck"
+	"github.com/ozal-project/ozal/internal/routemanager"
 )
 
 func TestOverviewProjectsAccessRulesWithoutConfigSecrets(t *testing.T) {

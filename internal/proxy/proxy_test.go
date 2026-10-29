@@ -21,11 +21,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/auth"
-	"github.com/switchboard-project/switchboard/internal/config"
-	"github.com/switchboard-project/switchboard/internal/events"
-	"github.com/switchboard-project/switchboard/internal/pages"
-	"github.com/switchboard-project/switchboard/internal/pipeline"
+	"github.com/ozal-project/ozal/internal/auth"
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/pages"
+	"github.com/ozal-project/ozal/internal/pipeline"
 )
 
 type auditAppenderFunc func(context.Context, events.Event) error
@@ -823,7 +823,7 @@ func captureHeaders(t *testing.T) (*httptest.Server, chan http.Header) {
 }
 
 // identityHeaders returns every header in h whose name normalizes to a
-// Switchboard identity header, as "Name=value" strings. The check repeats the
+// Ozal identity header, as "Name=value" strings. The check repeats the
 // dash/underscore normalization independently of the production helper so a
 // broken strip cannot hide behind a broken detector.
 func identityHeaders(h http.Header) []string {

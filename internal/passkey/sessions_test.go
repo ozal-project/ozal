@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/auth"
-	"github.com/switchboard-project/switchboard/internal/store/sqlite"
+	"github.com/ozal-project/ozal/internal/auth"
+	"github.com/ozal-project/ozal/internal/store/sqlite"
 )
 
 func TestSessionHTTPBoundaryEnforcesOriginAndOwner(t *testing.T) {

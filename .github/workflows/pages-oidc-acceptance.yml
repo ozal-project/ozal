@@ -18,7 +18,7 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
-      - name: Real GitHub OIDC token deploys through curl to a loopback Switchboard
+      - name: Real GitHub OIDC token deploys through curl to a loopback Ozal
         env:
           GITHUB_REPOSITORY_ID: ${{ github.repository_id }}
           GITHUB_REPOSITORY_OWNER_ID: ${{ github.repository_owner_id }}

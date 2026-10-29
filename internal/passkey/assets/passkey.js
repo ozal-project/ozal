@@ -1,4 +1,4 @@
-// Passkey enrolment and login for Switchboard (ID-003). The server sends
+// Passkey enrolment and login for Ozal (ID-003). The server sends
 // WebAuthn options with binary fields as base64url; the browser API wants
 // ArrayBuffers, and the server wants base64url back.
 "use strict";
@@ -99,7 +99,7 @@ function explain(error, page) {
 // A destination remembered from the login page, so an invitation opened in
 // the same browser can return there. The server validates it again; this is
 // a convenience, never a trust decision.
-const pendingKey = "switchboard.returnTo";
+const pendingKey = "ozal.returnTo";
 const pendingTTL = 30 * 60 * 1000;
 function rememberReturn(url) {
   try { localStorage.setItem(pendingKey, JSON.stringify({ url, at: Date.now() })); } catch {}
@@ -182,7 +182,7 @@ function setupLoginPage(button) {
         : "This site needs you to sign in with " + (provider || "single sign-on") + ".",
     }[reauth];
     document.getElementById("first-time").hidden = true;
-    document.title = "Confirm it's you · Switchboard";
+    document.title = "Confirm it's you · Ozal";
   }
   const passkeys = allows("passkey");
   if (!passkeys) {

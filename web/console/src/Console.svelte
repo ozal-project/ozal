@@ -75,7 +75,7 @@
     const path = route.path;
     const search = route.search;
     const title = nav.find((item) => item.path === path)?.label ?? "Overview";
-    document.title = `${title} · Switchboard`;
+    document.title = `${title} · Ozal`;
     if (mounted) void tick().then(() => {
       document.querySelector<HTMLElement>('nav[aria-label="Console"] [aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
       document.querySelector<HTMLElement>("#main-content h1")?.focus();
@@ -94,7 +94,7 @@
 {/snippet}
 
 {#snippet sidebar(drawer = false)}
-  {#if !drawer}<a href="/overview" onclick={(e) => go(e, "/overview")} class="flex h-14 shrink-0 items-center px-4" aria-label="Switchboard console home"><Wordmark animated /></a>{/if}
+  {#if !drawer}<a href="/overview" onclick={(e) => go(e, "/overview")} class="flex h-14 shrink-0 items-center px-4" aria-label="Ozal console home"><Wordmark animated /></a>{/if}
   <nav class="mt-2 flex flex-col gap-5 px-2" aria-label="Console">
     {#each visible as group (group.name)}
       <div class="flex flex-col gap-0.5">

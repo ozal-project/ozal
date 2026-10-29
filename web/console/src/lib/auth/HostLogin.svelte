@@ -11,7 +11,7 @@
   let draft = $state("");
   let checking = $state(false);
   let error = $state("");
-  const command = $derived(`sudo switchboard console login -name YOUR_NAME${picked.length === allTools.length ? "" : ` -tools ${picked.join(",") || "TOOL"}`}`);
+  const command = $derived(`sudo ozal console login -name YOUR_NAME${picked.length === allTools.length ? "" : ` -tools ${picked.join(",") || "TOOL"}`}`);
 
   async function unlock(e: SubmitEvent) {
     e.preventDefault();
@@ -41,7 +41,7 @@
 <p class="text-muted-foreground mt-4 mb-2 text-sm">Run this on the host, replacing YOUR_NAME, and open the link it prints:</p>
 <CopyCommand {command} label="Copy login command" />
 <p class="text-muted-foreground mt-2 text-xs">
-  Needs <code class="font-mono">switchboard</code> on the host's PATH, which the installer and <code class="font-mono">sbctl</code> set up.
+  Needs <code class="font-mono">ozal</code> on the host's PATH, which the installer and <code class="font-mono">ozalctl</code> set up.
   If it is not found, use the full path to the binary and add <code class="font-mono">-config /path/to/config.json</code>.
 </p>
 <form class="mt-5 flex items-center gap-2" onsubmit={unlock}>

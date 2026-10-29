@@ -15,15 +15,15 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 
-	"github.com/switchboard-project/switchboard/internal/config"
-	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/events"
 )
 
 // fakeOIDCProvider is a minimal OIDC provider good enough to exercise
-// Switchboard's real login -> code exchange -> callback path end-to-end:
+// Ozal's real login -> code exchange -> callback path end-to-end:
 // discovery document, JWKS, and a token endpoint that signs a real ID
 // token. It does not implement or check PKCE/state itself — that's
-// Switchboard's job, and is asserted on the Switchboard side.
+// Ozal's job, and is asserted on the Ozal side.
 type fakeOIDCProvider struct {
 	server        *httptest.Server
 	key           *rsa.PrivateKey
@@ -133,7 +133,7 @@ func TestFullLoginCallbackFlow(t *testing.T) {
 		t.Fatalf("NewGate: %v", err)
 	}
 
-	// Step 1: hit login, capture the state Switchboard generated and the
+	// Step 1: hit login, capture the state Ozal generated and the
 	// signed cookie that binds this attempt to the browser.
 	loginReq := httptest.NewRequest(http.MethodGet, "http://app.localhost/_/auth/login?return_to="+url.QueryEscape("http://app.localhost/dashboard"), nil)
 	loginRec := httptest.NewRecorder()

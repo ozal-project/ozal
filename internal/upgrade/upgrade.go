@@ -1,4 +1,4 @@
-// Package upgrade replaces the binary of a Switchboard systemd unit in place
+// Package upgrade replaces the binary of a Ozal systemd unit in place
 // (REL-010): the procedure proven by hand on both edges on 2026-10-22,
 // without any host's paths.
 //

@@ -44,7 +44,7 @@ jobs:
           npm ci --prefix site --no-audit --no-fund
       - name: Gate
         env:
-          SWITCHBOARD_REQUIRE_FRONTEND: "1"
+          OZAL_REQUIRE_FRONTEND: "1"
         run: scripts/verify.sh
       # Pinned and checked against the release's own checksums, the way
       # REL-005 was tested locally.

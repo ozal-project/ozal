@@ -10,7 +10,7 @@ import (
 // Quote makes s one safe shell word.
 func Quote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
-// Exit codes of the root wrapper, as `switchboard upgrade` defines them.
+// Exit codes of the root wrapper, as `ozal upgrade` defines them.
 const (
 	ExitUpgraded       = 0
 	ExitRefused        = 2 // refused before the stop: the edge was not touched
@@ -22,29 +22,29 @@ const (
 // its own directory and checks its hash there; only that copy runs, so the SSH
 // user's files never execute as root unchecked. SIGHUP is ignored so a dropped
 // session cannot stop a cutover halfway. Arguments: staged path, sha256, the
-// command link ("-" for none), the installed binary path, the config path, then the flags for `switchboard upgrade`.
+// command link ("-" for none), the installed binary path, the config path, then the flags for `ozal upgrade`.
 const RootScript = `
 set -u
 trap '' HUP
 STAGED=$1 SHA=$2 LINK=$3 BINARY=$4 CONFIG=$5
 shift 5
 T=$(mktemp -d "${TMPROOT:-/root}/sbupgrade.XXXXXX") || exit 2
-cp "$STAGED" "$T/switchboard" && chmod 755 "$T/switchboard" || { rm -rf "$T"; exit 2; }
-if [ "$(sha256sum "$T/switchboard" | cut -d' ' -f1)" != "$SHA" ]; then
+cp "$STAGED" "$T/ozal" && chmod 755 "$T/ozal" || { rm -rf "$T"; exit 2; }
+if [ "$(sha256sum "$T/ozal" | cut -d' ' -f1)" != "$SHA" ]; then
   echo "    the staged binary changed after its upload: refused"
   rm -rf "$T"
   exit 2
 fi
-"$T/switchboard" upgrade -sha256 "$SHA" "$@"
+"$T/ozal" upgrade -sha256 "$SHA" "$@"
 code=$?
 rm -rf "$T"
 if [ "$code" -eq 0 ] && [ "$LINK" != "-" ]; then
   # The command is a tiny wrapper that knows this host's config, so
-  # "sudo switchboard console enrol" works from any directory. A file this
+  # "sudo ozal console enrol" works from any directory. A file this
   # tool did not write is never replaced.
-  if [ ! -e "$LINK" ] || [ -L "$LINK" ] || grep -q '^# managed by sbctl' "$LINK" 2>/dev/null; then
-    W=$(mktemp "$(dirname "$LINK")/.switchboard.XXXXXX") &&
-    printf '#!/bin/sh\n# managed by sbctl\nSWITCHBOARD_CONFIG=${SWITCHBOARD_CONFIG:-%s}\nexport SWITCHBOARD_CONFIG\nexec %s "$@"\n' "$CONFIG" "$BINARY" > "$W" &&
+  if [ ! -e "$LINK" ] || [ -L "$LINK" ] || grep -qE '^# managed by (ozalctl|sbctl)$' "$LINK" 2>/dev/null; then
+    W=$(mktemp "$(dirname "$LINK")/.ozal.XXXXXX") &&
+    printf '#!/bin/sh\n# managed by ozalctl\nOZAL_CONFIG=${OZAL_CONFIG:-%s}\nexport OZAL_CONFIG\nexec %s "$@"\n' "$CONFIG" "$BINARY" > "$W" &&
     chmod 755 "$W" && mv -f "$W" "$LINK" && echo "    command $LINK runs $BINARY with $CONFIG"
   fi
 fi
@@ -90,17 +90,17 @@ func Outcome(code int, e Edge, backup string) error {
 	}
 }
 
-// BackupName is the file `switchboard upgrade` keeps for the binary it replaced.
-func BackupName(liveSHA string) string {
+// BackupName is the file `ozal upgrade` keeps for the binary it replaced.
+func BackupName(binary, liveSHA string) string {
 	if len(liveSHA) > 12 {
 		liveSHA = liveSHA[:12]
 	}
-	return "switchboard.bak-" + liveSHA
+	return path.Base(binary) + ".bak-" + liveSHA
 }
 
 // StageFile is where an upload waits; the .part name means "incomplete".
 func StageFile(e Edge) (part, final string) {
-	return e.Stage + "/switchboard.next.part", e.Stage + "/switchboard.next"
+	return e.Stage + "/ozal.next.part", e.Stage + "/ozal.next"
 }
 
 // ReceiveCommand decompresses stdin into the .part file and renames it only

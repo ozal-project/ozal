@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/auth"
+	"github.com/ozal-project/ozal/internal/auth"
 )
 
 func (s *Sessions) ListOwned(ctx context.Context, subject string) ([]auth.SessionInfo, error) {

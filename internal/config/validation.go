@@ -173,7 +173,7 @@ func validateAdminListen(address string) error {
 }
 
 // maxSocketPath fits sockaddr_un.sun_path with its terminating NUL on every
-// unix Switchboard builds for: 104 bytes on macOS and the BSDs (108 on
+// unix Ozal builds for: 104 bytes on macOS and the BSDs (108 on
 // Linux), so a config valid on one host stays valid on another.
 const maxSocketPath = 103
 

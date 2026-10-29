@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/ozal-project/ozal/internal/config"
 )
 
 type differentialRequest struct {
@@ -47,12 +47,12 @@ func (b *synchronizedBuffer) String() string {
 }
 
 // TestDifferentialProxyAgainstCaddyOrNginx compares the request semantics of
-// Switchboard's host-routed reverse proxy with an installed reference proxy.
-// It is opt-in through SWITCHBOARD_DIFFERENTIAL_PROXY=1: hosted CI images ship
+// Ozal's host-routed reverse proxy with an installed reference proxy.
+// It is opt-in through OZAL_DIFFERENTIAL_PROXY=1: hosted CI images ship
 // nginx, and the gate must not depend on whatever a runner has installed.
 func TestDifferentialProxyAgainstCaddyOrNginx(t *testing.T) {
-	if os.Getenv("SWITCHBOARD_DIFFERENTIAL_PROXY") != "1" {
-		t.Skip("set SWITCHBOARD_DIFFERENTIAL_PROXY=1 and install caddy or nginx to run the differential proxy harness")
+	if os.Getenv("OZAL_DIFFERENTIAL_PROXY") != "1" {
+		t.Skip("set OZAL_DIFFERENTIAL_PROXY=1 and install caddy or nginx to run the differential proxy harness")
 	}
 	type engine struct {
 		name string
@@ -92,18 +92,18 @@ func TestDifferentialProxyAgainstCaddyOrNginx(t *testing.T) {
 
 	handler, err := New([]config.Route{{Host: "app.example.test", Target: upstream.URL}}, nil, nil)
 	if err != nil {
-		t.Fatalf("build Switchboard proxy: %v", err)
+		t.Fatalf("build Ozal proxy: %v", err)
 	}
-	switchboard := httptest.NewServer(handler)
-	defer switchboard.Close()
-	want := sendDifferentialRequest(t, switchboard.URL)
+	ozal := httptest.NewServer(handler)
+	defer ozal.Close()
+	want := sendDifferentialRequest(t, ozal.URL)
 
 	for _, proxy := range engines {
 		t.Run(proxy.name, func(t *testing.T) {
 			baseURL := startReferenceProxy(t, proxy.name, proxy.path, upstream.URL)
 			got := sendDifferentialRequest(t, baseURL)
 			if got != want {
-				t.Fatalf("forwarded request differs\nSwitchboard: %+v\n%s: %+v", want, proxy.name, got)
+				t.Fatalf("forwarded request differs\nOzal: %+v\n%s: %+v", want, proxy.name, got)
 			}
 		})
 	}

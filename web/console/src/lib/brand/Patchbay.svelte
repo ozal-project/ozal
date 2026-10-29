@@ -1,6 +1,6 @@
 <script lang="ts">
   // The sign-in backdrop: a patch bay of jacks where a few cords connect and
-  // carry a signal, the switchboard the product is named after.
+  // carry a signal between resources.
   const cols = 14, rows = 8, gap = 72;
   const jacks = Array.from({ length: cols * rows }, (_, i) => ({ x: (i % cols) * gap + 36, y: Math.floor(i / cols) * gap + 36 }));
   const at = (c: number, r: number) => ({ x: c * gap + 36, y: r * gap + 36 });

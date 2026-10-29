@@ -79,7 +79,7 @@ func TestParseValidatesDeclaredRouteResource(t *testing.T) {
 
 func TestAuditConfigAndRouteFailureModes(t *testing.T) {
 	skipOnWindows(t, "audit.dir fixtures are POSIX absolute paths")
-	base := `{"listen":":8888","auth":{"issuer":"https://accounts.google.com","client_id":"id","client_secret":"secret","redirect_url":"http://private.localhost/_/auth/callback"},"audit":{"dir":"/var/lib/switchboard/audit","include":["access"]},"routes":[{"host":"public.localhost","target":"http://localhost:9000"},{"host":"private.localhost","target":"http://localhost:9001","access":{}}]}`
+	base := `{"listen":":8888","auth":{"issuer":"https://accounts.google.com","client_id":"id","client_secret":"secret","redirect_url":"http://private.localhost/_/auth/callback"},"audit":{"dir":"/var/lib/ozal/audit","include":["access"]},"routes":[{"host":"public.localhost","target":"http://localhost:9000"},{"host":"private.localhost","target":"http://localhost:9001","access":{}}]}`
 	cfg, err := Parse([]byte(base))
 	if err != nil {
 		t.Fatalf("Parse valid audit config: %v", err)
@@ -89,7 +89,7 @@ func TestAuditConfigAndRouteFailureModes(t *testing.T) {
 	}
 
 	for _, tc := range []struct{ name, from, to string }{
-		{"relative directory", `"dir":"/var/lib/switchboard/audit"`, `"dir":"audit"`},
+		{"relative directory", `"dir":"/var/lib/ozal/audit"`, `"dir":"audit"`},
 		{"unsupported family", `"include":["access"]`, `"include":["unknown"]`},
 		{"duplicate family", `"include":["access"]`, `"include":["access","access"]`},
 		{"no family", `"include":["access"]`, `"include":[]`},
@@ -102,14 +102,14 @@ func TestAuditConfigAndRouteFailureModes(t *testing.T) {
 			}
 		})
 	}
-	adminAudit, err := Parse([]byte(`{"listen":":8888","audit":{"dir":"/var/lib/switchboard/audit","include":["admin"]},"routes":[{"host":"app.localhost","target":"http://localhost:9000"}]}`))
+	adminAudit, err := Parse([]byte(`{"listen":":8888","audit":{"dir":"/var/lib/ozal/audit","include":["admin"]},"routes":[{"host":"app.localhost","target":"http://localhost:9000"}]}`))
 	if err != nil {
 		t.Fatalf("Parse admin audit config: %v", err)
 	}
 	if !adminAudit.Audit.AdminRequired() {
 		t.Fatal("admin audit must default to required")
 	}
-	bestEffort, err := Parse([]byte(`{"listen":":8888","audit":{"dir":"/var/lib/switchboard/audit","include":["admin"],"admin_mode":"best_effort"},"routes":[{"host":"app.localhost","target":"http://localhost:9000"}]}`))
+	bestEffort, err := Parse([]byte(`{"listen":":8888","audit":{"dir":"/var/lib/ozal/audit","include":["admin"],"admin_mode":"best_effort"},"routes":[{"host":"app.localhost","target":"http://localhost:9000"}]}`))
 	if err != nil {
 		t.Fatalf("Parse best-effort admin audit config: %v", err)
 	}
@@ -117,8 +117,8 @@ func TestAuditConfigAndRouteFailureModes(t *testing.T) {
 		t.Fatal("best-effort admin audit was treated as required")
 	}
 	for _, raw := range []string{
-		`{"listen":":8888","audit":{"dir":"/var/lib/switchboard/audit","include":["access"],"admin_mode":"required"},"routes":[{"host":"app.localhost","target":"http://localhost:9000"}]}`,
-		`{"listen":":8888","audit":{"dir":"/var/lib/switchboard/audit","include":["admin"],"admin_mode":"ignore"},"routes":[{"host":"app.localhost","target":"http://localhost:9000"}]}`,
+		`{"listen":":8888","audit":{"dir":"/var/lib/ozal/audit","include":["access"],"admin_mode":"required"},"routes":[{"host":"app.localhost","target":"http://localhost:9000"}]}`,
+		`{"listen":":8888","audit":{"dir":"/var/lib/ozal/audit","include":["admin"],"admin_mode":"ignore"},"routes":[{"host":"app.localhost","target":"http://localhost:9000"}]}`,
 	} {
 		if _, err := Parse([]byte(raw)); err == nil {
 			t.Errorf("Parse accepted invalid admin audit settings: %s", raw)
@@ -139,7 +139,7 @@ func TestAuditConfigAndRouteFailureModes(t *testing.T) {
 	if _, err := Parse([]byte(withoutAudit)); err == nil {
 		t.Fatal("route.audit_mode was accepted without top-level audit settings")
 	}
-	withoutAccessFamily := `{"listen":":8888","audit":{"dir":"/var/lib/switchboard/audit","include":["admin"]},"routes":[{"host":"public.localhost","target":"http://localhost:9000","audit_mode":"required"}]}`
+	withoutAccessFamily := `{"listen":":8888","audit":{"dir":"/var/lib/ozal/audit","include":["admin"]},"routes":[{"host":"public.localhost","target":"http://localhost:9000","audit_mode":"required"}]}`
 	if _, err := Parse([]byte(withoutAccessFamily)); err == nil {
 		t.Fatal("route.audit_mode was accepted without the access audit family")
 	}
@@ -623,14 +623,14 @@ func TestUpstreamTimeoutDefaultsAndRejectsOutOfRange(t *testing.T) {
 
 func TestOriginClientCARequiresTLS(t *testing.T) {
 	const routes = `"routes": [{"host": "a.localhost", "target": "http://localhost:9000"}]`
-	if _, err := Parse([]byte(`{"listen": ":8888", "tls": {"origin_client_ca_file": "/etc/switchboard/origin-pull-ca.pem"}, ` + routes + `}`)); err == nil {
+	if _, err := Parse([]byte(`{"listen": ":8888", "tls": {"origin_client_ca_file": "/etc/ozal/origin-pull-ca.pem"}, ` + routes + `}`)); err == nil {
 		t.Fatal("tls.origin_client_ca_file without tls.enabled was accepted: it would be silently ignored")
 	}
-	cfg, err := Parse([]byte(`{"listen": ":8888", "tls": {"enabled": true, "domains": ["example.com"], "cache_dir": "/tmp/c", "origin_client_ca_file": "/etc/switchboard/origin-pull-ca.pem"}, ` + routes + `}`))
+	cfg, err := Parse([]byte(`{"listen": ":8888", "tls": {"enabled": true, "domains": ["example.com"], "cache_dir": "/tmp/c", "origin_client_ca_file": "/etc/ozal/origin-pull-ca.pem"}, ` + routes + `}`))
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	if cfg.TLS.OriginClientCAFile != "/etc/switchboard/origin-pull-ca.pem" {
+	if cfg.TLS.OriginClientCAFile != "/etc/ozal/origin-pull-ca.pem" {
 		t.Fatalf("OriginClientCAFile = %q", cfg.TLS.OriginClientCAFile)
 	}
 }
@@ -671,7 +671,7 @@ func TestValidateSiteRoutes(t *testing.T) {
 
 func TestValidateAdminSocket(t *testing.T) {
 	// Absolute on every OS (a Windows path needs its drive).
-	absolute, err := filepath.Abs(filepath.Join("run", "switchboard", "admin.sock"))
+	absolute, err := filepath.Abs(filepath.Join("run", "ozal", "admin.sock"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -679,7 +679,7 @@ func TestValidateAdminSocket(t *testing.T) {
 		"":                             true,
 		absolute:                       true,
 		"run/admin.sock":               false,
-		"/run/switchboard/../x.sock":   false,
+		"/run/ozal/../x.sock":          false,
 		"/" + strings.Repeat("a", 107): false,
 	} {
 		cfg := Config{

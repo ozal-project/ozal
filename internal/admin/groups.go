@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"slices"
 
-	"github.com/switchboard-project/switchboard/internal/events"
-	"github.com/switchboard-project/switchboard/internal/store/sqlite"
+	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/store/sqlite"
 )
 
 type groupView struct {

@@ -1,4 +1,4 @@
-// Package notify carries Switchboard's ChatOps pieces (NTF-001): the
+// Package notify carries Ozal's ChatOps pieces (NTF-001): the
 // Notifier port, the alert bridge from events to messages, the one-time
 // pairing code and the signed callback data. Technology adapters live in
 // subpackages; telegram is the first one.
@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/ozal-project/ozal/internal/events"
 )
 
 // Message is one outbound notification.
@@ -108,7 +108,7 @@ func alertText(e events.Event) (string, bool) {
 	default:
 		return "", false
 	}
-	return "Switchboard: " + eventLine(e), true
+	return "Ozal: " + eventLine(e), true
 }
 
 // eventLine lists only fields that are safe in a chat: never the error text
@@ -130,5 +130,5 @@ func eventLine(e events.Event) string {
 // PairingText is what the operator sees; the code itself is printed by the
 // caller so the message shape stays in one place.
 func PairingText(code string) string {
-	return fmt.Sprintf("Switchboard: send /pair %s to the bot in a private chat to link it.", code)
+	return fmt.Sprintf("Ozal: send /pair %s to the bot in a private chat to link it.", code)
 }

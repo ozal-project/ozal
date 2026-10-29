@@ -47,11 +47,11 @@
   onDestroy(() => clearInterval(poll));
 
   const steps = $derived([
-    { t: "Create the identity on the private host", d: "The private key is generated there and never leaves it.", cmd: `switchboard connector prepare -dir ./connector-identity -name ${name || "NAME"}`, where: "on the private host" },
-    { t: "Sign the request with your CA", d: "Move only connector.csr to the machine that holds your CA, then bring the certificate back.", cmd: `switchboard connector sign -csr connector.csr -ca-dir ./ca -out connector.crt`, where: "on the CA machine" },
-    { t: "Check the certificate on the private host", d: "Confirms that the certificate matches the key before anything is enrolled.", cmd: `switchboard connector check -dir ./connector-identity -ca ./ca.crt`, where: "on the private host" },
-    { t: "Enrol it on the edge", d: "Review the fingerprint first. Enrolment stays with whoever controls the edge host.", cmd: `sudo -u switchboard switchboard connector enroll -config /etc/switchboard/config.json -name ${name || "NAME"} -cert connector.crt`, where: "on the edge host" },
-    { t: "Connect and add the application", d: "Replace the capitalised values with your app host and the edge address, then start the tunnel from the private host. Add the app in Applications and test an allowed and a refused visitor.", cmd: `switchboard tunnel connect -cert ./connector-identity/connector.crt -key ./connector-identity/connector.key -ca ./ca.crt -host APP.example.com -edge EDGE_PRIVATE_IP:9443 -server-name EDGE_CERT_NAME -upstream http://127.0.0.1:3000`, where: "on the private host" },
+    { t: "Create the identity on the private host", d: "The private key is generated there and never leaves it.", cmd: `ozal connector prepare -dir ./connector-identity -name ${name || "NAME"}`, where: "on the private host" },
+    { t: "Sign the request with your CA", d: "Move only connector.csr to the machine that holds your CA, then bring the certificate back.", cmd: `ozal connector sign -csr connector.csr -ca-dir ./ca -out connector.crt`, where: "on the CA machine" },
+    { t: "Check the certificate on the private host", d: "Confirms that the certificate matches the key before anything is enrolled.", cmd: `ozal connector check -dir ./connector-identity -ca ./ca.crt`, where: "on the private host" },
+    { t: "Enrol it on the edge", d: "Review the fingerprint first. Enrolment stays with whoever controls the edge host.", cmd: `sudo -u ozal ozal connector enroll -config /etc/ozal/config.json -name ${name || "NAME"} -cert connector.crt`, where: "on the edge host" },
+    { t: "Connect and add the application", d: "Replace the capitalised values with your app host and the edge address, then start the tunnel from the private host. Add the app in Applications and test an allowed and a refused visitor.", cmd: `ozal tunnel connect -cert ./connector-identity/connector.crt -key ./connector-identity/connector.key -ca ./ca.crt -host APP.example.com -edge EDGE_PRIVATE_IP:9443 -server-name EDGE_CERT_NAME -upstream http://127.0.0.1:3000`, where: "on the private host" },
   ]);
   const progress = $derived(mine ? (mine.connected ? 5 : 4) : 0);
 </script>
@@ -116,7 +116,7 @@
         {#if !connector.revoked}
           <details class="mt-4 text-sm"><summary class="text-muted-foreground hover:text-foreground cursor-pointer">Revoke this connector</summary>
             <p class="mt-3">Stops access to the hosts above within about 5 seconds. Application data is not deleted. Run it on the edge host:</p>
-            <div class="mt-2"><CopyCommand command={`sudo -u switchboard switchboard connector revoke -config /etc/switchboard/config.json -name ${connector.name}`} label={`Copy revoke command for ${connector.name}`} /></div>
+            <div class="mt-2"><CopyCommand command={`sudo -u ozal ozal connector revoke -config /etc/ozal/config.json -name ${connector.name}`} label={`Copy revoke command for ${connector.name}`} /></div>
             <p class="text-muted-foreground mt-2 text-xs">Then stop the connector service on its own host. Keep the shared CA; revoke only this identity.</p>
           </details>
         {/if}

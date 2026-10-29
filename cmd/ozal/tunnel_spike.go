@@ -1,0 +1,232 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"log/slog"
+	"net"
+	"net/http"
+	"net/url"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/proxy"
+	"github.com/ozal-project/ozal/internal/tunnel"
+)
+
+// runTunnelSpike intentionally isolates TUN-001 from normal deployments. Its
+// loopback-only modes let both roles run without a VPS or production secrets.
+func runTunnelSpike(ctx context.Context, args []string, out io.Writer) error {
+	if len(args) == 0 {
+		return errors.New("usage: tunnel-spike init|edge|connect (local experiment)")
+	}
+	mode := args[0]
+	if mode != "init" && mode != "edge" && mode != "connect" {
+		return errors.New("unknown tunnel-spike mode")
+	}
+	fs := flag.NewFlagSet("tunnel-spike "+mode, flag.ContinueOnError)
+	fs.SetOutput(out)
+	dir := fs.String("pki", "", "directory of disposable lab identities")
+	host := fs.String("host", "portfolio.localhost", "one allowed public request host")
+	listen := fs.String("listen", "127.0.0.1:0", "edge HTTP address (loopback only, ephemeral by default)")
+	tunnelListen := fs.String("tunnel-listen", "127.0.0.1:0", "connector ingress address (loopback only, ephemeral by default)")
+	edgeAddr := fs.String("edge", "", "edge connector ingress address (loopback only)")
+	root := fs.String("root", "", "absolute static site directory on the connector")
+	upstream := fs.String("upstream", "", "fixed HTTP loopback upstream on the connector")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("unexpected positional arguments")
+	}
+	if *dir == "" {
+		return errors.New("-pki is required")
+	}
+	if mode == "init" {
+		if err := tunnel.InitLab(*dir); err != nil {
+			return err
+		}
+		fmt.Fprintln(out, "Disposable lab identities created (expire in 24 hours); keep directory private.")
+		return nil
+	}
+	normalized, err := config.NormalizeHost(*host)
+	if err != nil {
+		return errors.New("invalid route host")
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	role := mode
+	if mode == "connect" {
+		role = "connector"
+	}
+	cert, roots, err := tunnel.LoadIdentity(filepath.Join(*dir, role+".crt"), filepath.Join(*dir, role+".key"), filepath.Join(*dir, "ca.crt"))
+	if err != nil {
+		return err
+	}
+	if mode == "connect" {
+		if err := validateLabAddress(*edgeAddr, false); err != nil {
+			return err
+		}
+		route, err := labRoute(normalized, *root, *upstream)
+		if err != nil {
+			return err
+		}
+		cfg, err := tunnel.ClientTLS(cert, roots, "edge.localhost")
+		if err != nil {
+			return err
+		}
+		handler, err := proxy.New([]config.Route{route}, nil, nil, proxy.WithAuthenticatedTunnelTrust())
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(out, "Connecting outbound to the local edge; one fixed route, no inbound connector listener.")
+		return tunnel.Connect(ctx, *edgeAddr, cfg, handler)
+	}
+	if err := validateLabAddress(*listen, true); err != nil {
+		return err
+	}
+	if err := validateLabAddress(*tunnelListen, true); err != nil {
+		return err
+	}
+	cfg, err := tunnel.ServerTLS(cert, roots, "connector.localhost")
+	if err != nil {
+		return err
+	}
+	// Event writes happen in multiple goroutines. slog serializes the writer.
+	sink := events.SlogSink{Logger: slog.New(slog.NewJSONHandler(out, nil))}
+	edge := tunnel.NewEdge(sink)
+	handler, closeTransport, err := edge.Handler(normalized)
+	if err != nil {
+		return err
+	}
+	defer closeTransport()
+	httpListener, err := net.Listen("tcp", *listen)
+	if err != nil {
+		return err
+	}
+	defer httpListener.Close()
+	tunnelListener, err := net.Listen("tcp", *tunnelListen)
+	if err != nil {
+		return err
+	}
+	defer tunnelListener.Close()
+	fmt.Fprintf(out, "HTTP http://%s (Host: %s)\nTUNNEL %s\n", httpListener.Addr(), normalized, tunnelListener.Addr())
+	server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 15 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, MaxHeaderBytes: 64 << 10, BaseContext: func(net.Listener) context.Context { return ctx }}
+	defer server.Close()
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	done := make(chan error, 2)
+	go func() { done <- edge.Serve(runCtx, tunnelListener, cfg) }()
+	go func() {
+		err := server.Serve(httpListener)
+		if errors.Is(err, http.ErrServerClosed) {
+			err = nil
+		}
+		done <- err
+	}()
+	var result error
+	finished := 0
+	select {
+	case <-ctx.Done():
+	case result = <-done:
+		finished++
+	}
+	cancel()
+	_ = server.Close()
+	// The two workers are joined even if one fails before ctx cancellation.
+	for finished < 2 {
+		<-done
+		finished++
+	}
+	return result
+}
+
+func validateLabAddress(addr string, allowZero bool) error {
+	host, port, err := net.SplitHostPort(addr)
+	ip := net.ParseIP(host)
+	n, portErr := strconv.Atoi(port)
+	if err != nil || ip == nil || !ip.IsLoopback() || portErr != nil || n < 0 || n > 65535 || (!allowZero && n == 0) {
+		return errors.New("lab address must be a literal loopback IP and valid port")
+	}
+	return nil
+}
+
+func labRoute(host, root, upstream string) (config.Route, error) {
+	if (root == "") == (upstream == "") {
+		return config.Route{}, errors.New("choose exactly one of -root or -upstream")
+	}
+	if root != "" {
+		if !filepath.IsAbs(root) {
+			return config.Route{}, errors.New("-root must be absolute")
+		}
+		return config.Route{Host: host, Root: root}, nil
+	}
+	u, err := url.Parse(upstream)
+	if err != nil || u.Scheme != "http" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
+		return config.Route{}, errors.New("-upstream must be a fixed HTTP loopback origin")
+	}
+	if err := validateLabAddress(u.Host, false); err != nil {
+		return config.Route{}, err
+	}
+	return config.Route{Host: host, Target: upstream}, nil
+}
+
+// maxConnectorRoutes bounds how many hosts one connector may serve. Every route
+// is fixed when the process starts; the cap keeps that list reviewable.
+const maxConnectorRoutes = 8
+
+// connectorRoutes builds the fixed routes a connector serves: the primary one
+// from -host plus -root or -upstream, then any -route HOST=root:DIR or
+// HOST=upstream:URL. One connector identity serving several hosts means one
+// certificate to renew, instead of one identity per site.
+func connectorRoutes(host, root, upstream string, extra []string) ([]config.Route, error) {
+	primary, err := labRoute(host, root, upstream)
+	if err != nil {
+		return nil, err
+	}
+	routes := []config.Route{primary}
+	seen := map[string]bool{host: true}
+	for _, spec := range extra {
+		rawHost, rest, ok := strings.Cut(spec, "=")
+		if !ok {
+			return nil, fmt.Errorf("-route %q must be HOST=root:DIR or HOST=upstream:URL", spec)
+		}
+		kind, value, ok := strings.Cut(rest, ":")
+		if !ok {
+			return nil, fmt.Errorf("-route %q must be HOST=root:DIR or HOST=upstream:URL", spec)
+		}
+		normalized, err := config.NormalizeHost(rawHost)
+		if err != nil {
+			return nil, fmt.Errorf("-route %q: host is not valid", spec)
+		}
+		if seen[normalized] {
+			return nil, fmt.Errorf("-route host %q is already served by this connector", normalized)
+		}
+		seen[normalized] = true
+		var route config.Route
+		switch kind {
+		case "root":
+			route, err = labRoute(normalized, value, "")
+		case "upstream":
+			route, err = labRoute(normalized, "", value)
+		default:
+			return nil, fmt.Errorf("-route %q: kind must be root or upstream", spec)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("-route %q: %w", spec, err)
+		}
+		routes = append(routes, route)
+	}
+	if len(routes) > maxConnectorRoutes {
+		return nil, fmt.Errorf("a connector serves at most %d routes", maxConnectorRoutes)
+	}
+	return routes, nil
+}

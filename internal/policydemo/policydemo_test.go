@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/switchboard-project/switchboard/internal/auth"
-	"github.com/switchboard-project/switchboard/internal/config"
-	"github.com/switchboard-project/switchboard/internal/policydemo"
+	"github.com/ozal-project/ozal/internal/auth"
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/policydemo"
 )
 
 func explain(t *testing.T, input string) (auth.Report, string) {

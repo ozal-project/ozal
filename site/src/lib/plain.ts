@@ -9,7 +9,7 @@ export const PLAIN: Record<string, string> = {
   "ID-008": "Add another device without asking the operator",
   "ID-011": "A page where visitors see what is known about them",
   "ID-012": "A portal for the people who use your apps",
-  "ID-004": "Let other apps sign in with Switchboard",
+  "ID-004": "Let other apps sign in with Ozal",
   "CTX-001": "Decisions that know the device and the moment",
   "CTX-007": "A refusal that offers a way forward",
   "CTX-010": "Access reviews built from your own log",

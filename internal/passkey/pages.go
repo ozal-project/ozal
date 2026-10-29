@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/ozal-project/ozal/internal/config"
 )
 
 //go:embed assets

@@ -1,4 +1,4 @@
-// Package publish is the network side of `sbctl site publish`: it uploads a
+// Package publish is the network side of `ozalctl site publish`: it uploads a
 // build through an SSH tunnel to the edge's admin API with the sites token and
 // accepts it on its public address, rolling back on failure.
 package publish
@@ -19,8 +19,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/ctl"
-	"github.com/switchboard-project/switchboard/internal/pages"
+	"github.com/ozal-project/ozal/internal/ctl"
+	"github.com/ozal-project/ozal/internal/pages"
 )
 
 // Tunnel opens a local address forwarded to an address on the edge.
@@ -28,7 +28,7 @@ type Tunnel interface {
 	Forward(ctx context.Context, remote string) (local string, stop func(), err error)
 }
 
-// Request is one run of `sbctl site publish`: a build the operator
+// Request is one run of `ozalctl site publish`: a build the operator
 // (or CI) already made is packed, uploaded through an SSH tunnel to the
 // edge's admin API with the sites token, and checked on its public address.
 // The route itself is the edge's: add the address once in the console.

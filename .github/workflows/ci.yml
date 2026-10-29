@@ -51,5 +51,5 @@ jobs:
       - name: Gate
         env:
           # Required on Linux; macOS runs the Go gate only.
-          SWITCHBOARD_REQUIRE_FRONTEND: ${{ startsWith(matrix.os, 'ubuntu') && '1' || '' }}
+          OZAL_REQUIRE_FRONTEND: ${{ startsWith(matrix.os, 'ubuntu') && '1' || '' }}
         run: scripts/verify.sh

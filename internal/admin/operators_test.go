@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/switchboard-project/switchboard/internal/config"
-	"github.com/switchboard-project/switchboard/internal/events"
-	"github.com/switchboard-project/switchboard/internal/tunnel"
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/tunnel"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -127,7 +127,7 @@ func TestTemporaryOperatorCannotPublishHostSecretsThroughEitherRouteAPI(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	route := `{"host":"secrets.localhost","root":"/etc/switchboard"}`
+	route := `{"host":"secrets.localhost","root":"/etc/ozal"}`
 	if rec := request(handler, http.MethodPost, "/routes", token, route); rec.Code != 403 {
 		t.Fatalf("legacy API exposed host root: %d", rec.Code)
 	}

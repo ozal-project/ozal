@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/ozal-project/ozal/internal/config"
 )
 
 func TestProjectsAPIRequiresAdminBearerAndRedactsTokenReferences(t *testing.T) {
@@ -15,7 +15,7 @@ func TestProjectsAPIRequiresAdminBearerAndRedactsTokenReferences(t *testing.T) {
 			Name: "portfolio", Site: "portfolio", Hostnames: []string{"portfolio.example"},
 			Deployers: []config.ProjectDeployer{
 				{GitHub: &config.ProjectGitHubTrust{RepositoryID: 123, RepositoryOwnerID: 456, Ref: "refs/heads/main", WorkflowRef: "octavio/site/.github/workflows/deploy.yml@refs/heads/main"}},
-				{Token: "file:/etc/switchboard/portfolio-deploy.token"},
+				{Token: "file:/etc/ozal/portfolio-deploy.token"},
 				{Token: "inline-secret-must-not-appear"},
 			},
 		}},
@@ -39,7 +39,7 @@ func TestProjectsAPIRequiresAdminBearerAndRedactsTokenReferences(t *testing.T) {
 			t.Errorf("project response missing %q: %s", want, body)
 		}
 	}
-	for _, secret := range []string{"file:/etc/switchboard/portfolio-deploy.token", "/etc/switchboard", "inline-secret-must-not-appear", "admin-secret", "sites-secret"} {
+	for _, secret := range []string{"file:/etc/ozal/portfolio-deploy.token", "/etc/ozal", "inline-secret-must-not-appear", "admin-secret", "sites-secret"} {
 		if strings.Contains(body, secret) {
 			t.Errorf("project response exposed %q: %s", secret, body)
 		}

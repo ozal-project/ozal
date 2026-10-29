@@ -1,4 +1,4 @@
-// Package config loads Switchboard's routing table from a JSON file.
+// Package config loads Ozal's routing table from a JSON file.
 package config
 
 import (
@@ -153,7 +153,7 @@ type TLS struct {
 	// issued by it (Authenticated Origin Pulls with the zone's own
 	// certificate). Changing it requires a restart.
 	OriginClientCAFile string `json:"origin_client_ca_file,omitempty"`
-	// DNS01 switches the public listener to Switchboard's own bounded ACME
+	// DNS01 switches the public listener to Ozal's own bounded ACME
 	// DNS-01 manager (EDGE-007): no port 80 and no inbound validation, one
 	// hostname, Cloudflare DNS. Nil keeps the autocert HTTP-01 path.
 	DNS01 *DNS01 `json:"dns01,omitempty"`
@@ -215,7 +215,7 @@ type Auth struct {
 	// are configured ("Google", "Okta"); defaults to "single sign-on".
 	ProviderName string `json:"provider_name,omitempty"`
 
-	// Passkeys makes Switchboard authenticate visitors itself (ID-003). The
+	// Passkeys makes Ozal authenticate visitors itself (ID-003). The
 	// OIDC fields may be set as well (ID-007): the login page then offers
 	// both, and redirect_url must be login_url + "/_/auth/callback".
 	Passkeys *Passkeys `json:"passkeys,omitempty"`
@@ -230,7 +230,7 @@ type Passkeys struct {
 	// LoginURL is the origin where the login and enrolment pages run, e.g.
 	// "https://auth.example.com". Browsers sign for this origin only.
 	LoginURL string `json:"login_url"`
-	// DisplayName is what the authenticator shows; "Switchboard" if empty.
+	// DisplayName is what the authenticator shows; "Ozal" if empty.
 	DisplayName string `json:"display_name,omitempty"`
 }
 
@@ -248,7 +248,7 @@ type Admin struct {
 }
 
 // Notify configures outbound notifications (NTF-001). Channels are opt-in:
-// a nil Notify means Switchboard publishes events to its log and console
+// a nil Notify means Ozal publishes events to its log and console
 // only.
 type Notify struct {
 	Telegram *Telegram `json:"telegram,omitempty"`
@@ -948,7 +948,7 @@ func validatePasskeys(auth *Auth) (string, error) {
 	pk.RPID = rpID
 	pk.LoginURL = login.Scheme + "://" + login.Host
 	if pk.DisplayName == "" {
-		pk.DisplayName = "Switchboard"
+		pk.DisplayName = "Ozal"
 	}
 	if err := validateOIDCBesidePasskeys(auth, pk.LoginURL); err != nil {
 		return "", err

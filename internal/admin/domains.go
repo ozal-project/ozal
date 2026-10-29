@@ -5,11 +5,11 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/switchboard-project/switchboard/internal/certs"
-	"github.com/switchboard-project/switchboard/internal/config"
-	"github.com/switchboard-project/switchboard/internal/domaincheck"
-	"github.com/switchboard-project/switchboard/internal/domaincheck/probe"
-	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/ozal-project/ozal/internal/certs"
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/domaincheck"
+	"github.com/ozal-project/ozal/internal/domaincheck/probe"
+	"github.com/ozal-project/ozal/internal/events"
 )
 
 // domainService connects a configured hostname to this edge (UI-006): it

@@ -1,6 +1,6 @@
 # Documentación
 
-## Usar Switchboard
+## Usar Ozal
 
 1. [Instalar](operations/download-install.md): versión, integridad y servicio Linux.
 2. [Publicar una aplicación](operations/first-application.md): consola, dominio, personas y grupos.

@@ -12,6 +12,12 @@ y SBOM. Elige SO/arquitectura y lee las notas de **esa versión**. La alpha.1
 histórica no incluye las funciones posteriores de main. Una compilación local
 con cambios sin commit es candidata, no una release reproducible publicada.
 
+Los ejemplos `ozal_VERSION_*` corresponden a los paquetes del nombre nuevo;
+no afirman que ya exista una release Ozal publicada. Los tags anteriores
+conservan sus archivos y binarios `switchboard`: usa las instrucciones y el
+instalador de ese tag. Para actualizar una instalación anterior, sigue la
+[migración a Ozal](administration.md#migrar-de-switchboard-a-ozal).
+
 Descarga el archivo desde el canal autorizado de la release y obtén su checksum
 por una fuente confiable. Verificar un checksum contra un valor que vino de
 un origen comprometido no demuestra autenticidad; no se afirma firma de release.
@@ -23,16 +29,16 @@ scripts del archivo, no instala servicios y no sobrescribe un binario existente:
 
 ```sh
 mkdir -p "$HOME/.local/bin"
-scripts/release/install.sh ./switchboard_VERSION_linux_amd64.tar.gz \
-  SHA256_ESPERADO "$HOME/.local/bin/switchboard"
-"$HOME/.local/bin/switchboard" version
-"$HOME/.local/bin/switchboard" setup -dir ./my-edge
+scripts/release/install.sh ./ozal_VERSION_linux_amd64.tar.gz \
+  SHA256_ESPERADO "$HOME/.local/bin/ozal"
+"$HOME/.local/bin/ozal" version
+"$HOME/.local/bin/ozal" setup -dir ./my-edge
 ```
 
 Reemplaza versión y checksum por los valores de la release elegida. El destino
 debe ser un archivo nuevo dentro de un directorio que controles. El helper
 verifica una copia privada del archivo y extrae solo el miembro regular
-`switchboard`, rechaza duplicados/enlaces y usa un enlace de destino exacto
+`ozal`, rechaza duplicados/enlaces y usa un enlace de destino exacto
 que también se niega a una creación concurrente. Su implementación es Linux.
 
 Para un servicio existente usa [upgrade](administration.md#servicio-y-propiedad-del-estado), no elimines el binario
@@ -42,7 +48,7 @@ actual para forzar al instalador. El helper necesita Bash, tar y sha256sum
 ## Linux: instalar el servicio de una vez
 
 `scripts/release/install-service.sh` hace la instalación documentada en
-[systemd](administration.md#servicio-y-propiedad-del-estado) en un solo paso: crea la cuenta `switchboard`, instala el
+[systemd](administration.md#servicio-y-propiedad-del-estado) en un solo paso: crea la cuenta `ozal`, instala el
 binario y la config como `root`, genera un token de administración aleatorio
 (legible solo por root y la cuenta del servicio), migra el estado, inicializa
 el archivo operativo, habilita el servicio y espera a que la consola responda.
@@ -50,30 +56,30 @@ Todo queda en loopback; no toca DNS, firewall ni TLS público, y se niega a
 sobrescribir una instalación existente (para eso está `upgrade`).
 
 ```sh
-sudo scripts/release/install-service.sh --dry-run --binary ./switchboard   # leer el plan
-sudo scripts/release/install-service.sh --binary ./switchboard --target http://127.0.0.1:3000
+sudo scripts/release/install-service.sh --dry-run --binary ./ozal   # leer el plan
+sudo scripts/release/install-service.sh --binary ./ozal --target http://127.0.0.1:3000
 # o, con una descarga y su checksum de un canal confiable:
-sudo scripts/release/install-service.sh --archive ./switchboard_VERSION_linux_amd64.tar.gz --sha256 SHA256_ESPERADO
+sudo scripts/release/install-service.sh --archive ./ozal_VERSION_linux_amd64.tar.gz --sha256 SHA256_ESPERADO
 ```
 
-El instalador deja `/usr/local/bin/switchboard` como enlace al binario instalado:
-`switchboard` se ejecuta desde cualquier directorio y `switchboard upgrade`
+El instalador deja `/usr/local/bin/ozal` como enlace al binario instalado:
+`ozal` se ejecuta desde cualquier directorio y `ozal upgrade`
 sigue actualizándolo. Los comandos de administración usan
-`/etc/switchboard/config.json` cuando no hay un `config.json` en el directorio actual.
+`/etc/ozal/config.json` cuando no hay un `config.json` en el directorio actual.
 
 Al terminar imprime los pasos siguientes: túnel SSH a la consola, enlace de un
-solo uso (`sudo switchboard console enrol`, que crea al primer administrador con su passkey) y alta de la primera aplicación en la consola.
+solo uso (`sudo ozal console enrol`, que crea al primer administrador con su passkey) y alta de la primera aplicación en la consola.
 `scripts/release/test-install-service.sh` lo prueba con el binario real en un
 directorio de staging, sin root.
 
 ## macOS y Windows
 
 En macOS, verifica el tar.gz con `shasum -a 256`, extrae el binario de la release
-en un directorio propio y comprueba `switchboard version`. El helper Linux se
+en un directorio propio y comprueba `ozal version`. El helper Linux se
 niega a ejecutarse en otros sistemas. No hay instalador launchd aprobado.
 
 En Windows, verifica el ZIP con `Get-FileHash -Algorithm SHA256`, usa
-`Expand-Archive` en un destino nuevo y ejecuta `switchboard.exe version`.
+`Expand-Archive` en un destino nuevo y ejecuta `ozal.exe version`.
 Los comandos de configuración/validación y el proxy son portables; la gestión
 systemd y el socket Unix administrativo tienen un alcance distinto.
 

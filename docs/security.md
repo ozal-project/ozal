@@ -1,6 +1,6 @@
 # Seguridad y límites de confianza
 
-Switchboard controla el acceso en el gateway; cada aplicación conserva su
+Ozal controla el acceso en el gateway; cada aplicación conserva su
 autorización interna. Esta guía describe los límites del diseño y las
 condiciones de despliegue. No es una certificación ASVS ni una auditoría
 completa de una instalación.

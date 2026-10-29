@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/certs"
+	"github.com/ozal-project/ozal/internal/certs"
 )
 
 // fakeZone holds one name's records; the public server answers like Pages

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/config"
-	"github.com/switchboard-project/switchboard/internal/policycontext"
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/policycontext"
 )
 
 // DecisionCode identifies why an authorization decision came out the way it
@@ -64,7 +64,7 @@ func (PolicyAuthorizer) Authorize(p Principal, context policycontext.Context, po
 //
 // If an identity allowlist (AllowedEmails or AllowedDomains) is configured,
 // the principal's email must also be verified — an unverified email is an
-// unauthenticated claim by the provider, not something Switchboard should
+// unauthenticated claim by the provider, not something Ozal should
 // authorize on.
 func Authorize(p Principal, policy config.AccessPolicy) Decision {
 	hasIdentityAllowlist := len(policy.AllowedEmails) > 0 || len(policy.AllowedDomains) > 0
@@ -144,7 +144,7 @@ func Fresh(p Principal, policy config.AccessPolicy, now time.Time) Decision {
 
 // RequiredMethods is the login methods a route accepts: its access.methods,
 // or only passkeys when it asks for a recent or device-bound login, because
-// only a passkey login is a fresh proof Switchboard itself verified (an
+// only a passkey login is a fresh proof Ozal itself verified (an
 // upstream provider's single sign-on can answer without the user). Nil means
 // any method.
 func RequiredMethods(policy config.AccessPolicy) []string {

@@ -18,8 +18,8 @@ import (
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 
-	"github.com/switchboard-project/switchboard/internal/adminid"
-	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/ozal-project/ozal/internal/adminid"
+	"github.com/ozal-project/ozal/internal/events"
 )
 
 // Administrative identity (UI-007): the people who run the console sign in
@@ -232,8 +232,8 @@ func (h *Handler) registerIdentities() {
 
 // relyingParty derives the WebAuthn relying party from the page's own origin.
 // A passkey is bound to a registrable name, never to an IP address, so the
-// console uses switchboard.localhost (the SSH tunnel's local end). The legacy
-// localhost origin stays available for registering a passkey on the new name.
+// console uses ozal.localhost (the SSH tunnel's local end). Legacy origins
+// remain available with their own RP IDs to enroll on the new name.
 func (h *Handler) relyingParty(r *http.Request) (*webauthn.WebAuthn, error) {
 	scheme := "http"
 	if r.TLS != nil {
@@ -248,12 +248,12 @@ func (h *Handler) relyingParty(r *http.Request) (*webauthn.WebAuthn, error) {
 		hostname = r.Host
 	}
 	hostname = strings.ToLower(hostname)
-	if hostname != "switchboard.localhost" && hostname != "localhost" {
-		return nil, errors.New("passkeys need the console opened as switchboard.localhost (for example http://switchboard.localhost:9091), not by IP address")
+	if hostname != "ozal.localhost" && hostname != "switchboard.localhost" && hostname != "localhost" {
+		return nil, errors.New("passkeys need the console opened as ozal.localhost (for example http://ozal.localhost:9091), not by IP address")
 	}
 	return webauthn.New(&webauthn.Config{
 		RPID:          hostname,
-		RPDisplayName: "Switchboard console",
+		RPDisplayName: "Ozal console",
 		RPOrigins:     []string{origin},
 		AuthenticatorSelection: protocol.AuthenticatorSelection{
 			ResidentKey:      protocol.ResidentKeyRequirementRequired,

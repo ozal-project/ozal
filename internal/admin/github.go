@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/switchboard-project/switchboard/internal/config"
-	"github.com/switchboard-project/switchboard/internal/events"
-	"github.com/switchboard-project/switchboard/internal/githubapp"
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/githubapp"
 )
 
 type repositoryReader interface {

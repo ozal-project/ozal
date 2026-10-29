@@ -17,10 +17,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/config"
-	"github.com/switchboard-project/switchboard/internal/events"
-	"github.com/switchboard-project/switchboard/internal/store/sqlite"
-	"github.com/switchboard-project/switchboard/internal/tunnel"
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/store/sqlite"
+	"github.com/ozal-project/ozal/internal/tunnel"
 )
 
 func connectorHandler(t *testing.T, extra ...Option) (http.Handler, *events.Recorder) {

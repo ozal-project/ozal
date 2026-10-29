@@ -8,7 +8,7 @@ de cada release delimitan qué incluye un binario distribuido.
 Con un binario construido de este checkout:
 
 ```sh
-switchboard setup -dir ./my-edge -target http://127.0.0.1:3000
+ozal setup -dir ./my-edge -target http://127.0.0.1:3000
 ```
 
 Crea una instalación **nueva**: configuración, token privado referenciado por
@@ -21,10 +21,10 @@ El comando imprime las rutas y los comandos exactos de arranque, invitación y
 login del operador. Usa esas rutas; no copies credenciales a un chat.
 
 ```sh
-switchboard -config /ruta/my-edge/config.json -db /ruta/my-edge/state.db
+ozal -config /ruta/my-edge/config.json -db /ruta/my-edge/state.db
 # En otra terminal del mismo host:
-switchboard console enrol -config /ruta/my-edge/config.json
-switchboard user invite -config /ruta/my-edge/config.json \
+ozal console enrol -config /ruta/my-edge/config.json
+ozal user invite -config /ruta/my-edge/config.json \
   -email ana@example.com -group members -return-to http://localhost:8888/
 ```
 
@@ -32,7 +32,7 @@ El primer enlace abre una sesión administrativa privada; el segundo es una
 invitación de visitante. Son credenciales diferentes. Envía la invitación a
 su destinataria por un canal confiable. Con un segundo perfil del navegador,
 prueba que una persona sin `members` recibe una negativa. Que haya login no
-implica que esa persona pueda administrar Switchboard.
+implica que esa persona pueda administrar Ozal.
 
 Para un sitio estático, usa `setup -dir ./my-site -site portfolio`. La
 configuración ya tiene persistencia y Pages. La primera publicación aún falta:
@@ -51,9 +51,9 @@ El host abre la puerta una sola vez; después cada administrador entra con su
 propio passkey y no hace falta ningún comando en el host.
 
 ```sh
-sudo switchboard console enrol            # instalación con el servicio; por SSH imprime también el `ssh -N -L` para abrir el enlace
-SWITCHBOARD_CONFIG=/ruta/config.json switchboard console enrol   # config fuera de /etc/switchboard
-switchboard console enrol -config /ruta/my-edge/config.json   # arranque manual
+sudo ozal console enrol            # instalación con el servicio; por SSH imprime también el `ssh -N -L` para abrir el enlace
+OZAL_CONFIG=/ruta/config.json ozal console enrol   # config fuera de /etc/ozal
+ozal console enrol -config /ruta/my-edge/config.json   # arranque manual
 ```
 
 Imprime un enlace que sirve una vez durante diez minutos. Ábrelo en el
@@ -61,24 +61,24 @@ navegador que tiene el túnel; pide nombre completo y correo (no se envía
 ningún mensaje) y crea el passkey. Esa persona queda como la primera
 administradora, con todas las herramientas. Desde entonces la consola ofrece
 «Sign in with your passkey». Un passkey queda atado al nombre del sitio, y
-WebAuthn no admite direcciones IP: abre la consola como `http://switchboard.localhost:PUERTO`
+WebAuthn no admite direcciones IP: abre la consola como `http://ozal.localhost:PUERTO`
 (el extremo local del túnel), nunca como `127.0.0.1`.
 
-`switchboard.localhost` resuelve al equipo desde el navegador; no necesita un
+`ozal.localhost` resuelve al equipo desde el navegador; no necesita un
 registro DNS público ni cambiar el túnel SSH o el puerto del listener. Si otra
 herramienta usa el DNS del sistema y no resuelve el nombre, puedes añadir
-`127.0.0.1 switchboard.localhost` al archivo `hosts` de tu equipo. El navegador
+`127.0.0.1 ozal.localhost` al archivo `hosts` de tu equipo. El navegador
 permite las passkeys en este contexto local sin instalar un certificado TLS.
 
 **Pasar desde localhost:** las passkeys están vinculadas al nombre y no se
 copian al nuevo dominio. Inicia sesión en `http://localhost:PUERTO`, abre tu
 menú y elige **Sign in on another browser**. El enlace ya usa
-`switchboard.localhost`: ábrelo y crea una passkey para la misma cuenta.
+`ozal.localhost`: ábrelo y crea una passkey para la misma cuenta.
 Las passkeys anteriores siguen sirviendo en `localhost`. Si ya no puedes
 usarlas, recurre a la recuperación del host, que sí reemplaza las anteriores.
 
 Si pierdes el dispositivo, el host emite una recuperación:
-`sudo switchboard console recover -email tu@correo`. Revoca los passkeys
+`sudo ozal console recover -email tu@correo`. Revoca los passkeys
 anteriores de esa persona y crea uno nuevo con el enlace. Un segundo
 `console enrol` se rechaza mientras exista un administrador. Los administradores
 no son usuarios de aplicaciones: un passkey de visitante no abre la consola.
@@ -86,7 +86,7 @@ no son usuarios de aplicaciones: un passkey de visitante no abre la consola.
 Desde la consola, **Administrators** permite invitar a otra persona por correo con
 una parte de tus herramientas (nunca más de las que tú tienes), y deshabilitarla;
 sus sesiones abiertas terminan al instante. La invitación sirve una vez durante
-24 horas y la persona la abre como `switchboard.localhost` por su propio túnel SSH.
+24 horas y la persona la abre como `ozal.localhost` por su propio túnel SSH.
 
 `console login` y el token de admin siguen disponibles como vía de emergencia
 y automatización.
@@ -125,7 +125,7 @@ Para una VPS, prepara un transporte privado, por ejemplo:
 ```sh
 ssh -N -L 19090:127.0.0.1:9090 operador@tu-edge
 # En la terminal del edge, con autoridad sobre su socket:
-switchboard console login -config /etc/switchboard/config.json \
+ozal console login -config /etc/ozal/config.json \
   -name Octavio -url http://127.0.0.1:19090
 ```
 
@@ -141,7 +141,7 @@ ruta pública. El bootstrap no convierte al primer visitante en dueño.
    una aplicación en ejecución (URL privada), archivos estáticos o una app detrás
    de un conector ya enrolado. Con archivos estáticos subes el `tar.gz` de
    `dist` en el mismo paso: el nombre del sitio sale de la dirección (se puede
-   cambiar) y la primera publicación crea el sitio. Switchboard no compila.
+   cambiar) y la primera publicación crea el sitio. Ozal no compila.
 2. **Quién entra.** Un grupo, cualquier persona autenticada o público. Por
    defecto se pide un grupo; varios grupos significan **todos**. Opcionalmente
    escribes correos para invitar: cada persona recibe un enlace de un solo uso
@@ -179,7 +179,7 @@ siga abierto, **todavía puede eludirse la nueva política**.
 
 ```json
 "dns": { "target": "203.0.113.10", "proxied": true,
-         "cloudflare": { "token": "file:/etc/switchboard/cloudflare-dns.token" } }
+         "cloudflare": { "token": "file:/etc/ozal/cloudflare-dns.token" } }
 ```
 
 - **Origin Pulls a nivel de zona.** Detrás del proxy de Cloudflare, activa
@@ -211,7 +211,7 @@ dominio, desconecta primero su publicador en CI projects. Las referencias se val
 Un rollback de Pages activa un artefacto retenido; **no** revierte DNS, una base
 de datos ni un cambio del backend.
 
-Switchboard no inicia ni instala tu aplicación. Si ya tiene login, conserva
+Ozal no inicia ni instala tu aplicación. Si ya tiene login, conserva
 ese login hasta elegir y probar un contrato de [integración](../engineering.md#identidad-y-aplicaciones).
 No deshabilites permisos internos para ahorrar una pantalla.
 

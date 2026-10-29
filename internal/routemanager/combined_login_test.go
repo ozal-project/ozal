@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/config"
-	"github.com/switchboard-project/switchboard/internal/store/sqlite"
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/store/sqlite"
 )
 
 // ID-007 wiring: with auth.passkeys and an OIDC provider together, the

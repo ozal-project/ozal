@@ -273,7 +273,7 @@ func (c *CloudflareClient) CreateSiteRecord(ctx context.Context, record SiteReco
 // Cloudflare applies the deletes and the create together or not at all, so
 // the name is never left without an answer (a gap would be cached as
 // NXDOMAIN). This is the one call that replaces records; it exists for an
-// operator moving a live name (sbctl site cutover), never for the console.
+// operator moving a live name (ozalctl site cutover), never for the console.
 func (c *CloudflareClient) ReplaceSiteRecords(ctx context.Context, name string, remove []SiteRecord, add SiteRecord) error {
 	zoneID, err := c.zoneFor(ctx, name)
 	if err != nil {

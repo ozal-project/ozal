@@ -60,9 +60,9 @@ export function explainPasskeyError(e: unknown, phase: "sign-in" | "create" = "c
       : "The passkey prompt was closed or timed out before a passkey was saved. Try again.";
   }
   if (error?.name === "InvalidStateError") return "This browser already has a passkey for this account. Sign in with it instead.";
-  if (error?.name === "SecurityError") return "This browser refused the passkey for this address. Open the console as http://switchboard.localhost (not an IP address) and try again.";
+  if (error?.name === "SecurityError") return "This browser refused the passkey for this address. Open the console as http://ozal.localhost (not an IP address) and try again.";
   if (error?.name === "NotSupportedError") return "This browser cannot create this kind of passkey. Update it, or use another browser or your phone.";
-  if (typeof DOMException !== "undefined" && e instanceof DOMException) return `This browser could not use a passkey here (${error.name}). Open the console as http://switchboard.localhost and try again.`;
+  if (typeof DOMException !== "undefined" && e instanceof DOMException) return `This browser could not use a passkey here (${error.name}). Open the console as http://ozal.localhost and try again.`;
   return error?.message || "Something went wrong.";
 }
 
@@ -148,6 +148,6 @@ export async function enrolInfo(token: string): Promise<EnrolInfo> {
 // including when issued from a legacy localhost session.
 export function consoleOrigin(origin: string): string {
   const url = new URL(origin);
-  url.hostname = "switchboard.localhost";
+  url.hostname = "ozal.localhost";
   return url.origin;
 }

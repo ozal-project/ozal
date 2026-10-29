@@ -154,7 +154,7 @@
   const kinds = $derived<Choice[]>([
     ...(base ? [{ value: "keep", label: "Keep current destination", hint: "Only change who may enter.", icon: CheckIcon }] : []),
     { value: "backend", label: "Running application", hint: "A service reached by a private URL.", icon: ServerIcon },
-    { value: "static", label: "Static build", hint: status?.pages_enabled ? "Upload the built files; Switchboard serves them." : "Pages is not enabled on this edge.", icon: LayersIcon, disabled: !status?.pages_enabled },
+    { value: "static", label: "Static build", hint: status?.pages_enabled ? "Upload the built files; Ozal serves them." : "Pages is not enabled on this edge.", icon: LayersIcon, disabled: !status?.pages_enabled },
     { value: "connector", label: "Through a connector", hint: "A private host enrolled with a connector.", icon: PlugIcon },
   ]);
   const signIn = $derived(!!status?.methods.length);
@@ -179,7 +179,7 @@
   }[step]);
   const intros = $derived({
     1: "Its address and what serves it. Nothing changes for visitors until its DNS points here.",
-    2: "Switchboard checks this before anything reaches the website.",
+    2: "Ozal checks this before anything reaches the website.",
     3: "Nothing changes until you save.",
     4: "Application saved. Point its DNS here; this panel checks until a public request arrives.",
   }[step]);
@@ -203,7 +203,7 @@
   </div>
 {/snippet}
 
-<PageHeader title="Applications" intro="Websites behind Switchboard and who may open each one." tabs={[...(can("applications") ? [{ path: "/applications" as const, label: "Manage" }] : []), { path: "/routes" as const, label: "Routing & health" }]}>
+<PageHeader title="Applications" intro="Websites behind Ozal and who may open each one." tabs={[...(can("applications") ? [{ path: "/applications" as const, label: "Manage" }] : []), { path: "/routes" as const, label: "Routing & health" }]}>
   <Button variant="outline" size="sm" aria-label="Refresh configuration" onclick={load} disabled={loading}><RefreshIcon class={["size-3.5", loading && "animate-spin"]} /> Refresh</Button>
   <Button size="sm" onclick={() => edit(null)} disabled={!status || !!waiting}><PlusIcon class="size-3.5" /> Add website</Button>
 </PageHeader>
@@ -212,7 +212,7 @@
   <Panel title="Start with this installation" label="Setup">
     <p class="text-muted-foreground mb-4 text-sm">Sign in as admin (top right), then read the configuration. No visitor account becomes an administrator.</p>
     <Button onclick={load} disabled={loading}>{loading ? "Reading…" : "Read installation"}</Button>
-    <p class="text-muted-foreground mt-3 text-sm">For a fresh local installation, run <code>switchboard setup -dir ./my-edge</code> on its host. The generated guide covers identity, invitations, restart and recovery.</p>
+    <p class="text-muted-foreground mt-3 text-sm">For a fresh local installation, run <code>ozal setup -dir ./my-edge</code> on its host. The generated guide covers identity, invitations, restart and recovery.</p>
   </Panel>
 {:else}
   <Summary label="Applications summary" items={[
@@ -224,7 +224,7 @@
   {#if status.routes.length === 0}
     <div class="panel px-5 py-10 text-center">
       <p class="font-medium">No applications yet</p>
-      <p class="text-muted-foreground mx-auto mt-1 max-w-md text-sm">Add a website: its address, what serves it and who may enter. Switchboard then shows the one DNS record it needs and checks it.</p>
+      <p class="text-muted-foreground mx-auto mt-1 max-w-md text-sm">Add a website: its address, what serves it and who may enter. Ozal then shows the one DNS record it needs and checks it.</p>
       <Button class="mt-4" onclick={() => edit(null)}><PlusIcon class="size-4" /> Add website</Button>
     </div>
   {:else}
@@ -292,7 +292,7 @@
             <span class="bg-muted grid size-9 shrink-0 place-items-center rounded-lg"><FileArchiveIcon class="text-muted-foreground size-4" /></span>
             <span class="min-w-0 text-sm">
               {#if files}<span class="block truncate font-medium">{files.name}</span><span class="text-muted-foreground text-xs">{size(files.size)} · choose another</span>
-              {:else}<span class="block font-medium">{base?.site ? "Optionally replace the live build" : "Choose a tar.gz of your dist folder"}</span><span class="text-muted-foreground text-xs">Up to 100 MiB. Switchboard does not run build commands.</span>{/if}
+              {:else}<span class="block font-medium">{base?.site ? "Optionally replace the live build" : "Choose a tar.gz of your dist folder"}</span><span class="text-muted-foreground text-xs">Up to 100 MiB. Ozal does not run build commands.</span>{/if}
             </span>
             <input id="app-files" type="file" accept=".gz,.tgz" onchange={(e) => { const f = e.currentTarget.files?.[0] ?? null; files = f && f.size <= 100 * 1024 * 1024 ? f : null; if (f && !files) formError = "The archive is larger than 100 MiB."; }} class="sr-only" />
           </label>
@@ -331,7 +331,7 @@
           <p class="text-muted-foreground text-xs">{emails.length ? `${emails.length} ${emails.length === 1 ? "person" : "people"}: each` : "Each"} gets a one-time link to create a passkey{privacy === "groups" && chosen.length ? `, already in ${chosen.join(" and ")}` : ""}. You copy the links after saving.</p>
         </div>
       {/if}
-      <p class="text-muted-foreground border-t pt-4 text-xs">An app with its own login keeps that login; Switchboard’s gate does not grant its internal permissions.</p>
+      <p class="text-muted-foreground border-t pt-4 text-xs">An app with its own login keeps that login; Ozal’s gate does not grant its internal permissions.</p>
       {#if formError}<p class="text-destructive text-sm" role="alert">{formError}</p>{/if}
       <div class="flex flex-wrap justify-between gap-2">
         <Button type="button" variant="ghost" onclick={() => { step = 1; formError = ""; }}><ArrowLeftIcon class="size-4" /> Back</Button>

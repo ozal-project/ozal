@@ -146,7 +146,7 @@
   const total = $derived(sites?.reduce((n, s) => n + s.deployments.length, 0) ?? 0);
 </script>
 
-<PageHeader title="Sites" intro="Static sites served by Switchboard. Each version is kept whole, so going live or back is one switch.">
+<PageHeader title="Sites" intro="Static sites served by Ozal. Each version is kept whole, so going live or back is one switch.">
   <div class="flex flex-col items-start gap-2 sm:items-end">
     <Button variant="outline" size="sm" onclick={load} disabled={loading}><RefreshIcon class={["size-3.5", loading && "animate-spin"]} /> Refresh</Button>
     <Freshness observedAt={observedAt} refreshing={loading && sites !== null} error={error} />
@@ -155,7 +155,7 @@
 
 {#if disabled}
   <Panel label="Pages" title="Not enabled on this edge">
-    <p class="text-muted-foreground text-sm">Add a <code class="font-mono">pages</code> block (an absolute <code class="font-mono">dir</code>) and start Switchboard with <code class="font-mono">-db</code>. Routes then serve a deployment with <code class="font-mono">"site": "name"</code>.</p>
+    <p class="text-muted-foreground text-sm">Add a <code class="font-mono">pages</code> block (an absolute <code class="font-mono">dir</code>) and start Ozal with <code class="font-mono">-db</code>. Routes then serve a deployment with <code class="font-mono">"site": "name"</code>.</p>
   </Panel>
 {:else}
   <Summary label="Sites summary" items={[{ value: sites ? sites.length : "—", label: "sites" }, { value: sites ? total : "—", label: "versions kept for rollback" }]} />

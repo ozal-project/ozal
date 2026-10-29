@@ -13,7 +13,7 @@ import (
 
 func openTestDB(t *testing.T) (*sql.DB, string) {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "switchboard.db")
+	path := filepath.Join(t.TempDir(), "ozal.db")
 	db, err := Open(context.Background(), path)
 	if err != nil {
 		t.Fatalf("Open: %v", err)

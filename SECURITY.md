@@ -1,6 +1,6 @@
 # Security policy
 
-Switchboard is an alpha project and the only supported code is the latest
+Ozal is an alpha project and the only supported code is the latest
 `main` and the most recent tagged release. Older tags do not receive fixes.
 
 ## Reporting a vulnerability
@@ -35,6 +35,6 @@ and installers in this repository.
 
 Out of scope: weaknesses that need an already-compromised host or administrator
 account, denial of service by raw traffic volume, and the behavior of
-applications placed behind Switchboard (it does not replace their own
+applications placed behind Ozal (it does not replace their own
 authorization). The deployment limits are described in
 [docs/security.md](docs/security.md).

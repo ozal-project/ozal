@@ -1,9 +1,9 @@
 {
-  "name": "switchboard-console",
+  "name": "ozal-console",
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "Switchboard admin console. Build-time only: the output is embedded in the Go binary.",
+  "description": "Ozal admin console. Build-time only: the output is embedded in the Go binary.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/auth"
-	"github.com/switchboard-project/switchboard/internal/config"
-	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/ozal-project/ozal/internal/auth"
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/events"
 )
 
 // Host sessions behind the central login (ID-015). A protected host the

@@ -19,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/domaincheck"
+	"github.com/ozal-project/ozal/internal/domaincheck"
 )
 
 // Path is the prefix the public listener answers before any routing.

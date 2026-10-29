@@ -1,4 +1,4 @@
-// Package sqlite is Switchboard's persistent state store: an embedded SQLite
+// Package sqlite is Ozal's persistent state store: an embedded SQLite
 // database whose schema is defined by numbered, immutable migrations.
 package sqlite
 

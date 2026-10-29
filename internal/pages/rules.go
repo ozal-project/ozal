@@ -242,7 +242,7 @@ func placeholderIn(s string, from pattern) bool {
 // forbiddenHeaders are headers a site may not set: framing and hop-by-hop
 // headers belong to the server, a redirect belongs in _redirects, and a
 // cookie set by one site under the shared parent domain could plant a
-// session cookie for every other host Switchboard serves there.
+// session cookie for every other host Ozal serves there.
 var forbiddenHeaders = map[string]bool{
 	"Connection": true, "Content-Length": true, "Content-Encoding": true,
 	"Keep-Alive": true, "Proxy-Authenticate": true, "Proxy-Connection": true,

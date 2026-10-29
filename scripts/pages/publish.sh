@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Uploads a site archive to Switchboard's deploy endpoint with a GitHub
+# Uploads a site archive to Ozal's deploy endpoint with a GitHub
 # Actions OIDC token, then confirms the deployment through its status. The job
 # needs `permissions: id-token: write`; no deploy secret is stored anywhere.
 # Writes the deployment JSON to RESULT_FILE. Stdout carries only the runner's
@@ -15,7 +15,7 @@ result=${2:?usage: publish.sh ARCHIVE RESULT_FILE}
 : "${ACTIONS_ID_TOKEN_REQUEST_URL:?the job needs permissions: id-token: write}"
 : "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:?the job needs permissions: id-token: write}"
 
-# The audience is the endpoint itself: Switchboard refuses tokens minted for
+# The audience is the endpoint itself: Ozal refuses tokens minted for
 # anything else.
 audience=$(jq -rn --arg value "$DEPLOY_ENDPOINT" '$value | @uri')
 token=$(curl -sSf --max-time 20 --config - "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${audience}" \
@@ -33,7 +33,7 @@ code=${response##*$'\n'}
 body=${response%$'\n'*}
 if [ "$code" != 201 ]; then
 	refusal=$(jq -r '.code // empty' <<<"$body" 2>/dev/null || true)
-	echo "deploy refused: HTTP ${code} ${refusal:-(no Switchboard code: a proxy answered?)}" >&2
+	echo "deploy refused: HTTP ${code} ${refusal:-(no Ozal code: a proxy answered?)}" >&2
 	if [ -z "$refusal" ]; then
 		# Who answered: a Cloudflare challenge carries cf-mitigated, the edge does not.
 		grep -iE '^(server|cf-mitigated|cf-ray|content-type):' "$headers" | tr -d '\r' >&2 || true

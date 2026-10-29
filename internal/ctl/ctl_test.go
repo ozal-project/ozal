@@ -16,16 +16,16 @@ func goodTarget() Target {
 	return Target{
 		SSH: SSH{Target: "deploy@edge.example.net", Key: "~/.ssh/k"},
 		Edge: Edge{
-			Unit: "switchboard", ServiceUser: "switchboard", Binary: "/usr/local/lib/switchboard/switchboard",
-			Config: "/etc/switchboard/routing.json", StateDB: "/var/lib/switchboard/state.db",
-			Stage: "/home/deploy/stage", Lock: "/home/deploy/lock", CommandLink: "/usr/local/bin/switchboard",
+			Unit: "ozal", ServiceUser: "ozal", Binary: "/usr/local/lib/ozal/ozal",
+			Config: "/etc/ozal/routing.json", StateDB: "/var/lib/ozal/state.db",
+			Stage: "/home/deploy/stage", Lock: "/home/deploy/lock", CommandLink: "/usr/local/bin/ozal",
 		},
 	}
 }
 
 func TestValidateRefusesUnsafeValues(t *testing.T) {
 	for name, mutate := range map[string]func(*Target){
-		"relative binary":  func(x *Target) { x.Edge.Binary = "bin/switchboard" },
+		"relative binary":  func(x *Target) { x.Edge.Binary = "bin/ozal" },
 		"public admin":     func(x *Target) { x.Edge.Admin = "0.0.0.0:9091" },
 		"admin by name":    func(x *Target) { x.Edge.Admin = "edge.example.net:9091" },
 		"relative socket":  func(x *Target) { x.Edge.Socket = "run/admin.sock" },
@@ -94,10 +94,18 @@ func TestOutcomeMapsExitCodes(t *testing.T) {
 }
 
 func TestUpgradeCommandCarriesTheLayout(t *testing.T) {
-	cmd := UpgradeCommand(goodTarget().Edge, "/home/deploy/stage/switchboard.next", "abc")
-	for _, want := range []string{"'-unit' 'switchboard'", "'-binary' '/usr/local/lib/switchboard/switchboard'", "'-keep' '3'", "'/usr/local/bin/switchboard'"} {
+	cmd := UpgradeCommand(goodTarget().Edge, "/home/deploy/stage/ozal.next", "abc")
+	for _, want := range []string{"'-unit' 'ozal'", "'-binary' '/usr/local/lib/ozal/ozal'", "'-keep' '3'", "'/usr/local/bin/ozal'"} {
 		if !strings.Contains(cmd, want) {
 			t.Fatalf("missing %s in %s", want, cmd)
+		}
+	}
+}
+
+func TestBackupNameUsesTheInstalledBinaryName(t *testing.T) {
+	for _, binary := range []string{"ozal", "switchboard", "custom-edge"} {
+		if got := BackupName("/opt/edge/"+binary, "0123456789abcdef"); got != binary+".bak-0123456789ab" {
+			t.Fatalf("backup for %s = %s", binary, got)
 		}
 	}
 }
@@ -125,7 +133,7 @@ func (f *fakeRemote) Run(_ context.Context, command string, stdin io.Reader) (st
 	f.ran = append(f.ran, command)
 	switch {
 	case strings.HasPrefix(command, "sha256sum '/usr/local/lib"):
-		return f.live + "  /usr/local/lib/switchboard/switchboard\n", nil
+		return f.live + "  /usr/local/lib/ozal/ozal\n", nil
 	case strings.Contains(command, "mkdir '/home/deploy/lock'"):
 		return f.lock, nil
 	case strings.Contains(command, "gzip -dc"):
@@ -212,7 +220,7 @@ func TestApplyOrderAndLockRelease(t *testing.T) {
 // cannot read, and never validates the live file directly.
 func TestUpgradeValidatesTheRootSettingsWhenRoutesAreTheServices(t *testing.T) {
 	r := &fakeRemote{live: "old", lock: "taken\n", uploadSHA: sha(data), terminal: true,
-		config: `{"listen":"127.0.0.1:8080","runtime_file":"/var/lib/switchboard/runtime.json"}`}
+		config: `{"listen":"127.0.0.1:8080","runtime_file":"/var/lib/ozal/runtime.json"}`}
 	if err := Upgrade(context.Background(), io.Discard, r, fakeBuilder{bin: Binary{Data: data, Commit: "c"}}, newRun(true)); err != nil {
 		t.Fatal(err)
 	}
@@ -220,7 +228,7 @@ func TestUpgradeValidatesTheRootSettingsWhenRoutesAreTheServices(t *testing.T) {
 		t.Fatalf("staged check = %q", r.checked)
 	}
 	for _, c := range r.ran {
-		if strings.Contains(c, "validate -config '/etc/switchboard/routing.json'") {
+		if strings.Contains(c, "validate -config '/etc/ozal/routing.json'") {
 			t.Fatal("validated the live config whose runtime file the SSH user cannot read")
 		}
 	}
@@ -229,7 +237,7 @@ func TestUpgradeValidatesTheRootSettingsWhenRoutesAreTheServices(t *testing.T) {
 	if err := Upgrade(context.Background(), io.Discard, plain, fakeBuilder{bin: Binary{Data: data, Commit: "c"}}, newRun(true)); err != nil {
 		t.Fatal(err)
 	}
-	if plain.checked != "" || !slices.ContainsFunc(plain.ran, func(c string) bool { return strings.Contains(c, "validate -config '/etc/switchboard/routing.json'") }) {
+	if plain.checked != "" || !slices.ContainsFunc(plain.ran, func(c string) bool { return strings.Contains(c, "validate -config '/etc/ozal/routing.json'") }) {
 		t.Fatal("a config without runtime_file was not validated as it is")
 	}
 	if _, _, err := RootCheck([]byte(`{"listen":"x","nope":1}`)); err == nil {
@@ -302,7 +310,7 @@ func TestRootScriptChecksHashRunsCopyAndLinks(t *testing.T) {
 		t.Fatalf("expected a run: %d %s", code, out)
 	}
 	wrapper, err := os.ReadFile(dir + "/link")
-	if err != nil || !strings.Contains(string(wrapper), "managed by sbctl") ||
+	if err != nil || !strings.Contains(string(wrapper), "managed by ozalctl") ||
 		!strings.Contains(string(wrapper), "/etc/x/routing.json") || !strings.Contains(string(wrapper), "exec "+dir+"/real") {
 		t.Fatalf("wrapper not written: %v %q", err, wrapper)
 	}
@@ -311,7 +319,7 @@ func TestRootScriptChecksHashRunsCopyAndLinks(t *testing.T) {
 	}
 	runRoot(t, dir, sum, dir+"/foreign", "0")
 	if got, _ := os.ReadFile(dir + "/foreign"); string(got) != "mine" {
-		t.Fatal("a file sbctl did not write was replaced")
+		t.Fatal("a file ozalctl did not write was replaced")
 	}
 	os.Remove(dir + "/link")
 	if _, code := runRoot(t, dir, sum, dir+"/link", "3"); code != 3 {

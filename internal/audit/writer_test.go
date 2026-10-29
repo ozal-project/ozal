@@ -18,8 +18,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/events"
-	"github.com/switchboard-project/switchboard/internal/policycontext"
+	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/policycontext"
 )
 
 func TestAppendWritesSafeRecordAndReopensChain(t *testing.T) {
@@ -408,7 +408,7 @@ func TestProcessKillAfterAppendCanRestartAndVerify(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "audit")
 	readyPath := filepath.Join(filepath.Dir(dir), "writer-ready")
 	cmd := exec.Command(os.Args[0], "-test.run=^TestAuditProcessCrashHelper$")
-	cmd.Env = append(os.Environ(), "SWITCHBOARD_AUDIT_CRASH_TEST_DIR="+dir)
+	cmd.Env = append(os.Environ(), "OZAL_AUDIT_CRASH_TEST_DIR="+dir)
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output
@@ -478,7 +478,7 @@ func TestProcessKillAfterAppendCanRestartAndVerify(t *testing.T) {
 // TestProcessKillAfterAppendCanRestartAndVerify. It deliberately leaves the
 // writer open so the parent can kill the process after Append has fsynced.
 func TestAuditProcessCrashHelper(t *testing.T) {
-	dir := os.Getenv("SWITCHBOARD_AUDIT_CRASH_TEST_DIR")
+	dir := os.Getenv("OZAL_AUDIT_CRASH_TEST_DIR")
 	if dir == "" {
 		return
 	}

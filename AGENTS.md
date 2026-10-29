@@ -1,6 +1,6 @@
 # AGENTS.md
 
-The single instruction file for any coding agent working on Switchboard.
+The single instruction file for any coding agent working on Ozal.
 
 ## Required context
 
@@ -18,7 +18,7 @@ report the difference before making a broad change.
 
 ## What this is
 
-Switchboard is a year-long open-source project (October 2026 –
+Ozal is a year-long open-source project (October 2026 –
 September 2027): a self-hostable **transparent zero-trust access platform**
 in a single Go binary. Today it is a host-based reverse proxy with health
 checks, ACME TLS, OIDC login against an external provider, per-route claim
@@ -31,7 +31,7 @@ It is dogfooded on `octaviosantacruz.com`. It is not a commercial product.
 
 ## Boundary with Server Ops
 
-Switchboard is the **trust plane** (identity, policy, access decisions, tunnels,
+Ozal is the **trust plane** (identity, policy, access decisions, tunnels,
 verifiable log). Server Ops is the **host plane** (processes, systemd units,
 ports, databases, backups, service health). Do not add a service-health or
 process-control dashboard here, and do not copy `server-ops/ports.json`.
@@ -41,7 +41,7 @@ the workspace `TO_IMPLEMENT.md`.
 ## Commands
 
 ```bash
-go run ./cmd/switchboard -config config.json   # run locally
+go run ./cmd/ozal -config config.json   # run locally
 go test -race ./...                            # all tests
 go test -race ./internal/auth -run TestName    # one test
 go test ./internal/config -fuzz FuzzName       # a fuzz target
@@ -52,7 +52,7 @@ scripts/verify.sh                              # full gate before reporting done
 
 ## Code map (current)
 
-- `cmd/switchboard/` — composition root: flags, listeners, signals, shutdown.
+- `cmd/ozal/` — composition root: flags, listeners, signals, shutdown.
 - `internal/config/` — parse, validate and normalize config; atomic persistence.
 - `internal/auth/` — `Principal`, pure `Authorize`, OIDC `Gate`, session and
   pending-login stores.
@@ -76,7 +76,7 @@ it, never as a standalone big-bang refactor.
   SDKs; interfaces are small and declared by the consumer.
 - The request pipeline order (trust → ratelimit → shield → identify →
   authorize → route → forward) lives in one place; every stage emits an event.
-- `cmd/switchboard` is the only composition root. No globals, no `init()` side
+- `cmd/ozal` is the only composition root. No globals, no `init()` side
   effects.
 - `context.Context` first for blocking work; every goroutine is cancellable.
 

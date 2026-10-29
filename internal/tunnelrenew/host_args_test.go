@@ -40,12 +40,12 @@ func TestAgentLayouts(t *testing.T) {
 	if user.config() != filepath.Join("home", "u", ".local/share/switchboard-tunnel-connector", "config.integrated.json") {
 		t.Fatalf("user config = %q", user.config())
 	}
-	system := Agent{Role: "edge", Dir: "/var/lib/e", Config: "/etc/e/config.json", Binary: "/usr/local/lib/e/switchboard", Unit: "switchboard-tunnel-edge"}
+	system := Agent{Role: "edge", Dir: "/var/lib/e", Config: "/etc/e/config.json", Binary: "/usr/local/lib/e/ozal", Unit: "ozal-tunnel-edge"}
 	// The sudoers rule matches this exact argv.
-	if got := system.restartCommand(); !slices.Equal(got, []string{"sudo", "-n", "/usr/bin/systemctl", "restart", "switchboard-tunnel-edge"}) {
+	if got := system.restartCommand(); !slices.Equal(got, []string{"sudo", "-n", "/usr/bin/systemctl", "restart", "ozal-tunnel-edge"}) {
 		t.Fatalf("system unit restart = %q", got)
 	}
-	if system.base() != "/var/lib/e" || system.config() != "/etc/e/config.json" || system.binary() != "/usr/local/lib/e/switchboard" {
+	if system.base() != "/var/lib/e" || system.config() != "/etc/e/config.json" || system.binary() != "/usr/local/lib/e/ozal" {
 		t.Fatalf("system layout = %q %q %q", system.base(), system.config(), system.binary())
 	}
 }

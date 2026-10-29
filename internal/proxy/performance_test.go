@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/switchboard-project/switchboard/internal/audit"
-	"github.com/switchboard-project/switchboard/internal/auth"
-	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/ozal-project/ozal/internal/audit"
+	"github.com/ozal-project/ozal/internal/auth"
+	"github.com/ozal-project/ozal/internal/config"
 )
 
 type benchmarkRoundTripper struct{}

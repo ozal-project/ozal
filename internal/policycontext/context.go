@@ -20,7 +20,7 @@ const (
 	SourceRouteConfig         = "route_config"
 	SourceHTTPRequest         = "http_request"
 	SourceSimulationInput     = "simulation_input"
-	SourceClassifier          = "switchboard_classifier"
+	SourceClassifier          = "ozal_classifier"
 
 	ArrivalDirect  = "direct"
 	ArrivalProxy   = "trusted_proxy"

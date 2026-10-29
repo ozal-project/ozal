@@ -14,12 +14,12 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/switchboard-project/switchboard/internal/config"
-	"github.com/switchboard-project/switchboard/internal/events"
-	"github.com/switchboard-project/switchboard/internal/pages"
-	"github.com/switchboard-project/switchboard/internal/pages/deployauth"
-	"github.com/switchboard-project/switchboard/internal/pipeline"
-	"github.com/switchboard-project/switchboard/internal/ratelimit"
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/pages"
+	"github.com/ozal-project/ozal/internal/pages/deployauth"
+	"github.com/ozal-project/ozal/internal/pipeline"
+	"github.com/ozal-project/ozal/internal/ratelimit"
 )
 
 type Store interface {

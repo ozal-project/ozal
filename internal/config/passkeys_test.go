@@ -24,7 +24,7 @@ func TestPasskeysValidateAndNormalize(t *testing.T) {
 		t.Fatal(err)
 	}
 	pk := cfg.Auth.Passkeys
-	if pk.RPID != "example.com" || pk.LoginURL != "https://auth.example.com" || pk.DisplayName != "Switchboard" {
+	if pk.RPID != "example.com" || pk.LoginURL != "https://auth.example.com" || pk.DisplayName != "Ozal" {
 		t.Fatalf("normalized = %+v", *pk)
 	}
 	if source.Auth.Passkeys.RPID != "Example.com" {
@@ -84,7 +84,7 @@ func TestPasskeysAcceptProtectedHostsOutsideTheCookie(t *testing.T) {
 	}
 }
 
-// Step-up needs a login Switchboard itself performs: an upstream provider's
+// Step-up needs a login Ozal itself performs: an upstream provider's
 // single sign-on would answer without a fresh proof.
 func TestMaxAuthAgeValidation(t *testing.T) {
 	ok := passkeyConfig()

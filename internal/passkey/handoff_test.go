@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/auth"
-	"github.com/switchboard-project/switchboard/internal/events"
-	"github.com/switchboard-project/switchboard/internal/store/sqlite"
+	"github.com/ozal-project/ozal/internal/auth"
+	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/store/sqlite"
 )
 
 // Two applications on domains the central cookie (example.test) cannot

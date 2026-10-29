@@ -17,7 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/ozal-project/ozal/internal/events"
 )
 
 // Default timing for the renewal loop. The first failure backs off a couple
@@ -175,7 +175,7 @@ func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 // Run owns the renewal loop until ctx is cancelled. It first recovers
 // persisted state — the last complete generation and any DNS cleanup left
 // behind — then attempts issuance whenever one is due, with backoff on
-// failure. cmd/switchboard runs it in a goroutine and joins it through the
+// failure. cmd/ozal runs it in a goroutine and joins it through the
 // same context that stops the listeners.
 func (m *Manager) Run(ctx context.Context) {
 	m.startup(ctx)

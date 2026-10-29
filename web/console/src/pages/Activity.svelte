@@ -139,7 +139,7 @@
 {#if feed.missed > 0 || feed.restarted}
   <div class="border-warning/40 bg-warning/[0.06] mb-6 rounded-lg border px-4 py-3 text-sm" role="status">
     {#if feed.missed > 0}<p><strong>{feed.missed} {feed.missed === 1 ? "event" : "events"} missed</strong> by this view (a slow connection, or history the server no longer holds): the table is incomplete. It is a live view, not an audit log.</p>{/if}
-    {#if feed.restarted}<p>Switchboard restarted while this view was open; earlier rows are from the previous run.</p>{/if}
+    {#if feed.restarted}<p>Ozal restarted while this view was open; earlier rows are from the previous run.</p>{/if}
   </div>
 {/if}
 

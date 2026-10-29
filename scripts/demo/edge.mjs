@@ -1,4 +1,4 @@
-// A real Switchboard edge on loopback with demo data, for reviewing the console
+// A real Ozal edge on loopback with demo data, for reviewing the console
 // and recording the tour (SITE-004). Nothing here is mocked: the binary is the
 // one built from this tree, the upstreams are small HTTP servers, and the
 // events, deployments and invitations are made through the real admin API.
@@ -59,8 +59,8 @@ function archive(dir, files) {
 
 // extraRoutes are appended to the demo routes, for scripts that need a host
 // the demo does not have (an app on another domain, for instance).
-export async function startDemoEdge({ binary, dir = join(homedir(), ".cache", "switchboard-demo"), adminSocket = false, extraRoutes = [] } = {}) {
-  if (!binary || !existsSync(binary)) throw new Error("pass the switchboard binary (--binary)");
+export async function startDemoEdge({ binary, dir = join(homedir(), ".cache", "ozal-demo"), adminSocket = false, extraRoutes = [] } = {}) {
+  if (!binary || !existsSync(binary)) throw new Error("pass the ozal binary (--binary)");
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(join(dir, "sites"), { recursive: true });
   const token = "demo-" + Math.random().toString(36).slice(2, 12);
@@ -122,7 +122,7 @@ export async function startDemoEdge({ binary, dir = join(homedir(), ".cache", "s
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const arg = (flag, fallback) => (process.argv.includes(flag) ? process.argv[process.argv.indexOf(flag) + 1] : fallback);
-  const binary = resolve(arg("--binary", "switchboard"));
+  const binary = resolve(arg("--binary", "ozal"));
   const edge = await startDemoEdge({ binary, dir: arg("--dir", undefined) });
   console.log(`demo edge ready\n  console  ${edge.consoleURL}/\n  apps     ${["grafana", "billing", "wiki", "blog", "docs"].map(edge.appURL).join("  ")}\n  login    ${LOGIN}/_/auth/login\n  token    ${edge.token}\nCtrl-C stops it.`);
   process.on("SIGINT", async () => { await edge.stop(); process.exit(0); });

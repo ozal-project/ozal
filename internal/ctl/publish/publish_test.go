@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/ctl"
+	"github.com/ozal-project/ozal/internal/ctl"
 )
 
 // fakeEdge is the admin API (sites token only) and the public site it serves.

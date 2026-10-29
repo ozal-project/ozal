@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/ozal-project/ozal/internal/events"
 )
 
 func TestPairingCodesAreTypableAndUnique(t *testing.T) {
@@ -47,7 +47,7 @@ func TestPairCommand(t *testing.T) {
 	}{
 		{"/pair " + valid, valid, true},
 		{"/pair " + strings.ToLower(valid), valid, true},
-		{"/pair@switchboard_bot " + valid, valid, true},
+		{"/pair@ozal_bot " + valid, valid, true},
 		{"/pair", "", false},
 		{"/pair " + valid + " extra", "", false},
 		{"pair " + valid, "", false},
@@ -285,7 +285,7 @@ func TestAlertSinkMapsLoginsAndAdminChanges(t *testing.T) {
 	defer notifier.mu.Unlock()
 	var sawRouteCreateFailure, sawRouteDeleteFailure, sawReloadFailure bool
 	for _, message := range notifier.messages {
-		if !strings.Contains(message.Text, "Switchboard:") || strings.Contains(message.Text, "reason") {
+		if !strings.Contains(message.Text, "Ozal:") || strings.Contains(message.Text, "reason") {
 			t.Fatalf("message = %q", message.Text)
 		}
 		if strings.Contains(message.Text, "route.create_failed") {

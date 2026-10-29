@@ -2,7 +2,7 @@ package admin
 
 import (
 	"context"
-	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/ozal-project/ozal/internal/events"
 	"net/http"
 	"strings"
 	"testing"

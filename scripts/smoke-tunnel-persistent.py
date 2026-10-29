@@ -46,7 +46,7 @@ def main():
             time.sleep(0.05)
         raise AssertionError("persistent tunnel smoke timed out")
 
-    with tempfile.TemporaryDirectory(prefix="switchboard-persistent-smoke-") as scratch:
+    with tempfile.TemporaryDirectory(prefix="ozal-persistent-smoke-") as scratch:
         directory = Path(scratch)
         pki = directory / "pki"
         db = str(directory / "state.db")

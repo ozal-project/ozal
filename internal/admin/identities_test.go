@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/config"
-	"github.com/switchboard-project/switchboard/internal/events"
-	"github.com/switchboard-project/switchboard/internal/store/sqlite"
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/store/sqlite"
 )
 
-const consoleOrigin = "http://switchboard.localhost:9091"
+const consoleOrigin = "http://ozal.localhost:9091"
 
 func identityHandler(t *testing.T, extra ...Option) (*Handler, *events.Recorder) {
 	t.Helper()
@@ -86,24 +86,24 @@ func decode(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 // enrol runs the whole browser side of a registration and returns the response.
 func enrol(t *testing.T, h *Handler, device *virtualAuthenticator, token, name, email string) *httptest.ResponseRecorder {
 	t.Helper()
-	begin := browser(h, "switchboard.localhost:9091", "/_/api/admin/enrol/begin", "", map[string]string{"token": token, "name": name, "email": email})
+	begin := browser(h, "ozal.localhost:9091", "/_/api/admin/enrol/begin", "", map[string]string{"token": token, "name": name, "email": email})
 	if begin.Code != http.StatusOK {
 		return begin
 	}
 	started := decode(t, begin)
 	credential := device.create(t, started["options"].(map[string]any), consoleOrigin)
-	return browser(h, "switchboard.localhost:9091", "/_/api/admin/enrol/finish", started["ceremony"].(string), credential)
+	return browser(h, "ozal.localhost:9091", "/_/api/admin/enrol/finish", started["ceremony"].(string), credential)
 }
 
 func signIn(t *testing.T, h *Handler, device *virtualAuthenticator) *httptest.ResponseRecorder {
 	t.Helper()
-	begin := browser(h, "switchboard.localhost:9091", "/_/api/admin/login/begin", "", map[string]string{})
+	begin := browser(h, "ozal.localhost:9091", "/_/api/admin/login/begin", "", map[string]string{})
 	if begin.Code != http.StatusOK {
 		return begin
 	}
 	started := decode(t, begin)
 	assertion := device.get(t, started["options"].(map[string]any), consoleOrigin)
-	return browser(h, "switchboard.localhost:9091", "/_/api/admin/login/finish", started["ceremony"].(string), assertion)
+	return browser(h, "ozal.localhost:9091", "/_/api/admin/login/finish", started["ceremony"].(string), assertion)
 }
 
 func TestFirstAdministratorEnrolsOnceAndGetsEveryTool(t *testing.T) {
@@ -161,8 +161,8 @@ func TestAdminPasskeysRefuseAnIPAddressAndAForeignOrigin(t *testing.T) {
 	if rec := browser(h, "127.0.0.1:9091", "/_/api/admin/login/begin", "", map[string]string{}); rec.Code != http.StatusBadRequest {
 		t.Fatalf("login on an IP address = %d, want 400", rec.Code)
 	}
-	req := httptest.NewRequest(http.MethodPost, "http://switchboard.localhost:9091/_/api/admin/login/begin", bytes.NewReader([]byte("{}")))
-	req.Host = "switchboard.localhost:9091"
+	req := httptest.NewRequest(http.MethodPost, "http://ozal.localhost:9091/_/api/admin/login/begin", bytes.NewReader([]byte("{}")))
+	req.Host = "ozal.localhost:9091"
 	req.Header.Set("Origin", "http://evil.example")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -184,7 +184,7 @@ func TestEnrolmentIssuingIsHostOnly(t *testing.T) {
 
 func TestUnknownEnrolmentTokenIsRefused(t *testing.T) {
 	h, _ := identityHandler(t)
-	begin := browser(h, "switchboard.localhost:9091", "/_/api/admin/enrol/begin", "", map[string]string{"token": "not-a-real-token", "name": "X", "email": "x@example.com"})
+	begin := browser(h, "ozal.localhost:9091", "/_/api/admin/enrol/begin", "", map[string]string{"token": "not-a-real-token", "name": "X", "email": "x@example.com"})
 	if begin.Code != http.StatusUnauthorized {
 		t.Fatalf("unknown token = %d, want 401", begin.Code)
 	}
@@ -352,16 +352,16 @@ func TestDisablingAnAdministratorEndsTheirSessionAndGuardsTheLastManager(t *test
 }
 
 func TestStateShowsTheHostCommandOnlyBeforeTheFirstAdministrator(t *testing.T) {
-	h, _ := identityHandler(t, WithEnrolCommand("sudo switchboard console enrol -config /etc/x/routing.json"))
-	before := decode(t, requestWithHost(h, "switchboard.localhost:9091", http.MethodGet, "/_/api/admin/state", "", ""))
-	if before["enrol_command"] != "sudo switchboard console enrol -config /etc/x/routing.json" {
+	h, _ := identityHandler(t, WithEnrolCommand("sudo ozal console enrol -config /etc/x/routing.json"))
+	before := decode(t, requestWithHost(h, "ozal.localhost:9091", http.MethodGet, "/_/api/admin/state", "", ""))
+	if before["enrol_command"] != "sudo ozal console enrol -config /etc/x/routing.json" {
 		t.Fatalf("command missing before enrolment: %v", before)
 	}
 	token, _ := hostEnrolment(t, h, "bootstrap", "")
 	if rec := enrol(t, h, newAuthenticator(t), token, "Octavio", "octavio@example.com"); rec.Code != http.StatusOK {
 		t.Fatalf("enrol = %d", rec.Code)
 	}
-	after := decode(t, requestWithHost(h, "switchboard.localhost:9091", http.MethodGet, "/_/api/admin/state", "", ""))
+	after := decode(t, requestWithHost(h, "ozal.localhost:9091", http.MethodGet, "/_/api/admin/state", "", ""))
 	if _, leaked := after["enrol_command"]; leaked {
 		t.Fatalf("host paths still shown after enrolment: %v", after)
 	}
@@ -371,13 +371,13 @@ func TestStateShowsTheHostCommandOnlyBeforeTheFirstAdministrator(t *testing.T) {
 // administrator.
 func addPasskey(t *testing.T, h *Handler, session string, device *virtualAuthenticator) *httptest.ResponseRecorder {
 	t.Helper()
-	begin := browserAs(h, "switchboard.localhost:9091", "/_/api/admin/passkeys/begin", "", session, map[string]string{})
+	begin := browserAs(h, "ozal.localhost:9091", "/_/api/admin/passkeys/begin", "", session, map[string]string{})
 	if begin.Code != http.StatusOK {
 		return begin
 	}
 	started := decode(t, begin)
 	credential := device.create(t, started["options"].(map[string]any), consoleOrigin)
-	return browserAs(h, "switchboard.localhost:9091", "/_/api/admin/passkeys/finish", started["ceremony"].(string), session, credential)
+	return browserAs(h, "ozal.localhost:9091", "/_/api/admin/passkeys/finish", started["ceremony"].(string), session, credential)
 }
 
 func TestAdministratorAddsASecondPasskeyAndEitherSignsIn(t *testing.T) {
@@ -387,7 +387,7 @@ func TestAdministratorAddsASecondPasskeyAndEitherSignsIn(t *testing.T) {
 	rec := enrol(t, h, first, token, "Octavio", "octavio@example.com")
 	session := decode(t, rec)["token"].(string)
 
-	if rec := browserAs(h, "switchboard.localhost:9091", "/_/api/admin/passkeys/begin", "", "", map[string]string{}); rec.Code == http.StatusOK {
+	if rec := browserAs(h, "ozal.localhost:9091", "/_/api/admin/passkeys/begin", "", "", map[string]string{}); rec.Code == http.StatusOK {
 		t.Fatal("a passkey was added without a session")
 	}
 	second := newAuthenticator(t)
@@ -400,7 +400,7 @@ func TestAdministratorAddsASecondPasskeyAndEitherSignsIn(t *testing.T) {
 		}
 	}
 	// A session that did not come from a passkey (the admin token) has no account to add to.
-	if rec := browserAs(h, "switchboard.localhost:9091", "/_/api/admin/passkeys/begin", "", "secret", map[string]string{}); rec.Code != http.StatusForbidden {
+	if rec := browserAs(h, "ozal.localhost:9091", "/_/api/admin/passkeys/begin", "", "secret", map[string]string{}); rec.Code != http.StatusForbidden {
 		t.Fatalf("admin token added a passkey: %d", rec.Code)
 	}
 }
@@ -514,16 +514,16 @@ func TestPasskeyAddedAfterTheSessionWasRevokedIsRefused(t *testing.T) {
 	if !ok {
 		t.Fatal("session not recognised")
 	}
-	begin := browserAs(h, "switchboard.localhost:9091", "/_/api/admin/passkeys/begin", "", session, map[string]string{})
+	begin := browserAs(h, "ozal.localhost:9091", "/_/api/admin/passkeys/begin", "", session, map[string]string{})
 	started := decode(t, begin)
 	credential := newAuthenticator(t).create(t, started["options"].(map[string]any), consoleOrigin)
 
 	// The request passes every check and waits for the identity lock, which a
 	// recovery holds while it revokes the account's sessions.
 	raw, _ := json.Marshal(credential)
-	req := httptest.NewRequest(http.MethodPost, "http://switchboard.localhost:9091/_/api/admin/passkeys/finish", bytes.NewReader(raw))
-	req.Host = "switchboard.localhost:9091"
-	req.Header.Set("Origin", "http://switchboard.localhost:9091")
+	req := httptest.NewRequest(http.MethodPost, "http://ozal.localhost:9091/_/api/admin/passkeys/finish", bytes.NewReader(raw))
+	req.Host = "ozal.localhost:9091"
+	req.Header.Set("Origin", "http://ozal.localhost:9091")
 	req.Header.Set(adminCeremony, started["ceremony"].(string))
 	req = req.WithContext(context.WithValue(req.Context(), operatorKey{}, grant))
 	rec := httptest.NewRecorder()
@@ -543,7 +543,7 @@ func TestEnrolInfoTellsTheFormWhatTheLinkAlreadyFixes(t *testing.T) {
 	h, _ := identityHandler(t)
 	first, _ := hostEnrolment(t, h, "bootstrap", "")
 	info := func(token string) (int, map[string]any) {
-		rec := browser(h, "switchboard.localhost:9091", "/_/api/admin/enrol/info", "", map[string]string{"token": token})
+		rec := browser(h, "ozal.localhost:9091", "/_/api/admin/enrol/info", "", map[string]string{"token": token})
 		out := map[string]any{}
 		_ = json.Unmarshal(rec.Body.Bytes(), &out)
 		return rec.Code, out
@@ -622,7 +622,7 @@ func TestAnotherBrowserAddsAPasskeyThroughAOneUseLink(t *testing.T) {
 		t.Fatalf("device link = %d %s", rec.Code, rec.Body)
 	}
 	link := decode(t, rec)["token"].(string)
-	info := decode(t, browser(h, "switchboard.localhost:9091", "/_/api/admin/enrol/info", "", map[string]string{"token": link}))
+	info := decode(t, browser(h, "ozal.localhost:9091", "/_/api/admin/enrol/info", "", map[string]string{"token": link}))
 	if info["kind"] != "device" || info["email"] != "octavio@example.com" {
 		t.Fatalf("info = %v", info)
 	}

@@ -7,8 +7,8 @@ import { describe, plainDecision, requestFor, stagesFor, type Report, type Visit
 declare const Go: new () => { importObject: WebAssembly.Imports; run(instance: WebAssembly.Instance): Promise<void> };
 declare global {
   interface Window {
-    switchboardExplain?: (input: string) => string;
-    switchboardEngine?: string;
+    ozalExplain?: (input: string) => string;
+    ozalEngine?: string;
   }
 }
 
@@ -38,8 +38,8 @@ function ensureEngine(): Promise<void> {
       instance = (await WebAssembly.instantiate(bytes, go.importObject)).instance;
     }
     void go.run(instance); // main blocks on purpose: the functions stay callable
-    for (let i = 0; i < 40 && !window.switchboardExplain; i++) await new Promise((r) => setTimeout(r, 50));
-    if (!window.switchboardExplain) throw new Error("the engine did not start");
+    for (let i = 0; i < 40 && !window.ozalExplain; i++) await new Promise((r) => setTimeout(r, 50));
+    if (!window.ozalExplain) throw new Error("the engine did not start");
   })();
   loading.catch(() => (loading = null)); // a failed load can be retried
   return loading;
@@ -98,7 +98,7 @@ function run(root: HTMLElement) {
   if (bound.disabled) bound.checked = false;
   const config = APPS[app];
   text($(root, "[data-config]"), JSON.stringify({ host: config.host, ...(config.access ? { access: config.access } : {}) }, null, 2));
-  const out = window.switchboardExplain!(JSON.stringify(requestFor(app, visitor)));
+  const out = window.ozalExplain!(JSON.stringify(requestFor(app, visitor)));
   render(root, JSON.parse(out), app, visitor);
 }
 
@@ -126,11 +126,11 @@ export function setup(root: HTMLElement) {
     fallback.hidden = true;
     panel.hidden = false;
     start.hidden = true;
-    say(`Running in your browser · engine ${window.switchboardEngine}`);
+    say(`Running in your browser · engine ${window.ozalEngine}`);
     run(root);
   }
 
-  root.addEventListener("input", () => window.switchboardExplain && run(root));
+  root.addEventListener("input", () => window.ozalExplain && run(root));
   start.addEventListener("click", boot);
   // Load on arrival unless the visitor asked their browser to save data; then
   // wait for the button.

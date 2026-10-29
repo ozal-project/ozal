@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/store/sqlite"
+	"github.com/ozal-project/ozal/internal/store/sqlite"
 )
 
 func migratedDB(t *testing.T) *sql.DB {

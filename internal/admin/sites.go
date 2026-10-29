@@ -8,8 +8,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/events"
-	"github.com/switchboard-project/switchboard/internal/pages"
+	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/pages"
 )
 
 // deployments is the deployment store as the admin API needs it

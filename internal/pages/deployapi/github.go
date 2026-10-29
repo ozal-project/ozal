@@ -10,7 +10,7 @@ import (
 
 	"github.com/coreos/go-oidc/v3/oidc"
 
-	"github.com/switchboard-project/switchboard/internal/pages/deployauth"
+	"github.com/ozal-project/ozal/internal/pages/deployauth"
 )
 
 const GitHubIssuer = "https://token.actions.githubusercontent.com"

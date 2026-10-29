@@ -19,10 +19,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/config"
-	"github.com/switchboard-project/switchboard/internal/events"
-	"github.com/switchboard-project/switchboard/internal/pipeline"
-	"github.com/switchboard-project/switchboard/internal/proxy"
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/pipeline"
+	"github.com/ozal-project/ozal/internal/proxy"
 )
 
 type testCA struct {

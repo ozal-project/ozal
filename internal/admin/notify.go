@@ -6,12 +6,12 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/events"
-	"github.com/switchboard-project/switchboard/internal/notify"
+	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/notify"
 )
 
 // pairing is the Telegram chat pairing (notify.Pairer implements it): the
-// operation of `switchboard notify pair` (CLI-001).
+// operation of `ozal notify pair` (CLI-001).
 type pairing interface {
 	Start(ttl time.Duration, onPaired func(chatID int64)) (string, time.Time, error)
 	Status() notify.PairingStatus

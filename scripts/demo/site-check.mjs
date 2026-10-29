@@ -40,7 +40,7 @@ try {
         const box = node.getBoundingClientRect(); return box.width > 0 && box.left >= 0 && box.right <= innerWidth;
       }),
       brokenAnchors: [...document.querySelectorAll('a[href^="#"]')].filter((link) => !document.getElementById(link.hash.slice(1))).map((link) => link.hash),
-      privateDownloads: document.querySelectorAll('a[href*="github.com/switchboard-project/switchboard"]').length,
+      privateDownloads: document.querySelectorAll('a[href*="github.com/ozal-project/ozal/releases"]').length,
     }));
     assert.ok(geometry.overflow <= 0, `${width}px horizontal overflow: ${geometry.overflow}`);
     assert.ok(geometry.titleOverflow <= 1, `${width}px clipped heading`);

@@ -15,7 +15,7 @@ import (
 
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
-	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/ozal-project/ozal/internal/config"
 )
 
 func TestDiscoveryUsesOnlyMetadataAndNeverReturnsCredentials(t *testing.T) {

@@ -1,7 +1,7 @@
 // Package originauth makes the public HTTPS listener serve only connections
 // that present a client certificate from a configured trust bundle.
 //
-// It is how Switchboard recognises the proxy in front of it (Cloudflare
+// It is how Ozal recognises the proxy in front of it (Cloudflare
 // Authenticated Origin Pulls with the zone's own certificate): source IP
 // filtering identifies a network, a client certificate identifies our
 // deployment. Decide is the pure core; ServerTLS and RequireVerified are the
@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/ozal-project/ozal/internal/events"
 )
 
 // Code is a stable decision code; it appears in events and logs.

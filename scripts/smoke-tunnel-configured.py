@@ -55,7 +55,7 @@ def main():
     origin = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Origin)
     threading.Thread(target=origin.serve_forever, daemon=True).start()
     try:
-        with tempfile.TemporaryDirectory(prefix="switchboard-configured-") as directory:
+        with tempfile.TemporaryDirectory(prefix="ozal-configured-") as directory:
             root = Path(directory)
             pki, other = root / "pki", root / "other-pki"
             db = root / "state.db"
@@ -122,8 +122,8 @@ def main():
             write_config()
             edge, output = start("edge", "-config", config_path, "-db", db)
             transport = wait_until(lambda: address(output, "tunnel listener: "))
-            public = wait_until(lambda: address(output, "switchboard listening on "))
-            admin = wait_until(lambda: address(output, "switchboard admin listening on "))
+            public = wait_until(lambda: address(output, "ozal listening on "))
+            admin = wait_until(lambda: address(output, "ozal admin listening on "))
             connector, _ = start("connector", "tunnel", "connect", "-cert", pki / "connector.crt",
                                  "-key", pki / "connector.key", "-ca", pki / "ca.crt", "-host", "app.localhost",
                                  "-edge", transport, "-server-name", "edge.localhost",
@@ -164,8 +164,8 @@ def main():
             connector_pid = connector.pid
             stop(edge)
             edge, output = start("restarted-edge", "-config", config_path, "-db", db)
-            public = wait_until(lambda: address(output, "switchboard listening on "))
-            admin = wait_until(lambda: address(output, "switchboard admin listening on "))
+            public = wait_until(lambda: address(output, "ozal listening on "))
+            admin = wait_until(lambda: address(output, "ozal admin listening on "))
             wait_until(lambda: fetch(public)[0] == 200)
             assert connector.poll() is None and connector.pid == connector_pid
             # Route state needs the admin credential even on loopback.

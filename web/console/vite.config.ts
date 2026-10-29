@@ -17,6 +17,6 @@ export default defineConfig({
     // Vite would inline as a data: URI is blocked by the browser. Emit files.
     assetsInlineLimit: 0,
   },
-  // `npm run dev` proxies the admin API of a local Switchboard.
-  server: { proxy: { "/_/": process.env.SWITCHBOARD_ADMIN ?? "http://127.0.0.1:9090" } },
+  // `npm run dev` proxies the admin API of a local Ozal.
+  server: { proxy: { "/_/": process.env.OZAL_ADMIN ?? "http://127.0.0.1:9090" } },
 });

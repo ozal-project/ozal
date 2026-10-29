@@ -30,7 +30,7 @@ func NewPairingCode() (string, error) {
 }
 
 // PairCommand extracts the code from a pairing message such as "/pair
-// ABC234" or "/pair@switchboard_bot ABC234" (Telegram appends the bot name
+// ABC234" or "/pair@ozal_bot ABC234" (Telegram appends the bot name
 // in groups). The code is upper-cased; anything else is not a pairing
 // attempt.
 func PairCommand(text string) (string, bool) {

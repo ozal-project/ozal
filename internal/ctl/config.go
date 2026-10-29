@@ -13,10 +13,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/ozal-project/ozal/internal/config"
 )
 
-// ConfigPlan is what `sbctl edge config` would install. The operator keeps
+// ConfigPlan is what `ozalctl edge config` would install. The operator keeps
 // the host settings (listeners, TLS, identity, trusted proxies, DNS) in a
 // local base file; routes, projects and the GitHub binding belong to the edge
 // and live in its runtime file, edited from the console. The candidate root
@@ -195,7 +195,7 @@ active() {
 }
 wait_for() {
   i=0
-  while [ "$i" -lt "${SBCTL_WAIT:-30}" ]; do
+  while [ "$i" -lt "${OZALCTL_WAIT:-30}" ]; do
     [ "$(active)" = "$1" ] && return 0
     i=$((i + 1))
     sleep 1
@@ -259,7 +259,7 @@ func ConfigOutcome(code int, e Edge, stamp string) error {
 	}
 }
 
-// ConfigRequest is one run of `sbctl edge config`.
+// ConfigRequest is one run of `ozalctl edge config`.
 type ConfigRequest struct {
 	Name   string
 	Target Target

@@ -1,4 +1,4 @@
-# VISION.md — Where Switchboard is going
+# VISION.md — Where Ozal is going
 
 > **North star:** an open-source, self-hostable **transparent zero-trust
 > access platform**. One Go binary that publishes apps and machines without
@@ -19,7 +19,7 @@ until this file is updated on purpose.
 
 ## Why this project
 
-Switchboard is a **year-long passion project** (October 2026 – September 2027)
+Ozal is a **year-long passion project** (October 2026 – September 2027)
 optimized for two things, in this order:
 
 1. **Learning in depth.** Each quarter forces real work in a different field:
@@ -41,7 +41,7 @@ a platform its author actually trusts, not in stars or revenue.
 ## The thesis: zero trust that is itself verifiable
 
 Zero-trust products ask you to trust *them*: their policy store, their CA,
-their admins, their logs. Switchboard's differentiator is that the access
+their admins, their logs. Ozal's differentiator is that the access
 system's own state is auditable by anyone who holds a copy of the log:
 
 - Every certificate the internal CA issues is appended to a public,
@@ -56,7 +56,7 @@ with cryptography instead of process.
 
 ## Landscape
 
-| Project | Strength | Where Switchboard differs |
+| Project | Strength | Where Ozal differs |
 |---|---|---|
 | Cloudflare Tunnel + Access | Tunnels, protected quick tunnels, email OTP | Self-hostable identity/policy and owned transport; optional exterior proxy protection |
 | Pangolin | Self-hosted tunnels, WireGuard, RBAC | Own CA and transparency log; AI-agent principals |
@@ -79,7 +79,7 @@ team sharing internal tools, panels and previews. Validate setup, revocation,
 explainable decisions and recovery before expanding the feature surface.
 
 Prove direct ingress and exterior-proxy ingress separately. Cloudflare can
-continue to provide exterior protection while Switchboard owns gateway
+continue to provide exterior protection while Ozal owns gateway
 identity and policy. DNS and ACME adapters make providers replaceable; a
 worldwide CDN, volumetric DDoS network and distributed functions platform
 remain outside the initial offering. Inventory actual Workers uses before
@@ -111,13 +111,13 @@ Publish anything without inbound ports, from a laptop, a homelab or a server
 behind CGNAT.
 
 ```bash
-switchboard edge --config edge.json                      # on the VPS
+ozal edge --config edge.json                      # on the VPS
 
-sb share http://localhost:3000 --allow ana@client.com    # ephemeral, protected
+ozal share http://localhost:3000 --allow ana@client.com    # ephemeral, protected
 # → https://k7x2.share.octaviosantacruz.com   (only Ana gets in)
 
-sb connect --name grafana http://localhost:3000          # permanent, named
-sb connect --tcp ssh=localhost:22 --name homelab         # raw TCP
+ozal connect --name grafana http://localhost:3000          # permanent, named
+ozal connect --tcp ssh=localhost:22 --name homelab         # raw TCP
 ```
 
 - Outbound multiplexed connection (yamux over mTLS first, QUIC later),
@@ -131,7 +131,7 @@ sb connect --tcp ssh=localhost:22 --name homelab         # raw TCP
 
 - Email one-time codes / magic links and **passkeys (WebAuthn)**. No passwords,
   ever — which removes the most dangerous parts of an IdP.
-- Switchboard as an **OIDC provider**: "Sign in with octaviosantacruz" for any
+- Ozal as an **OIDC provider**: "Sign in with octaviosantacruz" for any
   app, with signing-key rotation, JWKS and discovery.
 - External providers (Google, GitHub, any OIDC issuer) remain options.
 - Step-up: sensitive actions require a fresh passkey assertion.
@@ -158,7 +158,7 @@ learning is:
 
 ### 4. Infrastructure access (PSM/SIA ideas, open source)
 
-- `sb ssh homelab`, `sb db prod-postgres` from anywhere, through tunnels.
+- `ozal ssh homelab`, `ozal db prod-postgres` from anywhere, through tunnels.
 - **Just-in-time access:** request, approve (web/email/chat), auto-expire.
 - **Session recording:** SSH and web-terminal sessions as asciicast, replayable
   from the dashboard; database query logs.
@@ -181,7 +181,7 @@ entries `AUD-001`/`AUD-002`.
   access grants, approvals, session metadata.
 - Signed checkpoints; witnesses (other people's instances) can co-sign.
 - Clients and agents verify inclusion before trusting a certificate or policy.
-- Future `switchboard audit verify` and log clients should check inclusion and
+- Future `ozal audit verify` and log clients should check inclusion and
   consistency against independently retained checkpoints; local verification
   alone cannot prove that an operator did not rewrite the full log.
 - Raw data stays private where needed: only hashes or commitments go in public
@@ -247,7 +247,7 @@ every quarter instead of being one big block:
   Turnstile and Anubis), an "under attack" mode, TLS client fingerprints (JA4)
   as a signal.
 - **Signed agents:** verify Web Bot Auth (HTTP Message Signatures, RFC 9421) so
-  well-behaved AI agents can prove who they are, and sign Switchboard's own
+  well-behaved AI agents can prove who they are, and sign Ozal's own
   outbound agent traffic.
 - **API protection:** OpenAPI schema validation (positive security model) and
   endpoint discovery from observed traffic.
@@ -268,7 +268,7 @@ step. A WAF that breaks the apps behind it gets turned off.
 
 ### 9. Notifications and approvals (ChatOps)
 
-Access decisions often need a human *now*, on a phone. Switchboard gets one
+Access decisions often need a human *now*, on a phone. Ozal gets one
 `Notifier` / `Approver` interface with several channels, Telegram first:
 
 - **Telegram bot** (free, push on every phone, inline keyboards):
@@ -300,13 +300,13 @@ services reach each other privately under the same identity and policy.
 ## Cloudflare feature map
 
 Cloudflare is the main source of inspiration. This table maps its features to
-what Switchboard would build, so ideas are tracked in one place. "Quarter" is
+what Ozal would build, so ideas are tracked in one place. "Quarter" is
 the target release; "Stretch" means only if time allows; "No" is a deliberate
 non-goal.
 
-| Cloudflare feature | What it does | Switchboard version | Quarter |
+| Cloudflare feature | What it does | Ozal version | Quarter |
 |---|---|---|---|
-| Tunnel, quick tunnels | Publish local services without open ports | `sb connect`, `sb share` | Q1 |
+| Tunnel, quick tunnels | Publish local services without open ports | `ozal connect`, `ozal share` | Q1 |
 | Access, protected quick tunnels | Identity in front of apps; email-gated shares | Passwordless identity + `--allow` | Q1 |
 | Rate limiting | Limit request rates per key | Token buckets per IP/identity/route | Q1 |
 | Load balancing, health checks | Spread traffic, avoid dead origins | Multiple upstreams, active + passive health | Q1 |
@@ -319,7 +319,7 @@ non-goal.
 | API Shield | Schema validation, API discovery | OpenAPI validation, discovery from traffic | Q3 |
 | Leaked credentials detection | Flag breached passwords at login | HIBP k-anonymity check, header to app | Q3 |
 | Page Shield | Monitor third-party scripts in browsers | CSP/Reporting endpoint + script inventory | Q3 |
-| Access for Infrastructure | SSH/RDP/DB access with identity | `sb ssh`, `sb db`, JIT, recording | Q3 |
+| Access for Infrastructure | SSH/RDP/DB access with identity | `ozal ssh`, `ozal db`, JIT, recording | Q3 |
 | Bot management, JA4 | Score automation, fingerprint clients | JA4 + behavior signals into risk model | Q3 |
 | Device posture (WARP) | Gate access on device state | Device certificates + posture signals | Q4 |
 | Web Bot Auth / signed agents | Cryptographic identity for agents | Verify RFC 9421 signatures; sign own agents | Q4 |
@@ -340,7 +340,7 @@ non-goal.
 
 ## Integration map
 
-Open-source projects and standards Switchboard can integrate with, embed, or
+Open-source projects and standards Ozal can integrate with, embed, or
 learn from. Building everything from scratch is not the goal; the rule is
 **build the core, integrate the commodity** — write what teaches the most,
 plug in what is solved.
@@ -358,9 +358,9 @@ plug in what is solved.
 | | YubiKey / PKCS#11 | Hardware-held root and signing keys | Integrate (Q2) |
 | **Transparency** | C2SP tlog-checkpoint, tlog-tiles, tlog-witness | Standard formats so others' tools can verify the log | Implement (Q4) |
 | | transparency.dev witnesses, omniwitness | External witnesses cosign checkpoints | Integrate (Q4) |
-| | Sigstore (cosign, Rekor) | Sign Switchboard's own releases; reference design | Integrate (releases) |
+| | Sigstore (cosign, Rekor) | Sign Ozal's own releases; reference design | Integrate (releases) |
 | **Shield** | OWASP Coraza + CRS | Managed WAF rules | Embed (Q3) |
-| | CrowdSec | Community blocklists and shared signals; Switchboard as a bouncer | Integrate (Q3) |
+| | CrowdSec | Community blocklists and shared signals; Ozal as a bouncer | Integrate (Q3) |
 | | Anubis | Reference for proof-of-work bot challenges | Learn from |
 | | MaxMind GeoLite2 / IP2Location | Country/ASN signals for rules and risk | Integrate (Q2) |
 | | Have I Been Pwned (range API) | Leaked-password checks with k-anonymity | Integrate (Q3) |
@@ -392,7 +392,7 @@ Each quarter ends with a tagged release, release notes, real use on
 
 | Quarter | Release | Main scope | Shield track | Learning focus |
 |---|---|---|---|---|
-| **Q1 · Oct–Dec 2026** | `v0.1` Edge | Security fixes, VPS edge with wildcard TLS, tunnels (`sb connect`, `sb share`), protected shares, passwordless identity, OIDC provider, Telegram alerts | Rate limiting, security headers | Networking, multiplexing, OIDC server side, WebAuthn |
+| **Q1 · Oct–Dec 2026** | `v0.1` Edge | Security fixes, VPS edge with wildcard TLS, tunnels (`ozal connect`, `ozal share`), protected shares, passwordless identity, OIDC provider, Telegram alerts | Rate limiting, security headers | Networking, multiplexing, OIDC server side, WebAuthn |
 | **Q2 · Jan–Mar 2027** | `v0.2` PKI | ACME server, internal CA, mTLS edge↔agent and edge↔origin, developer certs, SSH CA, workload identity | Rules language + compiler, custom rules, PoW challenge | X.509, ACME, key management, compilers |
 | **Q3 · Apr–Jun 2027** | `v0.3` Access | SSH/DB over tunnels, JIT with Telegram approvals, session recording, credential injection, CAEP/SSF, SCIM | Coraza + CRS, own detectors, API schema validation, leaked credentials, CSP reporting | SSH internals, L4 proxying, security events, web attacks |
 | **Q4 · Jul–Sep 2027** | `v0.4` Trust | Transparency log for everything, risk signals and AI explanations, AI-agent gateway | Web Bot Auth, Firewall for AI, DLP | Merkle logs, token exchange, applied ML |
@@ -434,8 +434,8 @@ main release; if a quarter slips, Shield items move first.
    keys, approvals) lives in an embedded store (SQLite). The human-edited config
    file holds static intent; secrets come from env/files and are never written
    back.
-8. **One binary, subcommands.** `switchboard edge`, `sb connect`, `sb share`,
-   `sb ssh`, `switchboard ca`, `switchboard audit verify`.
+8. **One binary, subcommands.** `ozal edge`, `ozal connect`, `ozal share`,
+   `ozal ssh`, `ozal ca`, `ozal audit verify`.
 9. **Secure defaults, explained.** Every default has a sentence in the docs
    saying why.
 

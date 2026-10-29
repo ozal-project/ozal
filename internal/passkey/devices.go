@@ -10,8 +10,8 @@ import (
 
 	"github.com/go-webauthn/webauthn/webauthn"
 
-	"github.com/switchboard-project/switchboard/internal/auth"
-	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/ozal-project/ozal/internal/auth"
+	"github.com/ozal-project/ozal/internal/events"
 )
 
 // selfServiceMaxAge is how recent the passkey proof behind a session must be

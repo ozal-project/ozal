@@ -136,7 +136,7 @@
     }
   }
   async function share() {
-    if (created && navigator.share) await navigator.share({ title: "Your Switchboard invitation", url: created.link }).catch(() => {});
+    if (created && navigator.share) await navigator.share({ title: "Your Ozal invitation", url: created.link }).catch(() => {});
   }
 
   async function act(key: string, personEmail: string, run: (signal: AbortSignal) => Promise<unknown>, done: string) {
@@ -227,7 +227,7 @@
 
 {#if people && !people.enabled}
   <Panel label="People" title="Passkeys are not enabled on this edge">
-    <p class="text-muted-foreground text-sm">Add <code class="font-mono">auth.passkeys</code> (<code class="font-mono">rp_id</code>, <code class="font-mono">login_url</code>) and start Switchboard with <code class="font-mono">-db</code>.</p>
+    <p class="text-muted-foreground text-sm">Add <code class="font-mono">auth.passkeys</code> (<code class="font-mono">rp_id</code>, <code class="font-mono">login_url</code>) and start Ozal with <code class="font-mono">-db</code>.</p>
   </Panel>
 {:else}
   <Summary label="People summary" items={[{ value: people ? people.users.length : "—", label: "people" }, { value: people ? activeKeys : "—", label: "passkeys" }, { value: people ? disabledCount : "—", label: "disabled", tone: disabledCount ? "warn" : undefined }]} />
@@ -301,7 +301,7 @@
           {#each people?.protected_hosts ?? [] as host (host)}<option value={host}>{host}</option>{/each}
         </select>
       </div>
-      <p class="text-muted-foreground text-xs">Someone who lost every passkey is recovered on the host: <code class="font-mono">switchboard user invite -recover</code>.</p>
+      <p class="text-muted-foreground text-xs">Someone who lost every passkey is recovered on the host: <code class="font-mono">ozal user invite -recover</code>.</p>
       {#if inviteError}<p class="text-destructive text-sm" role="alert">{inviteError}</p>{/if}
       <div class="flex justify-end gap-2">
         {#if inviting}<Button type="button" variant="outline" onclick={stopInvite}>Stop waiting</Button>{/if}

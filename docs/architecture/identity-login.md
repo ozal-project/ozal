@@ -12,17 +12,17 @@ application trusts the gateway), [design](design.md) (the `identify` stage),
 
 ## What this decides
 
-How a visitor proves who they are **to Switchboard itself**, without Google or
+How a visitor proves who they are **to Ozal itself**, without Google or
 another external provider, and how that proof is kept safe for the rest of the
 session. It does not decide how an application trusts the result (that is
-`ARCH-009`) and it does not make Switchboard an OIDC provider for other apps
+`ARCH-009`) and it does not make Ozal an OIDC provider for other apps
 (that stays `ID-004`, later).
 
 **Tension to resolve first.** `ARCH-009` lists "a user directory" as a
 non-goal. Native login needs a minimal one: users, their passkeys, nothing
 else (no passwords, no profiles, no self sign-up). Approving this document
 narrows that non-goal to "no general-purpose directory or IdP"; rejecting it
-keeps Switchboard on external providers only.
+keeps Ozal on external providers only.
 
 ## Principles
 
@@ -34,7 +34,7 @@ keeps Switchboard on external providers only.
    theft), so it is short, rotated, re-proven for sensitive routes and, where
    the browser supports it, bound to the device (DBSC).
 4. **The operator's shell is the root of trust:** recovery happens only
-   through the CLI on the host (`switchboard user invite -recover`). Whoever
+   through the CLI on the host (`ozal user invite -recover`). Whoever
    has that shell already owns the deployment; no weaker path (email,
    support questions, the admin bearer) can recover an account. Since
    `CLI-001` (2026-10-22) "on the host" means the admin unix socket
@@ -94,8 +94,8 @@ refreshes authoritative membership on every request. See the current
 ## Flow 1 — first enrolment (and recovery)
 
 ```
-Operator (host shell)          Switchboard                    Visitor's browser
-  │ switchboard user invite      │                               │
+Operator (host shell)          Ozal                           Visitor's browser
+  │ ozal user invite             │                               │
   │   --email ana@… --group ops  │                               │
   │─────────────────────────────▶│ create user (if new)          │
   │                              │ token = 32 random bytes       │
@@ -126,7 +126,7 @@ Operator (host shell)          Switchboard                    Visitor's browser
 - Registration options: discoverable credential required, user verification
   required, attestation `none` (synced passkeys are not attested anyway).
 - **Recovery** is the same flow with `--recover`: a new passkey is added; old
-  ones stay until the operator revokes them (`switchboard user passkeys`,
+  ones stay until the operator revokes them (`ozal user passkeys`,
   `… revoke`).
 - **More passkeys** (a second device, a YubiKey) can be added from an
   existing session after a fresh step-up (Flow 3), never from an old session.
@@ -136,7 +136,7 @@ Operator (host shell)          Switchboard                    Visitor's browser
 ## Flow 2 — login
 
 ```
-Browser                          Switchboard (edge)
+Browser                          Ozal (edge)
   │── GET https://app…/ ────────▶│ no valid session
   │◀─ 302 auth…/login?rd=<id> ───│ rd: server-side record of the requested
   │                              │ URL (allowed hosts only), not a raw URL
@@ -239,8 +239,8 @@ later require it, accepting that Firefox/Safari users cannot reach that route.
    rotation, DBSC.
 3. **Approvals** (`NTF-001`): Telegram number matching for admin changes and
    break-glass, always after a passkey session, never instead of one.
-4. **Provider** (`ID-004`): Switchboard as OIDC provider with `acr`/`amr`,
-   PKCE and DPoP-bound tokens; device flow for `sb login`.
+4. **Provider** (`ID-004`): Ozal as OIDC provider with `acr`/`amr`,
+   PKCE and DPoP-bound tokens; device flow for `ozal login`.
 5. **Upstreams and signals:** keep Google/OIDC; add atproto login; CAEP/SSF
    to revoke sessions on external signals.
 
@@ -260,7 +260,7 @@ later require it, accepting that Firefox/Safari users cannot reach that route.
 ## Phase 1 as built (2026-10-21)
 
 Code: `internal/passkey` (gate, ceremonies, pages), `internal/store/sqlite`
-(`identity.go`, migration `004_create_passkey_users`), `switchboard user`,
+(`identity.go`, migration `004_create_passkey_users`), `ozal user`,
 config `auth.passkeys`. Where it differs from the text above:
 
 - **Return address.** The login keeps the existing `return_to` parameter,
@@ -341,7 +341,7 @@ of 12 h without use and 7 days after login.
 ## What `ID-004` (provider) is, and what it is not
 
 Being an OIDC provider means applications that speak OIDC (Grafana, Gitea, a
-mobile app, the `sb` CLI) can offer "Sign in with Switchboard" instead of
+mobile app, the `sb` CLI) can offer "Sign in with Ozal" instead of
 trusting the proxy's headers. The protocol part is well specified and
 bounded: discovery, JWKS with key rotation, authorization code + PKCE, token
 and userinfo endpoints, `acr`/`amr` claims, and the device flow for CLIs.
@@ -351,7 +351,7 @@ are as phishing-resistant as the login.
 What makes a product like Okta large is not OIDC: it is the catalog of
 pre-built integrations (OIDC, SAML, SCIM provisioning), lifecycle management,
 a risk engine, global availability and certifications, and an authenticator
-app (push, device trust). Switchboard does not need its own phone app for the
+app (push, device trust). Ozal does not need its own phone app for the
 phishing-resistant part: the platform passkey (Apple Passwords, Google
 Password Manager, a security key) is the authenticator, and approvals for
 sensitive actions can use the existing Telegram notifier (`NTF-001`). TOTP

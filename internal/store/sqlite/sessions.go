@@ -10,7 +10,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/auth"
+	"github.com/ozal-project/ozal/internal/auth"
 )
 
 // Sessions is the persistent auth.SessionBackend over migrations 001,
@@ -32,7 +32,7 @@ var (
 
 // NewSessions builds the store over an already-migrated database. It never
 // runs migrations itself: applying schema changes is an explicit operator
-// step (`switchboard migrate`), so a startup with a stale schema fails
+// step (`ozal migrate`), so a startup with a stale schema fails
 // loudly instead of guessing.
 func NewSessions(db *sql.DB, lifetime auth.Lifetime) *Sessions {
 	return &Sessions{db: db, lifetime: lifetime, maxSessions: auth.MaxSessions, now: time.Now}

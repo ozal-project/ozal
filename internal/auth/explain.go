@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/config"
-	"github.com/switchboard-project/switchboard/internal/policycontext"
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/policycontext"
 )
 
 // Explanation is the outcome of simulating one request against one route
@@ -84,7 +84,7 @@ const (
 )
 
 // Report is the stable, machine-readable form of an Explanation shared by
-// `switchboard policy explain -json` and the admin API. Field names are a
+// `ozal policy explain -json` and the admin API. Field names are a
 // public contract: version them if they ever change.
 type Report struct {
 	Route     string                `json:"route"`

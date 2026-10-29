@@ -1,0 +1,21 @@
+{
+  "targets": {
+    "edge-1": {
+      "ssh": { "target": "deploy@edge.example.net", "key": "~/.ssh/id_ed25519" },
+      "edge": {
+        "unit": "ozal",
+        "service_user": "ozal",
+        "binary": "/usr/local/lib/ozal/ozal",
+        "config": "/etc/ozal/config.json",
+        "state_db": "/var/lib/ozal/state.db",
+        "stage": "/home/deploy/.local/share/ozal-stage",
+        "lock": "/home/deploy/.local/share/ozal-deploy.lock",
+        "command_link": "/usr/local/bin/ozal",
+        "socket": "/run/ozal/admin.sock",
+        "admin": "127.0.0.1:9090",
+        "sites_token": "~/.config/ozalctl/edge-1.sites.token",
+        "keep": 3
+      }
+    }
+  }
+}

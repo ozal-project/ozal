@@ -34,7 +34,7 @@
 </script>
 <Button variant="ghost" size="sm" aria-label={`Publish an artifact to ${site}`} onclick={start}><UploadIcon class="size-3.5" /> Publish</Button>
 <Modal bind:open={dialogOpen} title="Publish a build" intro={`Make a new version of ${site} live.`}>
-  <p class="text-muted-foreground mb-4 text-sm">Build locally or in CI and pack the contents of <code class="font-mono">dist</code> as tar.gz. Switchboard validates and activates the artifact; it does not run build commands.</p>
+  <p class="text-muted-foreground mb-4 text-sm">Build locally or in CI and pack the contents of <code class="font-mono">dist</code> as tar.gz. Ozal validates and activates the artifact; it does not run build commands.</p>
   <label class="border-input hover:border-ring has-[:focus-visible]:ring-ring/50 flex cursor-pointer items-center gap-3 rounded-lg border border-dashed px-4 py-5 transition-colors has-[:focus-visible]:ring-3">
     <span class="bg-muted grid size-10 shrink-0 place-items-center rounded-lg"><FileArchiveIcon class="text-muted-foreground size-5" /></span>
     <span class="min-w-0 text-sm">

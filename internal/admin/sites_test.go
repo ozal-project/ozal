@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/config"
-	"github.com/switchboard-project/switchboard/internal/events"
-	"github.com/switchboard-project/switchboard/internal/pages"
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/pages"
 )
 
 // fakeDeployments records what reached the store and answers per site.
@@ -35,7 +35,7 @@ func (f *fakeDeployments) Deploy(_ context.Context, site string, archive io.Read
 		return pages.Deployment{}, &pages.RefusedError{Code: pages.UnsafePath, Reason: "entry name contains a parent-directory component"}
 	}
 	if site == "broken" {
-		return pages.Deployment{}, fmt.Errorf("write /private/switchboard/sites/blog/index.html: %w", os.ErrPermission)
+		return pages.Deployment{}, fmt.Errorf("write /private/ozal/sites/blog/index.html: %w", os.ErrPermission)
 	}
 	return pages.Deployment{Site: site, ID: strings.Repeat("a", 64), Live: true}, nil
 }
@@ -185,7 +185,7 @@ func TestRefusedDeployReturnsItsCode(t *testing.T) {
 func TestStorageFailureDoesNotExposeFilesystemError(t *testing.T) {
 	sink := &events.Recorder{}
 	rec := request(sitesHandler(&fakeDeployments{}, sink), http.MethodPost, "/_/api/sites/broken/deployments", "secret", "archive")
-	if rec.Code != http.StatusInternalServerError || strings.Contains(rec.Body.String(), "/private/switchboard") {
+	if rec.Code != http.StatusInternalServerError || strings.Contains(rec.Body.String(), "/private/ozal") {
 		t.Fatalf("storage failure response = %d %s, want generic 500", rec.Code, rec.Body)
 	}
 	event, ok := sink.Find(events.PagesFailed)

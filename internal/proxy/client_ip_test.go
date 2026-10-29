@@ -6,7 +6,7 @@ import (
 	"net/netip"
 	"testing"
 
-	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/ozal-project/ozal/internal/config"
 )
 
 func TestTrustedProxyForwardsSelectedIPAndDropsSpoofedChains(t *testing.T) {

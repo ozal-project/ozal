@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"slices"
 
-	"github.com/switchboard-project/switchboard/internal/auth"
-	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/ozal-project/ozal/internal/auth"
+	"github.com/ozal-project/ozal/internal/config"
 )
 
 type explainRequest struct {
@@ -27,7 +27,7 @@ type explainPrincipal struct {
 }
 
 // explainPolicy answers the UI-002 policy simulator with the same report as
-// `switchboard policy explain -json`. It needs the admin bearer token: the
+// `ozal policy explain -json`. It needs the admin bearer token: the
 // answer reveals allowlist contents and, used repeatedly, works as an oracle
 // for who is allowed, which is more than the token-less console shows.
 func (h *Handler) explainPolicy(w http.ResponseWriter, r *http.Request) {

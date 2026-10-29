@@ -4,7 +4,7 @@
 // third.localhost: Chrome treats each *.localhost name as its own site), so
 // every cookie, redirect and SameSite rule here is the browser's own.
 //
-//   SWITCHBOARD_BIN=/path/to/switchboard CHROME=/path/to/chrome node scripts/demo/host-sessions-acceptance.mjs
+//   OZAL_BIN=/path/to/ozal CHROME=/path/to/chrome node scripts/demo/host-sessions-acceptance.mjs
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -13,9 +13,9 @@ import { join } from "node:path";
 import { chromium } from "playwright-core";
 import { startDemoEdge, PORT, LOGIN } from "./edge.mjs";
 
-const binary = process.env.SWITCHBOARD_BIN;
+const binary = process.env.OZAL_BIN;
 const chrome = process.env.CHROME;
-if (!binary || !chrome) throw new Error("Set SWITCHBOARD_BIN and CHROME");
+if (!binary || !chrome) throw new Error("Set OZAL_BIN and CHROME");
 const NOTES = `http://notes.other.localhost:${PORT}`;
 const CRM = `http://crm.third.localhost:${PORT}`;
 const root = await mkdtemp(join(tmpdir(), "sb-hostsessions-"));

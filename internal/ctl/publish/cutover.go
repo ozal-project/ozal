@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/certs"
+	"github.com/ozal-project/ozal/internal/certs"
 )
 
 // DNS is the part of the Cloudflare client a cutover uses.
@@ -70,7 +70,7 @@ func Cutover(ctx context.Context, out io.Writer, dns DNS, req CutoverRequest) er
 	if err != nil {
 		return err
 	}
-	note("previous records kept in %s (sbctl site cutover -back %s restores them)", evidence, evidence)
+	note("previous records kept in %s (ozalctl site cutover -back %s restores them)", evidence, evidence)
 	step("switch %s to %s", req.Host, req.To.Content)
 	if err := dns.ReplaceSiteRecords(ctx, req.Host, current, req.To); err != nil {
 		return fmt.Errorf("the DNS batch failed; Cloudflare applies all or nothing, so the records are unchanged: %w", err)
@@ -139,7 +139,7 @@ func edgeAnswers(ctx context.Context, req CutoverRequest, tries int) bool {
 	}
 	streak := 0
 	for i := 0; i < tries; i++ {
-		status, _, err := fetch(ctx, req.Public, fmt.Sprintf("%s/no-such-page-sbctl-check-%d", base(req), i))
+		status, _, err := fetch(ctx, req.Public, fmt.Sprintf("%s/no-such-page-ozalctl-check-%d", base(req), i))
 		if err == nil && status == http.StatusNotFound {
 			streak++
 		} else {

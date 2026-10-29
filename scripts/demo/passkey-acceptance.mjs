@@ -2,7 +2,7 @@
 // an isolated real edge. Each browser context is a separate device with its
 // own Chrome virtual authenticator, so credentials never leave this run.
 //
-//   SWITCHBOARD_BIN=/path/to/switchboard CHROME=/path/to/chrome node scripts/demo/passkey-acceptance.mjs
+//   OZAL_BIN=/path/to/ozal CHROME=/path/to/chrome node scripts/demo/passkey-acceptance.mjs
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -13,10 +13,10 @@ import { chromium } from "playwright-core";
 import { startDemoEdge, ADMIN_PORT } from "./edge.mjs";
 
 const exec = promisify(execFile);
-const binary = process.env.SWITCHBOARD_BIN;
+const binary = process.env.OZAL_BIN;
 const chrome = process.env.CHROME;
-if (!binary || !chrome) throw new Error("Set SWITCHBOARD_BIN and CHROME");
-const consoleURL = `http://switchboard.localhost:${ADMIN_PORT}`;
+if (!binary || !chrome) throw new Error("Set OZAL_BIN and CHROME");
+const consoleURL = `http://ozal.localhost:${ADMIN_PORT}`;
 const root = await mkdtemp(join(tmpdir(), "sb-passkeys-"));
 let edge, browser, step = "start";
 const errors = [];

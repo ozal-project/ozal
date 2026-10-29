@@ -8,14 +8,14 @@ import { join } from "node:path";
 import assert from "node:assert/strict";
 import { startDemoEdge, PORT } from "./edge.mjs";
 const exec = promisify(execFile);
-const binary = process.env.SWITCHBOARD_BIN;
-if (!binary) throw new Error("Set SWITCHBOARD_BIN to the built binary");
+const binary = process.env.OZAL_BIN;
+if (!binary) throw new Error("Set OZAL_BIN to the built binary");
 const root = await mkdtemp(join(tmpdir(), "sb-product-"));
-const session = `switchboard-product-${process.pid}`;
+const session = `ozal-product-${process.pid}`;
 let edge;
 let step = "start";
 const ab = async (...args) => {
-  try { return (await exec("agent-browser", ["--session", session, ...(process.env.SWITCHBOARD_BROWSER_ARGS ? ["--args", process.env.SWITCHBOARD_BROWSER_ARGS] : []), "--json", ...args], { maxBuffer: 4 << 20 })).stdout; }
+  try { return (await exec("agent-browser", ["--session", session, ...(process.env.OZAL_BROWSER_ARGS ? ["--args", process.env.OZAL_BROWSER_ARGS] : []), "--json", ...args], { maxBuffer: 4 << 20 })).stdout; }
   catch (error) { let detail = String(error.stderr ?? ""); try { detail += JSON.stringify(JSON.parse(error.stdout).error); } catch {} const safe = detail.replace(/operator=[^\s"<>]+/g, "operator=[redacted]").slice(0, 2000); throw new Error(`Browser ${args[0]} ${args[0] === "click" ? args[1] : ""} failed during ${step}: ${safe}`); }
 };
 const evaluate = async (source) => JSON.parse(await ab("eval", source)).data?.result;

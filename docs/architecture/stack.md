@@ -23,7 +23,7 @@ ni mantener una tabla de estado de tareas en este archivo.
 | Consola | Svelte 5, TypeScript, Vite, Tailwind y bits-ui | SPA estática embebida; Node solo en build |
 | Página pública | Astro estático, Tailwind y engine Go/WASM opcional | Contenido accesible sin servidor Node |
 | Tipografía | Geist Sans/Mono autoalojadas, OFL | Activos locales y CSP sin proveedores de fuentes |
-| CLI | flag estándar; sbctl separado para operación SSH | Instalación/automatización; trabajo rutinario desde consola |
+| CLI | flag estándar; ozalctl separado para operación SSH | Instalación/automatización; trabajo rutinario desde consola |
 | Telegram/GitHub App | Adaptadores net/http | Opcionales, referencias locales y permisos mínimos |
 | Auditoría | JSONL, SHA-256 y checkpoints Ed25519 | Contrato local con límites de evidencia explícitos |
 | Pruebas | testing, httptest, race y fuzz nativos | Regresiones en decisiones, adaptadores y fronteras |
@@ -36,7 +36,7 @@ para esta consola; React con Vite sería técnicamente posible, pero no hay una
 necesidad demostrada que justifique migrar.
 
 CI Linux y release preparan dependencias con lockfiles y Node fijado, y usan
-`SWITCHBOARD_REQUIRE_FRONTEND=1` para fallar si se omiten controles frontend
+`OZAL_REQUIRE_FRONTEND=1` para fallar si se omiten controles frontend
 (`REL-014`). La aceptación del runner se registra en el tracker; tener el job
 configurado no prueba que se haya ejecutado correctamente.
 

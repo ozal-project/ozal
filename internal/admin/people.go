@@ -8,13 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/events"
-	"github.com/switchboard-project/switchboard/internal/passkey"
-	"github.com/switchboard-project/switchboard/internal/store/sqlite"
+	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/passkey"
+	"github.com/ozal-project/ozal/internal/store/sqlite"
 )
 
 // people is the user and passkey store as the console needs it
-// (sqlite.Identity implements it): the same operations as `switchboard
+// (sqlite.Identity implements it): the same operations as `ozal
 // user`, so the operator never needs a shell for them.
 type people interface {
 	Users(ctx context.Context) ([]passkey.User, error)
@@ -124,7 +124,7 @@ func (h *Handler) invitePerson(w http.ResponseWriter, r *http.Request) {
 	// trust (identity-login.md): the admin unix socket, never the admin
 	// bearer, which also travels to the machines that publish sites.
 	if req.Recover && !isLocal(r) {
-		writeError(w, http.StatusForbidden, "account recovery runs on the host only: switchboard user invite -recover")
+		writeError(w, http.StatusForbidden, "account recovery runs on the host only: ozal user invite -recover")
 		return
 	}
 	if req.TTLMinutes < 0 || req.TTLMinutes > maxInviteMinutes {

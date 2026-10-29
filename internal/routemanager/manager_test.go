@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/auth"
-	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/ozal-project/ozal/internal/auth"
+	"github.com/ozal-project/ozal/internal/config"
 )
 
 func writeConfig(t *testing.T, cfg config.Config) string {
@@ -49,9 +49,9 @@ func routeConfig(target string) config.Config {
 
 func TestAuditTargetCannotChangeOnReload(t *testing.T) {
 	before := routeConfig("http://upstream.local")
-	before.Audit = &config.AuditConfig{Dir: "/var/lib/switchboard/audit", Include: []string{"access"}}
+	before.Audit = &config.AuditConfig{Dir: "/var/lib/ozal/audit", Include: []string{"access"}}
 	after := config.Clone(before)
-	after.Audit.Dir = "/var/lib/switchboard/new-audit"
+	after.Audit.Dir = "/var/lib/ozal/new-audit"
 	if config.SameServer(before, after) {
 		t.Fatal("SameServer accepted a changed audit directory")
 	}
@@ -491,7 +491,7 @@ func TestAuthEndpointsOnlyExistOnAuthHosts(t *testing.T) {
 		return rec
 	}
 
-	// On a public host the path belongs to the upstream, not to Switchboard.
+	// On a public host the path belongs to the upstream, not to Ozal.
 	rec := do(http.MethodGet, "public.localhost", "/_/auth/login")
 	if rec.Code != http.StatusNoContent || rec.Header().Get("X-Upstream-Path") != "/_/auth/login" {
 		t.Fatalf("public /_/auth/login = %d path=%q, want the upstream 204", rec.Code, rec.Header().Get("X-Upstream-Path"))

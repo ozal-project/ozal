@@ -12,9 +12,9 @@ import { setTimeout as delay } from "node:timers/promises";
 
 const github = process.argv.includes("--github");
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const scratch = await mkdtemp(path.join(tmpdir(), "switchboard-pages-008-"));
+const scratch = await mkdtemp(path.join(tmpdir(), "ozal-pages-008-"));
 const secret = randomBytes(32).toString("base64url");
-const audience = "https://switchboard-pages-acceptance.invalid";
+const audience = "https://ozal-pages-acceptance.invalid";
 let child;
 
 function run(command, args, options = {}) {
@@ -54,8 +54,8 @@ async function githubToken() {
 }
 
 try {
-  const binary = process.env.SWITCHBOARD_BIN ? path.resolve(process.env.SWITCHBOARD_BIN) : path.join(scratch, "switchboard");
-  if (!process.env.SWITCHBOARD_BIN) run("go", ["build", "-o", binary, "./cmd/switchboard"]);
+  const binary = process.env.OZAL_BIN ? path.resolve(process.env.OZAL_BIN) : path.join(scratch, "ozal");
+  if (!process.env.OZAL_BIN) run("go", ["build", "-o", binary, "./cmd/ozal"]);
   const publicPort = await freePort();
   let adminPort = await freePort(); while (adminPort === publicPort) adminPort = await freePort();
   const database = path.join(scratch, "state.db");
@@ -77,11 +77,11 @@ try {
       listen: `127.0.0.1:${publicPort}`,
       admin: { listen: `127.0.0.1:${adminPort}` },
       pages: { dir: path.join(scratch, "pages"), deploy: { host: "deploy.localhost", audience: overrides.audience ?? audience } },
-      projects: [{ name: "acceptance", site: "acceptance", hostnames: ["site.localhost"], deployers: github ? [{ github: githubTrust }] : [{ token: "env:SWITCHBOARD_LAB_DEPLOY_TOKEN" }] }],
+      projects: [{ name: "acceptance", site: "acceptance", hostnames: ["site.localhost"], deployers: github ? [{ github: githubTrust }] : [{ token: "env:OZAL_LAB_DEPLOY_TOKEN" }] }],
       routes: [{ host: "site.localhost", site: "acceptance" }],
     };
     const configPath = path.join(scratch, "config.json"); await writeFile(configPath, JSON.stringify(config), { mode: 0o600 });
-    child = spawn(binary, ["-config", configPath, "-db", database], { cwd: root, env: { ...process.env, SWITCHBOARD_LAB_DEPLOY_TOKEN: secret }, stdio: ["ignore", "ignore", "ignore"] });
+    child = spawn(binary, ["-config", configPath, "-db", database], { cwd: root, env: { ...process.env, OZAL_LAB_DEPLOY_TOKEN: secret }, stdio: ["ignore", "ignore", "ignore"] });
     for (let attempt = 0; attempt < 100; attempt++) {
       if (child.exitCode !== null) throw new Error("acceptance server exited during startup");
       try { const response = await fetch(`http://127.0.0.1:${adminPort}/_/healthz`, { signal: AbortSignal.timeout(300) }); if (response.ok) return; } catch {}
@@ -108,8 +108,8 @@ try {
     for (const [label, trust, code] of [
       ["repository", { repository_id: repositoryID + 1 }, "deployer.repository"],
       ["owner", { repository_owner_id: ownerID + 1 }, "deployer.owner"],
-      ["ref", { ref: "refs/heads/switchboard-deliberately-untrusted" }, "deployer.ref"],
-      ["workflow", { workflow_ref: `${process.env.GITHUB_REPOSITORY}/.github/workflows/switchboard-untrusted.yml@${ref}` }, "deployer.workflow"],
+      ["ref", { ref: "refs/heads/ozal-deliberately-untrusted" }, "deployer.ref"],
+      ["workflow", { workflow_ref: `${process.env.GITHUB_REPOSITORY}/.github/workflows/ozal-untrusted.yml@${ref}` }, "deployer.workflow"],
     ]) { await start({ trust }); request("POST", upload, token, 401, code); console.log(`real OIDC rejects other ${label}: OK`); }
     await start({ audience: "https://wrong-audience.invalid" }); request("POST", upload, token, 401, "deployer.token_invalid");
     console.log("real OIDC rejects wrong audience: OK");
@@ -130,7 +130,7 @@ try {
     await start(); request("POST", upload, token, 401, "deployer.replay");
     console.log("real OIDC replay, including process restart: OK");
   }
-  console.log(`${github ? "Real GitHub OIDC" : "Project token"} -> curl -> local Switchboard -> live site/status: OK`);
+  console.log(`${github ? "Real GitHub OIDC" : "Project token"} -> curl -> local Ozal -> live site/status: OK`);
 } finally {
   await stop();
   await rm(scratch, { recursive: true, force: true });

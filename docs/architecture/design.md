@@ -1,6 +1,6 @@
 # Design pattern
 
-Switchboard follows one architecture: **functional core, imperative shell**,
+Ozal follows one architecture: **functional core, imperative shell**,
 organized as **ports and adapters** (hexagonal), with the request path built
 as a **pipeline of stages**. This file explains the pattern, why it fits, and
 the concrete rules every package follows.
@@ -46,7 +46,7 @@ this pattern in the codebase; everything new follows it.
   `CertSigner`, `EventSink`, `Upstream`.
 - **Adapters** implement ports for one technology each: `sqlite`,
   `telegram`, `oidc`, `acme`, `yamux`.
-- **`cmd/switchboard`** is the **composition root**: the only place that
+- **`cmd/ozal`** is the **composition root**: the only place that
   constructs adapters and wires them into the core. No globals, no `init()`
   with side effects.
 
@@ -92,7 +92,7 @@ New code goes straight into this layout; existing packages move when they are
 next touched, never in a big-bang refactor.
 
 ```
-cmd/switchboard/          composition root, subcommands (edge, connect, share, validate)
+cmd/ozal/          composition root, subcommands (edge, connect, share, validate)
 internal/
   identity/               Principal, session types                      (core)
   policy/                 AccessPolicy, Authorize, Decision             (core)

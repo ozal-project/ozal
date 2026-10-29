@@ -1,4 +1,4 @@
-module github.com/switchboard-project/switchboard
+module github.com/ozal-project/ozal
 
 go 1.26.0
 

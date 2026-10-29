@@ -15,10 +15,10 @@
   // null: the edge keeps no administrator directory (host login only);
   // false: nobody enrolled yet; true: sign in with a passkey.
   let enrolled = $state<boolean | null | undefined>(undefined);
-  let enrolCommand = $state("sudo switchboard console enrol");
+  let enrolCommand = $state("sudo ozal console enrol");
   let waiting = $state(false);
   let error = $state("");
-  const onLocalhost = location.hostname === "switchboard.localhost" || location.hostname === "localhost";
+  const onLocalhost = ["ozal.localhost", "switchboard.localhost", "localhost"].includes(location.hostname);
   let pasted = $state("");
   let pasteError = $state("");
   // The setup link can be pasted whole (or just its token) instead of opened.
@@ -70,7 +70,7 @@
         <p class="text-muted-foreground mt-1 mb-4 text-sm">Open the setup link the installer printed, or paste it here.</p>
         <form class="flex items-center gap-2" onsubmit={usePasted}>
           <label class="sr-only" for="setup-link">Setup link</label>
-          <input id="setup-link" bind:value={pasted} autocomplete="off" spellcheck="false" placeholder="http://switchboard.localhost:…/overview#enrol=…"
+          <input id="setup-link" bind:value={pasted} autocomplete="off" spellcheck="false" placeholder="http://ozal.localhost:…/overview#enrol=…"
             class="border-input bg-background focus-visible:ring-ring h-9 min-w-0 flex-1 rounded-md border px-2.5 font-mono text-xs focus-visible:ring-2 focus-visible:outline-none" />
           <Button type="submit" size="sm" disabled={!pasted.trim()}>Continue</Button>
         </form>
@@ -90,7 +90,7 @@
       {/if}
 
       {#if !onLocalhost && !admin.enrol && mode === "passkey" && enrolled !== undefined}
-        <p class="border-warning/40 bg-warning/[0.06] mt-4 rounded-md border px-3 py-2 text-xs" role="status">Passkeys need this console opened as <span class="font-mono">switchboard.localhost</span> (for example http://switchboard.localhost:{location.port || "9091"}), not by IP address.</p>
+        <p class="border-warning/40 bg-warning/[0.06] mt-4 rounded-md border px-3 py-2 text-xs" role="status">Passkeys need this console opened as <span class="font-mono">ozal.localhost</span> (for example http://ozal.localhost:{location.port || "9091"}), not by IP address.</p>
       {/if}
     </div>
     {#if !admin.enrol && mode === "passkey" && enrolled !== undefined}

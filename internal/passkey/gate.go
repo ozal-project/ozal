@@ -17,9 +17,9 @@ import (
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 
-	"github.com/switchboard-project/switchboard/internal/auth"
-	"github.com/switchboard-project/switchboard/internal/config"
-	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/ozal-project/ozal/internal/auth"
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/events"
 )
 
 const (
@@ -34,7 +34,7 @@ const (
 // Gate authenticates visitors with passkeys. It implements the proxy's
 // AuthGate (Authenticate, RedirectToLogin) and serves the /_/auth/ pages
 // and API through ServeAuthEndpoint. Sessions use the same backend and
-// cookie as the OIDC gate, so the rest of Switchboard does not change.
+// cookie as the OIDC gate, so the rest of Ozal does not change.
 type Gate struct {
 	webauthn     *webauthn.WebAuthn
 	dir          Directory
@@ -94,7 +94,7 @@ func NewGate(cfg config.Auth, protectedHosts []string, dir Directory, sessions a
 			ResidentKey:      protocol.ResidentKeyRequirementRequired,
 			UserVerification: protocol.VerificationRequired,
 		},
-		// Synced passkeys are not attested, and Switchboard does not
+		// Synced passkeys are not attested, and Ozal does not
 		// restrict authenticator models in phase 1.
 		AttestationPreference: protocol.PreferNoAttestation,
 		Timeouts: webauthn.TimeoutsConfig{

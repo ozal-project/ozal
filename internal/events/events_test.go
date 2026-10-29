@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/policycontext"
+	"github.com/ozal-project/ozal/internal/policycontext"
 )
 
 func TestSlogSinkEmitsOneJSONRecordPerEvent(t *testing.T) {
@@ -64,7 +64,7 @@ func TestSlogSinkEmitsOneJSONRecordPerEvent(t *testing.T) {
 }
 
 func TestMultiClearsRawErrorsBeforeForwarding(t *testing.T) {
-	const raw = "/private/switchboard/state.db: secret-token"
+	const raw = "/private/ozal/state.db: secret-token"
 	var recorder Recorder
 	Multi{&recorder}.Emit(Event{Type: LoginFailed, Code: "session_create_failed", Error: raw})
 	got := recorder.Events()

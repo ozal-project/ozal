@@ -5,16 +5,16 @@
 # is committed and checked by scripts/verify.sh, so no Node step runs here.
 version: 2
 
-project_name: switchboard
+project_name: ozal
 
 before:
   hooks:
     - go mod verify
 
 builds:
-  - id: switchboard
-    main: ./cmd/switchboard
-    binary: switchboard
+  - id: ozal
+    main: ./cmd/ozal
+    binary: ozal
     env:
       # Pure Go throughout (SQLite is modernc): static binaries, no libc.
       - CGO_ENABLED=0
@@ -31,7 +31,7 @@ builds:
     mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:
-  - id: switchboard
+  - id: ozal
     format: tar.gz
     format_overrides:
       - goos: windows
@@ -50,7 +50,7 @@ archives:
       - docs/operations/administration.md
       - docs/security.md
       - docs/reference.md
-      - docs/operations/switchboard.service
+      - docs/operations/ozal.service
 
 checksum:
   name_template: checksums.txt
@@ -73,8 +73,8 @@ changelog:
 
 release:
   github:
-    owner: switchboard-project
-    name: switchboard
+    owner: ozal-project
+    name: ozal
   # Published by hand after reading the notes and checking the artifacts.
   draft: true
   prerelease: auto

@@ -26,9 +26,9 @@ func TestDNS01ConfigAcceptsTheBoundedScope(t *testing.T) {
 		"domains": ["Preview.Example.COM"],
 		"email": "ops@example.com",
 		"dns01": {
-			"state_dir": "/var/lib/switchboard/certs/",
+			"state_dir": "/var/lib/ozal/certs/",
 			"directory_url": "https://acme-staging-v02.api.letsencrypt.org/directory",
-			"certificate_roots_file": "/etc/switchboard/./staging-roots.crt",
+			"certificate_roots_file": "/etc/ozal/./staging-roots.crt",
 			"dns_token": "env:CLOUDFLARE_DNS_TOKEN"
 		}
 	}`)
@@ -38,13 +38,13 @@ func TestDNS01ConfigAcceptsTheBoundedScope(t *testing.T) {
 	if cfg.TLS.Domains[0] != "preview.example.com" {
 		t.Fatalf("domain = %q, want normalized", cfg.TLS.Domains[0])
 	}
-	if cfg.TLS.DNS01.StateDir != "/var/lib/switchboard/certs" {
+	if cfg.TLS.DNS01.StateDir != "/var/lib/ozal/certs" {
 		t.Fatalf("state dir = %q, want cleaned absolute path", cfg.TLS.DNS01.StateDir)
 	}
 	if cfg.TLS.DNS01.DNSToken != "env:CLOUDFLARE_DNS_TOKEN" {
 		t.Fatalf("token reference = %q", cfg.TLS.DNS01.DNSToken)
 	}
-	if cfg.TLS.DNS01.CertificateRootsFile != "/etc/switchboard/staging-roots.crt" {
+	if cfg.TLS.DNS01.CertificateRootsFile != "/etc/ozal/staging-roots.crt" {
 		t.Fatal("certificate roots path was not normalized")
 	}
 	// Clone must not share the pointer.
@@ -63,7 +63,7 @@ func TestDNS01ConfigRefusals(t *testing.T) {
 			"domains": ["preview.example.com"],
 			"email": "ops@example.com",
 			"dns01": {
-				"state_dir": "/var/lib/switchboard/certs",
+				"state_dir": "/var/lib/ozal/certs",
 				"directory_url": "https://acme.example/directory",
 				"dns_token": "env:TOKEN"
 			}
@@ -122,9 +122,9 @@ func TestDNS01ConfigDoesNotRequireAutocertCache(t *testing.T) {
 		"domains": ["preview.example.com"],
 		"email": "ops@example.com",
 		"dns01": {
-			"state_dir": "/var/lib/switchboard/certs",
+			"state_dir": "/var/lib/ozal/certs",
 			"directory_url": "https://acme.example/directory",
-			"dns_token": "file:/etc/switchboard/dns-token"
+			"dns_token": "file:/etc/ozal/dns-token"
 		}
 	}`)
 	if cfg.TLS.CacheDir != "" {
@@ -139,7 +139,7 @@ func TestDNS01ConfigAcceptsASingleLevelWildcard(t *testing.T) {
 		"domains": ["*.Example.COM"],
 		"email": "ops@example.com",
 		"dns01": {
-			"state_dir": "/var/lib/switchboard/certs",
+			"state_dir": "/var/lib/ozal/certs",
 			"directory_url": "https://acme.example/directory",
 			"dns_token": "env:TOKEN"
 		}
@@ -158,7 +158,7 @@ func TestDNS01ConfigAcceptsAWildcardAndItsApex(t *testing.T) {
 		"domains": ["*.example.com", "Example.com"],
 		"email": "ops@example.com",
 		"dns01": {
-			"state_dir": "/var/lib/switchboard/certs",
+			"state_dir": "/var/lib/ozal/certs",
 			"directory_url": "https://acme.example/directory",
 			"dns_token": "env:TOKEN"
 		}
@@ -173,7 +173,7 @@ func TestDNS01ConfigAcceptsAWildcardAndItsApex(t *testing.T) {
 func TestWildcardRequiresDNS01(t *testing.T) {
 	path := writeConfig(t, `{
 		"listen": ":8888",
-		"tls": {"enabled": true, "domains": ["*.example.com"], "email": "ops@example.com", "cache_dir": "/var/lib/switchboard/acme"},
+		"tls": {"enabled": true, "domains": ["*.example.com"], "email": "ops@example.com", "cache_dir": "/var/lib/ozal/acme"},
 		"routes": [{"host": "a.localhost", "target": "http://localhost:9000"}]
 	}`)
 	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "wildcard") {

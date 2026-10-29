@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/auth"
+	"github.com/ozal-project/ozal/internal/auth"
 )
 
 // migratedSessions opens a real database file with every embedded migration

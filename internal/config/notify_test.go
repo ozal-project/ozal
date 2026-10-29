@@ -24,7 +24,7 @@ func TestNotifyConfigAcceptsLocalBotAPI(t *testing.T) {
 	cfg := notifyConfig(t, `{
 		"telegram": {
 			"token": "env:TELEGRAM_BOT_TOKEN",
-			"chats_file": "/var/lib/switchboard/telegram-chats.json",
+			"chats_file": "/var/lib/ozal/telegram-chats.json",
 			"api_base": "http://127.0.0.1:8081"
 		}
 	}`)
@@ -49,12 +49,12 @@ func TestNotifyConfigRefusals(t *testing.T) {
 		want   string
 	}{
 		{"no channel", `{}`, "notify requires telegram"},
-		{"no token", `{"telegram":{"chats_file":"/var/lib/switchboard/chats.json"}}`, "requires token"},
-		{"empty token reference", `{"telegram":{"token":"env: ","chats_file":"/var/lib/switchboard/chats.json"}}`, "names no environment variable"},
+		{"no token", `{"telegram":{"chats_file":"/var/lib/ozal/chats.json"}}`, "requires token"},
+		{"empty token reference", `{"telegram":{"token":"env: ","chats_file":"/var/lib/ozal/chats.json"}}`, "names no environment variable"},
 		{"no chats file", `{"telegram":{"token":"env:TOKEN"}}`, "requires chats_file"},
 		{"relative chats file", `{"telegram":{"token":"env:TOKEN","chats_file":"chats.json"}}`, "absolute path"},
-		{"plain http api base", `{"telegram":{"token":"env:TOKEN","chats_file":"/var/lib/switchboard/chats.json","api_base":"http://api.example.com"}}`, "must be https"},
-		{"unparseable api base", `{"telegram":{"token":"env:TOKEN","chats_file":"/var/lib/switchboard/chats.json","api_base":"://"}}`, "is not a URL"},
+		{"plain http api base", `{"telegram":{"token":"env:TOKEN","chats_file":"/var/lib/ozal/chats.json","api_base":"http://api.example.com"}}`, "must be https"},
+		{"unparseable api base", `{"telegram":{"token":"env:TOKEN","chats_file":"/var/lib/ozal/chats.json","api_base":"://"}}`, "is not a URL"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

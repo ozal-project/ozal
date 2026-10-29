@@ -8,7 +8,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/switchboard-project/switchboard/internal/pages"
+	"github.com/ozal-project/ozal/internal/pages"
 )
 
 const indexFile = "index.html"

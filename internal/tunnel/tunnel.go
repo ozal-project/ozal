@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/hashicorp/yamux"
-	"github.com/switchboard-project/switchboard/internal/config"
-	"github.com/switchboard-project/switchboard/internal/events"
-	"github.com/switchboard-project/switchboard/internal/proxy"
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/proxy"
 )
 
 const (

@@ -6,8 +6,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/switchboard-project/switchboard/internal/auth"
-	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/ozal-project/ozal/internal/auth"
+	"github.com/ozal-project/ozal/internal/events"
 )
 
 func (g *Gate) sessionsList(_ http.ResponseWriter, r *http.Request) (any, *apiError) {

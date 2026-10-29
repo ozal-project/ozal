@@ -9,15 +9,15 @@ import (
 
 // JSONSchema returns an editor-oriented JSON Schema derived from the same
 // structs used by the strict config decoder. Cross-field security rules still
-// live in Validate and must be checked with `switchboard validate`.
+// live in Validate and must be checked with `ozal validate`.
 func JSONSchema() ([]byte, error) {
 	schema, err := schemaForType(reflect.TypeOf(Config{}))
 	if err != nil {
 		return nil, err
 	}
 	schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
-	schema["title"] = "Switchboard configuration"
-	schema["description"] = "Editor aid generated from Switchboard's config types. Run `switchboard validate` for cross-field and security validation."
+	schema["title"] = "Ozal configuration"
+	schema["description"] = "Editor aid generated from Ozal's config types. Run `ozal validate` for cross-field and security validation."
 
 	properties := schema["properties"].(map[string]any)
 	properties["listen"].(map[string]any)["minLength"] = 1

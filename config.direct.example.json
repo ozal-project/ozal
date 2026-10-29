@@ -1,14 +1,14 @@
 {
   "listen": ":8888",
-  "runtime_file": "/var/lib/switchboard/runtime.json",
+  "runtime_file": "/var/lib/ozal/runtime.json",
   "admin": {
     "listen": "127.0.0.1:9090",
-    "socket": "/run/switchboard/admin.sock"
+    "socket": "/run/ozal/admin.sock"
   },
   "tls": {
     "enabled": true,
     "domains": ["auth.example.com"],
-    "cache_dir": "/var/lib/switchboard/acme",
+    "cache_dir": "/var/lib/ozal/acme",
     "email": "operator@example.com"
   },
   "dns": { "target": "edge.example.com" },
@@ -17,7 +17,7 @@
     "passkeys": {
       "rp_id": "example.com",
       "login_url": "https://auth.example.com",
-      "display_name": "Switchboard"
+      "display_name": "Ozal"
     }
   },
   "routes": [

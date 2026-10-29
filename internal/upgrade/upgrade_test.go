@@ -113,12 +113,12 @@ func newScene(t *testing.T, newBinary string) *scene {
 		}
 		return path
 	}
-	binary, source, db := write("switchboard", "old"), write("staged", newBinary), write("state.db", "v5")
+	binary, source, db := write("ozal", "old"), write("staged", newBinary), write("state.db", "v5")
 	sum := sha256.Sum256([]byte(newBinary))
 	s := &scene{dir: dir, host: &fakeHost{t: t, binary: binary, db: db, active: true}}
 	s.plan = Plan{
-		Unit: "switchboard", Binary: binary, Source: source, SHA256: hex.EncodeToString(sum[:]),
-		Config: "/etc/switchboard/config.json", DB: db, Keep: 3,
+		Unit: "ozal", Binary: binary, Source: source, SHA256: hex.EncodeToString(sum[:]),
+		Config: "/etc/ozal/config.json", DB: db, Keep: 3,
 		Poll: time.Microsecond, Attempts: 3,
 		Now: func() time.Time { return time.Date(2026, 10, 22, 3, 0, 0, 0, time.UTC) },
 	}
@@ -135,7 +135,7 @@ func (s *scene) read(name string) string {
 	return string(body)
 }
 
-func (s *scene) stopped() bool { return slices.Contains(s.host.calls, "systemctl stop switchboard") }
+func (s *scene) stopped() bool { return slices.Contains(s.host.calls, "systemctl stop ozal") }
 
 func TestUpgradeMigratesSwapsAndKeepsThePrevious(t *testing.T) {
 	s := newScene(t, "new")
@@ -153,7 +153,7 @@ func TestUpgradeMigratesSwapsAndKeepsThePrevious(t *testing.T) {
 	if s.read("state.db.pre-"+s.plan.SHA256[:12]+"-20261022T030000Z") != "v5" {
 		t.Fatal("database before the migrations not kept")
 	}
-	if len(s.host.asSvc) != 1 || !strings.HasPrefix(s.host.asSvc[0], "switchboard.next migrate up") {
+	if len(s.host.asSvc) != 1 || !strings.HasPrefix(s.host.asSvc[0], "ozal.next migrate up") {
 		t.Fatalf("the database must be touched only as the service account: %v", s.host.asSvc)
 	}
 }
@@ -179,7 +179,7 @@ func TestValidationRunsTheCheckedCopyAndARefusedConfigStopsNothing(t *testing.T)
 	if res, _ := s.run(t); res != Refused || s.stopped() {
 		t.Fatalf("result %v, stopped %v", res, s.stopped())
 	}
-	if s.host.calls[0] != "switchboard.next validate -config /etc/switchboard/config.json" {
+	if s.host.calls[0] != "ozal.next validate -config /etc/ozal/config.json" {
 		t.Fatalf("validated with %q, want root's copy", s.host.calls[0])
 	}
 }
@@ -267,7 +267,7 @@ func TestKeepsTheNewestPreviousBinariesOnly(t *testing.T) {
 	left, _ := filepath.Glob(s.plan.Binary + ".bak-*")
 	names := []string{}
 	for _, l := range left {
-		names = append(names, strings.TrimPrefix(filepath.Base(l), "switchboard.bak-"))
+		names = append(names, strings.TrimPrefix(filepath.Base(l), "ozal.bak-"))
 	}
 	want := []string{bakOf("old"), "cccc", "dddd"}
 	slices.Sort(want)

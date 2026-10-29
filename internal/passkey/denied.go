@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/switchboard-project/switchboard/internal/auth"
+	"github.com/ozal-project/ozal/internal/auth"
 )
 
 // deniedPage is parsed once. It is an html/template on purpose: everything the

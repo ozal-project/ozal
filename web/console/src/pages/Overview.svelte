@@ -127,7 +127,7 @@
 </PageHeader>
 
 {#if statusError && !status}
-  <p class="border-destructive/40 bg-destructive/10 mb-6 rounded-xl border px-4 py-3 text-sm" role="alert">The edge did not answer ({statusError}). Is Switchboard running?</p>
+  <p class="border-destructive/40 bg-destructive/10 mb-6 rounded-xl border px-4 py-3 text-sm" role="alert">The edge did not answer ({statusError}). Is Ozal running?</p>
 {/if}
 
 <div class="mb-6 grid gap-3" aria-live="polite">

@@ -16,11 +16,11 @@ const { instance } = await WebAssembly.instantiate(readFileSync(new URL("engine.
 go.run(instance); // returns when main exits; main blocks, so this only starts it
 await new Promise((resolve) => setTimeout(resolve, 50));
 
-const explain = (input) => JSON.parse(sandbox.switchboardExplain(JSON.stringify(input)));
+const explain = (input) => JSON.parse(sandbox.ozalExplain(JSON.stringify(input)));
 const route = { host: "wiki.acme.dev", auth_required: true, access: { allowed_domains: ["acme.dev"] } };
 const person = (email) => ({ email, email_verified: true, groups: [] });
 
-assert.equal(typeof sandbox.switchboardEngine, "string", "the page can say which engine it runs");
+assert.equal(typeof sandbox.ozalEngine, "string", "the page can say which engine it runs");
 assert.equal(explain({ route }).decision.code, "authentication_required");
 assert.equal(explain({ route, principal: person("bob@other.org") }).decision.code, "domain_not_allowed");
 assert.deepEqual(
@@ -28,7 +28,7 @@ assert.deepEqual(
   { allowed: true, code: "allowed" },
 );
 assert.match(explain({ route: { host: "" } }).error, /host/, "bad input answers with a reason, never throws");
-assert.match(JSON.parse(sandbox.switchboardExplain(42)).error, /one JSON string/);
+assert.match(JSON.parse(sandbox.ozalExplain(42)).error, /one JSON string/);
 
-console.log("site engine: 5 checks OK against engine.wasm " + sandbox.switchboardEngine);
+console.log("site engine: 5 checks OK against engine.wasm " + sandbox.ozalEngine);
 process.exit(0);

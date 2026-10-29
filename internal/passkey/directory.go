@@ -1,4 +1,4 @@
-// Package passkey lets Switchboard authenticate visitors itself with WebAuthn
+// Package passkey lets Ozal authenticate visitors itself with WebAuthn
 // passkeys (ID-003), without an external identity provider. The operator
 // invites users from the host; a user enrols a passkey through a one-time
 // link and then logs in with it. Only public keys and hashes are stored.

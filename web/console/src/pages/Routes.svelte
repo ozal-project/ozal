@@ -70,7 +70,7 @@
   }
 </script>
 
-<PageHeader title="Applications" intro="Every hostname Switchboard answers, its access rule and whether the app behind it responds." tabs={[...(can("applications") ? [{ path: "/applications" as const, label: "Manage" }] : []), { path: "/routes" as const, label: "Routing & health" }]}>
+<PageHeader title="Applications" intro="Every hostname Ozal answers, its access rule and whether the app behind it responds." tabs={[...(can("applications") ? [{ path: "/applications" as const, label: "Manage" }] : []), { path: "/routes" as const, label: "Routing & health" }]}>
   <div class="flex flex-col items-start gap-2 sm:items-end">
     <Button variant="outline" size="sm" onclick={load} disabled={loading}><RefreshIcon class={["size-3.5", loading && "animate-spin"]} /> Refresh</Button>
     <Freshness observedAt={observedAt} refreshing={loading && data !== null} error={error} />
@@ -161,7 +161,7 @@
     </dl>
     <div class="mt-5 flex flex-wrap items-center gap-3">
       <Button onclick={() => navigate("/activity")}>See its access decisions <ArrowRightIcon class="size-4" /></Button>
-      <span class="text-muted-foreground text-xs">To ask why someone would be refused, run <code class="font-mono">switchboard policy explain -host {selected.host} -email person@example.com</code> on the host.</span>
+      <span class="text-muted-foreground text-xs">To ask why someone would be refused, run <code class="font-mono">ozal policy explain -host {selected.host} -email person@example.com</code> on the host.</span>
     </div>
   </Panel>
 {/if}

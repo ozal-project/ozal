@@ -11,9 +11,9 @@ import (
 	"testing"
 
 	"github.com/go-webauthn/webauthn/webauthn"
-	"github.com/switchboard-project/switchboard/internal/config"
-	"github.com/switchboard-project/switchboard/internal/events"
-	"github.com/switchboard-project/switchboard/internal/store/sqlite"
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/store/sqlite"
 )
 
 func peopleHandler(t *testing.T, extra ...Option) (http.Handler, *sqlite.Identity, *events.Recorder) {
@@ -78,7 +78,7 @@ func TestPeopleListingRequiresPeopleAuthority(t *testing.T) {
 	}
 }
 
-// The console does what `switchboard user` does: invite with a link that
+// The console does what `ozal user` does: invite with a link that
 // only the admin token can obtain, list, disable and enable.
 func TestPeopleInviteListDisable(t *testing.T) {
 	audit := &recordingMutationAudit{}
@@ -191,7 +191,7 @@ func TestRecoveryIsRefusedOnTheAdminAPI(t *testing.T) {
 		`{"email":"nobody@example.com","name":"X","groups":["owner"],"recover":true}`,
 	} {
 		rec := request(handler, http.MethodPost, "/_/api/people/invite", "secret", body)
-		if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "switchboard user invite -recover") {
+		if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "ozal user invite -recover") {
 			t.Fatalf("recover over the API = %d %s, want 403 pointing at the host CLI", rec.Code, rec.Body)
 		}
 	}

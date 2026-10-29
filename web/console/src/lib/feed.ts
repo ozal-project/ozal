@@ -1,5 +1,5 @@
 // Live activity bookkeeping (BUG-009). Every event carries "<epoch>-<seq>":
-// the epoch names one Switchboard process, the sequence counts its events.
+// the epoch names one Ozal process, the sequence counts its events.
 // The view keeps an event once per identity (never by time or type: two real
 // events can share both), and a jump in the sequence means events this view
 // never received: a slow connection, or history the server no longer holds.

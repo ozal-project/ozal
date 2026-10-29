@@ -1,4 +1,4 @@
-// Package certs owns Switchboard's public origin certificate: the pure
+// Package certs owns Ozal's public origin certificate: the pure
 // decisions about it, the manager that serves and renews it, and the
 // adapters that talk to ACME and to the DNS provider (EDGE-007).
 //
@@ -7,7 +7,7 @@
 // a stored certificate must pass before it is trusted. manager.go is the
 // shell: one active issuance attempt, exponential backoff with jitter,
 // atomic activation and fail-closed serving. filestore.go, acmeissuer.go and
-// cloudflare.go are adapters for one technology each. cmd/switchboard is the
+// cloudflare.go are adapters for one technology each. cmd/ozal is the
 // only place that constructs them.
 //
 // The scope is deliberately bounded: one certificate name, Cloudflare DNS.
@@ -19,7 +19,7 @@ package certs
 import (
 	"errors"
 
-	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/ozal-project/ozal/internal/events"
 )
 
 // Event types published by the manager. Like every event type in the

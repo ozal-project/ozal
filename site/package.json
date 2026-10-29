@@ -1,9 +1,9 @@
 {
-  "name": "switchboard-site",
+  "name": "ozal-site",
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "Public project page for Switchboard. Static output, served by Switchboard Pages.",
+  "description": "Public project page for Ozal. Static output, served by Ozal Pages.",
   "scripts": {
     "dev": "astro dev",
     "build": "astro check && astro build",

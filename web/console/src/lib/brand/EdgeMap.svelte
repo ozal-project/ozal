@@ -2,7 +2,7 @@
   import type { RouteStatus } from "$lib/api";
   import { navigate } from "$lib/router.svelte";
 
-  // The edge at a glance: visitors reach Switchboard, Switchboard decides and
+  // The edge at a glance: visitors reach Ozal, Ozal decides and
   // patches each request through to an application. A healthy cord carries a
   // signal; a broken one is red and still.
   let { routes, allowed, refused }: { routes: RouteStatus[]; allowed: number; refused: number } = $props();
@@ -31,7 +31,7 @@
     <p class="text-muted-foreground text-xs">{allowed} let in · {refused} refused, in the retained events</p>
   </div>
 
-  <svg viewBox={`0 0 900 ${height}`} class="edgemap hidden w-full sm:block" role="group" aria-label={`Visitors reach Switchboard, which serves ${routes.length} applications`}>
+  <svg viewBox={`0 0 900 ${height}`} class="edgemap hidden w-full sm:block" role="group" aria-label={`Visitors reach Ozal, which serves ${routes.length} applications`}>
     <path d={`M120 ${mid} L288 ${mid}`} class="em-cord" />
     <path d={`M120 ${mid} L288 ${mid}`} class="em-signal em-d0" pathLength="1" />
     <g transform={`translate(70 ${mid})`}>
@@ -44,7 +44,7 @@
       <circle cx="-14" cy="-7" r="4.5" class="em-dot" />
       <circle cx="14" cy="8" r="4.5" class="em-dot-primary" />
       <path d="M-14 -2 C-14 10, 14 -4, 14 3" class="em-glyph-line" />
-      <text y="46" text-anchor="middle" class="em-label">Switchboard</text>
+      <text y="46" text-anchor="middle" class="em-label">Ozal</text>
     </g>
     {#each shown as r, i (r.host)}
       {@const y = rowY(i)}

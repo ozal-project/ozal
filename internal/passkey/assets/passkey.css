@@ -1,5 +1,5 @@
-/* Switchboard identity, shared with the admin console (web/console) and the
-   project page (site/): dark graphite with one violet brand colour. Green and
+/* Ozal identity, shared with the admin console (web/console) and the
+   project page (site/): dark graphite with one cyan brand colour. Green and
    red keep one meaning each: done and refused. Geist is bundled locally (OFL,
    see OFL.txt) so the sign-in pages make no third-party request. */
 @font-face { font-family: "Geist"; src: url("/_/auth/geist-400.woff2") format("woff2"); font-weight: 400 500; font-display: swap; }
@@ -12,10 +12,10 @@
   --fg: #ededef;
   --muted: #8b8b95;
   --border: #26262d;
-  --accent: #8f7cff;
+  --accent: #3ec5d6;
   --accent-fg: #0c0c0e;
-  --lamp: #b3a6ff;
-  --ok: #3fb68b;
+  --lamp: #8fe3ee;
+  --ok: #5fcf80;
   --err: #f0685c;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }

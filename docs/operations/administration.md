@@ -12,14 +12,14 @@ configuración del host pertenecen a root; el estado al servicio.
 
 | Recurso | Ruta recomendada | Propiedad/permisos |
 |---|---|---|
-| Binario y versiones anteriores | `/usr/local/lib/switchboard/` | root, 755 |
-| Configuración del host | `/etc/switchboard/config.json` | root, 644 si solo contiene referencias |
-| Archivos de credenciales | `/etc/switchboard/*.token` | root:switchboard, 640 |
-| SQLite, Pages, runtime y ACME | `/var/lib/switchboard/` | switchboard, directorio 700 |
-| Socket administrativo | `/run/switchboard/admin.sock` | switchboard, 600 |
+| Binario y versiones anteriores | `/usr/local/lib/ozal/` | root, 755 |
+| Configuración del host | `/etc/ozal/config.json` | root, 644 si solo contiene referencias |
+| Archivos de credenciales | `/etc/ozal/*.token` | root:ozal, 640 |
+| SQLite, Pages, runtime y ACME | `/var/lib/ozal/` | ozal, directorio 700 |
+| Socket administrativo | `/run/ozal/admin.sock` | ozal, 600 |
 
 El [instalador](download-install.md#linux-instalar-el-servicio-de-una-vez)
-prepara el servicio. La [unidad de ejemplo](switchboard.service) documenta
+prepara el servicio. La [unidad de ejemplo](ozal.service) documenta
 sus permisos. No hagas que un usuario sin autoridad pueda reemplazar binario,
 configuración o estado para conseguir acceso al reiniciar.
 
@@ -28,8 +28,8 @@ GitHub App en un archivo del servicio; listeners, TLS y autoridad permanecen
 en la configuración del host. Inicialízalo una vez antes de arrancar:
 
 ```sh
-sudo -u switchboard /usr/local/lib/switchboard/switchboard runtime init \
-  -config /etc/switchboard/config.json
+sudo -u ozal /usr/local/lib/ozal/ozal runtime init \
+  -config /etc/ozal/config.json
 ```
 
 El destino debe ser nuevo. Después, un runtime ausente o inválido provoca
@@ -38,17 +38,57 @@ Inclúyelo en backups. Una recarga fallida conserva el snapshot válido anterior
 `config_sha256` en el estado autenticado identifica la configuración efectiva.
 Modificar listeners, identidad del túnel o `runtime_file` requiere reinicio.
 
+## Migrar de Switchboard a Ozal
+
+El nombre del producto y de los comandos pasa a ser **Ozal** (`ozal` y
+`ozalctl`). Una instalación existente conserva su cuenta, unidad, configuración,
+socket, SQLite, runtime, CA y estado TLS. No ejecutes el instalador de una
+instalación nueva sobre ella ni muevas el estado para cambiar la marca.
+El instalador rechaza el layout anterior para evitar crear dos servicios.
+
+Usa el procedimiento de actualización de la sección siguiente con el binario
+Ozal y los valores **reales anteriores** de `-unit`, `-binary`, `-config`,
+`-db` y `-user`. Esos flags no dependen del nombre del producto. Conserva los
+backups y la unidad anterior para revertir; cambiar sus nombres es otra operación.
+Los agentes de renovación del piloto conservan sus rutas y unidades anteriores.
+
+`OZAL_CONFIG` sustituye a `SWITCHBOARD_CONFIG` y `OZAL_ADMIN_TOKEN` a
+`SWITCHBOARD_ADMIN_TOKEN`; las variables anteriores siguen aceptadas como
+compatibilidad. El token nuevo, si está definido incluso vacío, tiene prioridad.
+Sin `-config`, se busca la variable nueva, la anterior, `./config.json`,
+`/etc/ozal/config.json` y por último `/etc/switchboard/config.json`.
+`migrate` usa `ozal.db` por defecto, pero reutiliza `switchboard.db` si existe
+y el nuevo no; en instalaciones usa siempre el `-db` real.
+
+La consola prefiere **`ozal.localhost`**. Las passkeys existentes siguen
+funcionando en `switchboard.localhost` o `localhost`, con el RP ID original.
+Entra por ese nombre, genera un enlace para agregar otro navegador y ábrelo
+en `ozal.localhost` para registrar una passkey nueva para la misma cuenta.
+El cambio de nombre no permite usar una credencial de un RP ID en otro.
+Las sesiones de consola en memoria terminan al reiniciar, como antes.
+
+Cookies `sb_*`, sujetos nativos `sb:`, cabeceras `X-Switchboard-*`, ALPN del
+túnel, derivaciones criptográficas, ruta del probe y migraciones SQL mantienen
+sus identificadores de protocolo. Son contratos de compatibilidad, no marca
+visible: cambiarlos invalidaría estado o impediría mezclar versiones durante
+una actualización. Los filtros de identidad y cookies siguen aplicándose.
+
+El repositorio remoto, módulo Go y URL pública conservan sus destinos actuales
+hasta confirmar dominio y organización. El renombrado local no registra un
+dominio, publica una versión ni modifica el trust OIDC del edge. Un traslado
+de repositorio necesita actualizar ese trust explícitamente antes de publicar.
+
 ## Actualizar y revertir
 
-`switchboard upgrade` se ejecuta desde el **binario nuevo**, verificado y
+`ozal upgrade` se ejecuta desde el **binario nuevo**, verificado y
 copiado a un directorio propiedad de root. Ejemplo: sustituye SHA y rutas por
 valores comprobados; no ejecutes como root un archivo modificable por otra cuenta.
 
 ```sh
-sudo /ruta/root-owned/switchboard-new upgrade -unit switchboard \
-  -binary /usr/local/lib/switchboard/switchboard -sha256 SHA256_ESPERADO \
-  -config /etc/switchboard/config.json \
-  -db /var/lib/switchboard/state.db -user switchboard
+sudo /ruta/root-owned/ozal-new upgrade -unit ozal \
+  -binary /usr/local/lib/ozal/ozal -sha256 SHA256_ESPERADO \
+  -config /etc/ozal/config.json \
+  -db /var/lib/ozal/state.db -user ozal
 ```
 
 Valida, detiene la unidad, respalda/migra si hay migraciones, conserva el
@@ -85,10 +125,10 @@ El backup de DB usa `VACUUM INTO`, verifica integridad y publica en un archivo
 nuevo con permisos privados. Prueba sobre un directorio descartable:
 
 ```sh
-switchboard db backup -db /var/lib/switchboard/state.db -out ./state.backup.db
-switchboard db restore -from ./state.backup.db -to ./state.restored.db
-switchboard doctor -config /etc/switchboard/config.json -db ./state.restored.db
-switchboard migrate -db ./state.restored.db status
+ozal db backup -db /var/lib/ozal/state.db -out ./state.backup.db
+ozal db restore -from ./state.backup.db -to ./state.restored.db
+ozal doctor -config /etc/ozal/config.json -db ./state.restored.db
+ozal migrate -db ./state.restored.db status
 ```
 
 `restore` no sobrescribe destinos existentes e invalida sesiones por defecto.
@@ -109,14 +149,14 @@ autenticado. Los placeholders son rutas elegidas por el operador.
 
 ```sh
 # Máquina del conector: directorio nuevo, clave local y CSR público.
-switchboard connector prepare -dir ./connector-identity -name homelab
+ozal connector prepare -dir ./connector-identity -name homelab
 # Host autorizado de la CA: solo recibe el CSR.
-switchboard connector sign -csr ./connector.csr \
+ozal connector sign -csr ./connector.csr \
   -ca-dir /ruta/ca-existente -out ./connector.crt
 # Devuelve el certificado público a su máquina; nunca transfieras la clave.
-switchboard connector check -dir ./connector-identity -ca ./ca.crt
+ozal connector check -dir ./connector-identity -ca ./ca.crt
 # Edge: enrolamiento con autoridad del socket local.
-switchboard connector enroll -config /etc/switchboard/config.json \
+ozal connector enroll -config /etc/ozal/config.json \
   -name homelab -cert ./connector.crt
 ```
 
@@ -124,7 +164,7 @@ Configura `tunnel` en el edge y una ruta con `connector: "homelab"`. El
 transporte actual permite loopback o una subred RFC1918/ULA explícita; no es
 un listener público genérico. El conector valida nombre/certificado del edge
 y solo sirve sus destinos fijos. Para las opciones exactas usa
-`switchboard tunnel connect -h`; los contratos están en
+`ozal tunnel connect -h`; los contratos están en
 [desarrollo](../engineering.md#tuneles).
 
 El certificado emitido por este flujo dura 30 días. Planifica y prueba rotación
@@ -133,7 +173,7 @@ es renovación genérica para cualquier conector. Si no hay metadatos de
 vencimiento, la consola informa desconocido.
 
 Para retirar: revisa apps afectadas y usa
-`switchboard connector revoke -config /etc/switchboard/config.json -name homelab`
+`ozal connector revoke -config /etc/ozal/config.json -name homelab`
 en el edge, después detén el conector en su host. La revalidación periódica
 busca cerrar sesiones revocadas alrededor de cinco segundos; ante errores del
 registro las existentes pueden permanecer y las conexiones nuevas se rechazan.
@@ -152,8 +192,8 @@ solo en los repositorios elegidos. Guarda su clave como archivo privado y
 configura únicamente la referencia desde el socket del host:
 
 ```sh
-switchboard github connect -config /etc/switchboard/config.json \
-  -app-id 123 -installation-id 456 -key file:/etc/switchboard/github-app-key
+ozal github connect -config /etc/ozal/config.json \
+  -app-id 123 -installation-id 456 -key file:/etc/ozal/github-app-key
 ```
 
 En Sites, elige quién puede publicar: repo, sitio, proyecto, ref completa y
@@ -177,21 +217,21 @@ rutas; una subida ya autenticada puede terminar con su snapshot capturado.
 retira los publicadores si quieres detener CI. Desinstalar la App tampoco
 revoca esas reglas del edge.
 
-<a id="operacion-remota-con-sbctl"></a>
+<a id="operacion-remota-con-ozalctl"></a>
 
-## Operación remota con sbctl
+## Operación remota con ozalctl
 
-`sbctl` se ejecuta en la máquina del operador, habla por SSH y muestra un plan
+`ozalctl` se ejecuta en la máquina del operador, habla por SSH y muestra un plan
 antes de aplicar. Usa un archivo de targets privado —
-[sbctl.example.json](../../sbctl.example.json)— con destinos, rutas, unidad,
+[ozalctl.example.json](../../ozalctl.example.json)— con destinos, rutas, unidad,
 cuenta, socket, lock y archivo del token de publicación limitado.
 
 ```sh
-sbctl edge upgrade [-ref REF] [-apply]
-sbctl edge config -base FILE [-cloudflare-ranges] [-apply]
-sbctl site publish -site NAME -dir DIST [-host HOST] [-apply]
-sbctl site cutover -host HOST -to IP -cloudflare-token FILE [-dir DIST] [-apply]
-sbctl site cutover -host HOST -back EVIDENCE -cloudflare-token FILE [-apply]
+ozalctl edge upgrade [-ref REF] [-apply]
+ozalctl edge config -base FILE [-cloudflare-ranges] [-apply]
+ozalctl site publish -site NAME -dir DIST [-host HOST] [-apply]
+ozalctl site cutover -host HOST -to IP -cloudflare-token FILE [-dir DIST] [-apply]
+ozalctl site cutover -host HOST -back EVIDENCE -cloudflare-token FILE [-apply]
 ```
 
 Upgrade construye un ref comprometido y usa el procedimiento anterior. Config

@@ -64,6 +64,6 @@ test("tracks group by area and put work in progress first", () => {
 });
 
 test("long titles are cut at a word", () => {
-  const t = shortTitle("Validate Cloudflare proxy and Switchboard coexistence and a measurable path to reduce provider dependence over time");
+  const t = shortTitle("Validate Cloudflare proxy and Ozal coexistence and a measurable path to reduce provider dependence over time");
   assert.ok(t.length <= 84 && t.endsWith("…") && !t.endsWith(" …"));
 });

@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/switchboard-project/switchboard/internal/store/sqlite"
+	"github.com/ozal-project/ozal/internal/store/sqlite"
 )
 
 func newTestRegistry(t *testing.T) *Registry {

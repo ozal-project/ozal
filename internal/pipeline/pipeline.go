@@ -14,7 +14,7 @@ import (
 	"strings"
 )
 
-// Identity headers a protected upstream trusts. Switchboard injects them only
+// Identity headers a protected upstream trusts. Ozal injects them only
 // after authentication; client-supplied values (in any spelling) never reach
 // an upstream.
 const (

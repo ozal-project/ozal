@@ -1,4 +1,10 @@
-# Switchboard
+# Ozal
+
+Previously named Switchboard. This checkout builds `ozal` and `ozalctl`;
+existing installations follow the [rename upgrade guide](docs/operations/administration.md#migrar-de-switchboard-a-ozal).
+Source and Go module: [`github.com/ozal-project/ozal`](https://github.com/ozal-project/ozal).
+The public site address stays unchanged until DNS/HTTPS cutover is verified.
+Historical Switchboard releases keep their original names; Ozal release artifacts are not published yet.
 
 Self-hosted application access in one Go binary: give an application a hostname,
 serve it over HTTPS, and decide who may enter with passkeys or an external OIDC
@@ -6,7 +12,7 @@ provider. Built static sites can also be published with deployment history and
 rollback. The administrative console is a Svelte app embedded in the binary;
 Node is needed to build the UI, not to run the installed gateway.
 
-Switchboard is an alpha project. Features in this checkout can be newer than
+Ozal is an alpha project. Features in this checkout can be newer than
 those in a tagged release. Owned tunnels, provider independence and external
 operator acceptance have explicit remaining gates; consult the version you
 install rather than treating future plans as available features.
@@ -15,7 +21,7 @@ install rather than treating future plans as available features.
 
 - [Install](docs/operations/download-install.md): choose a version, verify it and install locally or as a Linux service.
 - [First application](docs/operations/first-application.md): private console, passkeys, applications, domains and groups.
-- [Administration](docs/operations/administration.md): upgrades, backups, recovery, connectors, GitHub and sbctl.
+- [Administration](docs/operations/administration.md): upgrades, backups, recovery, connectors, GitHub and ozalctl.
 - [Security](docs/security.md): trust boundaries and deployment responsibilities.
 - [Configuration and CLI reference](docs/reference.md): advanced options and examples.
 
@@ -23,7 +29,7 @@ For a local trial with a binary built from this checkout, start an application
 on port 3000, then:
 
 ```sh
-switchboard setup -dir ./my-edge -target http://127.0.0.1:3000
+ozal setup -dir ./my-edge -target http://127.0.0.1:3000
 ```
 
 This creates a new private installation and prints its start and bootstrap
@@ -47,7 +53,7 @@ free domains, a hosted service, a global CDN or volumetric DDoS mitigation.
 ## Development
 
 ```sh
-go build ./cmd/switchboard
+go build ./cmd/ozal
 scripts/verify.sh
 ```
 

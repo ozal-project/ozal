@@ -7,17 +7,17 @@ OIDC provider. Everything stays on loopback. You need Go (version in
 ## 1. Demo upstream — terminal 1
 
 ```bash
-mkdir -p /tmp/switchboard-demo
-printf 'hello from the routed app\n' > /tmp/switchboard-demo/index.html
-python3 -m http.server 9000 --bind 127.0.0.1 --directory /tmp/switchboard-demo
+mkdir -p /tmp/ozal-demo
+printf 'hello from the routed app\n' > /tmp/ozal-demo/index.html
+python3 -m http.server 9000 --bind 127.0.0.1 --directory /tmp/ozal-demo
 ```
 
-## 2. Switchboard — terminal 2
+## 2. Ozal — terminal 2
 
 From the repository root:
 
 ```bash
-go run ./cmd/switchboard -config config.quickstart.json
+go run ./cmd/ozal -config config.quickstart.json
 ```
 
 ## 3. Check the route — terminal 3
@@ -48,7 +48,7 @@ loopback. For a persistent console and passkey setup, follow
 `Ctrl-C` in both terminals and remove the demo directory:
 
 ```bash
-rm -rf /tmp/switchboard-demo
+rm -rf /tmp/ozal-demo
 ```
 
 ## Notes

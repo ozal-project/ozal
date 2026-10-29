@@ -40,7 +40,7 @@ func writeBytesAtomic(path string, data []byte) (err error) {
 	}
 
 	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, ".switchboard-config-*")
+	tmp, err := os.CreateTemp(dir, ".ozal-config-*")
 	if err != nil {
 		return fmt.Errorf("create temporary config: %w", err)
 	}

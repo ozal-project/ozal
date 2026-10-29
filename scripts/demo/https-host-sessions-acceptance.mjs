@@ -26,9 +26,9 @@ const errors = [];
 const agent = async (...args) => JSON.parse((await run("agent-browser", ["--session", session, "--namespace", session, "--json", ...args], { timeout: 45_000 })).stdout);
 try {
   await run("certutil", ["-H"], { timeout: 5000 }).catch((error) => { if (error.code === "ENOENT") throw new Error("certutil is required; install libnss3-tools separately"); });
-  await run("go", ["test", "-c", "-o", fixtureBin, "./cmd/switchboard"], { cwd: repo, timeout: 120_000 });
+  await run("go", ["test", "-c", "-o", fixtureBin, "./cmd/ozal"], { cwd: repo, timeout: 120_000 });
   fixture = spawn(fixtureBin, ["-test.run=^TestHTTPSAcceptanceFixture$", "-test.timeout=11m"], {
-    cwd: repo, env: { ...process.env, SWITCHBOARD_HTTPS_FIXTURE: metadata }, stdio: ["pipe", "pipe", "pipe"],
+    cwd: repo, env: { ...process.env, OZAL_HTTPS_FIXTURE: metadata }, stdio: ["pipe", "pipe", "pipe"],
   });
   fixtureExit = once(fixture, "exit").then(([code]) => { fixtureFailed = code !== 0; return code; });
   for (const stream of [fixture.stdout, fixture.stderr]) stream.on("data", (data) => { fixtureLog = (fixtureLog + data).slice(-8000); });

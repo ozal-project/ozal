@@ -5,12 +5,12 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-# CI and release set SWITCHBOARD_REQUIRE_FRONTEND=1 (REL-014): a frontend
+# CI and release set OZAL_REQUIRE_FRONTEND=1 (REL-014): a frontend
 # check that cannot run is then a failure, not a skipped step.
-require_frontend="${SWITCHBOARD_REQUIRE_FRONTEND:-}"
+require_frontend="${OZAL_REQUIRE_FRONTEND:-}"
 skipped() {
   if [[ -n "$require_frontend" ]]; then
-    echo "$1 (required: SWITCHBOARD_REQUIRE_FRONTEND is set)" >&2
+    echo "$1 (required: OZAL_REQUIRE_FRONTEND is set)" >&2
     exit 1
   fi
   echo "  $1"
@@ -31,7 +31,7 @@ echo "[3/7] go test -race"
 go test -race -count=1 ./...
 
 echo "[4/7] go build"
-go build -o /dev/null ./cmd/switchboard
+go build -o /dev/null ./cmd/ozal
 
 # Short fuzz pass: the seed corpus runs in the normal test step above; this
 # keeps the fuzz targets alive without turning the gate into a long run.

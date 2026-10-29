@@ -29,6 +29,8 @@ env:
 
 jobs:
   deploy:
+    # Enable only after the edge trusts this repository's owner/workflow.
+    if: vars.OZAL_SITE_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -106,5 +108,5 @@ jobs:
             scripts/pages/publish.sh "$RUNNER_TEMP/last-good/site.tar.gz" "$RUNNER_TEMP/rollback.json"
             echo "Acceptance failed: rolled back to the last good build." >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "::error::Acceptance failed and no previous build is cached: roll back on the edge with 'switchboard site rollback -site switchboard-site'."
+            echo "::error::Acceptance failed and no previous build is cached: roll back on the edge with 'ozal site rollback -site switchboard-site'."
           fi

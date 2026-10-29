@@ -7,11 +7,11 @@ Para campos exactos genera el schema con el binario de tu versión y valida las
 reglas entre campos; no uses un ejemplo de otra release como configuración vigente.
 
 ```sh
-switchboard schema > switchboard-config.schema.json
-switchboard validate -config config.json
-switchboard doctor -config config.json -db ./state.db
-switchboard version -json
-switchboard completion bash  # también zsh, fish, powershell
+ozal schema > ozal-config.schema.json
+ozal validate -config config.json
+ozal doctor -config config.json -db ./state.db
+ozal version -json
+ozal completion bash  # también zsh, fish, powershell
 ```
 
 `doctor` comprueba configuración/DB, no disponibilidad pública de una app.
@@ -31,7 +31,7 @@ Ejemplo de proxy HTTP local público, sin login:
 ```
 
 ```sh
-switchboard -config config.json
+ozal -config config.json
 ```
 
 `config.example.json` y `config.quickstart.json` en la raíz contienen ejemplos;
@@ -156,9 +156,9 @@ también CAA si tu zona restringe las CA autorizadas.
 
 Instala siguiendo la guía de servicio y aplica la plantilla como configuración
 del host, con permisos y directorios del instalador. Inicializa una sola vez
-`runtime_file` con `switchboard runtime init -config /etc/switchboard/config.json`,
-migra SQLite y arranca con `-config /etc/switchboard/config.json
--db /var/lib/switchboard/state.db`. Completa el bootstrap administrativo por
+`runtime_file` con `ozal runtime init -config /etc/ozal/config.json`,
+migra SQLite y arranca con `-config /etc/ozal/config.json
+-db /var/lib/ozal/state.db`. Completa el bootstrap administrativo por
 el transporte privado e invita al email permitido. Conserva el estado ACME y
 SQLite en backups. La consola continúa en loopback/socket; el ejemplo no la
 expone por HTTPS público.
@@ -176,9 +176,9 @@ DNS-01 usa `tls.domains` y un bloque `tls.dns01`:
 
 ```json
 "dns01": {
-  "state_dir": "/var/lib/switchboard/origin-cert",
+  "state_dir": "/var/lib/ozal/origin-cert",
   "directory_url": "https://acme-v02.api.letsencrypt.org/directory",
-  "dns_token": "file:/etc/switchboard/cloudflare-dns.token"
+  "dns_token": "file:/etc/ozal/cloudflare-dns.token"
 }
 ```
 
@@ -232,7 +232,7 @@ no cambia. No equivale a protección volumétrica de red.
 
 `notify.telegram` acepta `token` referenciado, `chats_file` privado y opcional
 `api_base` HTTPS (HTTP solo loopback). Empareja desde el host con
-`switchboard notify pair -config config.json` y envía `/pair CODE` al bot en el
+`ozal notify pair -config config.json` y envía `/pair CODE` al bot en el
 chat elegido. El proceso es el único lector de updates; código de uso único y
 expiración. Cola acotada, reintentos limitados, sin bloquear el request path;
 alertas pueden perderse. Aprobar accesos por Telegram sigue siendo otra función.
@@ -241,7 +241,7 @@ alertas pueden perderse. Aprobar accesos por Telegram sigue siendo otra función
 
 `pages.dir` mantiene artefactos y `keep` controla retención. Una ruta `root`
 sirve archivos fijos; `site` usa el deployment activo de Pages. Subir tar.gz de
-archivos regulares de `dist` desde la consola, CLI o CI. Switchboard no compila.
+archivos regulares de `dist` desde la consola, CLI o CI. Ozal no compila.
 
 Límites predeterminados del extractor: 100 MiB/archivo, 500 MiB total, 20.000
 entradas y 32 niveles. Rechaza enlaces, traversal, dispositivos y archivos de
@@ -284,10 +284,10 @@ required es el default cuando se incluye la familia. El intent durable no es
 prueba de commit. [Contrato de auditoría](engineering.md#auditoria).
 
 ```sh
-switchboard audit verify -config config.json
-switchboard audit keygen -h
-switchboard audit checkpoint -h
-switchboard audit repair -dir /ruta/audit  # plan; -apply después de revisar
+ozal audit verify -config config.json
+ozal audit keygen -h
+ozal audit checkpoint -h
+ozal audit repair -dir /ruta/audit  # plan; -apply después de revisar
 ```
 
 Detén el writer para verificar/checkpoint/repair. El journal no se repara al
@@ -300,8 +300,8 @@ Usa el binario de la versión correcta con DB migrada; no se aplican migraciones
 silenciosamente al iniciar:
 
 ```sh
-switchboard migrate -db ./state.db status
-switchboard migrate up -db ./state.db -backup
+ozal migrate -db ./state.db status
+ozal migrate up -db ./state.db -backup
 scripts/new-migration.sh nombre
 ```
 

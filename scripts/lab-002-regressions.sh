@@ -19,6 +19,6 @@ run_package_cases ./internal/proxy '^(TestSilentUpstreamTimesOutWith504|TestUnhe
 run_package_cases ./internal/tunnel '^(TestTunnelHTTPConcurrencyTrustAndReconnect|TestTunnelRejectsUnauthorizedTLS|TestRequestCancellationClosesOnlyItsStream)$'
 run_package_cases ./internal/tunnel '^(TestConnectorReattachesAfterEdgeRestart|TestRevocationClosesLiveSessionAndBlocksReconnect)$'
 run_package_cases ./internal/certs '^(TestRenewalDue|TestManagerFailsClosedWithoutCertificate|TestManagerKeepsServingAfterFailedRenewal|TestManagerServesPersistedCertificateAfterRestart)$'
-run_package_cases ./cmd/switchboard '^(TestAuditFailureReporterReturnsFailureAndLogsOnce|TestAuditFailureReporterStatusTracksStorageFailuresOnly)$'
+run_package_cases ./cmd/ozal '^(TestAuditFailureReporterReturnsFailureAndLogsOnce|TestAuditFailureReporterStatusTracksStorageFailuresOnly)$'
 run_package_cases ./internal/store/sqlite '^(TestReadOnlyStatusDoesNotCreateMigrationTable|TestOpenReadOnlyAndIntegrityCheck|TestOpenReadOnlyDoesNotCreateMissingFile)$'
 run_package_cases ./internal/audit '^TestProcessKillAfterAppendCanRestartAndVerify$'

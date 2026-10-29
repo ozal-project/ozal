@@ -12,8 +12,8 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/switchboard-project/switchboard/internal/auth"
-	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/ozal-project/ozal/internal/auth"
+	"github.com/ozal-project/ozal/internal/config"
 )
 
 const (
@@ -38,7 +38,7 @@ type request struct {
 }
 
 // Explain evaluates one route and an optional person and returns the same
-// auth.Report the console and `switchboard policy explain -json` return. A nil
+// auth.Report the console and `ozal policy explain -json` return. A nil
 // principal simulates a request without a session.
 func Explain(input []byte) ([]byte, error) {
 	if len(input) > maxInput {

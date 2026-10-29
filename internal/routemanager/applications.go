@@ -2,7 +2,7 @@ package routemanager
 
 import (
 	"errors"
-	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/ozal-project/ozal/internal/config"
 )
 
 var ErrConfigChanged = errors.New("configuration changed; refresh and review again")

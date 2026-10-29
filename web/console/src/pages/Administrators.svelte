@@ -144,7 +144,7 @@
     <div class="grid gap-2" aria-live="polite">
       <p class="text-sm font-medium">Invitation for {invitation.email}</p>
       <CopyCommand command={invitation.link} label="Copy invitation link" />
-      <p class="text-muted-foreground text-xs">Works once, until {when(invitation.expires)}. They open it as <span class="font-mono">switchboard.localhost</span> through their own SSH tunnel to this console, give their name and create a passkey. Shown only now.</p>
+      <p class="text-muted-foreground text-xs">Works once, until {when(invitation.expires)}. They open it as <span class="font-mono">ozal.localhost</span> through their own SSH tunnel to this console, give their name and create a passkey. Shown only now.</p>
       <div class="mt-3 flex justify-end gap-2">
         <Button variant="ghost" onclick={startAdd}>Add another</Button>
         <Button onclick={() => (addOpen = false)}>Done</Button>

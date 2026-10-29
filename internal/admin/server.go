@@ -1,4 +1,4 @@
-// Package admin implements Switchboard's loopback control plane.
+// Package admin implements Ozal's loopback control plane.
 package admin
 
 import (
@@ -15,10 +15,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/config"
-	"github.com/switchboard-project/switchboard/internal/events"
-	"github.com/switchboard-project/switchboard/internal/healthcheck"
-	"github.com/switchboard-project/switchboard/internal/routemanager"
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/healthcheck"
+	"github.com/ozal-project/ozal/internal/routemanager"
 )
 
 const maxRequestBody = 1 << 20
@@ -144,7 +144,7 @@ func setSecurityHeaders(w http.ResponseWriter, r *http.Request) {
 }
 
 // loopbackHost reports whether an admin Host header names only the local
-// machine: an IP in 127.0.0.0/8 or ::1, or one of the two console names.
+// machine: an IP in 127.0.0.0/8 or ::1, or an exact current/legacy console name.
 func loopbackHost(host string) bool {
 	if host == "" {
 		return false
@@ -154,7 +154,7 @@ func loopbackHost(host string) bool {
 	}
 	host = strings.TrimSuffix(host, ".")
 	host = strings.TrimPrefix(strings.TrimSuffix(host, "]"), "[")
-	if strings.EqualFold(host, "localhost") || strings.EqualFold(host, "switchboard.localhost") {
+	if strings.EqualFold(host, "localhost") || strings.EqualFold(host, "ozal.localhost") || strings.EqualFold(host, "switchboard.localhost") {
 		return true
 	}
 	ip := net.ParseIP(host)

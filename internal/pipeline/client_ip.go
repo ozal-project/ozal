@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/switchboard-project/switchboard/internal/policycontext"
+	"github.com/ozal-project/ozal/internal/policycontext"
 )
 
 type clientIPKey struct{}

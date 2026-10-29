@@ -1,4 +1,4 @@
-// Package events defines what Switchboard publishes and how an event reaches
+// Package events defines what Ozal publishes and how an event reaches
 // a sink. Types are stable: renaming one is a breaking change for whoever
 // consumes the JSON logs.
 package events
@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/policycontext"
+	"github.com/ozal-project/ozal/internal/policycontext"
 )
 
 // Type is a stable event name.

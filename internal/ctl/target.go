@@ -1,5 +1,5 @@
-// Package ctl is the operator-side toolkit behind cmd/sbctl: it ships a
-// Switchboard binary to an edge and runs `switchboard upgrade` there. It runs
+// Package ctl is the operator-side toolkit behind cmd/ozalctl: it ships a
+// Ozal binary to an edge and runs `ozal upgrade` there. It runs
 // on the operator's machine and is never part of the edge's own binary. This
 // file is the functional core: targets, validation, the commands sent to the
 // edge and the reading of their results. Nothing here touches a network.
@@ -46,7 +46,7 @@ type Edge struct {
 	// whichever tool runs it.
 	Lock string `json:"lock"`
 	// CommandLink, when set, is created (if absent) as a link to Binary so the
-	// `switchboard` command runs from any directory.
+	// `ozal` command runs from any directory.
 	CommandLink string `json:"command_link,omitempty"`
 	Keep        int    `json:"keep,omitempty"`
 	// Socket is the edge's admin Unix socket. `edge config` reads the

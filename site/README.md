@@ -1,7 +1,7 @@
-# Switchboard project page
+# Ozal project page
 
 Static site for `switchboard.octaviosantacruz.com`, built with Astro and served by
-Switchboard Pages. Its tokens (dark graphite, violet brand, Geist) are shared with the
+Ozal Pages. Its tokens (dark graphite, cyan brand, Geist) are shared with the
 console (`UI-005`).
 
 The roadmap and changelog are not written here: `src/lib/tracker.ts` parses
@@ -33,16 +33,18 @@ section comes into view) and copies the matching `wasm_exec.js`. Both are build 
 committed. `internal/policydemo` is the only code in between; it adds input checks, not policy, and a
 test compares its answer with `auth.NewReport`. The page states what it does not simulate.
 
-The first screen says what Switchboard is (the front door for self-hosted apps) with a
+The first screen says what Ozal is (the front door for self-hosted apps) with a
 before/after comparison. "Everyone goes through one door" follows: an animated map (CSS
 only, still under reduced motion, a plain list under 640 px) of three people reaching
-Switchboard and four apps, with the request pipeline and a `policy explain` trace beside
+Ozal and four apps, with the request pipeline and a `policy explain` trace beside
 it. The live engine has its own section after it. The walkthrough is five real console
 screens behind native radio tabs (no video; `scripts/demo/tour.mjs` regenerates the
 stills by signing in with a host login). Below it the page stays short: one line and a
 status tag per capability ("In use" on the author's server, "Tested" by automated tests
 only, "Unreleased" on main), a four-release timeline, and a link to `/roadmap/`, which
-is read from the trackers. Private downloads have no public CTA while `sourcePublic` is false.
+is read from the trackers. The public source is linked; release downloads stay unadvertised until Ozal artifacts exist.
+Automatic site publication requires repository variable `OZAL_SITE_DEPLOY_ENABLED=true`,
+set only after the edge trusts the new repository owner and workflow.
 
 Browser regression checks reuse the tour's existing Playwright dependency:
 

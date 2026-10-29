@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/ozal-project/ozal/internal/config"
 )
 
 type probeRoundTripperFunc func(*http.Request) (*http.Response, error)

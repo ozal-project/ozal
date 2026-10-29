@@ -17,6 +17,6 @@ export async function exchangeHostLogin(token: string): Promise<{ token: string;
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token }), cache: "no-store", signal: AbortSignal.timeout(15_000),
   });
-  if (!res.ok) throw new Error("This host login expired or was already used. Open a new link from switchboard console login on the host.");
+  if (!res.ok) throw new Error("This host login expired or was already used. Open a new link from ozal console login on the host.");
   return res.json();
 }

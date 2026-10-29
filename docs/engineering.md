@@ -70,7 +70,7 @@ falla cerrado cuando la regla necesita esa evidencia.
 `policy explain` usa el mismo motor con identidad/contexto hipotéticos:
 
 ```sh
-switchboard policy explain -config /ruta/config.json -host app.example.com \
+ozal policy explain -config /ruta/config.json -host app.example.com \
   -email ana@example.com -verified -groups engineering -expect allowed
 ```
 
@@ -80,7 +80,7 @@ política; `who-can` y `review` no deben convertir historia ausente en "sin uso"
 
 La app puede conservar su propio login. Headers de gateway solo se aceptan
 desde su camino autenticado; la app conserva autorización interna. Afirmaciones
-firmadas verificables por la app, intercambio de tokens y Switchboard como
+firmadas verificables por la app, intercambio de tokens y Ozal como
 proveedor OIDC tienen alcances distintos y no están concedidos por pasar headers.
 `ARCH-009` conserva la decisión pendiente; `ID-004` no se cierra por handoff.
 
@@ -241,14 +241,14 @@ node scripts/demo/site-check.mjs
 python3 scripts/smoke-tunnel-configured.py --binary /ruta/binario-de-prueba
 ```
 
-Los demos necesitan sus dependencias y navegador; usa `SWITCHBOARD_BIN` y
+Los demos necesitan sus dependencias y navegador; usa `OZAL_BIN` y
 `CHROME` cuando corresponda, consulta el script para prerrequisitos. Ejecutan
 fixtures locales; HTTP localhost no acredita HTTPS público ni otros navegadores.
 No instales herramientas adicionales implícitamente por un ejemplo.
 
 La aceptación HTTPS de ID-015 requiere Linux, Go, `agent-browser` con soporte
 `--ca-cert`, `certutil` (paquete `libnss3-tools`) y el `playwright-core` ya fijado
-en `scripts/demo`. Compila un ejecutable de test de `cmd/switchboard`, usa la
+en `scripts/demo`. Compila un ejecutable de test de `cmd/ozal`, usa la
 configuración autocert de producción con hojas locales precargadas, el routing
 real, WebAuthn y SQLite migrado. Todos los listeners usan puertos efímeros en
 loopback; la administración del fixture existe solo en `_test.go`. Cierra stdin

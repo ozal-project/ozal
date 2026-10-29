@@ -15,8 +15,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/switchboard-project/switchboard/internal/config"
-	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/events"
 )
 
 type operatorKey struct{}

@@ -8,7 +8,7 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Switchboard identity (UI-005): dark graphite with one violet brand colour.
+/* Ozal identity (UI-005): dark graphite with one cyan brand colour.
    Green, red and amber keep one meaning each: allowed, refused, waiting. The
    marketing site (site/src/styles.css) uses the same tokens. Fonts are bundled
    (OFL): no third-party requests. */
@@ -20,7 +20,7 @@
   --card-foreground: #ededef;
   --popover: #1c1c21;
   --popover-foreground: #ededef;
-  --primary: #8f7cff;
+  --primary: #3ec5d6;
   --primary-foreground: #0c0c0e;
   --secondary: #1c1c21;
   --secondary-foreground: #ededef;
@@ -31,11 +31,11 @@
   --destructive: #f0685c;
   --border: #26262d;
   --input: #34343c;
-  --ring: #b3a6ff;
-  --success: #3fb68b;
+  --ring: #8fe3ee;
+  --success: #5fcf80;
   --warning: #e0a84a;
   /* The brand colour, for marks and emphasis. */
-  --signal: #b3a6ff;
+  --signal: #8fe3ee;
   --sidebar: #111114;
   --sidebar-foreground: #ededef;
   --sidebar-border: #26262d;

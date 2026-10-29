@@ -5,7 +5,7 @@
 // captions and the pointer are added, because a screen recording shows neither.
 //
 //   cd scripts/demo && npm ci
-//   node tour.mjs --binary ../../switchboard --chrome /path/to/chrome
+//   node tour.mjs --binary ../../ozal --chrome /path/to/chrome
 //
 // Output: site/public/tour/tour.webm and site/public/shots/*.png.
 import { chromium } from "playwright-core";
@@ -18,7 +18,7 @@ import { startDemoEdge, DOMAIN, PORT } from "./edge.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const arg = (flag, fallback) => (process.argv.includes(flag) ? process.argv[process.argv.indexOf(flag) + 1] : fallback);
-const binary = resolve(arg("--binary", join(here, "../../switchboard")));
+const binary = resolve(arg("--binary", join(here, "../../ozal")));
 const chrome = arg("--chrome", process.env.CHROME);
 const site = resolve(here, "../../site/public");
 const tourDir = join(site, "tour");
@@ -39,7 +39,7 @@ const overlay = () => {
     bar.style.cssText = "position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:2147483647;max-width:min(880px,92vw);padding:12px 20px;border-radius:999px;background:rgba(17,17,20,.94);color:#ededef;font:500 17px/1.35 system-ui,sans-serif;border:1px solid #34343c;box-shadow:0 12px 40px rgba(0,0,0,.5);opacity:0;transition:opacity .35s;pointer-events:none;text-align:center";
     const dot = document.createElement("div");
     dot.id = "tour-pointer";
-    dot.style.cssText = "position:fixed;left:-40px;top:-40px;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;border:2px solid #b3a6ff;background:rgba(143,124,255,.28);z-index:2147483647;pointer-events:none;transition:transform .12s";
+    dot.style.cssText = "position:fixed;left:-40px;top:-40px;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;border:2px solid #8fe3ee;background:rgba(62,197,214,.28);z-index:2147483647;pointer-events:none;transition:transform .12s";
     document.documentElement.append(bar, dot);
     addEventListener("mousemove", (e) => { dot.style.left = e.clientX + "px"; dot.style.top = e.clientY + "px"; }, true);
     addEventListener("mousedown", () => (dot.style.transform = "scale(.7)"), true);
@@ -201,7 +201,7 @@ async function main() {
   await edge.deploy("blog", { "index.html": "<!doctype html><meta charset=utf-8><title>Acme blog</title><h1>Acme blog</h1><p>Launch day.</p>" });
   await page.waitForSelector("text=blog was updated");
   await pause(3800);
-  await say("Switchboard: every door to your apps, one place that decides.");
+  await say("Ozal: every door to your apps, one place that decides.");
   await open("People");
   await shot("people");
   await pause(3400);

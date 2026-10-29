@@ -14,11 +14,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/auth"
-	"github.com/switchboard-project/switchboard/internal/config"
-	"github.com/switchboard-project/switchboard/internal/events"
-	"github.com/switchboard-project/switchboard/internal/passkey"
-	"github.com/switchboard-project/switchboard/internal/store/sqlite"
+	"github.com/ozal-project/ozal/internal/auth"
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/passkey"
+	"github.com/ozal-project/ozal/internal/store/sqlite"
 )
 
 const (
@@ -71,7 +71,7 @@ func newHarnessFor(t testing.TB, protected ...string) *harness {
 	identity := sqlite.NewIdentity(db)
 	cfg := config.Auth{
 		CookieDomain: "example.test",
-		Passkeys:     &config.Passkeys{RPID: "example.test", LoginURL: loginOrigin, DisplayName: "Switchboard"},
+		Passkeys:     &config.Passkeys{RPID: "example.test", LoginURL: loginOrigin, DisplayName: "Ozal"},
 	}
 	rec := &recorder{}
 	gate, err := passkey.NewGate(cfg, protected, identity, sqlite.NewSessions(db, auth.SessionLifetime(cfg)), rec)

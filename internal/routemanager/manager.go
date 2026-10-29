@@ -15,14 +15,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/auth"
-	"github.com/switchboard-project/switchboard/internal/config"
-	"github.com/switchboard-project/switchboard/internal/events"
-	"github.com/switchboard-project/switchboard/internal/healthcheck"
-	"github.com/switchboard-project/switchboard/internal/passkey"
-	"github.com/switchboard-project/switchboard/internal/pipeline"
-	"github.com/switchboard-project/switchboard/internal/proxy"
-	"github.com/switchboard-project/switchboard/internal/ratelimit"
+	"github.com/ozal-project/ozal/internal/auth"
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/healthcheck"
+	"github.com/ozal-project/ozal/internal/passkey"
+	"github.com/ozal-project/ozal/internal/pipeline"
+	"github.com/ozal-project/ozal/internal/proxy"
+	"github.com/ozal-project/ozal/internal/ratelimit"
 )
 
 // Option configures the manager.
@@ -419,7 +419,7 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 		return nil, err
 	}
 	if current := m.current.Load(); current != nil && !config.SameServer(current.cfg, *cfg) {
-		return nil, fmt.Errorf("listen, admin listen, TLS, tunnel, and notification settings cannot change without restarting Switchboard")
+		return nil, fmt.Errorf("listen, admin listen, TLS, tunnel, and notification settings cannot change without restarting Ozal")
 	}
 
 	healthCtx, healthCancel := context.WithCancel(m.ctx)
@@ -456,7 +456,7 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 			builtGate = m.gate
 		} else if cfg.Auth.Passkeys != nil {
 			if m.passkeys == nil {
-				return nil, fmt.Errorf("auth.passkeys requires the state database: start Switchboard with -db")
+				return nil, fmt.Errorf("auth.passkeys requires the state database: start Ozal with -db")
 			}
 			passkeyGate, err := passkey.NewGate(cfg.Auth, protectedHosts, m.passkeys, sessions, m.sink)
 			if err != nil {
@@ -629,7 +629,7 @@ func (m *Manager) reloadError(err error) error {
 	return err
 }
 
-// authEndpointHosts returns the hosts where /_/auth/* belongs to Switchboard:
+// authEndpointHosts returns the hosts where /_/auth/* belongs to Ozal:
 // the protected routes, plus the redirect_url host where the OIDC callback
 // lands. On any other host the path is the upstream's, not ours.
 func authEndpointHosts(cfg config.Config, protectedHosts []string) map[string]bool {

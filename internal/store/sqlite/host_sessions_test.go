@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/auth"
+	"github.com/ozal-project/ozal/internal/auth"
 )
 
 // ID-015: host sessions copy the central principal, live only on their

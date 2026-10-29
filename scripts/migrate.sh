@@ -18,7 +18,8 @@ Usage: scripts/migrate.sh [up|status] [-db PATH]
 up      Apply pending migrations (default).
 status  Validate migration history and list applied/pending migrations.
 
-Default database: switchboard.db in the repository root. Relative paths are
+Default database: ozal.db in the repository root (existing switchboard.db
+is reused when ozal.db is absent). Relative paths are
 resolved from that root, even when invoked from another directory.
 Status can create the database and migration-history table on a fresh path;
 it does not apply application migrations. Parent directories must exist.
@@ -30,4 +31,4 @@ USAGE
   *) echo "Unknown migration action: $1 (use up or status)" >&2; exit 2 ;;
 esac
 
-exec go run ./cmd/switchboard migrate "$@"
+exec go run ./cmd/ozal migrate "$@"

@@ -21,7 +21,7 @@ function render(search, { oidc = "", webauthn = true, page = "login", fetch = ()
   let ready;
   const document = {
     head: { appendChild: (node) => head.push(node) },
-    title: "Sign in · Switchboard",
+    title: "Sign in · Ozal",
     body: { dataset: { page, oidc } },
     getElementById: (id) => els[id],
     querySelector: (q) => (q === "label[for=username]" ? label : null),

@@ -106,6 +106,6 @@ The per-transaction cookie change needs no database migration. Existing sessions
 remain valid; pending handoffs are already lost on restart/gate rebuild and are
 retried. The old shared `sb_handoff` cookie is ignored and expires naturally.
 
-Out of scope: authentication between different installations, Switchboard as
+Out of scope: authentication between different installations, Ozal as
 an OIDC provider for apps (`ID-004`), per-app logout that keeps the central
 login.

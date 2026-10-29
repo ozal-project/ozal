@@ -3,8 +3,8 @@ package tunnel
 import (
 	"bufio"
 	"context"
-	"github.com/switchboard-project/switchboard/internal/config"
-	"github.com/switchboard-project/switchboard/internal/proxy"
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/proxy"
 	"io"
 	"net"
 	"net/http"

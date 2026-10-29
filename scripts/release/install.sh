@@ -28,7 +28,7 @@ if [[ ! -d "$parent" ]]; then
 fi
 # Work on a private copy so concurrent source changes cannot swap the archive
 # between verification and extraction. Only one fixed member is ever extracted.
-work=$(mktemp -d "$parent/.switchboard-install-XXXXXX")
+work=$(mktemp -d "$parent/.ozal-install-XXXXXX")
 trap 'rm -rf -- "$work"' EXIT
 cp -- "$archive" "$work/release.tar.gz"
 if command -v sha256sum >/dev/null 2>&1; then
@@ -45,18 +45,18 @@ if [[ "$actual" != "$expected" ]]; then
 fi
 # Reject duplicate binary members and links; never unpack arbitrary paths,
 # install scripts, config or state from the archive.
-count=$(tar -tzf "$work/release.tar.gz" | awk '$0 == "switchboard" { n++ } END { print n+0 }')
-kind=$(tar -tvzf "$work/release.tar.gz" switchboard | cut -c1)
+count=$(tar -tzf "$work/release.tar.gz" | awk '$0 == "ozal" { n++ } END { print n+0 }')
+kind=$(tar -tvzf "$work/release.tar.gz" ozal | cut -c1)
 if [[ "$count" -ne 1 || "$kind" != '-' ]]; then
-  echo 'release needs exactly one regular switchboard binary at the archive root' >&2
+  echo 'release needs exactly one regular ozal binary at the archive root' >&2
   exit 1
 fi
-tar -xOzf "$work/release.tar.gz" switchboard > "$work/switchboard"
-if [[ ! -s "$work/switchboard" ]]; then
+tar -xOzf "$work/release.tar.gz" ozal > "$work/ozal"
+if [[ ! -s "$work/ozal" ]]; then
   echo 'release binary is empty' >&2
   exit 1
 fi
-chmod 755 "$work/switchboard"
+chmod 755 "$work/ozal"
 # A same-filesystem hard link atomically refuses a concurrently created target.
-ln -T -- "$work/switchboard" "$destination"
+ln -T -- "$work/ozal" "$destination"
 echo "Installed $destination. Run its version command, then setup in a new private directory."

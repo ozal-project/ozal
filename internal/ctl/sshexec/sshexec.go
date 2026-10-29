@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/ctl"
+	"github.com/ozal-project/ozal/internal/ctl"
 )
 
 // Remote runs commands on an edge through the system ssh client. The
@@ -69,10 +69,10 @@ func (s Remote) Terminal(ctx context.Context, command string) (int, error) {
 	return 0, nil
 }
 
-// GitBuilder builds a committed ref of a Switchboard checkout for linux/amd64.
+// GitBuilder builds a committed ref of a Ozal checkout for linux/amd64.
 // It builds from `git archive`, so uncommitted files never reach an edge.
 type GitBuilder struct {
-	Repo    string // checkout of Switchboard
+	Repo    string // checkout of Ozal
 	WorkDir string // on a real disk: /tmp can be a small tmpfs
 	GOOS    string
 	GOARCH  string
@@ -97,7 +97,7 @@ func (b GitBuilder) Build(ctx context.Context, ref string) (ctl.Binary, error) {
 	commit := strings.TrimSpace(string(short))
 	// A binary without `upgrade` would start a server as root: never ship one.
 	if _, err := git("cat-file", "-e", commit+":internal/upgrade/upgrade.go"); err != nil {
-		return ctl.Binary{}, fmt.Errorf("%s predates `switchboard upgrade`: build a newer ref", commit)
+		return ctl.Binary{}, fmt.Errorf("%s predates `ozal upgrade`: build a newer ref", commit)
 	}
 	if err := os.MkdirAll(b.WorkDir, 0o755); err != nil {
 		return ctl.Binary{}, err
@@ -120,9 +120,14 @@ func (b GitBuilder) Build(ctx context.Context, ref string) (ctl.Binary, error) {
 	if out, err := untar.CombinedOutput(); err != nil {
 		return ctl.Binary{}, fmt.Errorf("unpack: %v: %s", err, out)
 	}
-	exe := filepath.Join(work, "switchboard")
+	exe := filepath.Join(work, "ozal")
+	commandPath := "./cmd/ozal"
+	if _, err := os.Stat(filepath.Join(src, "cmd", "ozal")); errors.Is(err, os.ErrNotExist) {
+		// Historical rollback refs keep their original command directory.
+		commandPath = "./cmd/switchboard"
+	}
 	build := exec.CommandContext(ctx, "go", "build", "-trimpath", "-buildvcs=false",
-		"-ldflags", "-X main.buildCommit="+commit, "-o", exe, "./cmd/switchboard")
+		"-ldflags", "-X main.buildCommit="+commit, "-o", exe, commandPath)
 	build.Dir = src
 	build.Env = append(os.Environ(), "GOOS="+b.GOOS, "GOARCH="+b.GOARCH, "CGO_ENABLED=0", "GOTMPDIR="+work)
 	if out, err := build.CombinedOutput(); err != nil {

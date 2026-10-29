@@ -19,7 +19,7 @@ import (
 
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
-	"github.com/switchboard-project/switchboard/internal/config"
+	"github.com/ozal-project/ozal/internal/config"
 )
 
 var ErrUnavailable = errors.New("GitHub metadata unavailable; check the installation, key reference, rate limit and selected repositories")
@@ -161,7 +161,7 @@ func (c *Client) call(ctx context.Context, method, path, token string, body []by
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-	req.Header.Set("User-Agent", "switchboard")
+	req.Header.Set("User-Agent", "ozal")
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

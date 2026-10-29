@@ -16,13 +16,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/auth"
-	"github.com/switchboard-project/switchboard/internal/config"
-	"github.com/switchboard-project/switchboard/internal/events"
-	"github.com/switchboard-project/switchboard/internal/pages"
-	"github.com/switchboard-project/switchboard/internal/pipeline"
-	"github.com/switchboard-project/switchboard/internal/routing"
-	"github.com/switchboard-project/switchboard/internal/static"
+	"github.com/ozal-project/ozal/internal/auth"
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/pages"
+	"github.com/ozal-project/ozal/internal/pipeline"
+	"github.com/ozal-project/ozal/internal/routing"
+	"github.com/ozal-project/ozal/internal/static"
 )
 
 // Option configures the proxy handler.

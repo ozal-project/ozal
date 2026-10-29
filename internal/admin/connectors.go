@@ -9,12 +9,12 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/events"
-	"github.com/switchboard-project/switchboard/internal/tunnel"
+	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/tunnel"
 )
 
 // connectors is the tunnel connector registry (tunnel.Registry implements
-// it): the operations of `switchboard connector` (CLI-001).
+// it): the operations of `ozal connector` (CLI-001).
 type connectors interface {
 	List(ctx context.Context) ([]tunnel.Record, error)
 	Current(ctx context.Context, name string) (tunnel.Fingerprint, error)

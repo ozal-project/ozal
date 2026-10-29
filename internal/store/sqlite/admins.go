@@ -11,7 +11,7 @@ import (
 
 	"github.com/go-webauthn/webauthn/webauthn"
 
-	"github.com/switchboard-project/switchboard/internal/adminid"
+	"github.com/ozal-project/ozal/internal/adminid"
 )
 
 // Admins stores administrator accounts and their passkeys (migration 013),

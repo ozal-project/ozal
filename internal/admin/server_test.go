@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/switchboard-project/switchboard/internal/config"
-	"github.com/switchboard-project/switchboard/internal/events"
-	"github.com/switchboard-project/switchboard/internal/healthcheck"
-	"github.com/switchboard-project/switchboard/internal/routemanager"
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/healthcheck"
+	"github.com/ozal-project/ozal/internal/routemanager"
 )
 
 // readToken is the admin token of tests whose config does not set its own.
@@ -182,12 +182,12 @@ func TestLoopbackHost(t *testing.T) {
 		{"localhost", true},
 		{"LOCALHOST:9090", true},
 		{"localhost.", true},
-		{"switchboard.localhost:9091", true},
-		{"SWITCHBOARD.LOCALHOST:9091", true},
-		{"switchboard.localhost.", true},
+		{"ozal.localhost:9091", true},
+		{"OZAL.LOCALHOST:9091", true},
+		{"ozal.localhost.", true},
 		{"other.localhost:9091", false},
-		{"switchboard.localhost.evil.example", false},
-		{"evil.switchboard.localhost", false},
+		{"ozal.localhost.evil.example", false},
+		{"evil.ozal.localhost", false},
 		{"", false},
 		{"evil.example", false},
 		{"evil.example:9090", false},
@@ -363,7 +363,7 @@ func TestReloadFailureReturnsUnprocessableEntity(t *testing.T) {
 }
 
 func TestAdminFailureEventsUseStableDetails(t *testing.T) {
-	const raw = "/private/switchboard/config.json: secret-token"
+	const raw = "/private/ozal/config.json: secret-token"
 	tests := []struct {
 		name       string
 		method     string

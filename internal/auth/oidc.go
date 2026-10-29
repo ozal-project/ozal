@@ -18,12 +18,12 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 
-	"github.com/switchboard-project/switchboard/internal/config"
-	"github.com/switchboard-project/switchboard/internal/events"
+	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/events"
 )
 
 const (
-	// SessionCookieName is Switchboard's session cookie. The proxy strips it
+	// SessionCookieName is Ozal's session cookie. The proxy strips it
 	// from every request so an upstream never receives the edge session.
 	SessionCookieName = "sb_session"
 	// HandoffCookiePrefix reserves a browser-binding cookie per transaction.
@@ -68,7 +68,7 @@ func SessionCookie(id, domain string, secure bool, l Lifetime) *http.Cookie {
 }
 
 // Gate protects routes behind a login against an external OIDC provider.
-// Switchboard never handles a password: it redirects to the provider,
+// Ozal never handles a password: it redirects to the provider,
 // verifies the ID token the provider returns, and trusts that identity
 // for the session's lifetime.
 type Gate struct {

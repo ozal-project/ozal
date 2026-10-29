@@ -60,7 +60,7 @@
     };
   });
 
-  $effect(() => { if (!admin.token) document.title = "Sign in · Switchboard"; });
+  $effect(() => { if (!admin.token) document.title = "Sign in · Ozal"; });
 </script>
 
 {#if admin.token}
