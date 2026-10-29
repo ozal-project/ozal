@@ -84,10 +84,10 @@ Telegram, replay de deploy y cadena del audit log). **No es retrocompatible**:
 - Se conservan: cookies `sb_*`, sujetos nativos `sb:`, migraciones SQL (con su
   checksum) y las variables, rutas y nombres de host anteriores listados arriba.
 
-El repositorio remoto, módulo Go y URL pública conservan sus destinos actuales
-hasta confirmar dominio y organización. El renombrado local no registra un
-dominio, publica una versión ni modifica el trust OIDC del edge. Un traslado
-de repositorio necesita actualizar ese trust explícitamente antes de publicar.
+El código fuente y el módulo ya usan `github.com/ozal-project/ozal`; el sitio
+público es `ozal.octaviosantacruz.com`. La publicación del sitio y su trust OIDC
+se aceptaron por separado en `SITE-006`. Eso no actualiza el binario del edge
+ni del conector y no implica que exista un nuevo tag o descarga Ozal.
 
 ## Actualizar y revertir
 
@@ -118,6 +118,210 @@ contra el valor suministrado, no autentica por sí solo el canal de descarga.
 Los backups no se borran automáticamente. Una versión anterior puede rechazar
 un esquema nuevo; revertir solo el ejecutable puede ser insuficiente.
 
+### Actualización coordinada del edge y el conector
+
+Para `REL-013/017`, trata ambos extremos como **una pareja de versiones**.
+`ozalctl edge upgrade` actualiza solamente el edge: no instala ni revierte el
+conector, no pausa su renovación y no comprueba aplicaciones. Su salida 0
+prueba arranque y admin; todavía falta la aceptación del recorrido completo.
+No encadenes dos actualizaciones independientes suponiendo compatibilidad ALPN.
+
+Antes de la ventana, completa esta ficha con datos observados, sin valores de
+secretos; conserva la evidencia operativa en un destino privado:
+
+| Dato | Edge | Conector |
+|---|---|---|
+| Versión anterior | Commit/build y SHA-256 del ejecutable instalado | Commit/build y SHA-256 instalado |
+| Candidato común | Ref comprometido, SO/arquitectura y SHA-256 del artefacto | Mismo ref, artefacto de su arquitectura y SHA-256 |
+| Servicio real | Host, unidad system/user, cuenta, ejecutable, config, DB, socket | Host, unidad system/user, cuenta, ejecutable, argumentos y rutas fijas |
+| Estado | Config raíz, runtime efectivo, SQLite, Pages, TLS y audit | Identidad local, CA pública, configuración y renovación |
+| Recuperación | Pareja anterior conservada, checkpoint privado y destino nuevo de restore | Ejecutable anterior conservado y configuración anterior |
+
+En el piloto hay unidades y agentes de renovación con nombres históricos.
+No los renombres durante este corte. Identifica también cualquier proceso
+`tunnel edge` separado: cada edge que reciba ese conector necesita una pareja
+compatible. No deduzcas la topología de una reserva de puertos ni de un nombre
+de servicio. Registra el `config_sha256` efectivo usando el socket autenticado;
+con `runtime_file`, la raíz no describe por sí sola las rutas/publicadores.
+
+#### Topología observada y checkpoint privado — 2026-10-29
+
+La lectura real encontró tres edges en la VPS y un conector en el homelab; los
+nombres históricos no describen una única función:
+
+| Extremo | Unidad / host | Ejecutable y SHA-256 | Estado observado |
+|---|---|---|---|
+| Preview público | `switchboard-preview.service`, VPS | commit `da3d0e6`, `0ca4c91d…` | activo; HTTPS público 443; admin `127.0.0.1:9091`; DB/Pages/runtime/TLS en `/var/lib/switchboard-preview` |
+| Tunnel edge (ALPN) | `switchboard-tunnel-edge.service`, VPS | `(devel)`, `b5cba887…` | activo; HTTP `127.0.0.1:18889`, admin `127.0.0.1:9092`, mTLS `10.8.0.1:9443`; DB/identidad en `/var/lib/switchboard-tunnel-edge` |
+| Conector | `switchboard-tunnel-connector.service`, homelab | `9701fa4`, `b2761ed3…` | estaba **inactivo desde 2026-10-26 01:25 UTC** al inventariar; activo y reiniciado el 2026-10-29 (ventana) |
+| Staging histórico | `switchboard-staging.service`, VPS (usuario) | `eb8b805`, `e7b973d8…` | activo sólo en loopback (8888/9090); no participa del par |
+| Preview staging | `switchboard-preview-staging.service`, VPS | mismo preview | inactivo/static |
+
+La ruta real es preview (443) → tunnel edge (`127.0.0.1:18889`) → conector
+(`10.8.0.1:9443`). `ozalctl edge upgrade` sólo tiene un target para
+`switchboard-preview`; **no actualiza el tunnel edge ni el conector**. No
+encadenes la actualización sin preparar esas dos unidades y su vuelta.
+
+El conector estaba inactivo al inventariar; su certificado
+`CN=connector.homelab.internal` vence el 2026-11-21 y la CA del piloto el
+2027-10-18. El timer de renovación sigue activo (próxima ejecución
+2026-10-30 00:09 UTC) y no se pausó. El checkpoint privado del conector
+(identidad, CA, CA de origin-pull, unidades, estado de renovación, binarios y
+journal) se creó en el homelab y se restauró en un directorio descartable:
+cadena, correspondencia clave/certificado, hashes, sintaxis de unidad y
+ejecución del binario pasan. No se conectó la identidad de producción a ningún
+edge.
+
+El checkpoint privado del edge requiere root en la VPS; `sudo -n` no está
+disponible. El procedimiento preparado crea un destino nuevo, toma un snapshot
+online de SQLite, copia Pages contra las filas del snapshot, runtime,
+TLS/ACME, identidad del túnel y tokens, y prueba la restauración en loopback
+con el binario anterior. No detiene unidades ni toca timers. En modo
+`--quiesced` no consulta los sockets admin (las unidades están detenidas por
+contrato).
+
+**Checkpoint completo del edge, 2026-10-29 (UTC).** Un primer intento terminó
+`incomplete` porque el capturador sondeaba esos sockets; se corrigió
+(`capture-edge.py` `db4a567e…`). El segundo produjo
+`/var/backups/ozal/REL-013-017-20261029T172304Z` (root, 0700; no se copió
+fuera del host): `manifest.json` `d78be43b…` con `status` complete,
+`coherent` true, sin fallos, `served_matches_live`, `identity_key_match` y
+`expected_match` true; `inventory.tsv` `1bfe6a6d…`, `SHA256SUMS` `112f4818…`.
+`ROLLBACK.md` (`868116b9…`) está en el directorio índice de octavio. Interrupción
+medida: conector 17:22:39→17:23:45 (66 s), tunnel edge 17:22:57→17:23:21 (24 s),
+preview 17:23:00→17:23:18 (18 s). Tras recuperar, healthz del preview 200,
+`config_sha256` del edge `4b3415c9…` y preview 200 por el túnel. Límites: sin
+copia fuera del host, sin `audit`, sin login ni app real verificados, y el
+registro no mostró al conector adjunto. No declara listo el corte real.
+
+**Instalación de la pareja `8f20fbe`, 2026-10-29 (UTC).** Un único artefacto
+para los tres roles: `14fde470bab6f666…` (31162239 bytes; `go build -trimpath
+-buildvcs=false -ldflags "-X main.buildCommit=<commit corto>"`, el mismo que
+construye `ozalctl`; con el hash completo del commit el binario sale distinto).
+Antes de la ventana: `validate` de la config del tunnel edge con el binario
+nuevo OK y ensayo de `migrate up -backup` sobre una copia del checkpoint
+(008–015 aplicadas, copia borrada). Instalación: DB real migrada con el binario
+nuevo como `switchboard-tunnel` (el binario se instala primero como
+`switchboard.new` en `/usr/local/lib/switchboard-tunnel-edge/`, porque esa
+cuenta no entra a `/home/octavio`), ejecutable anterior conservado como
+`switchboard.bak-b5cba887`; preview con `ozalctl edge upgrade -ref 8f20fbe
+-apply` (anterior en `switchboard.bak-0ca4c91d7277`); conector nuevo instalado
+el 18:12:14 (anterior `switchboard.bak-b2761ed3`). El conector anterior
+estuvo activo frente al edge nuevo hasta ese momento, contra lo indicado más
+arriba. Resultado: los tres ejecutables `14fde470…`; healthz del preview 200;
+preview y `sigea-api` (`/healthz`) 200 por el túnel; conector y timer activos.
+
+Cambio de comportamiento: `GET /_/api/status` por TCP en el admin del tunnel
+edge (9092) responde 503 `admin mutations are disabled until admin.token is
+configured`; antes devolvía 200. El estado se lee por el socket admin
+(`/run/switchboard-tunnel-edge/admin.sock`) o con token. Las sondas por TCP sin
+token dejan de servir.
+
+No verificado: login real, política permitida/denegada, ausencia de identidad
+falsificada y cookie de sesión en el origen, publicación de prueba y su
+rollback, HTTPS público, `config_sha256` del edge por el socket tras la
+actualización, y el registro del conector adjunto. Las horas de parada de preview
+y tunnel edge de esta ventana no se midieron. Sin copia fuera del host ni
+audit. No declara aceptado el corte.
+
+El esquema instalado del tunnel edge tiene **ocho migraciones pendientes**
+(008–015) respecto del candidato `8f20fbe`; la actualización migra esa DB y la
+reversión exige restaurar el snapshot previo a una ruta nueva. Entre
+`da3d0e6` y `8f20fbe` el preview no tiene migraciones pendientes. Ninguno de
+los dos edges tiene `audit` configurado: no hay cadena/checkpoint durable que
+archivar; si se habilita, archivá la cadena anterior con su binario por el
+cambio de dominio del hash.
+
+1. **Preparar sin cortar.** Ejecuta el gate del ref candidato, construye ambos
+   artefactos y verifica sus hashes. Revisa `ozalctl edge upgrade -ref REF`
+   sin `-apply`. Valida configuración, esquema, identidades y permisos con
+   el candidato en un entorno privado; no imprimas configuración ni claves.
+   Registra una línea base: túnel conectado, contenido de una app, visitante
+   permitido y denegado, login, publicación y versión actualmente publicada.
+2. **Comprobar recuperación antes de instalar.** Conserva los dos ejecutables
+   anteriores y un backup privado de todos los recursos de la tabla. SQLite
+   requiere snapshot consistente. Restaura en un destino nuevo, verifica con
+   el binario anterior y prueba la pareja anterior en aislamiento. El backup
+   automático de `upgrade` solo cubre DB cuando hay migraciones pendientes;
+   no sustituye este checkpoint ni incluye Pages/runtime/identidades.
+3. **Quiescer la pareja.** Bloquea nuevas publicaciones y cambios administrativos
+   durante la ventana y coordina los timers/agentes de renovación que puedan
+   reiniciar o rotar identidades. Detén primero el conector, después los edges
+   afectados, y toma el checkpoint final consistente. Conserva su estado previo
+   para reanudar solo lo que estaba activo. Hay una interrupción planificada;
+   no anuncies disponibilidad continua durante el cambio de protocolo.
+4. **Instalar ambos lados.** Usa los layouts existentes y los artefactos
+   verificados. Si hay audit persistente, con el edge detenido prepara en la
+   configuración un destino nuevo para la cadena Ozal y conserva la referencia
+   anterior en el checkpoint; nunca abras la cadena vieja con el candidato.
+   Para el edge administrado por `ozalctl`, aplica el plan revisado
+   desde una terminal; el paso root valida y migra con la cuenta del servicio.
+   Cambia el ejecutable del conector bajo la autoridad de su host, conservando
+   el anterior y sin mover ni regenerar su clave. Inicia primero el edge y luego
+   el conector. No arranques el conector anterior frente al edge candidato.
+   El `upgrade` puede restaurar únicamente el edge si falla: en ese caso deja
+   el conector detenido hasta elegir de nuevo una pareja completa.
+5. **Aceptar o volver.** Confirma hashes instalados y estado efectivo, túnel
+   conectado con la identidad enrolada, aplicación pública y protegida pasando
+   por el túnel, login real y política permitida/denegada, ausencia de identidad
+   falsificada/cookie de sesión en el origen y consola privada. Publica un
+   artefacto de prueba en un sitio de prueba, verifica bytes/assets y prueba su
+   rollback. Comprueba también los sitios ya publicados y el trust CI efectivo.
+   Si no pasa cualquier criterio, detén la pareja y ejecuta la reversión; no
+   debilites TLS, política ni enrolamiento para recuperar servicio.
+
+**Reversión coordinada:** detén conector y edges candidatos; conserva su estado
+para diagnóstico; restaura los dos ejecutables anteriores comprobando hashes.
+Si cambió el esquema, usa la DB del checkpoint restaurada a una ruta nueva y
+reconcilia revocaciones posteriores antes de servir. Restaura la configuración
+y el runtime del mismo checkpoint, junto con el contenido/metadata de Pages
+si cambió. No emparejes una DB antigua con un runtime de otra generación.
+Revisa propietarios, permisos y rutas de la unidad, y valida con el binario
+anterior. Arranca el edge anterior y después el conector anterior; repite todos
+los criterios de aceptación y reanuda los timers/publicadores que corresponda.
+Una reversión de artefacto de sitio no restaura DB, runtime ni protocolo.
+Registra tiempo de interrupción, checkpoint elegido y escrituras descartadas;
+sin checkpoint completo, no declares recuperación comprobada.
+
+Secuencia concreta de vuelta (con la ventana autorizada y `<CHECKPOINT>` ya
+verificado):
+
+```sh
+# Homelab: primero el conector.
+systemctl --user stop switchboard-tunnel-connector.service
+# VPS: después los edges; no dejes el conector anterior frente al candidato.
+sudo systemctl stop switchboard-tunnel-edge.service switchboard-preview.service
+# DB a rutas NUEVAS (nunca sobrescribir la del candidato).
+sudo -u switchboard /usr/local/lib/switchboard-preview/switchboard db restore \
+  -from <CHECKPOINT>/db/preview-state.db \
+  -to /var/lib/switchboard-preview/state.rollback-<TS>.db
+# El binario antiguo del tunnel edge no tiene db restore: usá el del preview
+# o copiá el snapshot ya verificado y comprobá PRAGMA integrity_check.
+sudo /usr/local/lib/switchboard-preview/switchboard db restore \
+  -from <CHECKPOINT>/db/tunnel-state.db \
+  -to /var/lib/switchboard-tunnel-edge/state.rollback-<TS>.db
+# Restaurar runtime/pages/tls/tunnel desde <CHECKPOINT>, apuntar las unidades
+# a la DB nueva con los mismos propietarios/permisos, y reinstalar los binarios
+# anteriores desde <CHECKPOINT>/bin; verificar cada sha256 antes de arrancar.
+sudo systemctl start switchboard-tunnel-edge.service switchboard-preview.service
+systemctl --user start switchboard-tunnel-connector.service
+```
+
+Después repetí túnel, login real, app permitida/denegada, ausencia de identidad
+falsificada/cookie en el origen y publicación. Reconciliá revocaciones
+posteriores al checkpoint antes de devolver servicio.
+
+La cadena de audit anterior se conserva intacta con su binario verificador;
+el candidato escribe en un destino nuevo. En la vuelta conserva ambas cadenas
+por separado y usa un destino compatible con el binario anterior. Reconciliar
+revocaciones también aplica a usuarios, passkeys y conectores, no solo sesiones.
+Las cookies OIDC antiguas requieren nuevo login tras el cambio; el reinicio
+termina las sesiones de consola en memoria. No cambies RP IDs de passkeys.
+
+El [ensayo local](../engineering.md#verificacion) ejercita ambos protocolos,
+backup/restore y publicación con fixtures. No sustituye el ensayo de systemd
+en VM limpia (`REL-012`) ni la aceptación de login y publicación en el servidor.
+
 <a id="backup-y-recuperacion"></a>
 
 ## Backup y recuperación
@@ -141,6 +345,15 @@ ozal db restore -from ./state.backup.db -to ./state.restored.db
 ozal doctor -config /etc/ozal/config.json -db ./state.restored.db
 ozal migrate -db ./state.restored.db status
 ```
+
+En el piloto 2026-10-29 el binario del tunnel edge (`9701fa4`) no tiene
+`db backup`: usá la API de backup de SQLite (Python) o el binario del preview
+(`da3d0e6`) sobre la DB anterior; ambos producen un archivo autocontenido y se
+probaron con el esquema previo. Verificá siempre la restauración en una ruta
+nueva con el binario que va a leerla. El backup de la DB no incluye Pages,
+runtime, TLS/ACME, identidad del túnel ni tokens: copiá esos recursos en el
+mismo checkpoint y comprobá que las filas de `deployments`/`site_live` del
+snapshot tengan sus directorios de Pages.
 
 `restore` no sobrescribe destinos existentes e invalida sesiones por defecto.
 `-keep-sessions` puede reactivar cookies viejas. Una copia antigua también puede

@@ -267,7 +267,61 @@ node scripts/demo/host-sessions-acceptance.mjs
 CHROME=/ruta/chrome node scripts/demo/https-host-sessions-acceptance.mjs
 node scripts/demo/site-check.mjs
 python3 scripts/smoke-tunnel-configured.py --binary /ruta/binario-de-prueba
+python3 scripts/rehearse-coordinated-upgrade.py \
+  --previous /ruta/binario-anterior --candidate /ruta/binario-candidato
 ```
+
+El ensayo `REL-013/017` requiere dos binarios confiables a ambos lados del
+cambio ALPN `bd06c29`; por ejemplo, `e762012` como anterior y el ref candidato
+comprometido como nuevo. Construye cada ref por separado desde `git archive`
+con `go build -buildvcs=false`, registrando ref y SHA-256; no modifica Git ni
+descarga releases. El anterior elegido es una referencia de protocolo, **no**
+una afirmación de qué binario corre hoy en el piloto. Para reproducir el corte
+real usa también su ref/artefacto exacto cuando se haya inventariado.
+
+Solo usa loopback y estado generado en un directorio temporal privado. Prueba
+pareja anterior, ambas mezclas (502 sostenido), pareja candidata, publicación
+antes/después, restore de SQLite a ruta nueva, runtime y Pages del checkpoint,
+pareja restaurada y nueva actualización después de revertir. Comprueba que una
+app protegida pide login, la página de login responde y las cabeceras/cookies
+falsificadas no alcanzan el origen. No prueba una autenticación de navegador,
+systemd/SSH, backup de claves reales, ACME ni publicación pública. El tiempo
+medido es recuperación del fixture; no es RTO del servidor. El gate habitual
+no necesita artefactos históricos: este ensayo se ejecuta explícitamente antes
+de un cambio de protocolo, además de `scripts/verify.sh`.
+
+Ejecución local 2026-10-29: anterior `e762012` (SHA-256 prefijo
+`49d2879737df`) y candidato `8f20fbe` (`e792b95aad57`) pasan el ciclo completo.
+No había migraciones pendientes entre esos refs; no acredita una migración del
+esquema instalado en el piloto. Un control con dos builds distintos del
+protocolo anterior falla en la comprobación de rechazo de la mezcla, como debe.
+El plan SSH sin `-apply` observa por separado `switchboard-preview` con hash
+`0ca4c91d7277116e…`; el build reproducible de `ozalctl` para `8f20fbe` tiene hash
+`14fde470bab6f666…` (flags de distribución distintos del build local del ensayo).
+No se instaló ni copió estado del servidor durante estas comprobaciones.
+
+Ampliación 2026-10-29 con artefactos instalados. El ensayo canónico con el
+binario real del preview (`0ca4c91d…`, commit `da3d0e6`) como anterior y el
+candidato construido desde `8f20fbe` (`10d76ecb…`, `go build -buildvcs=false`)
+pasa pareja, rechazo de ambas mezclas, restore de SQLite/runtime/Pages y
+nueva actualización; no hay migraciones pendientes entre esos dos refs. El
+segundo ensayo usa el tunnel edge y el conector realmente instalados
+(`b5cba887…` y `b2761ed3…`, procedencia `9701fa4`): pareja anterior, rechazo
+persistente de ambas mezclas, pareja candidata, restauración del snapshot
+previo y reactualización. Ese esquema sí tiene **ocho migraciones pendientes**
+(008–015) y `migrate up -backup` crea el respaldo previo. El checkpoint y la
+restauración del conector (identidad, cadena, clave/certificado, unidades,
+binario) se probaron en un directorio descartable. Los hashes de candidato
+dependen de las flags: `14fde470…` corresponde al build reproducible de
+`ozalctl`, no a este build de `cmd/ozal`.
+
+Límites: ambos ensayos usan PKI/estado sintéticos y loopback; no prueban
+systemd/SSH, ACME, DNS, login real ni aceptación pública. El estado privado
+del edge se capturó después, en la ventana quiescida del mismo día (ver
+`administration.md`), y la pareja `8f20fbe` quedó instalada; estos ensayos no
+lo prueban. Los dos edges no tienen auditoría durable configurada, así que no
+hay cadena/checkpoint que archivar. El ensayo no usó la identidad de producción
+del conector.
 
 Los demos necesitan sus dependencias y navegador; usa `OZAL_BIN` y
 `CHROME` cuando corresponda, consulta el script para prerrequisitos. Ejecutan
