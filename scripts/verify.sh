@@ -17,7 +17,7 @@ skipped() {
 }
 
 echo "[1/7] gofmt"
-unformatted="$(gofmt -l .)"
+unformatted="$(git ls-files -z --cached --others --exclude-standard -- '*.go' | while IFS= read -r -d '' file; do if [[ -f "$file" ]]; then printf '%s\0' "$file"; fi; done | xargs -0 gofmt -l)"
 if [[ -n "$unformatted" ]]; then
   echo "Files need gofmt:" >&2
   echo "$unformatted" >&2
