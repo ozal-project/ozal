@@ -381,6 +381,24 @@ y 64 conexiones a la vez. Un dominio de `tls.domains` sin entrada en
 servidor no puede escribir fuera de su zona. Mantén la zona dedicada: **quien la
 controle puede emitir certificados para los dominios que la delegan**.
 
+##### Ensayo sin tocar producción: `ozal dns01 try`
+
+```
+ozal dns01 try -config dns01-try.json
+```
+
+Emite **un** certificado con el proveedor configurado, por Internet real, y lo
+descarta. No abre el 443, no usa ni modifica `tls.dns01.state_dir` (trabaja en
+un directorio temporal que borra al terminar) y no imprime claves ni
+certificados. Rechaza un CA de producción (`directory_url` sin "staging") salvo
+`-allow-production`, para no gastar sus límites. Con `builtin` levanta el
+servidor DNS en `listen`, por lo que necesita permiso para ese puerto (`sudo`
+o `CAP_NET_BIND_SERVICE`) y que ese puerto no esté ocupado. Imprime el
+proveedor, los nombres, el emisor, el vencimiento y si la cadena se verificó:
+sin `certificate_roots_file` dice **"chain NOT verified"** en lugar de
+afirmarlo. Usa una copia de la configuración con otro `tls.dns01` apuntando al
+CA de staging; no sustituye la aceptación del certificado real en el edge.
+
 Esto independiza la emisión de certificados de cualquier proveedor DNS; no
 cambia quién sirve el DNS de tu dominio, ni quién es tu registrador, ni quién
 te protege de DDoS, y el pegamento y la delegación `NS` siguen viviendo en la
