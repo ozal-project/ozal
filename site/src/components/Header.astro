@@ -4,7 +4,7 @@ import Logo from "./Logo.astro";
 const { here = "home" } = Astro.props;
 ---
 <a class="skip-link" href="#main-content">Skip to content</a>
-<header class="topbar frame">
+<header class="site-header"><div class="topbar frame">
   <a href="/" class="mark" aria-label="Ozal home"><Logo size={28} animated /><span>ozal</span></a>
   <nav aria-label="Sections">
     <a href="/#how">How it works</a>
@@ -13,4 +13,4 @@ const { here = "home" } = Astro.props;
     <a href="/#start">Availability</a>
   </nav>
   {here === "home" ? <a class="button button-brand header-action" href="#engine">Try the demo</a> : <a class="button header-action" href="/#engine">Try the demo</a>}
-</header>
+</div></header>

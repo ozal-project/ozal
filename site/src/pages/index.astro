@@ -118,7 +118,10 @@ reason    account's email domain
         {steps.map((st, i) => (
           <article class="step" id={`step-${i + 1}`}>
             <div class="step-copy"><h3>{st.t}</h3><p>{st.d}</p>{i < steps.length - 1 && <label class="walk-next" for={`walk-${i + 2}`}>Next: {steps[i + 1].short} <span aria-hidden="true">→</span></label>}</div>
-            <figure class={`step-shot ${st.narrow ? "step-narrow" : ""}`}><img src={`/shots/${st.img}.jpg`} width={st.w} height={st.h} loading={i === 0 ? "eager" : "lazy"} alt={st.alt} /></figure>
+            <figure class={`step-shot ${st.narrow ? "step-narrow" : ""}`}>
+              <div class="window"><span class="window-bar" aria-hidden="true"><i></i><i></i><i></i><b>{st.narrow ? "Ana's browser" : "Operator console"} · demo workspace</b></span><a href={`/shots/${st.img}.jpg`} aria-label={`Open full size: ${st.alt}`}><img src={`/shots/${st.img}.jpg`} width={st.w} height={st.h} loading={i === 0 ? "eager" : "lazy"} alt={st.alt} /></a></div>
+              <figcaption><a class="text-link" href={`/shots/${st.img}.jpg`}>Open full size <span aria-hidden="true">↗</span></a></figcaption>
+            </figure>
           </article>
         ))}
       </div>
@@ -141,6 +144,11 @@ reason    account's email domain
       <ul class="works">{works.map((w) => (
         <li><h3>{w.t}</h3><p>{w.d}</p><span class={`works-tag works-${w.e.toLowerCase().replace(" ", "-")}`}>{w.e}</span></li>
       ))}</ul>
+      <dl class="works-legend small quiet" aria-label="What the tags mean">
+        <div><dt class="works-tag works-in-use">In use</dt><dd>runs on the author's server</dd></div>
+        <div><dt class="works-tag">Tested</dt><dd>covered by automated tests only</dd></div>
+        <div><dt class="works-tag works-unreleased">Unreleased</dt><dd>on main, not in alpha.1</dd></div>
+      </dl>
       <p class="scope-note small quiet">Experimental, outside the alpha: tunnels, rate limiting, Telegram alerts.</p>
     </section>
 

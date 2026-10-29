@@ -14,12 +14,11 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/ozal-project/ozal/internal/ctl"
+	"github.com/ozal-project/ozal/internal/ctl/artifact"
 	"github.com/ozal-project/ozal/internal/pages"
 )
 
@@ -67,11 +66,11 @@ func Run(ctx context.Context, out io.Writer, tunnel Tunnel, req Request) error {
 		return errors.New("edge.admin is required to reach the admin API through the tunnel")
 	}
 	step("pack %s", req.Dir)
-	archive, err := pages.Pack(req.Dir)
+	snapshot, err := artifact.FromDir(req.Dir)
 	if err != nil {
 		return err
 	}
-	index, _ := os.ReadFile(filepath.Join(req.Dir, "index.html"))
+	archive := snapshot.Archive
 	note("%d bytes, sha256 %s…", len(archive), digest(archive)[:16])
 	if !req.Apply {
 		step("plan: publish %s as the live build of %s%s", req.Dir, req.Site, map[bool]string{true: ", then check " + req.Host, false: ""}[req.Host != ""])
@@ -111,7 +110,7 @@ func Run(ctx context.Context, out io.Writer, tunnel Tunnel, req Request) error {
 	}
 
 	step("check %s", req.Host)
-	failure := accept(ctx, req, index, note)
+	failure := accept(ctx, req, snapshot.Proof, note)
 	if failure == nil {
 		step("%s serves the new build", req.Host)
 		return nil
@@ -128,66 +127,17 @@ func Run(ctx context.Context, out io.Writer, tunnel Tunnel, req Request) error {
 	return fmt.Errorf("public check failed; %s is back on %s: %w", req.Site, previous, failure)
 }
 
-// accept checks the public answer: the page is this build's index.html,
-// a secret-looking path is not served, and plain HTTP redirects to HTTPS.
-// The proxy in front may take a moment, so it retries.
-func accept(ctx context.Context, req Request, index []byte, note func(string, ...any)) error {
+// accept shares the same public proof and refusal checks as CI.
+func accept(ctx context.Context, req Request, proof artifact.Proof, note func(string, ...any)) error {
 	public := req.PublicURL
 	if public == "" {
 		public = "https://" + req.Host
 	}
-	retries, wait := req.Retries, req.Wait
-	if retries <= 0 {
-		retries = 5
+	err := Accept(ctx, io.Discard, Acceptance{URL: public, Proof: proof, Client: req.Public, Attempts: req.Retries, Wait: req.Wait})
+	if err == nil {
+		note("public build proof, hidden paths and HTTPS redirect checked")
 	}
-	if wait <= 0 {
-		wait = 2 * time.Second
-	}
-	var last error
-	for i := 0; i < retries; i++ {
-		if i > 0 {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(wait):
-			}
-		}
-		if last = acceptOnce(ctx, req.Public, public, index); last == nil {
-			note("200 with this build's index.html; /.env refused")
-			break
-		}
-	}
-	if last != nil {
-		return last
-	}
-	if strings.HasPrefix(public, "https://") {
-		status, location, err := get(ctx, req.Public, "http://"+strings.TrimPrefix(public, "https://")+"/")
-		if err != nil {
-			return fmt.Errorf("plain HTTP: %w", err)
-		}
-		if status < 300 || status > 399 || !strings.HasPrefix(location, "https://") {
-			return fmt.Errorf("plain HTTP answered %d instead of redirecting to HTTPS", status)
-		}
-		note("plain HTTP redirects to HTTPS")
-	}
-	return nil
-}
-
-func acceptOnce(ctx context.Context, client *http.Client, public string, index []byte) error {
-	res, body, err := fetch(ctx, client, public+"/")
-	if err != nil {
-		return fmt.Errorf("GET /: %w", err)
-	}
-	if res != http.StatusOK {
-		return fmt.Errorf("GET / answered %d", res)
-	}
-	if len(index) > 0 && digest(body) != digest(index) {
-		return errors.New("GET / does not serve this build's index.html yet")
-	}
-	if status, _, err := fetch(ctx, client, public+"/.env"); err != nil || status != http.StatusNotFound {
-		return fmt.Errorf("GET /.env answered %d (%v), want 404", status, err)
-	}
-	return nil
+	return err
 }
 
 func get(ctx context.Context, client *http.Client, target string) (int, string, error) {

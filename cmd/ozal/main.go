@@ -58,6 +58,7 @@ func subcommands() map[string]func(context.Context, []string, io.Writer) error {
 		"db":           runDB,
 		"doctor":       runDoctor,
 		"init":         runInit,
+		"install":      runInstall,
 		"github":       runGitHub,
 		"tunnel":       runTunnel,
 		"tunnel-spike": runTunnelSpike,

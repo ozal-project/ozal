@@ -25,6 +25,12 @@ import (
 )
 
 const usage = `usage:
+  ozalctl site check -dir DIST
+  ozalctl site pack -dir DIST -out ARCHIVE
+  ozalctl site deploy -endpoint HTTPS_URL -project NAME -archive ARCHIVE -result FILE [-apply]
+      CI upload with GitHub Actions OIDC; credentials stay in memory.
+  ozalctl site accept -url HTTPS_URL -dir DIST [-http-url HTTP_URL]
+      Check public content hashes, hidden paths and the HTTPS redirect.
   ozalctl project trust -project NAME -repository-id ID -owner-id ID -workflow-ref WORKFLOW [-ref REF] [-apply]
       Migrate an existing GitHub publisher through the edge's private socket.
       The default is a plan; -apply keeps previous trust metadata on the edge.
@@ -78,6 +84,10 @@ func run(args []string) int {
 		"site publish":  sitePublish,
 		"app alias":     appAlias,
 		"project trust": projectTrust,
+		"site check":    func(args []string) int { return siteSnapshot(args, false) },
+		"site pack":     func(args []string) int { return siteSnapshot(args, true) },
+		"site deploy":   siteDeploy,
+		"site accept":   siteAccept,
 		"site cutover":  siteCutover,
 	}
 	command, ok := commands[args[0]+" "+args[1]]

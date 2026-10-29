@@ -15,10 +15,17 @@ import (
 // special files in the source instead of following them: the archive must
 // contain exactly what the directory holds, nothing it points to.
 func Pack(dir string) ([]byte, error) {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
 	var buf bytes.Buffer
-	gz := gzip.NewWriter(&buf)
+	gz := gzip.NewWriter(&archiveBuffer{buffer: &buf})
 	tw := tar.NewWriter(gz)
-	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+	var total int64
+	entries := 0
+	err = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -27,6 +34,10 @@ func Pack(dir string) ([]byte, error) {
 			return err
 		}
 		name := filepath.ToSlash(rel)
+		entries++
+		if entries > DefaultLimits.MaxEntries {
+			return fmt.Errorf("too many deployment entries")
+		}
 		switch {
 		case d.Type()&fs.ModeSymlink != 0:
 			return fmt.Errorf("%s is a symlink; deployments contain regular files only", name)
@@ -39,15 +50,26 @@ func Pack(dir string) ([]byte, error) {
 		if err != nil {
 			return err
 		}
+		if info.Size() > DefaultLimits.MaxFileBytes || info.Size() > DefaultLimits.MaxTotalBytes-total {
+			return fmt.Errorf("deployment content exceeds size limits")
+		}
+		total += info.Size()
 		if err := tw.WriteHeader(&tar.Header{Name: name, Typeflag: tar.TypeReg, Mode: 0o644, Size: info.Size()}); err != nil {
 			return err
 		}
-		f, err := os.Open(path)
+		f, err := root.Open(rel)
 		if err != nil {
 			return err
 		}
 		defer f.Close()
-		_, err = io.Copy(tw, f)
+		opened, err := f.Stat()
+		if err != nil || !opened.Mode().IsRegular() || !os.SameFile(info, opened) {
+			return fmt.Errorf("deployment source changed during packing")
+		}
+		n, err := io.Copy(tw, io.LimitReader(f, info.Size()+1))
+		if n != info.Size() {
+			return fmt.Errorf("deployment source changed size during packing")
+		}
 		return err
 	})
 	if err != nil {
@@ -63,4 +85,13 @@ func Pack(dir string) ([]byte, error) {
 		return nil, fmt.Errorf("pack %s: archive is %d bytes, over the %d-byte upload cap", dir, buf.Len(), MaxUploadBytes)
 	}
 	return buf.Bytes(), nil
+}
+
+type archiveBuffer struct{ buffer *bytes.Buffer }
+
+func (w *archiveBuffer) Write(p []byte) (int, error) {
+	if len(p) > MaxUploadBytes-w.buffer.Len() {
+		return 0, fmt.Errorf("archive exceeds upload limit")
+	}
+	return w.buffer.Write(p)
 }
