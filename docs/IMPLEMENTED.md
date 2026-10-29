@@ -6,6 +6,34 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## REL-018 — native operational commands — 2026-10-29 (`424bf41`, initial sources `d1bb55b`, lint `7dc2c21`)
+
+Installation, CI publication and the remaining provider/authority helpers now
+live in Go. `ozal install binary/service` verifies bounded private archives,
+refuses overwrite and stages service ownership/config/unit without root.
+`ozalctl site check/pack/deploy/accept` validates the exact artifact before
+OIDC, uploads once, records confirmed-live state and checks authenticated status
+plus a public asset hash, hidden/unknown 404s and the HTTPS redirect. The site
+workflow invokes those commands and can restore the last accepted archive.
+Compatibility scripts only translate arguments and exec a trusted binary;
+build/test/demo scripts remain development tooling, not runtime requirements.
+
+Optional `ozalctl cloudflare origin-pull/deploy-rule` uses pure scoped plans,
+private metadata backups, a fresh review and read-back; it never replaces a
+ruleset or a different existing certificate association. Native read-only plans
+confirmed the existing Ozal hostname binding and CI rule. Mutations were tested
+against local fake APIs, without changing Cloudflare. `ozal tunnel ca init` and
+`identity prepare/sign/check` create new private directories and fixed-role
+certificates; they do not deploy trust or automate CA rollover.
+
+Evidence: full `OZAL_REQUIRE_FRONTEND=1 scripts/verify.sh` passes (race, fuzz,
+staticcheck, govulncheck, console/site/WASM, staged real-binary installers), plus
+focused integrity/redirect regressions. Removing the CA suitability check via a
+temporary Go overlay makes its regression fail. No real root service install,
+VPS binary upgrade or CA rotation was performed. Hosted Actions/public delivery
+is checked separately from these local and provider-plan checks. Broader remote
+operator adoption and provider-neutral DNS remain active under `REL-013`.
+
 ## SITE-006 — Ozal public hostname and Actions publication — 2026-10-29 (`78f9ef6`)
 
 `https://ozal.octaviosantacruz.com` serves the existing Pages site with the
