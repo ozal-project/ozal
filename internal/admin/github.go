@@ -118,15 +118,19 @@ func (h *Handler) saveGitHubProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 503, "project editing unavailable")
 		return
 	}
-	if !h.recordMutationIntent(w, r, "project.trust", project.Name) {
-		return
-	}
-	if err := writer.PutProject(project, req.Expected, false); err != nil {
-		writeError(w, 409, "project could not be saved; refresh and review again")
-		return
-	}
-	h.emit(events.Event{Type: events.ConfigReloaded, Actor: actor(r), Host: project.Name, Code: "project.trust_saved", ConfigSHA256: h.manager.ConfigDigest()})
-	writeJSON(w, 200, map[string]any{"name": project.Name, "workflow_ref": project.Deployers[0].GitHub.WorkflowRef, "deploy_host_configured": cfg.Pages != nil && cfg.Pages.Deploy != nil})
+	// Repository discovery is network I/O: do not commit a change after the
+	// publishing session expired or was revoked during that lookup.
+	h.requireTool("publishing", func(w http.ResponseWriter, r *http.Request) {
+		if !h.recordMutationIntent(w, r, "project.trust", project.Name) {
+			return
+		}
+		if err := writer.PutProject(project, req.Expected, false); err != nil {
+			writeError(w, 409, "project could not be saved; refresh and review again")
+			return
+		}
+		h.emit(events.Event{Type: events.ConfigReloaded, Actor: actor(r), Host: project.Name, Code: "project.trust_saved", ConfigSHA256: h.manager.ConfigDigest()})
+		writeJSON(w, 200, map[string]any{"name": project.Name, "workflow_ref": project.Deployers[0].GitHub.WorkflowRef, "deploy_host_configured": cfg.Pages != nil && cfg.Pages.Deploy != nil})
+	})(w, r)
 }
 func (h *Handler) removeProject(w http.ResponseWriter, r *http.Request) {
 	var req struct {

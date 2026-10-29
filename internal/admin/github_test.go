@@ -64,3 +64,20 @@ func TestProjectTrustUsesInstallationRepositoryAndOwnerIDs(t *testing.T) {
 		t.Fatal("discovery exposed key reference")
 	}
 }
+
+func TestProjectTrustRechecksAuthorityAfterDiscovery(t *testing.T) {
+	manager := &projectManager{fakeManager: &fakeManager{cfg: config.Config{Listen: "127.0.0.1:8888", Admin: config.Admin{Token: "admin-test"}, Pages: &config.Pages{Dir: t.TempDir()}, GitHub: &config.GitHubApp{AppID: 1, InstallationID: 2, PrivateKey: "file:/private/reference"}, Routes: []config.Route{{Host: "blog.localhost", Site: "blog"}}}}}
+	repo := githubapp.Repository{ID: 123, FullName: "acme/blog", DefaultBranch: "main"}
+	repo.Owner.ID = 456
+	reader := &workflowRepositories{testRepositories: testRepositories{listing: githubapp.Listing{Repositories: []githubapp.Repository{repo}}}}
+	handler := New(manager, nil, WithGitHubRepositories(reader))
+	token, grant, err := handler.operators.issue("Publisher", false, "publishing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader.afterRead = func() { handler.operators.revoke(grant.ID) }
+	body := `{"name":"blog","site":"blog","repository_id":123,"page":1,"ref":"refs/heads/main","workflow":"deploy.yml","expected":"` + manager.ConfigDigest() + `"}`
+	if rec := request(handler, http.MethodPost, "/_/api/projects", token, body); rec.Code != http.StatusUnauthorized || manager.saved {
+		t.Fatalf("revoked publisher changed trust: %d %s", rec.Code, rec.Body)
+	}
+}

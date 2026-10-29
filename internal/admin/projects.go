@@ -2,6 +2,7 @@ package admin
 
 import (
 	"net/http"
+	"slices"
 )
 
 type projectView struct {
@@ -25,7 +26,8 @@ type projectGitHubView struct {
 }
 
 func (h *Handler) listProjects(w http.ResponseWriter, _ *http.Request) {
-	projects := h.manager.Config().Projects
+	cfg := h.manager.Config()
+	projects := cfg.Projects
 	out := make([]projectView, 0, len(projects))
 	for _, project := range projects {
 		view := projectView{
@@ -53,5 +55,14 @@ func (h *Handler) listProjects(w http.ResponseWriter, _ *http.Request) {
 		}
 		out = append(out, view)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"projects": out})
+	// Publishing operators need site names and a revision for binding trust,
+	// not the Applications API's upstreams, access policies or secret sources.
+	sites := []string{}
+	for _, route := range cfg.Routes {
+		if route.Site != "" && !slices.Contains(sites, route.Site) {
+			sites = append(sites, route.Site)
+		}
+	}
+	slices.Sort(sites)
+	writeJSON(w, http.StatusOK, map[string]any{"projects": out, "sites": sites, "config_sha256": h.manager.ConfigDigest()})
 }

@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
@@ -43,5 +44,34 @@ func TestProjectsAPIRequiresAdminBearerAndRedactsTokenReferences(t *testing.T) {
 		if strings.Contains(body, secret) {
 			t.Errorf("project response exposed %q: %s", secret, body)
 		}
+	}
+}
+
+func TestPublishingContextDoesNotRequireApplicationsOrExposeUpstreams(t *testing.T) {
+	manager := &fakeManager{cfg: config.Config{Admin: config.Admin{Token: "admin-test"}, Routes: []config.Route{{Host: "z.example.test", Site: "z-site"}, {Host: "a.example.test", Site: "a-site"}, {Host: "alias.example.test", Site: "a-site"}, {Host: "private.example.test", Target: "http://private-upstream:8080", Access: &config.AccessPolicy{RequiredGroups: []string{"private-group"}}}}}}
+	h := New(manager, nil)
+	token, _, err := h.operators.issue("Publisher", false, "publishing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec := request(h, http.MethodGet, "/_/api/setup", token, ""); rec.Code != 403 {
+		t.Fatal("publisher can read application details")
+	}
+	rec := request(h, http.MethodGet, "/_/api/projects", token, "")
+	if rec.Code != 200 {
+		t.Fatalf("publishing read: %d %s", rec.Code, rec.Body)
+	}
+	var context struct {
+		Sites  []string `json:"sites"`
+		Digest string   `json:"config_sha256"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &context); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(context.Sites, ",") != "a-site,z-site" || context.Digest != manager.ConfigDigest() {
+		t.Fatalf("publishing context: %+v", context)
+	}
+	if strings.Contains(rec.Body.String(), "private-upstream") || strings.Contains(rec.Body.String(), "private-group") || strings.Contains(rec.Body.String(), "private.example.test") {
+		t.Fatal("publishing context leaked unrelated application configuration")
 	}
 }

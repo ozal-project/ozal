@@ -42,6 +42,8 @@ const (
 	PagesRefused       Type = "pages.refused"
 	PagesFailed        Type = "pages.failed"
 	PagesDeployRefused Type = "pages.deploy_refused"
+	// GitHub accepted a reviewable workflow PR; no deployment is implied.
+	GitHubWorkflowProposed Type = "github.workflow_proposed"
 	// The console created a hostname's DNS record through the configured
 	// provider (UI-006). Host is the hostname; Code is the record type.
 	DNSRecordCreated Type = "dns.record_created"

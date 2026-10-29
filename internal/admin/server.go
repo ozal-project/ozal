@@ -78,6 +78,7 @@ func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 	h.mux.HandleFunc("PUT /_/api/github", h.requireLocal(h.configureGitHub))
 	h.mux.HandleFunc("GET /_/api/github/repositories", h.requireTool("publishing", h.githubRepositories))
 	h.mux.HandleFunc("POST /_/api/projects", h.requireTool("publishing", h.saveGitHubProject))
+	h.mux.HandleFunc("POST /_/api/projects/{name}/workflow", h.requireTool("publishing", h.projectWorkflow))
 	h.mux.HandleFunc("DELETE /_/api/projects/{name}", h.requireTool("publishing", h.removeProject))
 	h.mux.HandleFunc("GET /_/api/projects", h.requireTool("publishing", h.listProjects))
 	h.mux.HandleFunc("PUT /_/api/projects/{name}/github-trust", h.requireLocal(h.migrateProjectTrust))

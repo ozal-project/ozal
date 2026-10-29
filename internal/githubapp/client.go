@@ -1,5 +1,6 @@
-// Package githubapp is the optional GitHub metadata adapter. It does not
-// build, clone, write workflows, authenticate visitors, or import teams.
+// Package githubapp discovers installation repositories and proposes a Pages
+// workflow through a pull request. It never builds or clones repository code,
+// authenticates visitors or imports teams.
 package githubapp
 
 import (
@@ -154,9 +155,14 @@ func parseKey(raw []byte) (*rsa.PrivateKey, error) {
 	return key, nil
 }
 func (c *Client) call(ctx context.Context, method, path, token string, body []byte, out any) error {
+	_, err := c.callStatus(ctx, method, path, token, body, out)
+	return err
+}
+
+func (c *Client) callStatus(ctx context.Context, method, path, token string, body []byte, out any) (int, error) {
 	req, err := http.NewRequestWithContext(ctx, method, c.BaseURL+path, bytes.NewReader(body))
 	if err != nil {
-		return ErrUnavailable
+		return 0, ErrUnavailable
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/vnd.github+json")
@@ -165,17 +171,22 @@ func (c *Client) call(ctx context.Context, method, path, token string, body []by
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	res, err := c.HTTP.Do(req)
+	// Refuse redirects even when a test or composition root supplies a client.
+	// An installation credential must never follow a repository rename or URL
+	// returned by GitHub to another destination.
+	client := *c.HTTP
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	res, err := client.Do(req)
 	if err != nil {
-		return ErrUnavailable
+		return 0, ErrUnavailable
 	}
 	defer res.Body.Close()
 	if res.StatusCode < 200 || res.StatusCode > 299 {
-		return ErrUnavailable
+		return res.StatusCode, ErrUnavailable
 	}
-	limited := io.LimitReader(res.Body, 2<<20)
-	if err := json.NewDecoder(limited).Decode(out); err != nil {
-		return ErrUnavailable
+	data, err := io.ReadAll(io.LimitReader(res.Body, (2<<20)+1))
+	if err != nil || len(data) > 2<<20 || out != nil && json.Unmarshal(data, out) != nil {
+		return res.StatusCode, ErrUnavailable
 	}
-	return nil
+	return res.StatusCode, nil
 }
