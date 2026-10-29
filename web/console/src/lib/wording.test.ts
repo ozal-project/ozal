@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { eventReason, friendlyHealth, shortId, subjectsOf, whoActed } from "./wording.ts";
+import { applicationAccess, eventReason, friendlyHealth, shortId, subjectsOf, whoActed } from "./wording.ts";
 
 test("an admin request names the admin API, not a throwaway port", () => {
   assert.equal(whoActed("127.0.0.1:56198"), "the admin API");
@@ -52,4 +52,20 @@ test("tool lists in reasons get spaces", () => {
   assert.equal(eventReason("tools: administrators,people,sites"), "tools: administrators, people, sites");
   assert.equal(eventReason("passkey"), "passkey");
   assert.equal(eventReason(undefined), "");
+});
+
+// An operator must not mistake an email, device or context restriction for
+// permission granted to every signed-in visitor.
+test("application access summaries preserve identity and session restrictions", () => {
+  assert.equal(applicationAccess({}), "Public · no login");
+  assert.equal(applicationAccess({ auth_required: true }), "Any signed-in person");
+  assert.equal(applicationAccess({ access: {} }), "Any signed-in person");
+  assert.equal(applicationAccess({ access: { allowed_domains: ["example.test"] } }), "Approved email addresses or domains");
+  assert.equal(applicationAccess({ access: { allowed_emails: ["person@example.test"] } }), "Approved email addresses or domains");
+  assert.equal(applicationAccess({ access: { required_groups: ["ops"] } }), "Members of");
+  assert.equal(applicationAccess({ access: { required_groups: ["ops"], allowed_domains: ["example.test"] } }), "Group members with an approved email or domain");
+  for (const policy of [{ methods: ["passkey"] }, { require_device_bound: true }, { max_auth_age_minutes: 15 }, { context_rule: { when: { session_device_bound: false }, then: "deny" } }]) {
+    assert.equal(applicationAccess({ access: policy }), "Sign-in with extra checks");
+  }
+  assert.equal(applicationAccess({ access: { required_groups: ["ops"], methods: ["passkey"] } }), "Group members · extra checks");
 });

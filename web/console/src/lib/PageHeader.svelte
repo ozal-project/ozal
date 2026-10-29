@@ -14,16 +14,16 @@
 <div class={tabs ? "mb-6" : "mb-8"}>
   <div class="flex flex-wrap items-end justify-between gap-4">
     <div class="max-w-2xl">
-      <h1 tabindex="-1" class="text-2xl leading-tight font-semibold tracking-tight outline-none">{title}</h1>
-      <p class="text-muted-foreground mt-1.5 text-sm">{intro}</p>
+      <h1 tabindex="-1" class="text-[1.75rem] leading-tight font-medium tracking-tight outline-none">{title}</h1>
+      <p class="text-muted-foreground mt-2 text-sm leading-relaxed">{intro}</p>
     </div>
     {#if children}<div class="flex flex-wrap items-center gap-2">{@render children()}</div>{/if}
   </div>
   {#if tabs}
-    <nav class="border-border mt-6 flex gap-6 border-b" aria-label={`${title} views`}>
+    <nav class="console-tabs" aria-label={`${title} views`}>
       {#each tabs as tab (tab.path)}
         <a href={tab.path} onclick={(e) => go(e, tab.path)} aria-current={route.path === tab.path ? "page" : undefined}
-          class="tab text-muted-foreground hover:text-foreground aria-[current=page]:text-foreground -mb-px border-b-2 border-transparent pb-2.5 text-sm transition-colors">{tab.label}</a>
+          class="console-tab">{tab.label}</a>
       {/each}
     </nav>
   {/if}

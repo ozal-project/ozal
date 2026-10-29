@@ -161,7 +161,8 @@ export type ProjectDeployer =
   | { type: "token"; token_configured: boolean };
 export type Project = { name: string; site: string; hostnames: string[]; deployers: ProjectDeployer[] };
 
-export async function fetchProjects(token: string, signal?: AbortSignal): Promise<Project[]> {
+export type PublishingState = { projects: Project[]; sites: string[]; config_sha256: string };
+export async function fetchPublishing(token: string, signal?: AbortSignal): Promise<PublishingState> {
   const res = await fetch("/_/api/projects", {
     cache: "no-store",
     headers: { Authorization: `Bearer ${token}` },
@@ -169,8 +170,9 @@ export async function fetchProjects(token: string, signal?: AbortSignal): Promis
   });
   if (res.status === 401) throw new Error("The admin token was rejected.");
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return ((await res.json()) as { projects: Project[] }).projects ?? [];
+  return res.json();
 }
+export const fetchProjects = async (token: string, signal?: AbortSignal): Promise<Project[]> => (await fetchPublishing(token, signal)).projects ?? [];
 
 export class PagesDisabledError extends Error {}
 
@@ -281,13 +283,23 @@ export async function deploySite(token: string, site: string, file: File): Promi
 
 export type Repository = { id: number; owner: { id: number }; full_name: string; default_branch: string; private: boolean };
 export type Repositories = { configured: boolean; repositories: Repository[]; page?: number; more?: boolean };
-export async function githubRepositories(token: string, page = 1): Promise<Repositories> {
-  const res = await fetch(`/_/api/github/repositories?page=${page}`, { cache: "no-store", headers: { Authorization: `Bearer ${token}` }, signal: boundedSignal() });
+export async function githubRepositories(token: string, page = 1, signal?: AbortSignal): Promise<Repositories> {
+  const res = await fetch(`/_/api/github/repositories?page=${page}`, { cache: "no-store", headers: { Authorization: `Bearer ${token}` }, signal: boundedSignal(signal) });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error ?? `GitHub unavailable (HTTP ${res.status}).`);
   return body;
 }
 export const bindGitHubProject = (token: string, project: { name: string; site: string; repository_id: number; page: number; ref: string; workflow: string; expected: string }) => adminPost<{ workflow_ref: string; deploy_host_configured: boolean }>(token, "/_/api/projects", project);
+export type WorkflowInput = { directory: string; output: string; hostname: string; page: number };
+export type WorkflowPlan = { project: string; repository: string; ref: string; filename: string; endpoint: string; site_url: string; directory: string; output: string; base: string; branch: string; path: string; content: string; digest: string };
+export type WorkflowPreview = { applied: false; plan: WorkflowPlan; expected: string };
+export type WorkflowResult = { applied: true; pull_request: { url: string; number: number; branch: string } };
+export async function proposeWorkflow(token: string, project: string, input: WorkflowInput & { expected?: string; digest?: string; apply?: boolean }, signal: AbortSignal): Promise<WorkflowPreview | WorkflowResult> {
+  const res = await fetch(`/_/api/projects/${encodeURIComponent(project)}/workflow`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(input), signal });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`${body.error ?? `Workflow proposal failed (HTTP ${res.status}).`}${body.branch ? ` Proposal branch: ${body.branch}.` : ""}`);
+  return body;
+}
 export async function disconnectProject(token: string, name: string, expected: string): Promise<void> {
   const res = await fetch(`/_/api/projects/${encodeURIComponent(name)}`, { method: "DELETE", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ expected }), signal: boundedSignal() });
   if (!res.ok) throw new Error("Project disconnect could not be confirmed. Refresh and reconcile before retrying.");

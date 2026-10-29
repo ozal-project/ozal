@@ -1,5 +1,6 @@
 <script lang="ts">
   import Summary from "$lib/Summary.svelte";
+  import { applicationAccess } from "$lib/wording";
   import { onMount, type Component } from "svelte";
   import PageHeader from "$lib/PageHeader.svelte";
   import Panel from "$lib/Panel.svelte";
@@ -84,7 +85,7 @@
 
   // A site name derived from the address, so a static build needs no name.
   const slug = (value: string) => value.toLowerCase().replace(/:\d+$/, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 63).replace(/-+$/, "");
-  $effect(() => { if (!siteEdited && kind === "static") site = slug(host); });
+  $effect(() => { if (!siteEdited && (kind === "static" || kind === "github")) site = slug(host); });
 
   const chosen = $derived([...new Set(groups.split(",").map((g) => g.trim()).filter(Boolean))]);
   const suggestions = $derived(known.filter((g) => !chosen.includes(g)));
@@ -105,7 +106,7 @@
     formError = ""; plan = null; checked = false;
     if (privacy === "groups" && !chosen.length) { formError = "Name at least one group, or choose any signed-in person."; return; }
     const route: ApplicationRoute = kind === "keep" ? { ...base!, host: host.trim(), auth_required: false } : { ...base, host: host.trim(), target: undefined, upstreams: undefined, site: undefined, root: undefined, connector: undefined, auth_required: false };
-    if (kind === "static") route.site = site.trim();
+    if (kind === "static" || kind === "github") route.site = site.trim();
     else if (kind === "connector") route.connector = connector.trim();
     else if (kind !== "keep") route.target = target.trim();
     if (privacy === "public") route.access = undefined;
@@ -155,6 +156,7 @@
     ...(base ? [{ value: "keep", label: "Keep current destination", hint: "Only change who may enter.", icon: CheckIcon }] : []),
     { value: "backend", label: "Running application", hint: "A service reached by a private URL.", icon: ServerIcon },
     { value: "static", label: "Static build", hint: status?.pages_enabled ? "Upload the built files; Ozal serves them." : "Pages is not enabled on this edge.", icon: LayersIcon, disabled: !status?.pages_enabled },
+    ...(!base ? [{ value: "github", label: "From GitHub", hint: !status?.pages_enabled ? "Pages is not enabled on this edge." : !can("publishing") ? "Needs the CI publishing tool in this session." : "Connect a repository and review its publishing workflow.", icon: LayersIcon, disabled: !status?.pages_enabled || !can("publishing") }] : []),
     { value: "connector", label: "Through a connector", hint: "A private host enrolled with a connector.", icon: PlugIcon },
   ]);
   const signIn = $derived(!!status?.methods.length);
@@ -175,13 +177,13 @@
     1: base ? `Configure ${base.host}` : "Add a website",
     2: "Who may enter?",
     3: `Review ${plan?.route.host ?? host}`,
-    4: `Connect ${host}`,
+    4: kind === "github" ? `Next: publish ${site}` : `Connect ${host}`,
   }[step]);
   const intros = $derived({
     1: "Its address and what serves it. Nothing changes for visitors until its DNS points here.",
     2: "Ozal checks this before anything reaches the website.",
     3: "Nothing changes until you save.",
-    4: "Application saved. Point its DNS here; this panel checks until a public request arrives.",
+    4: kind === "github" ? "Application saved. Connect its repository before moving DNS." : "Application saved. Point its DNS here; this panel checks until a public request arrives.",
   }[step]);
 </script>
 
@@ -234,7 +236,7 @@
         {@const needs = required(app)}
         <li class="grid gap-x-6 gap-y-3 px-4 py-3.5 sm:px-5 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_19rem] md:items-center">
           <div class="flex min-w-0 items-center gap-3">
-            <span class="bg-muted text-muted-foreground grid size-9 shrink-0 place-items-center rounded-lg"><Icon class="size-4" /></span>
+            <span class="text-muted-foreground grid size-9 shrink-0 place-items-center"><Icon class="size-4" /></span>
             <div class="min-w-0">
               <h2 class="truncate text-sm font-medium">{app.host}</h2>
               <p class="text-muted-foreground truncate font-mono text-xs">
@@ -245,20 +247,20 @@
           <div class="flex min-w-0 flex-wrap items-center gap-1.5 pl-12 text-xs md:pl-0">
             {#if !isPrivate(app)}
               <span class="text-warning flex items-center gap-1.5"><span class="lamp lamp-warn" aria-hidden="true"></span>Public · no login</span>
-            {:else if needs.length}
-              <span class="text-muted-foreground flex items-center gap-1.5"><span class="lamp lamp-on" aria-hidden="true"></span>Members of</span>
-              {#each needs as group (group)}<button class="chip" title="Open groups" onclick={() => navigate("/groups")}>{group}</button>{/each}
             {:else}
-              <span class="text-muted-foreground flex items-center gap-1.5"><span class="lamp lamp-on" aria-hidden="true"></span>Any signed-in person</span>
+              <span class="text-muted-foreground flex items-center gap-1.5"><span class="lamp lamp-on" aria-hidden="true"></span>{applicationAccess(app)}</span>
+              {#each needs as group (group)}<button class="chip" title="Open groups" onclick={() => navigate("/groups")}>{group}</button>{/each}
             {/if}
           </div>
-          <div class="flex flex-wrap items-center gap-0.5 pl-12 md:justify-end md:pl-0">
+          <div class="flex flex-wrap items-center gap-1 md:justify-end">
             <Button variant="outline" size="sm" aria-label={`Configure ${app.host}`} onclick={() => edit(app)}>Configure</Button>
             {#if app.site}<ArtifactUpload site={app.site} />{/if}
-            <Button variant="ghost" size="icon-sm" class="text-muted-foreground" aria-label={`Connection of ${app.host}`} title="Domain connection" onclick={() => { connectHost = app.host; connectOpen = true; }}><GlobeIcon class="size-4" /></Button>
-            <Button variant="ghost" size="icon-sm" class="text-muted-foreground" aria-label={`Access log for ${app.host}`} title="Access log" onclick={() => navigate("/activity")}><ScrollTextIcon class="size-4" /></Button>
-            {#if app.site}<Button variant="ghost" size="icon-sm" class="text-muted-foreground" aria-label={`Versions and rollback for ${app.site}`} title="Versions & rollback" onclick={() => navigate("/sites")}><VersionsIcon class="size-4" /></Button>{/if}
-            <ApplicationRemove host={app.host} version={status.config_sha256} refreshed={load} />
+            <div class="flex items-center">
+              <Button variant="ghost" size="icon-sm" class="text-muted-foreground" aria-label={`Connection of ${app.host}`} title="Domain connection" onclick={() => { connectHost = app.host; connectOpen = true; }}><GlobeIcon class="size-4" /></Button>
+              <Button variant="ghost" size="icon-sm" class="text-muted-foreground" aria-label={`Access log for ${app.host}`} title="Access log" onclick={() => navigate("/activity")}><ScrollTextIcon class="size-4" /></Button>
+              {#if app.site}<Button variant="ghost" size="icon-sm" class="text-muted-foreground" aria-label={`Versions and rollback for ${app.site}`} title="Versions & rollback" onclick={() => navigate("/sites")}><VersionsIcon class="size-4" /></Button>{/if}
+              <ApplicationRemove host={app.host} version={status.config_sha256} refreshed={load} />
+            </div>
           </div>
         </li>
       {/each}
@@ -302,6 +304,12 @@
             <p class="mt-1">Reuse a name to serve an existing site at this address too.</p>
           </details>
         </div>
+      {:else if kind === "github"}
+        <div class="grid gap-2">
+          <Label for="app-github-site">Site name</Label>
+          <Input id="app-github-site" required bind:value={site} oninput={() => (siteEdited = true)} pattern="[a-z0-9]+(-[a-z0-9]+)*" class="font-mono" />
+          <p class="text-muted-foreground text-xs">After saving, choose a repository in Sites and review the generated pull request. A build already stored under this name will be served immediately; otherwise the address has no content until the first successful publication.</p>
+        </div>
       {:else if kind === "connector"}
         <div class="grid gap-2"><Label for="app-connector">Enrolled connector name</Label><Input id="app-connector" required bind:value={connector} class="font-mono" /><p class="text-muted-foreground text-xs">The connector must also serve this exact hostname. It does not install or start your app.</p></div>
       {/if}
@@ -342,7 +350,7 @@
     <dl class="divide-y rounded-lg border text-sm">
       {#each [
         ["Address", plan.route.host],
-        ["Served by", draft ? destination(draft.route) + (kind === "static" && files ? ` · uploads ${files.name}` : "") : ""],
+        ["Served by", draft ? destination(draft.route) + (kind === "static" && files ? ` · uploads ${files.name}` : kind === "github" ? " · repository selected after saving" : "") : ""],
         ["Who may enter", draft?.access_mode === "public" ? "Everyone, without login" : privacy === "groups" && chosen.length ? `Members of ${chosen.join(" and ")}` : privacy === "signed-in" ? "Any signed-in person" : "The current policy"],
         ...(canInvite && emails.length ? [["Invitations", emails.join(", ")]] : []),
         ["Certificate", certificate(plan.tls)],
@@ -366,7 +374,15 @@
       <Button disabled={!checked || !!waiting || plan.tls === "not_covered"} onclick={() => (review = true)}>Save reviewed application</Button>
     </div>
   {:else if step === 4}
-    <DomainConnect {host} https={!!status?.tls_enabled} />
+    {#if kind === "github"}
+      <div class="grid gap-3 text-sm">
+        <p>In <strong>Sites</strong>, select a repository, choose <strong>{site}</strong>, and review its publisher trust. Then prepare the workflow and review its pull request in GitHub.</p>
+        <p class="text-muted-foreground">No repository has been selected and no build or deployment has run yet. Check the first publication before moving DNS. A retained build with this site name may already be served by the saved route.</p>
+        {#if privacy !== "public"}<p class="text-muted-foreground">The generated workflow checks a public hostname. For this private site, review a separate acceptance workflow instead.</p>{/if}
+      </div>
+    {:else}
+      <DomainConnect {host} https={!!status?.tls_enabled} />
+    {/if}
     {#if invitations.length}
       <section class="mt-6 border-t pt-5" aria-labelledby="invites-title">
         <h3 id="invites-title" class="text-sm font-medium">Invitations</h3>
@@ -382,7 +398,7 @@
         </ul>
       </section>
     {/if}
-    <div class="mt-5 flex justify-end"><Button onclick={() => (editing = false)}>Done</Button></div>
+    <div class="mt-5 flex flex-wrap justify-end gap-2"><Button variant={kind === "github" ? "outline" : "default"} onclick={() => (editing = false)}>Done</Button>{#if kind === "github"}<Button onclick={() => { editing = false; navigate("/sites"); }}>Continue in Sites</Button>{/if}</div>
   {/if}
 </Modal>
 
@@ -392,4 +408,4 @@
   {/if}
 </Modal>
 
-<ConfirmAction bind:open={review} title="Save this application?" target={draft?.route.host ?? ""} current={base ? "Existing application" : "Not configured"} requested={draft?.access_mode === "public" ? "Public application" : "Private application"} consequence={kind === "static" && files ? "The build is published, then the routing configuration changes immediately. DNS and the previous hosting are not changed." : "The routing configuration will change immediately. DNS and the previous hosting are not changed."} detail="Test the allowed and refused cases before moving a live domain. To undo a newly added address, remove it from Applications." confirmLabel="Save application" onConfirm={() => void save()} />
+<ConfirmAction bind:open={review} title="Save this application?" target={draft?.route.host ?? ""} current={base ? "Existing application" : "Not configured"} requested={draft?.access_mode === "public" ? "Public application" : "Private application"} consequence={kind === "static" && files ? "The build is published, then the routing configuration changes immediately. DNS and the previous hosting are not changed." : kind === "github" ? "The route changes immediately. A previously deployed build under this site name may be served; otherwise there is no content until publication. DNS is not changed." : "The routing configuration will change immediately. DNS and the previous hosting are not changed."} detail="Test the allowed and refused cases before moving a live domain. To undo a newly added address, remove it from Applications." confirmLabel="Save application" onConfirm={() => void save()} />

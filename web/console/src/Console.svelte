@@ -15,34 +15,25 @@
   import Administrators from "./pages/Administrators.svelte";
   import Groups from "./pages/Groups.svelte";
   import Wordmark from "$lib/brand/Wordmark.svelte";
-  import LayoutDashboardIcon from "@lucide/svelte/icons/layout-dashboard";
-  import AppWindowIcon from "@lucide/svelte/icons/app-window";
-  import GlobeIcon from "@lucide/svelte/icons/globe";
-  import UsersIcon from "@lucide/svelte/icons/users";
-  import ShieldCheckIcon from "@lucide/svelte/icons/shield-check";
-  import PlugIcon from "@lucide/svelte/icons/plug";
-  import ScrollTextIcon from "@lucide/svelte/icons/scroll-text";
-  import RouteIcon from "@lucide/svelte/icons/route";
   import MenuIcon from "@lucide/svelte/icons/menu";
   import XIcon from "@lucide/svelte/icons/x";
-  import type { Component } from "svelte";
 
   // Few entries, grouped by what the product does. Related views of one thing
   // (an application and its routing table; people, their groups and who runs
   // the console) are tabs on one page.
-  type Item = { path: Page; label: string; icon: Component<{ class?: string }>; tool?: Tool; also?: Page[] };
+  type Item = { path: Page; label: string; tool?: Tool; also?: Page[] };
   const groups: { name: string; items: Item[] }[] = [
     { name: "", items: [
-      { path: "/overview", label: "Overview", icon: LayoutDashboardIcon },
+      { path: "/overview", label: "Overview" },
     ] },
     { name: "Access", items: [
-      { path: "/applications", label: "Applications", icon: AppWindowIcon, tool: "applications", also: ["/routes"] },
-      { path: "/people", label: "People", icon: UsersIcon, tool: "people", also: ["/groups", "/administrators"] },
+      { path: "/applications", label: "Applications", tool: "applications", also: ["/routes"] },
+      { path: "/people", label: "People", tool: "people", also: ["/groups", "/administrators"] },
     ] },
     { name: "Edge", items: [
-      { path: "/sites", label: "Sites", icon: GlobeIcon },
-      { path: "/connectors", label: "Connectors", icon: PlugIcon, tool: "connectors" },
-      { path: "/activity", label: "Activity", icon: ScrollTextIcon },
+      { path: "/sites", label: "Sites" },
+      { path: "/connectors", label: "Connectors", tool: "connectors" },
+      { path: "/activity", label: "Activity" },
     ] },
   ];
   // The navigation lists what this session can open; a direct link to a page
@@ -57,8 +48,44 @@
   const visible = $derived(groups.map((g) => ({ ...g, items: g.items.filter((i) => !i.tool || can(i.tool) || (i.path === "/applications") || (i.path === "/people" && can("administrators"))) })).filter((g) => g.items.length));
   const isActive = (i: Item) => route.path === i.path || !!i.also?.includes(route.path);
   let menuOpen = $state(false);
-  const nav: Item[] = [...groups.flatMap((g) => g.items), { path: "/groups", label: "Groups", icon: UsersIcon, tool: "people" },
-    { path: "/administrators", label: "Administrators", icon: ShieldCheckIcon, tool: "administrators" }, { path: "/routes", label: "Applications", icon: RouteIcon, tool: "applications" }];
+  let drawer = $state<HTMLDialogElement | null>(null);
+  let menuTrigger = $state<HTMLButtonElement | null>(null);
+  let drawerPage: Page = route.path;
+  const purpose: Partial<Record<Page, string>> = {
+    "/overview": "What needs you, and what changed",
+    "/applications": "Destinations and who may enter",
+    "/routes": "Destinations and who may enter",
+    "/people": "People, groups and administrators",
+    "/administrators": "People, groups and administrators",
+    "/sites": "Published versions and CI",
+    "/connectors": "Trusted connections to private hosts",
+    "/activity": "Access decisions and their reasons",
+  };
+  $effect(() => {
+    if (!drawer) return;
+    if (menuOpen && !drawer.open) {
+      drawerPage = route.path;
+      drawer.showModal();
+      requestAnimationFrame(() => drawer?.querySelector<HTMLElement>('[aria-current="page"]')?.focus());
+    } else if (!menuOpen && drawer.open) drawer.close();
+  });
+  function drawerClosed() {
+    menuOpen = false;
+    requestAnimationFrame(() => {
+      if (route.path === drawerPage) menuTrigger?.focus();
+      else document.querySelector<HTMLElement>("#main-content h1")?.focus();
+    });
+  }
+  function containDrawerTab(event: KeyboardEvent) {
+    if (event.key !== "Tab" || !drawer) return;
+    const controls = [...drawer.querySelectorAll<HTMLElement>('a[href], button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])')].filter((element) => element.getClientRects().length > 0);
+    if (!controls.length) return;
+    const first = controls[0], last = controls[controls.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  }
+  const nav: Item[] = [...groups.flatMap((g) => g.items), { path: "/groups", label: "Groups", tool: "people" },
+    { path: "/administrators", label: "Administrators", tool: "administrators" }, { path: "/routes", label: "Applications", tool: "applications" }];
   const currentItem = $derived(nav.find((i) => i.path === route.path) ?? nav[0]);
   // A signed-in session without the page's tool sees why, not a page of 403s.
   const blocked = $derived(route.path !== "/routes" && !!currentItem.tool && !can(currentItem.tool));
@@ -85,66 +112,65 @@
   });
 </script>
 
-{#snippet link(item: Item)}
+{#snippet link(item: Item, expanded = false)}
   {@const active = isActive(item)}
   <a href={target(item)} onclick={(e) => go(e, target(item))} aria-current={active ? "page" : undefined}
-    class={["nav-item group flex items-center gap-3 rounded-md px-2.5 py-1.5 text-sm transition-colors",
-      active ? "bg-sidebar-accent text-foreground" : "text-muted-foreground hover:text-foreground"]}
-  ><item.icon class={`size-4 shrink-0 transition-colors ${active ? "text-primary" : "opacity-60 group-hover:opacity-100"}`} />{item.label}</a>
-{/snippet}
-
-{#snippet sidebar(drawer = false)}
-  {#if !drawer}<a href="/overview" onclick={(e) => go(e, "/overview")} class="flex h-14 shrink-0 items-center px-4" aria-label="Ozal console home"><Wordmark animated /></a>{/if}
-  <nav class="mt-2 flex flex-col gap-5 px-2" aria-label="Console">
-    {#each visible as group (group.name)}
-      <div class="flex flex-col gap-0.5">
-        {#if group.name}<p class="text-muted-foreground px-2.5 pb-1 text-xs">{group.name}</p>{/if}
-        {#each group.items as item (item.path)}{@render link(item)}{/each}
-      </div>
-    {/each}
-  </nav>
-  <div class="mt-auto flex flex-col gap-1 p-2">
-    <div class="border-sidebar-border mt-1 border-t pt-2"><UserMenu placement="up" /></div>
-  </div>
+    class={expanded ? "console-drawer-link" : "console-nav-link"}>
+    <span>{item.label}</span>
+    {#if expanded}<span class="console-nav-purpose">{purpose[target(item)]}</span>{/if}
+  </a>
 {/snippet}
 
 {#if admin.passkey}<PasskeysDialog bind:open={dialogs.passkeys} />{/if}
 
-<div class="flex min-h-screen">
+<div class="console-workspace">
   <a href="#main-content" class="sr-only focus:not-sr-only focus:bg-background focus:text-foreground focus:ring-ring fixed top-2 left-2 z-50 rounded-md px-3 py-2 text-sm focus:ring-2">Skip to content</a>
-  <div class="bg-sidebar border-sidebar-border relative z-30 hidden w-60 shrink-0 border-r md:block">
-    <aside class="sticky top-0 flex h-screen flex-col">{@render sidebar()}</aside>
-  </div>
-
-  <div class="flex min-w-0 flex-1 flex-col">
-    <header class="bg-background/85 border-border sticky top-0 z-20 flex h-14 items-center justify-between border-b px-4 backdrop-blur md:hidden">
-      <Wordmark animated />
-      <button type="button" class="hover:bg-accent rounded-md p-2" aria-expanded={menuOpen} aria-controls="mobile-menu" aria-label={menuOpen ? "Close menu" : "Open menu"} onclick={() => (menuOpen = !menuOpen)}>
-        {#if menuOpen}<XIcon class="size-5" />{:else}<MenuIcon class="size-5" />{/if}
+  <header class="console-header">
+    <div class="console-bar">
+      <a href="/overview" onclick={(e) => go(e, "/overview")} class="console-brand" aria-label="Ozal console home"><Wordmark sub="Private console" /></a>
+      <nav class="console-nav" aria-label="Console">
+        {#each visible as group (group.name)}
+          {#each group.items as item (item.path)}{@render link(item)}{/each}
+        {/each}
+      </nav>
+      <div class="console-account"><UserMenu /></div>
+      <span class="console-mobile-place" aria-hidden="true">{currentItem.label}</span>
+      <button bind:this={menuTrigger} type="button" class="console-menu-toggle" aria-expanded={menuOpen} aria-controls="mobile-menu" aria-label="Open menu" onclick={() => menuOpen = true}>
+        <MenuIcon class="size-5" />
       </button>
-    </header>
+    </div>
+  </header>
+
+  <dialog bind:this={drawer} id="mobile-menu" aria-label="Console navigation" class="console-drawer" onclose={drawerClosed} onkeydown={containDrawerTab}>
     {#if menuOpen}
-      <div id="mobile-menu" class="bg-sidebar animate-in fade-in-0 slide-in-from-top-2 fixed inset-x-0 top-14 bottom-0 z-20 flex flex-col overflow-y-auto duration-200 md:hidden">{@render sidebar(true)}</div>
+      <div class="console-drawer-header"><Wordmark sub="Private console" /><button type="button" class="console-menu-toggle" aria-label="Close menu" onclick={() => menuOpen = false}><XIcon class="size-5" /></button></div>
+      <nav aria-label="Console">
+        {#each visible as group (group.name)}
+          {#each group.items as item (item.path)}{@render link(item, true)}{/each}
+        {/each}
+      </nav>
+      <div class="console-drawer-account"><UserMenu placement="up" /></div>
     {/if}
-    <main id="main-content" tabindex="-1" class="mx-auto w-full max-w-[1200px] flex-1 px-5 py-8 outline-none md:px-12 md:py-12">
-      {#key route.path}<div class="page-enter">
-      {#if blocked}
-        <div class="panel mx-auto max-w-lg p-8 text-center">
-          <p class="plate">Not included in this session</p>
-          <h1 tabindex="-1" class="mt-2 text-xl font-semibold outline-none">This session cannot open {currentItem.label}</h1>
-          <p class="text-muted-foreground mt-2 text-sm">You are signed in as {admin.name || "an operator"} without the {toolList.find((t) => t.id === currentItem.tool)?.label} tool. Your name at the bottom of the menu lists what this session may change; ask an administrator to include it.</p>
-        </div>
-      {:else if route.path === "/overview"}<Overview />
-      {:else if route.path === "/applications"}<Applications />
-      {:else if route.path === "/connectors"}<Connectors />
-      {:else if route.path === "/activity"}<Activity />
-      {:else if route.path === "/routes"}<Routes />
-      {:else if route.path === "/people"}<People />
-      {:else if route.path === "/groups"}<Groups />
-      {:else if route.path === "/administrators"}<Administrators />
-      {:else if route.path === "/sites"}<Sites />
-      {:else}<Overview />{/if}
-      </div>{/key}
-    </main>
-  </div>
+  </dialog>
+
+  <main id="main-content" tabindex="-1" class="console-content outline-none">
+    {#key route.path}<div class="page-enter">
+    {#if blocked}
+      <div class="panel mx-auto max-w-lg p-8 text-center">
+        <p class="plate">Not included in this session</p>
+        <h1 tabindex="-1" class="mt-2 text-xl font-semibold outline-none">This session cannot open {currentItem.label}</h1>
+        <p class="text-muted-foreground mt-2 text-sm">You are signed in as {admin.name || "an operator"} without the {toolList.find((t) => t.id === currentItem.tool)?.label} tool. Your name in the account menu lists what this session may change; ask an administrator to include it.</p>
+      </div>
+    {:else if route.path === "/overview"}<Overview />
+    {:else if route.path === "/applications"}<Applications />
+    {:else if route.path === "/connectors"}<Connectors />
+    {:else if route.path === "/activity"}<Activity />
+    {:else if route.path === "/routes"}<Routes />
+    {:else if route.path === "/people"}<People />
+    {:else if route.path === "/groups"}<Groups />
+    {:else if route.path === "/administrators"}<Administrators />
+    {:else if route.path === "/sites"}<Sites />
+    {:else}<Overview />{/if}
+    </div>{/key}
+  </main>
 </div>

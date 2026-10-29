@@ -44,6 +44,15 @@ const device = async () => {
   return { context, page };
 };
 const onLoginPage = (page) => page.waitForURL((u) => u.origin === LOGIN && u.pathname === "/_/auth/login");
+const signInToPortal = async (page) => {
+  await page.goto(`${LOGIN}/_/auth/login`);
+  await Promise.race([
+    page.waitForURL(`${LOGIN}/_/auth/me`, { timeout: 20_000 }),
+    page.locator("#action").click({ timeout: 20_000 }).catch(() => {}),
+  ]);
+  await page.waitForURL(`${LOGIN}/_/auth/me`, { timeout: 20_000 });
+  await page.locator("#who:not([hidden])").waitFor();
+};
 const sessionCookie = async (context, url) => (await context.cookies(url)).find((c) => c.name === "sb_session");
 // Where the browser's cookies lead without following them: "app" when the
 // app answers, "code" when the login host approves a handoff (a live central
@@ -109,6 +118,42 @@ try {
   const denied = await laptop.page.goto(`${CRM}/`);
   assert.equal(denied.status(), 403, "an app whose policy excludes Ana let her in");
 
+  step = "a refused visitor can reach only her own portal";
+  await laptop.page.getByRole("heading", { name: /You can't open/ }).waitFor();
+  assert.match(await laptop.page.locator(".reference").textContent(), /email_not_allowed|domain_not_allowed/);
+  assert(!(await laptop.page.locator("body").textContent()).includes("nobody@acme.dev"), "refusal exposed the allowed address");
+  await laptop.page.getByRole("link", { name: "See the apps you can open" }).click();
+  await laptop.page.waitForURL(`${LOGIN}/_/auth/me`);
+  await laptop.page.locator("#who:not([hidden])").waitFor();
+  assert.equal(await laptop.page.locator("#email").textContent(), "ana@acme.dev");
+  await laptop.page.locator(`#apps a[href="${NOTES}/"]`).waitFor();
+  assert.equal(await laptop.page.locator(`#apps a[href="${CRM}/"]`).count(), 0, "portal listed a refused application");
+  const portalText = await laptop.page.locator("body").textContent();
+  assert(!portalText.includes("nobody@acme.dev") && !portalText.includes("bob@other.org"), "portal exposed another person's data or a policy");
+
+  step = "a person can end one of her sessions without affecting another person";
+  // Drop the local cookie without logging out, then sign in again. A login
+  // with the old cookie would replace that session; handoffs are children
+  // and intentionally do not appear in the session list.
+  await laptop.context.clearCookies({ name: "sb_session", domain: /^\.?demo\.localhost$/ });
+  await signInToPortal(laptop.page);
+  const bob = await device();
+  await bob.page.goto(edge.invites.bob);
+  await bob.page.locator("#action").click();
+  await bob.page.waitForURL(`${LOGIN}/_/auth/me`);
+  await bob.page.locator("#who:not([hidden])").waitFor();
+  await laptop.page.locator("#sessions li", { hasText: "Other session" }).first().waitFor();
+  const beforeSessions = await laptop.page.locator("#sessions li").count();
+  laptop.page.once("dialog", (dialog) => dialog.dismiss());
+  await laptop.page.locator("#sessions li", { hasText: "Other session" }).first().getByRole("button", { name: "End session" }).click();
+  assert.equal(await laptop.page.locator("#sessions li").count(), beforeSessions, "cancelling ended a session");
+  laptop.page.once("dialog", (dialog) => dialog.accept());
+  await laptop.page.locator("#sessions li", { hasText: "Other session" }).first().getByRole("button", { name: "End session" }).click();
+  await laptop.page.waitForFunction((count) => document.querySelectorAll("#sessions li").length === count - 1, beforeSessions);
+  await bob.page.reload();
+  await bob.page.locator("#who:not([hidden])").waitFor();
+  assert.equal(await bob.page.locator("#email").textContent(), "bob@other.org", "another person's session was affected");
+
   step = "a captured code is worthless in another browser and burns";
   const thief = await device();
   await laptop.context.clearCookies({ domain: "notes.other.localhost", name: "sb_session" });
@@ -152,8 +197,35 @@ try {
   await laptop.context.addCookies([{ ...before }]);
   assert.equal(await reach(laptop.context, `${NOTES}/`), "login", "the app's session outlived the central logout");
 
+  step = "sign out everywhere in the portal";
+  await signInToPortal(laptop.page);
+  // Prevent a virtual authenticator from immediately signing back in on the
+  // destination page; the API request below observes the actual revocation.
+  await laptop.page.route("**/_/auth/login", (route) => route.abort());
+  laptop.page.once("dialog", (dialog) => dialog.accept());
+  const ended = laptop.page.waitForResponse((response) => response.url().endsWith("/_/auth/me/sessions/revoke") && response.status() === 200);
+  await laptop.page.locator("#signout-all").click();
+  await ended;
+  assert.equal(await reach(laptop.context, `${NOTES}/`), "login", "sign out everywhere left the visitor's session active");
+  await bob.page.reload();
+  await bob.page.locator("#who:not([hidden])").waitFor();
+  assert.equal(await bob.page.locator("#email").textContent(), "bob@other.org", "sign out everywhere affected another person");
+
+  step = "try another account after a refusal";
+  assert.equal((await bob.page.goto(`${CRM}/`)).status(), 403);
+  await bob.page.getByText("This ends your current sign-in and its linked app sessions.").waitFor();
+  await bob.page.route("**/_/auth/login", (route) => route.abort());
+  const logoutResponses = [];
+  bob.page.on("response", (response) => { if (new URL(response.url()).pathname === "/_/auth/logout") logoutResponses.push(response.status()); });
+  const switched = bob.page.waitForResponse((response) => new URL(response.url()).pathname === "/_/auth/logout", { timeout: 15_000 });
+  await bob.page.getByRole("button", { name: "Sign out and try another account" }).click();
+  const logout = await switched.catch(() => { throw new Error(`account-switch logout did not answer; statuses ${logoutResponses.join(",")}`); });
+  assert.equal(logout.status(), 303, "account-switch logout did not redirect to sign-in");
+  assert.equal(await reach(bob.context, `${CRM}/`), "login", "trying another account left the previous login active");
+  await bob.context.close();
+
   assert.deepEqual(errors, [], "page errors");
-  console.log("host sessions acceptance: OK");
+  console.log("Host sessions and visitor portal: allowed/denied routes, policy privacy, account switch, per-session and all-session sign-out, cross-user isolation, handoffs and logout OK");
 } catch (error) {
   console.error(`failed during: ${step}`);
   throw error;

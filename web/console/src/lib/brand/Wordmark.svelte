@@ -4,9 +4,9 @@
 </script>
 
 <span class="flex items-center gap-2.5">
-  <Logo size={26} {animated} />
+  <Logo size={30} {animated} />
   <span class="leading-none">
-    <span class="block text-[0.98rem] font-semibold tracking-tight">ozal</span>
-    <span class="text-muted-foreground mt-1 block font-mono text-[0.65rem] tracking-wide">{sub}</span>
+    <span class="block text-xl font-medium tracking-tight">ozal</span>
+    <span class="text-muted-foreground mt-1 block text-xs">{sub}</span>
   </span>
 </span>

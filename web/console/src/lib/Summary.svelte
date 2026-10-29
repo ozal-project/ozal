@@ -8,7 +8,7 @@
   {#each items as item (item.label)}
     <div class="flex items-baseline gap-2">
       <dt class="sr-only">{item.label}</dt>
-      <dd class={["font-mono text-xl font-medium tabular-nums", item.tone === "bad" && "text-destructive", item.tone === "warn" && "text-warning"]}>{item.value}</dd>
+      <dd class={["text-xl font-medium tabular-nums", item.tone === "bad" && "text-destructive", item.tone === "warn" && "text-warning"]}>{item.value}</dd>
       <span class="text-muted-foreground text-sm" aria-hidden="true">{item.label}</span>
     </div>
   {/each}

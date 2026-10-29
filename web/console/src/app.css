@@ -19,7 +19,7 @@
    sign-in pages (internal/passkey/assets) use the same values. Fonts are
    bundled (OFL): no third-party requests. */
 :root {
-  --radius: 0.75rem;
+  --radius: 0.5rem;
   --background: #0e0e0d;
   --foreground: #f1ede6;
   --card: #171716;
@@ -44,7 +44,7 @@
   /* Camel: what is live. Graphite: depth. */
   --signal: #c4a17c;
   --depth: #55514a;
-  --sidebar: #121211;
+  --sidebar: #0e0e0d;
   --sidebar-foreground: #f1ede6;
   --sidebar-border: #2a2927;
   --sidebar-accent: #1f1f1d;
@@ -94,6 +94,7 @@
   }
   body {
     @apply bg-background text-foreground font-sans antialiased;
+    color-scheme: dark;
   }
 }
 
@@ -104,26 +105,21 @@
 /* Shared pieces. Names are kept from the first console so every page inherits
    the new look; only their appearance changed. */
 @layer components {
-  body {
-    background-image: radial-gradient(1100px 520px at 78% -14%, color-mix(in srgb, var(--primary) 7%, transparent), transparent 62%);
-    background-repeat: no-repeat;
-  }
   /* Small label above a block. */
   .plate {
-    @apply text-muted-foreground font-mono text-[0.72rem] font-medium tracking-wide uppercase;
+    @apply text-muted-foreground text-xs font-medium;
   }
   .plate b { @apply text-signal font-semibold; }
   /* A state dot: green allowed, red refused, blue waiting, amber warning, grey idle. */
   .lamp {
     @apply inline-block size-2 shrink-0 rounded-full;
     background: var(--lamp, var(--muted-foreground));
-    box-shadow: 0 0 8px color-mix(in srgb, var(--lamp, transparent) 55%, transparent);
   }
   .lamp-on { --lamp: var(--success); }
   .lamp-off { --lamp: var(--destructive); }
   .lamp-wait { --lamp: var(--waiting); animation: lamp-pulse 1.6s ease-in-out infinite; }
   .lamp-warn { --lamp: var(--warning); }
-  .lamp-idle { --lamp: #3a3833; box-shadow: none; }
+  .lamp-idle { --lamp: #3a3833; }
   .lamp-lg { @apply size-3; }
   /* A group name; as a button it adds or removes the group. */
   .chip {
@@ -132,9 +128,9 @@
   button.chip { @apply hover:bg-accent focus-visible:ring-ring cursor-pointer focus-visible:ring-2 focus-visible:outline-none; }
   .chip-add { @apply text-muted-foreground border-border border border-dashed bg-transparent; }
   .panel {
-    @apply bg-card relative rounded-xl border;
+    @apply bg-card relative rounded-lg;
   }
-  .panel-head { @apply flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3; }
+  .panel-head { @apply flex flex-wrap items-center justify-between gap-3 px-5 py-4; }
   /* A connecting line, as a divider next to labels. */
   .cord { stroke: #6e6a63; fill: none; stroke-linecap: round; }
 }
@@ -145,58 +141,89 @@
    (rule above); none is needed to read or use a page. */
 .logo-live .logo-light { transform-box: fill-box; transform-origin: left center; animation: door-open 0.7s 0.2s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 @keyframes door-open { from { opacity: 0; transform: scaleX(0); } }
-@keyframes cord-draw { to { stroke-dashoffset: 0; } }
+.page-enter { min-width: 0; }
 
-.patchbay { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.55; mask-image: radial-gradient(70% 70% at 50% 45%, black, transparent); }
-.patch-jack { fill: color-mix(in srgb, var(--muted-foreground) 35%, transparent); }
-.patch-cord { fill: none; stroke: color-mix(in srgb, var(--muted-foreground) 45%, transparent); stroke-width: 1.4; stroke-dasharray: 1; stroke-dashoffset: 1; animation: cord-draw 1.6s cubic-bezier(0.6, 0, 0.2, 1) forwards; }
-.patch-signal { fill: none; stroke: var(--signal); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 0.06 0.94; stroke-dashoffset: 1; opacity: 0; animation: patch-signal 5s ease-in-out infinite; filter: drop-shadow(0 0 4px var(--signal)); }
-.patch-lit { fill: none; stroke: var(--signal); stroke-width: 1.4; opacity: 0; animation: patch-lit 5s ease-in-out infinite; }
-.patch-cord-1 { animation-delay: 0.3s, 0.3s; } .patch-cord-1.patch-signal, .patch-cord-1.patch-lit { animation-delay: 2.1s; }
-.patch-cord-0.patch-signal, .patch-cord-0.patch-lit { animation-delay: 1.4s; }
-.patch-cord-2 { animation-delay: 0.6s; } .patch-cord-2.patch-signal, .patch-cord-2.patch-lit { animation-delay: 3.2s; }
-.patch-cord-3 { animation-delay: 0.9s; } .patch-cord-3.patch-signal, .patch-cord-3.patch-lit { animation-delay: 4.3s; }
-.patch-cord-4 { animation-delay: 1.2s; } .patch-cord-4.patch-signal, .patch-cord-4.patch-lit { animation-delay: 5.4s; }
-@keyframes patch-signal { 0% { stroke-dashoffset: 1; opacity: 0; } 8% { opacity: 1; } 60% { stroke-dashoffset: 0.06; opacity: 1; } 70%, 100% { stroke-dashoffset: 0.06; opacity: 0; } }
-@keyframes patch-lit { 0%, 55% { opacity: 0; } 62% { opacity: 0.9; } 100% { opacity: 0; } }
-
-/* A page change: the new page settles in from slightly below. */
-.page-enter { animation: page-in 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
-@keyframes page-in { from { opacity: 0; transform: translateY(6px); } }
-
-/* The navigation marker: a lit cord on the left of the current section. */
-.nav-item { position: relative; }
-.nav-item[aria-current="page"]::before {
-  content: ""; position: absolute; left: -0.5rem; top: 22%; bottom: 22%; width: 3px; border-radius: 0 3px 3px 0;
-  background: var(--primary); box-shadow: 0 0 10px color-mix(in srgb, var(--primary) 70%, transparent);
-  animation: marker-in 0.25s ease-out both;
+/* Umbral is the sign-in's own object: an open door. The signed-out screen
+   carries only brand and sign-in, never configuration or app names. */
+.auth-shell { display: grid; min-height: 100svh; align-items: center; padding: 56px 32px; }
+.auth-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 440px); gap: 96px; width: min(1040px, 100%); margin-inline: auto; align-items: center; }
+.auth-identity { align-self: stretch; display: flex; flex-direction: column; justify-content: space-between; gap: 56px; padding-block: 24px; }
+.auth-story { display: grid; justify-items: start; gap: 24px; }
+.auth-statement { max-width: 15ch; font-size: 32px; font-weight: 500; line-height: 1.15; letter-spacing: -.035em; }
+.auth-description { max-width: 34ch; color: var(--muted-foreground); font-size: 15px; line-height: 1.6; }
+.auth-footnote { color: var(--muted-foreground); font-size: 12px; }
+.auth-form { min-width: 0; }
+.auth-form-body { background: var(--card); padding: 32px; border-radius: 12px; }
+@media (max-width: 767px) {
+  [data-slot="button"], select { min-height: 40px; }
+  .auth-shell { padding: 32px 20px; }
+  .auth-layout { grid-template-columns: minmax(0, 1fr); gap: 32px; max-width: 440px; }
+  .auth-identity { padding: 0; gap: 0; }
+  .auth-story, .auth-footnote { display: none; }
+  .auth-form-body { padding: 24px; }
 }
-@keyframes marker-in { from { transform: scaleY(0); } }
 
 .tab[aria-current="page"] { border-color: var(--primary); }
 
-/* The Overview map. Text uses the theme; cords carry staggered signals. */
-.edgemap { font-family: inherit; }
-.em-node { fill: var(--card); stroke: var(--border); }
-.em-hub { fill: color-mix(in srgb, var(--primary) 10%, var(--card)); stroke: color-mix(in srgb, var(--primary) 45%, transparent); }
-.em-dot-primary { fill: var(--primary); }
-.em-depth { fill: var(--depth); }
-.em-light { fill: var(--signal); }
-.em-glyph { fill: var(--muted-foreground); }
-.em-glyph-line { fill: none; stroke: var(--muted-foreground); stroke-width: 1.8; stroke-linecap: round; }
-.em-label { fill: var(--muted-foreground); font-size: 12px; }
-.em-cord { fill: none; stroke: color-mix(in srgb, var(--muted-foreground) 40%, transparent); stroke-width: 1.4; }
-.em-cord-bad { stroke: color-mix(in srgb, var(--destructive) 70%, transparent); stroke-dasharray: 4 5; }
-.em-signal { fill: none; stroke: var(--signal); stroke-width: 2.2; stroke-linecap: round; stroke-dasharray: 0.08 0.92; stroke-dashoffset: 1; opacity: 0; animation: em-run 3.6s ease-in-out infinite; filter: drop-shadow(0 0 3px var(--primary)); }
-.em-d1 { animation-delay: 1.2s; } .em-d2 { animation-delay: 1.6s; } .em-d3 { animation-delay: 2.1s; } .em-d4 { animation-delay: 2.5s; }
-.em-d5 { animation-delay: 2.9s; } .em-d6 { animation-delay: 3.3s; } .em-d7 { animation-delay: 0.6s; } .em-d8 { animation-delay: 0.9s; }
-@keyframes em-run { 0% { stroke-dashoffset: 1; opacity: 0; } 10% { opacity: 1; } 55% { stroke-dashoffset: 0.08; opacity: 1; } 65%, 100% { stroke-dashoffset: 0.08; opacity: 0; } }
-.em-row-bg { fill: transparent; stroke: var(--border); transition: fill 0.15s; }
-.em-row:hover .em-row-bg, .em-row:focus-visible .em-row-bg { fill: var(--accent); }
-.em-row:focus-visible { outline: none; }
-.em-row:focus-visible .em-row-bg { stroke: var(--ring); }
-.em-host { fill: var(--foreground); font-family: var(--font-mono); font-size: 12.5px; }
-.em-meta { fill: var(--muted-foreground); font-size: 11.5px; }
-.em-lamp-ok { fill: var(--success); }
-.em-lamp-bad { fill: var(--destructive); }
-.em-lamp-idle { fill: var(--muted-foreground); opacity: 0.5; }
+/* Navigation as a threshold: the active space opens a small Umbral arch in
+   the shared baseline. No extra status, counters or invented workspace. */
+.console-workspace { display: flex; min-height: 100svh; flex-direction: column; }
+.console-header { position: sticky; top: 0; z-index: 30; background: var(--background); border-bottom: 1px solid var(--border); }
+.console-bar, .console-content { width: min(1360px, 100%); margin-inline: auto; padding-inline: 32px; }
+.console-bar { display: grid; grid-template-columns: 160px minmax(0, 1fr) minmax(140px, 180px); align-items: center; gap: 24px; min-height: 76px; }
+.console-brand { display: inline-flex; width: fit-content; text-decoration: none; }
+.console-nav { display: flex; justify-content: center; align-self: stretch; gap: 20px; }
+.console-nav-link { position: relative; display: inline-flex; align-items: center; color: var(--muted-foreground); font-size: 14px; text-decoration: none; white-space: nowrap; transition: color 150ms; }
+.console-nav-link:hover, .console-nav-link[aria-current="page"] { color: var(--foreground); }
+.console-nav-link[aria-current="page"]::after { content: ""; position: absolute; bottom: -1px; left: calc(50% - 7px); width: 14px; height: 9px; border: 2px solid var(--primary); border-bottom: 0; border-radius: 9px 9px 0 0; }
+.console-nav-link:focus-visible, .console-brand:focus-visible, .console-tab:focus-visible { outline: 2px solid var(--ring); outline-offset: 6px; border-radius: 3px; }
+.console-account { min-width: 0; justify-self: end; max-width: 180px; }
+.console-content { flex: 1; padding-block: 40px; }
+.console-mobile-place, .console-menu-toggle { display: none; }
+.console-drawer { position: fixed; inset: 0; margin: 0; width: 100%; max-width: none; height: 100svh; max-height: none; padding: 24px; color: var(--foreground); background: var(--background); border: 0; }
+.console-drawer[open] { display: flex; flex-direction: column; }
+.console-drawer-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; }
+.console-drawer nav { display: grid; gap: 4px; }
+.console-drawer-link { position: relative; display: grid; gap: 4px; padding: 12px 0 12px 24px; color: var(--muted-foreground); font-size: 22px; font-weight: 500; text-decoration: none; }
+.console-drawer-link[aria-current="page"] { color: var(--foreground); }
+.console-drawer-link[aria-current="page"]::before { content: ""; position: absolute; top: 19px; left: 0; width: 10px; height: 16px; border: 2px solid var(--primary); border-bottom: 0; border-radius: 7px 7px 0 0; }
+.console-nav-purpose { font-size: 12px; font-weight: 400; color: var(--muted-foreground); }
+.console-drawer-account { margin-top: auto; padding-top: 24px; }
+.console-tabs { display: flex; gap: 28px; margin-top: 24px; border-bottom: 1px solid var(--border); }
+.console-tab { position: relative; padding-bottom: 14px; font-size: 14px; color: var(--muted-foreground); text-decoration: none; white-space: nowrap; }
+.console-tab[aria-current="page"] { color: var(--foreground); }
+.console-tab[aria-current="page"]::after { content: ""; position: absolute; bottom: -1px; left: 0; right: 0; height: 2px; background: var(--primary); }
+@media (max-width: 1023px) {
+  .console-bar { display: flex; min-height: 64px; gap: 16px; }
+  .console-nav, .console-account { display: none; }
+  .console-mobile-place { display: block; margin-left: auto; color: var(--muted-foreground); font-size: 12px; }
+  .console-menu-toggle { display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 6px; }
+  .console-menu-toggle:hover { background: var(--muted); }
+}
+@media (max-width: 767px) {
+  .console-bar, .console-content { padding-inline: 20px; }
+  .console-content { padding-block: 28px; }
+  .console-tabs { gap: 20px; }
+}
+
+/* Native text stays legible as the access path changes size. The Umbral
+   mark owns the decision point; each branch is an actual configured route. */
+.edge-journey { display: grid; grid-template-columns: 116px minmax(0, 1fr); align-items: center; gap: 20px; padding: 0 20px 20px; }
+.edge-threshold { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.edge-direction { color: var(--muted-foreground); transform: rotate(90deg); }
+.edge-threshold-mark { display: flex; flex-direction: column; align-items: center; }
+.edge-paths { min-width: 0; padding-left: 16px; border-left: 1px solid var(--border); }
+.edge-route { position: relative; display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 40px; padding: 8px 0; color: var(--foreground); text-decoration: none; }
+.edge-route::before { content: ""; position: absolute; top: 50%; left: -16px; width: 8px; border-top: 1px solid var(--border); }
+.edge-route:hover { color: var(--primary); }
+.edge-route:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; border-radius: 3px; }
+.edge-live { --lamp: var(--signal); }
+@media (max-width: 639px) {
+  .edge-journey { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .edge-threshold { flex-direction: row; justify-content: flex-start; gap: 12px; }
+  .edge-direction { transform: none; }
+  .edge-threshold-mark { flex-direction: row; gap: 8px; }
+  .edge-threshold-mark svg { width: 24px; height: 24px; }
+  .edge-threshold-mark span { margin-top: 0; }
+  .edge-threshold-mark span:last-child { display: none; }
+}

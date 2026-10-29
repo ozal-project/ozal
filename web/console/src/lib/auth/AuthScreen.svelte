@@ -7,7 +7,7 @@
   import EnrolForm from "$lib/EnrolForm.svelte";
   import HostLogin from "$lib/auth/HostLogin.svelte";
   import Wordmark from "$lib/brand/Wordmark.svelte";
-  import Patchbay from "$lib/brand/Patchbay.svelte";
+  import Logo from "$lib/brand/Logo.svelte";
 
   // The only thing a signed-out tab shows. It says what this is and how to get
   // in, and nothing about what is inside.
@@ -51,12 +51,19 @@
   const heading = $derived(admin.enrol ? "Create your passkey" : mode === "host" ? "Sign in from the host" : enrolled === false ? "Set up the first administrator" : "Sign in");
 </script>
 
-<main class="relative flex min-h-screen items-center justify-center overflow-hidden px-5 py-12">
-  <Patchbay />
-  <div aria-hidden="true" class="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_50%_at_50%_0%,color-mix(in_oklab,var(--primary)_14%,transparent),transparent)]"></div>
-  <div class="animate-in fade-in-0 slide-in-from-bottom-3 relative w-full max-w-md duration-500 motion-reduce:animate-none">
-    <div class="mb-8 flex justify-center"><Wordmark animated /></div>
-    <div class="panel p-8">
+<main class="auth-shell">
+  <div class="auth-layout">
+    <section class="auth-identity" aria-label="Ozal private console">
+      <Wordmark sub="Private console" />
+      <div class="auth-story">
+        <Logo size={88} />
+        <p class="auth-statement">Your access.<br />Your control.</p>
+        <p class="auth-description">A private place to manage access to the applications you host.</p>
+      </div>
+      <p class="auth-footnote">Self-hosted. On your infrastructure.</p>
+    </section>
+    <div class="auth-form">
+    <div class="auth-form-body">
       <h1 class="text-xl font-semibold">{heading}</h1>
 
       {#if admin.enrol}
@@ -96,5 +103,6 @@
     {#if !admin.enrol && mode === "passkey" && enrolled !== undefined}
       <p class="mt-5 text-center"><button type="button" class="text-muted-foreground hover:text-foreground text-xs underline-offset-4 hover:underline" onclick={() => { mode = "host"; }}>{enrolled === false ? "Use a host login instead" : "No passkey? Use a host login"}</button></p>
     {/if}
+    </div>
   </div>
 </main>

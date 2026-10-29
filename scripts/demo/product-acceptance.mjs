@@ -11,6 +11,8 @@ const exec = promisify(execFile);
 const binary = process.env.OZAL_BIN;
 if (!binary) throw new Error("Set OZAL_BIN to the built binary");
 const root = await mkdtemp(join(tmpdir(), "sb-product-"));
+const captures = process.env.OZAL_CONSOLE_ARTIFACTS;
+if (captures) await mkdir(captures, { recursive: true });
 const session = `ozal-product-${process.pid}`;
 let edge;
 let step = "start";
@@ -222,11 +224,40 @@ try {
   await ab("wait", "--fn", `![...document.querySelectorAll('#main-content h2')].some((el) => el.textContent.trim() === ${JSON.stringify(appHost)})`);
   assert.equal((await api("GET", "/_/api/setup")).routes.some((r) => r.host === appHost), false, "confirmed removal left the route configured");
 
+  step = "start a GitHub website without a local build";
+  await ab("find", "role", "button", "click", "--name", "Add website", "--exact");
+  await ab("fill", "#app-host", `gitflow.demo.localhost:${PORT}`);
+  await ab("click", 'label:has(input[name="app-kind"][value="github"])');
+  const githubSite = await evaluate("document.querySelector('#app-github-site')?.value");
+  assert.equal(githubSite, "gitflow-demo-localhost");
+  await ab("find", "role", "button", "click", "--name", "Next", "--exact");
+  await ab("click", 'label:has(input[name="app-privacy"][value="public"])');
+  await ab("find", "role", "button", "click", "--name", "Review configuration", "--exact");
+  await ab("wait", "--text", "repository selected after saving");
+  await ab("check", 'dialog[open] input[type="checkbox"]');
+  await ab("find", "role", "button", "click", "--name", "Save reviewed application", "--exact");
+  await ab("wait", "--text", "A previously deployed build under this site name may be served");
+  await ab("find", "role", "button", "click", "--name", "Save application", "--exact");
+  await ab("wait", "--text", "No repository has been selected and no build or deployment has run yet.");
+  const githubRoute = (await api("GET", "/_/api/setup")).routes.find((r) => r.host === `gitflow.demo.localhost:${PORT}`);
+  assert.equal(githubRoute?.site, githubSite, "GitHub onboarding did not configure the reviewed site route");
+  assert.equal((await api("GET", "/_/api/sites")).sites.some((s) => s.name === githubSite), false, "GitHub onboarding claimed a deployment without a build");
+  await ab("find", "role", "button", "click", "--name", "Continue in Sites", "--exact");
+  await ab("wait", "--fn", "location.pathname === '/sites'");
+  await ab("wait", "--text", "Connect your own GitHub App");
+
   step = "responsive layouts and accessibility";
   const pages = [["/overview", "Overview"], ["/applications", "Applications"], ["/routes", "Applications"], ["/sites", "Sites"], ["/people", "People"], ["/groups", "People"], ["/administrators", "People"], ["/connectors", "Connectors"], ["/activity", "Activity"]];
   for (const [href, title] of pages) {
     await goPage(href, title);
     await auditPage([[1440, 1000], [1024, 900], [390, 844], [320, 800]]);
+    if (captures) {
+      for (const [width, height] of [[1440, 1000], [390, 844]]) {
+        await ab("set", "viewport", String(width), String(height));
+        await ab("eval", "window.scrollTo(0, 0)");
+        await ab("screenshot", join(captures, `${href.slice(1)}-${width}.png`), "--full");
+      }
+    }
     if (href === "/applications") {
       await ab("set", "viewport", "1440", "1000");
       await ab("screenshot", join(root, "applications-1440.png"));
@@ -234,6 +265,23 @@ try {
       await ab("screenshot", join(root, "applications-390.png"));
     }
   }
+  step = "mobile Ozal navigation and keyboard focus";
+  await ab("set", "viewport", "390", "844");
+  await ab("find", "role", "button", "click", "--name", "Open menu", "--exact");
+  await ab("wait", "--fn", "document.querySelector('#mobile-menu')?.open === true");
+  await ab("wait", "--fn", "document.activeElement?.closest('#mobile-menu') !== null");
+  await ab("eval", "document.querySelector('#mobile-menu button[aria-label=\"Close menu\"]').focus()");
+  await ab("press", "Shift+Tab");
+  assert.equal(await evaluate("document.activeElement?.getAttribute('aria-label')"), "Acceptance operator", "backward Tab escaped the mobile navigation");
+  await ab("press", "Tab");
+  assert.equal(await evaluate("document.activeElement?.getAttribute('aria-label')"), "Close menu", "Tab did not wrap inside the mobile navigation");
+  if (captures) await ab("screenshot", join(captures, "navigation-390.png"), "--full");
+  await auditPage([[390, 844], [320, 800]]);
+  await ab("press", "Escape");
+  await ab("wait", "--fn", "document.querySelector('#mobile-menu')?.open === false && document.activeElement?.getAttribute('aria-label') === 'Open menu'");
+  await ab("find", "role", "button", "click", "--name", "Open menu", "--exact");
+  await ab("click", "#mobile-menu a[href=\"/sites\"]");
+  await ab("wait", "--fn", "location.pathname === '/sites' && !document.querySelector('#mobile-menu')?.open && document.activeElement?.textContent?.trim() === 'Sites'");
   step = "signing out hides the console entirely";
   await ab("set", "viewport", "1440", "1000");
   await goPage("/people", "People");
@@ -241,6 +289,12 @@ try {
   await ab("find", "role", "button", "click", "--name", "Acceptance operator", "--exact");
   await ab("find", "role", "button", "click", "--name", "Sign out", "--exact");
   await ab("wait", "--text", "Use a host login");
+  if (captures) {
+    for (const [width, height] of [[1440, 1000], [768, 1024], [390, 844], [320, 800]]) {
+      await ab("set", "viewport", String(width), String(height));
+      await ab("screenshot", join(captures, `sign-in-${width}.png`), "--full");
+    }
+  }
   assert.equal(await evaluate("document.body.innerText.includes('new-operator-test@example.test')"), false, "signing out kept the people list visible");
   for (const name of ["Applications", "Connectors", "Activity", "Routing & health", "Administrators"]) {
     assert.equal(await evaluate(`document.body.innerText.includes(${JSON.stringify(name)})`), false, `the signed-out screen still shows ${name}`);

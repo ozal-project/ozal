@@ -78,7 +78,8 @@ try {
   await signOut(laptop.page, "Olivia Owner");
   await laptop.page.getByRole("button", { name: "Sign in with your passkey" }).click();
   await inConsole(laptop.page);
-  assert.match(await laptop.page.getByRole("button", { name: "Olivia Owner", exact: true }).textContent(), /Passkey · 6 of 6 tools/);
+  assert.match(await (await menu(laptop.page, "Olivia Owner")).textContent(), /Passkey · 6 of 6 tools/);
+  await laptop.page.keyboard.press("Escape");
 
   step = "another browser through a one-use device link";
   const deviceLink = await (async () => {
@@ -125,7 +126,10 @@ try {
   await (await menu(laptop.page, "Olivia Owner")).getByRole("button", { name: "Your passkeys" }).click();
   await own.getByText("this session").waitFor();
   assert.ok(await own.isVisible(), "the passkeys dialog is hidden on a phone");
-  await own.getByRole("button", { name: "Close" }).click();
+  await laptop.page.keyboard.press("Escape");
+  await own.waitFor({ state: "hidden" });
+  assert.equal(await laptop.page.locator("#mobile-menu").evaluate((dialog) => dialog.open), true, "Escape from passkeys closed the parent navigation");
+  await laptop.page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "Olivia Owner");
   await laptop.page.getByRole("button", { name: "Close menu" }).click();
   await laptop.page.setViewportSize({ width: 1280, height: 900 });
   await endedOnNextRequest(phone.page);
@@ -149,7 +153,8 @@ try {
   assert.equal(await bea.page.getByLabel("Full name").inputValue(), "Bea");
   await bea.page.getByRole("button", { name: "Create my passkey" }).click();
   await inConsole(bea.page);
-  assert.match(await bea.page.getByRole("button", { name: "Bea", exact: true }).textContent(), /1 of 6 tools/);
+  assert.match(await (await menu(bea.page, "Bea")).textContent(), /1 of 6 tools/);
+  await bea.page.keyboard.press("Escape");
   assert.deepEqual((await admins()).find((a) => a.email === "bea@acme.dev").tools, ["people"]);
 
   step = "reset another administrator's passkeys";

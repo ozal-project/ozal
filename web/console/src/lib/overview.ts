@@ -38,9 +38,9 @@ export function headline(status: StatusResponse | null, needAttention: number): 
   if (!status) return "Loading…";
   const sites = status.routes.filter((r) => r.is_static).length;
   const apps = status.routes.length - sites;
-  const serving = [apps > 0 ? plural(apps, "app") : "", sites > 0 ? plural(sites, "site") : ""].filter(Boolean).join(" and ") || "nothing yet";
-  const state = needAttention === 0 ? "Everything is answering." : needAttention === 1 ? "One thing needs you." : `${needAttention} things need you.`;
-  return `Serving ${serving}. ${state}`;
+  const configured = [apps > 0 ? plural(apps, "app route") : "", sites > 0 ? plural(sites, "site route") : ""].filter(Boolean).join(" and ") || "No routes";
+  const state = needAttention === 0 ? "No active alerts." : needAttention === 1 ? "One thing needs you." : `${needAttention} things need you.`;
+  return `${configured} configured. ${state}`;
 }
 
 export function attention(status: StatusResponse | null): Attention[] {
@@ -122,6 +122,9 @@ export function changes(events: AccessEvent[], subjects?: Map<string, string>): 
     const base = { time: e.time, type: e.type };
     const host = e.host ?? "";
     switch (e.type) {
+      case "github.workflow_proposed":
+        out.push({ ...base, title: `A publishing workflow was proposed for ${host || "a project"}`, detail: "Review its pull request in GitHub before merging. Publication is not yet verified.", tone: "neutral" });
+        break;
       case "pages.deployed":
         out.push({ ...base, title: `${host || e.deployment?.project || "A site"} was updated`, detail: "", source: deploySource(e, subjects), tone: "good", undo: host ? { site: host } : undefined });
         break;

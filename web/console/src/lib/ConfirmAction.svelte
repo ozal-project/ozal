@@ -11,10 +11,11 @@
     consequence: string;
     detail?: string;
     confirmLabel: string;
+    destructive?: boolean;
     onConfirm: () => void;
   };
 
-  let { open = $bindable(false), title, target, current, requested, consequence, detail = "", confirmLabel, onConfirm }: Props = $props();
+  let { open = $bindable(false), title, target, current, requested, consequence, detail = "", confirmLabel, destructive = true, onConfirm }: Props = $props();
   let dialog = $state<HTMLDialogElement | null>(null);
   let cancelButton = $state<HTMLButtonElement | null>(null);
   let returnFocus: HTMLElement | null = null;
@@ -82,7 +83,7 @@
     </dl>
     <div class="flex flex-wrap justify-end gap-2">
       <Button bind:ref={cancelButton} variant="outline" onclick={close}>Cancel</Button>
-      <Button class="bg-destructive text-destructive-foreground hover:bg-destructive/90" onclick={confirm}>{confirmLabel}</Button>
+      <Button variant={destructive ? "destructive" : "default"} onclick={confirm}>{confirmLabel}</Button>
     </div>
   </div>
 </dialog>

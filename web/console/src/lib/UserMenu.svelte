@@ -8,7 +8,7 @@
   import ChevronIcon from "@lucide/svelte/icons/chevron-down";
 
   // Who is signed in, what the session may change, and the way out. In the
-  // sidebar it sits at the bottom and opens upward.
+  // mobile directory it sits at the bottom and opens upward.
   let { placement = "down" }: { placement?: "up" | "down" } = $props();
   const initial = $derived((admin.name || "A").trim().charAt(0).toUpperCase());
   let open = $state(false);
@@ -55,10 +55,10 @@
 
 <svelte:window onclick={outside} onkeydown={keys} />
 
-<div class="relative" bind:this={root}>
+<div class="relative min-w-0 max-w-full" bind:this={root}>
   <button bind:this={trigger} type="button" aria-haspopup="dialog" aria-label={admin.name || "Admin token"} aria-expanded={open} aria-controls="user-menu" onclick={() => (open ? close() : void show())}
     class={["text-foreground focus-visible:outline-ring flex items-center gap-2.5 rounded-lg text-left text-sm transition-colors focus-visible:outline-2",
-      placement === "up" ? "hover:bg-sidebar-accent/60 w-full px-2 py-2" : "bg-card h-9 rounded-full border px-2"]}>
+      placement === "up" ? "hover:bg-sidebar-accent/60 w-full px-2 py-2" : "hover:bg-muted h-9 w-full px-2"]}>
     <span class="bg-primary/15 text-primary flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold" aria-hidden="true">{initial}</span>
     <span class="min-w-0 flex-1 leading-tight">
       <span class="block truncate font-medium">{admin.name || "Admin token"}</span>
@@ -71,6 +71,7 @@
     <div id="user-menu" role="dialog" aria-label="Your session" class={["bg-popover text-popover-foreground border-border animate-in fade-in-0 zoom-in-95 absolute z-30 w-[min(22rem,calc(100vw-2rem))] rounded-xl border p-4 shadow-2xl duration-150 motion-reduce:animate-none",
       placement === "up" ? "bottom-full left-0 mb-2" : "right-0 mt-2"]}>
       <h2 class="text-sm font-semibold">{admin.name || "Admin token"}</h2>
+      <p class="text-muted-foreground mt-1 text-xs">{admin.passkey ? "Passkey" : "Host login"} · {admin.tools.length} of {tools.length} tools</p>
       <p class="text-muted-foreground mt-0.5 text-xs">{sessionText} It exists only in this tab.</p>
       <p class="text-muted-foreground mt-4 mb-2 text-xs">This session may change</p>
       <ul class="flex flex-wrap gap-1.5" aria-label="Tools this session may change">

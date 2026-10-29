@@ -5,13 +5,16 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { admin, askForToken } from "$lib/adminToken.svelte";
-  import { githubRepositories, fetchProjects, setupStatus, bindGitHubProject, disconnectProject, type Repository, type Repositories, type Project, type SetupStatus } from "$lib/api";
+  import { githubRepositories, fetchPublishing, bindGitHubProject, disconnectProject, type Repository, type Repositories, type Project, type PublishingState } from "$lib/api";
+  import { LatestRequest } from "$lib/latestRequest";
   import ConfirmAction from "$lib/ConfirmAction.svelte";
+  import WorkflowProposal from "$lib/WorkflowProposal.svelte";
   let { embedded = false }: { embedded?: boolean } = $props();
   let repositories = $state<Repositories | null>(null);
   let projects = $state<Project[]>([]);
   let projectsLoaded = $state(false);
-  let setup = $state<SetupStatus | null>(null);
+  let setup = $state<PublishingState | null>(null);
+  const reads = new LatestRequest();
   let page = $state(1);
   let busy = $state(false);
   let error = $state("");
@@ -24,17 +27,20 @@
   let confirm = $state(false);
   let removing = $state<Project | null>(null);
   let frozen = $state<{ name: string; site: string; repository_id: number; page: number; ref: string; workflow: string; expected: string } | null>(null);
-  const sites = $derived([...new Set(setup?.routes.map((r) => r.site).filter((s): s is string => !!s) ?? [])]);
+  const sites = $derived(setup?.sites ?? []);
   async function load() {
     if (!admin.token.trim()) { askForToken(); return; }
+    const run = reads.start();
     busy = true; error = "";
     try {
-      [repositories, projects, setup] = await Promise.all([githubRepositories(admin.token.trim(), page), fetchProjects(admin.token.trim()), setupStatus(admin.token.trim())]);
+      const [repos, state] = await Promise.all([githubRepositories(admin.token.trim(), page, run.signal), fetchPublishing(admin.token.trim(), run.signal)]);
+      if (!run.isCurrent()) return;
+      repositories = repos; setup = state; projects = state.projects;
       projectsLoaded = true;
-    } catch (e) { error = (e as Error).message; }
-    finally { busy = false; }
+    } catch (e) { if (run.isCurrent()) error = (e as Error).message; }
+    finally { if (run.isCurrent()) busy = false; run.finish(); }
   }
-  onMount(() => { if (admin.token.trim()) void load(); });
+  onMount(() => { if (admin.token.trim()) void load(); return () => reads.cancel(); });
   function select(repo: Repository) { selected = repo; name = repo.full_name.split("/")[1].toLowerCase().replace(/[^a-z0-9-]/g, "-"); ref = `refs/heads/${repo.default_branch}`; site = sites[0] ?? ""; }
   function prepare(e: SubmitEvent) {
     e.preventDefault(); if (!selected || !setup) return;
@@ -47,7 +53,7 @@
       if (removing) { await disconnectProject(admin.token.trim(), removing.name, setup.config_sha256); notice = "Publisher trust removed. The live site and its retained deployments remain. A deployment already authenticated may finish; verify Activity."; }
       else if (frozen) {
         const result = await bindGitHubProject(admin.token.trim(), frozen);
-        notice = `Publisher trust saved for ${result.workflow_ref}. ${result.deploy_host_configured ? "Add and review the deploy workflow in that repository, then run its build and public acceptance." : "Prepare the dedicated HTTPS deploy hostname on the host before enabling CI."} No repository files were changed.`;
+        notice = `Publisher trust saved for ${result.workflow_ref}. ${result.deploy_host_configured ? "Prepare its publishing workflow below to review a pull request, then verify its first build and publication." : "Prepare the dedicated HTTPS deploy hostname on the host before enabling CI."} No repository files were changed.`;
       }
       selected = null; removing = null; await load();
     } catch (e) { error = (e as Error).message; }
@@ -101,7 +107,7 @@
   {:else if projects.length === 0}
     <p class="text-muted-foreground text-sm">No CI projects configured. Manual static uploads can still work.</p>
   {:else}
-    <ul class="divide-y">{#each projects as p (p.name)}<li class="py-4"><div class="flex flex-wrap items-center justify-between gap-3"><h2 class="font-semibold">{p.name} · {p.site}</h2><Button variant="outline" size="sm" disabled={busy} onclick={() => { removing = p; frozen = null; confirm = true; }}>Disconnect publisher</Button></div><p class="text-muted-foreground mt-2 break-all text-sm">{p.hostnames.join(", ")}</p>{#each p.deployers as d}<p class="mt-2 break-all text-sm">{d.type === "github" ? `Repository ${d.github.repository_id} · ${d.github.ref} · ${d.github.workflow_ref}` : "Project-scoped token configured"}</p>{/each}</li>{/each}</ul>
+    <ul class="divide-y">{#each projects as p (p.name)}<li class="py-4"><div class="flex flex-wrap items-center justify-between gap-3"><h2 class="font-semibold">{p.name} · {p.site}</h2><Button variant="outline" size="sm" disabled={busy} onclick={() => { removing = p; frozen = null; confirm = true; }}>Disconnect publisher</Button></div><p class="text-muted-foreground mt-2 break-all text-sm">{p.hostnames.join(", ")}</p>{#each p.deployers as d}<p class="mt-2 break-all text-sm">{d.type === "github" ? `Repository ${d.github.repository_id} · ${d.github.ref} · ${d.github.workflow_ref}` : "Project-scoped token configured"}</p>{/each}{#if p.deployers.filter((d) => d.type === "github").length === 1}<WorkflowProposal project={p} {page} />{/if}</li>{/each}</ul>
   {/if}
 </Panel>
 <ConfirmAction bind:open={confirm} title={removing ? "Disconnect this publisher?" : "Change publisher trust?"} target={removing?.name ?? frozen?.name ?? ""} current={removing ? "Configured deploy trust" : "Current project trust, if any"} requested={removing ? "No deploy trust for this project" : `${frozen?.ref} · ${frozen?.workflow}`} consequence={removing ? "Future deploy authentication for this project stops. Content remains. An already authenticated upload may finish." : "Only the selected repository, owner, ref and workflow will be trusted for this project. Previous token deployers will be removed."} detail="This does not change visitor access, uninstall the GitHub App or change any repository file." confirmLabel={removing ? "Disconnect publisher" : "Save publisher trust"} onConfirm={() => void save()} />

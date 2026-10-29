@@ -47,3 +47,18 @@ export function eventReason(reason?: string): string {
   if (!reason) return "";
   return reason.replace(/^tools: (.*)$/, (_, list: string) => `tools: ${list.split(",").map((t) => t.trim()).filter(Boolean).join(", ")}`);
 }
+
+// Summarize the configured restrictions without claiming that every signed-in
+// person can enter when the policy also checks email, method or context.
+export function applicationAccess(route: { auth_required?: boolean; access?: Record<string, unknown> }): string {
+  if (!route.auth_required && route.access == null) return "Public · no login";
+  const policy = route.access ?? {};
+  const present = (key: string) => Array.isArray(policy[key]) && (policy[key] as unknown[]).length > 0;
+  const email = present("allowed_emails") || present("allowed_domains");
+  const groups = present("required_groups");
+  const who = groups ? (email ? "Group members with an approved email or domain" : "Members of") : email ? "Approved email addresses or domains" : "Any signed-in person";
+  const extra = present("methods") || !!policy.require_device_bound || Number(policy.max_auth_age_minutes) > 0 || !!policy.context_rule;
+  if (extra && !groups && !email) return "Sign-in with extra checks";
+  if (extra && groups && !email) return "Group members · extra checks";
+  return extra ? `${who} · extra checks` : who;
+}

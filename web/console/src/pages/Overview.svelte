@@ -34,7 +34,7 @@
 
   const needs = $derived(attention(status));
   const summary = $derived(accessSummary(events));
-  const recent = $derived(changes(events, subjects).slice(0, 8));
+  const recent = $derived(changes(events, subjects).slice(0, 5));
   const oldest = $derived(events.length ? new Date(events[events.length - 1].time) : null);
   const decisions = $derived(summary.allowed + summary.refused);
   // The last deploy event of each site, newest first in `events`: where the live version came from.
@@ -132,13 +132,13 @@
 
 <div class="mb-6 grid gap-3" aria-live="polite">
   {#each needs as item (item.title)}
-    <div class="border-destructive/40 from-destructive/10 to-card flex flex-wrap items-center gap-4 rounded-2xl border bg-gradient-to-r px-4 py-3.5">
+    <div class="bg-card flex flex-wrap items-center gap-4 rounded-lg px-4 py-3.5">
       <TriangleAlertIcon class="text-destructive size-5 shrink-0" aria-hidden="true" />
-      <div class="min-w-0 flex-1">
+      <div class="min-w-0 basis-[calc(100%-2.25rem)] sm:flex-1 sm:basis-auto">
         <p class="font-semibold">{item.title}</p>
         <p class="text-muted-foreground text-sm" title={item.raw}>{item.detail}</p>
       </div>
-      {#if item.action}<Button variant="outline" size="sm" onclick={() => navigate(item.action!.page, { host: item.action!.host })}>{item.action.label}</Button>{/if}
+      {#if item.action}<Button class="ml-9 sm:ml-0" variant="outline" size="sm" onclick={() => navigate(item.action!.page, { host: item.action!.host })}>{item.action.label}</Button>{/if}
     </div>
   {/each}
   {#if status && needs.length === 0}
@@ -146,30 +146,8 @@
   {/if}
 </div>
 
-{#if status}<EdgeMap routes={status.routes} allowed={summary.allowed} refused={summary.refused} />{/if}
-
-<div class="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
-  <Panel label="What changed" title="Recent changes" sub="Deploys, reloads, people and connectors, newest first." bodyClass="p-0">
-    {#if recent.length === 0}
-      <p class="text-muted-foreground px-5 py-8 text-sm">{stream === "locked" ? "Sign in to see recent changes." : stream === "connecting" ? "Connecting to the live stream…" : stream === "lost" ? "The event stream is unavailable." : "No changes since this edge started."}</p>
-    {:else}
-      <ul>
-        {#each recent as c, i (c.time + c.type + i)}
-          <li class="border-border grid grid-cols-[4.6rem_1.6rem_1fr_auto] items-start gap-3 border-b px-5 py-3.5 last:border-b-0">
-            <span class="text-muted-foreground pt-0.5 font-mono text-xs whitespace-nowrap">{clock(c.time)}</span>
-            <span class={["mt-0.5 grid size-5 place-items-center rounded-md text-[0.7rem]", tones[c.tone]]} aria-hidden="true">{marks[c.tone]}</span>
-            <div class="min-w-0">
-              <p class="text-sm">{c.title}</p>
-              {#if c.source}<p class="text-muted-foreground mt-0.5 font-mono text-xs break-words">{c.source}</p>{/if}
-              {#if c.detail}<p class="text-muted-foreground mt-0.5 text-xs break-words">{c.detail}</p>{/if}
-            </div>
-            {#if c.undo}<Button variant="outline" size="sm" onclick={() => navigate("/sites")} aria-label={`Review the versions of ${c.undo.site} in Sites`}>Review versions</Button>{/if}
-          </li>
-        {/each}
-      </ul>
-    {/if}
-  </Panel>
-
+<div class="mb-5 grid items-start gap-5 xl:grid-cols-[1.6fr_1fr]">
+  {#if status}<EdgeMap routes={status.routes} allowed={summary.allowed} refused={summary.refused} />{/if}
   <Panel label="Access" title="Who got in" sub={oldest ? `Since ${clock(oldest.toISOString())} · last ${events.length} events held in memory.` : "Waiting for the first events."} bodyClass="p-0">
     <div class="border-border grid grid-cols-3 border-b">
       {#each [{ n: summary.allowed, label: "requests let in", lamp: "on" }, { n: summary.refused, label: "requests refused", lamp: "off" }, { n: summary.loginsStarted, label: "sign-ins started", lamp: "wait" }] as s (s.label)}
@@ -196,7 +174,31 @@
   </Panel>
 </div>
 
-<div class="mt-5">
+<div class="grid items-start gap-5 xl:grid-cols-[1fr_1.2fr]">
+  <Panel label="What changed" title="Recent changes" sub="Deploys, reloads, people and connectors, newest first." bodyClass="p-0">
+    {#if recent.length === 0}
+      <p class="text-muted-foreground px-5 py-8 text-sm">{stream === "locked" ? "Sign in to see recent changes." : stream === "connecting" ? "Connecting to the live stream…" : stream === "lost" ? "The event stream is unavailable." : "No changes since this edge started."}</p>
+    {:else}
+      <ul>
+        {#each recent as c, i (c.time + c.type + i)}
+          <li class="border-border grid grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-3 gap-y-2 border-b px-5 py-3.5 last:border-b-0 sm:grid-cols-[4.6rem_1.25rem_minmax(0,1fr)_auto]">
+            <span class="text-muted-foreground hidden pt-0.5 text-xs whitespace-nowrap sm:block">{clock(c.time)}</span>
+            <span class={["mt-0.5 grid size-5 place-items-center rounded-md text-[0.7rem]", tones[c.tone]]} aria-hidden="true">{marks[c.tone]}</span>
+            <div class="min-w-0">
+              <p class="text-muted-foreground mb-1 text-xs sm:hidden">{clock(c.time)}</p>
+              <p class="text-sm">{c.title}</p>
+              {#if c.source}<p class="text-muted-foreground mt-0.5 font-mono text-xs break-words">{c.source}</p>{/if}
+              {#if c.detail}<p class="text-muted-foreground mt-0.5 text-xs break-words">{c.detail}</p>{/if}
+            </div>
+            {#if c.undo}<div class="col-start-2 sm:col-start-auto"><Button variant="outline" size="sm" onclick={() => navigate("/sites")} aria-label={`Review the versions of ${c.undo.site} in Sites`}>Review versions</Button></div>{/if}
+          </li>
+        {/each}
+      </ul>
+      <div class="px-5 py-3"><Button variant="ghost" size="sm" onclick={() => navigate("/activity")}>All activity →</Button></div>
+    {/if}
+  </Panel>
+
+
   <Panel label="Sites" title="What is live, and where it came from" bodyClass="p-0">
     {#if sitesError && sites !== null}
       <p class="border-warning/40 bg-warning/[0.06] border-b px-5 py-3 text-sm" role="status">Showing the last successful site read. Refresh failed: {sitesError}</p>
@@ -212,7 +214,17 @@
     {:else if sites.length === 0}
       <p class="text-muted-foreground px-5 py-8 text-sm">No site has been published yet.</p>
     {:else}
-      <div class="overflow-x-auto">
+      <ul class="divide-border divide-y sm:hidden" aria-label="Live site versions">
+        {#each sites as site (site.name)}
+          {@const deploy = lastDeploy(site.name)}
+          <li class="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 px-5 py-4">
+            <div class="min-w-0"><h3 class="break-words text-sm font-medium">{site.name}</h3><p class="text-muted-foreground mt-1 text-xs"><code>{site.live ? site.live.slice(0, 7) : "none"}</code> · {site.deployments.length} versions</p></div>
+            <Button variant="outline" size="sm" onclick={() => navigate("/sites")}>Open</Button>
+            <p class="text-muted-foreground col-span-2 break-words text-xs">{deploy ? changes([deploy], subjects)[0].source : "Published before this session"}{site.changed_at ? ` · ${since(site.changed_at)}` : ""}</p>
+          </li>
+        {/each}
+      </ul>
+      <div class="hidden overflow-x-auto sm:block">
         <table class="w-full text-sm">
           <thead><tr class="text-muted-foreground border-border border-b text-left font-mono text-xs">
             <th class="px-5 py-2.5 font-medium">Site</th><th class="px-5 py-2.5 font-medium">Live version</th><th class="px-5 py-2.5 font-medium">Came from</th><th class="px-5 py-2.5 font-medium">Versions</th><th class="px-5 py-2.5"><span class="sr-only">Actions</span></th>

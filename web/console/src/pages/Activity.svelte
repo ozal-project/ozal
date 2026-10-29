@@ -23,6 +23,7 @@
 
   const MAX = 500;
   const labels: Record<string, string> = {
+    "github.workflow_proposed": "Publishing workflow proposed",
     "access.allowed": "Access allowed", "access.denied": "Access denied", "access.rate_limited": "Rate limited", "access.step_up": "Login requested again", "passkey.registered": "Passkey added", "passkey.revoked": "Passkey revoked", "user.invited": "Person invited", "user.disabled": "Person disabled", "user.enabled": "Person enabled",
     "login.started": "Login started", "login.failed": "Login failed", "login.succeeded": "Login succeeded",
     "route.created": "Route added", "route.create_failed": "Route creation failed", "route.deleted": "Route removed", "route.delete_failed": "Route removal failed", "config.reloaded": "Configuration reloaded", "config.reload_failed": "Configuration reload failed",

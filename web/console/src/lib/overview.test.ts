@@ -11,11 +11,12 @@ const route = (over: Partial<RouteStatus> = {}): RouteStatus => ({
 const status = (routes: RouteStatus[], over: Partial<StatusResponse> = {}): StatusResponse => ({ generated_at: "2026-10-25T18:00:00Z", routes, ...over });
 const event = (type: string, over: Partial<AccessEvent> = {}): AccessEvent => ({ time: "2026-10-25T18:12:00Z", type, ...over });
 
-test("the headline counts what is serving and says when something needs the operator", () => {
-  assert.equal(headline(status([route(), route({ host: "b" })]), 0), "Serving 2 apps. Everything is answering.");
-  assert.equal(headline(status([route(), route({ host: "b", state_class: "unhealthy" })]), 1), "Serving 2 apps. One thing needs you.");
-  assert.equal(headline(status([route(), route({ host: "b", state_class: "unhealthy" }), route({ host: "c", state_class: "unhealthy" })]), 2), "Serving 3 apps. 2 things need you.");
-  assert.equal(headline(status([route({ is_static: true }), route({ host: "b" })]), 0), "Serving 1 app and 1 site. Everything is answering.");
+test("the headline counts configured routes without claiming they are serving", () => {
+  assert.equal(headline(status([route(), route({ host: "b", state_class: "unknown" })]), 0), "2 app routes configured. No active alerts.");
+  assert.equal(headline(status([route(), route({ host: "b", state_class: "unhealthy" })]), 1), "2 app routes configured. One thing needs you.");
+  assert.equal(headline(status([route(), route({ host: "b", state_class: "unhealthy" }), route({ host: "c", state_class: "unhealthy" })]), 2), "3 app routes configured. 2 things need you.");
+  assert.equal(headline(status([route({ is_static: true, state_class: "unknown" }), route({ host: "b" })]), 0), "1 app route and 1 site route configured. No active alerts.");
+  assert.equal(headline(status([]), 0), "No routes configured. No active alerts.");
   assert.equal(headline(null, 0), "Loading…");
 });
 
@@ -62,6 +63,14 @@ test("a failed deploy is shown as a failure and carries no undo", () => {
   assert.equal(fail.title, "An update to portfolio did not go live");
   assert.equal(fail.undo, undefined);
   assert.match(fail.detail, /deployer\.token_invalid/);
+});
+
+test("a workflow proposal is reviewable activity and makes no deployment claim", () => {
+  const [proposal] = changes([event("github.workflow_proposed", { host: "blog" })]);
+  assert.equal(proposal.title, "A publishing workflow was proposed for blog");
+  assert.equal(proposal.tone, "neutral");
+  assert.equal(proposal.undo, undefined);
+  assert.match(proposal.detail, /Publication is not yet verified/);
 });
 
 test("the access summary counts decisions and ranks refusal reasons", () => {
