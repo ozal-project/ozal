@@ -429,11 +429,44 @@ ozal github connect -config /etc/ozal/config.json \
   -app-id 123 -installation-id 456 -key file:/etc/ozal/github-app-key
 ```
 
+Para una web nueva también puedes empezar en **Applications → Add website →
+From GitHub**. Guarda la ruta revisada y continúa en Sites; la ruta puede
+servir un build retenido con ese nombre inmediatamente y, si todavía no hay
+ninguno, no tiene contenido hasta publicar. Verifica la primera publicación
+antes de mover DNS. Esta opción necesita las herramientas de aplicaciones y
+publicación; no selecciona un repo ni crea un PR al guardar la ruta.
+
 En Sites, elige quién puede publicar: repo, sitio, proyecto, ref completa y
 workflow. El servidor vuelve a comprobar acceso e IDs de repo/propietario.
 El build corre en CI y el edge recibe el artefacto terminado; no compila código
-del repositorio. Una futura generación de PRs/workflows requiere permisos y
-aceptación adicionales; no es parte del adaptador de metadatos.
+del repositorio. Una vez guardado el publicador, **Prepare publishing workflow**
+permite elegir el directorio de build, su salida y un hostname público del
+proyecto. **Preview workflow** muestra el archivo sin escribir en GitHub;
+**Review pull request** pide confirmar la rama y el archivo antes de crearlos.
+La App necesita además `Contents: write`, `Workflows: write` y
+`Pull requests: write`, solo en los repositorios elegidos. El token usado para
+proponer el PR queda limitado al repositorio seleccionado; explorar sigue
+pidiendo únicamente metadatos.
+
+La plantilla inicial usa `npm ci` y `npm run build`; revisa el PR para otros
+builds. Soporta subdirectorios y ramas con `/`, pero requiere una ref de rama,
+un hostname público del proyecto y audiencia OIDC igual al origen HTTPS de
+deploy. Los sitios protegidos y las audiencias personalizadas requieren un
+workflow y una aceptación revisados por separado; no cambies su política para
+usar esta plantilla. El job de build no puede pedir OIDC; el de deploy no
+ejecuta código del repositorio. El checker/publicador y las acciones están
+fijados por commit. La aceptación pública restaura el último build aceptado
+en caché si existe; sin caché, el operador debe reconciliar la versión viva
+y restaurar una versión retenida desde Sites.
+
+Ozal agrega un archivo nuevo en una rama nueva, abre el PR y devuelve su
+enlace; no reemplaza workflows ni ramas existentes, no hace merge y no
+declara una publicación aceptada. Crear la rama puede activar otros workflows
+de push del repositorio. Si la respuesta se interrumpe o falla después de una
+escritura, inspecciona la rama `ozal/publish-…` y sus PRs antes de repetir:
+la rama se conserva para reconciliar y no se fuerza ni borra automáticamente.
+Fusionar el PR habilita la publicación en la rama elegida; verifica el primer
+build, la política OIDC activa, la aceptación y el rollback reales.
 
 El endpoint de deploy tiene hostname HTTPS dedicado y alcance reducido.
 El workflow pide OIDC con la audiencia del edge, y deben coincidir repo,

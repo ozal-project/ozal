@@ -153,6 +153,39 @@ hostnames y publicadores; el endpoint dedicado recibe artefactos, no ejecuta
 builds. El admin continúa privado. El publicador puede ser OIDC Actions o un
 token limitado por proyecto; GitHub App de descubrimiento es independiente.
 
+`internal/pages/workflow.Build` es el núcleo puro de `PAGES-010`: valida refs,
+rutas relativas y orígenes HTTPS, genera YAML sin expresiones provenientes de
+entradas, y liga el contenido por SHA-256 a una rama determinista. La plantilla
+separa build (`contents: read`, sin OIDC) de deploy (`id-token: write`, sin
+checkout ni ejecución del repositorio). Las acciones y `ozalctl` están fijados
+por SHA; el publicador usa el ref publicado `900003e224c785f698ec015945b43fb2456753fd`.
+Los cambios de pins requieren revisar la plantilla y sus regresiones.
+
+El shell admin deriva repo/owner/ref/workflow del proyecto guardado, vuelve a
+comprobar la instalación y el digest antes de una escritura, y exige un plan
+revisado y la herramienta `publishing`. El guardado de confianza y la propuesta
+vuelven a comprobar la sesión tras el descubrimiento de repositorios: una
+revocación o caducidad durante esa consulta impide iniciar la escritura.
+Registra intent de auditoría antes de
+llamar al adaptador; un fallo del audit requerido impide escribir. El adaptador
+`githubapp.OpenWorkflow` pide un token de un solo repo y verifica otra vez sus
+IDs/nombre, fija el commit base, exige que archivo y rama no existan y usa
+create-ref + create-content sin SHA de reemplazo + create-PR. No sigue redirects,
+filtra errores del proveedor y nunca reintenta ni limpia una escritura incierta.
+`github.workflow_proposed` solo se emite tras recibir un PR válido; no significa
+deploy ni cambio de configuración. La desconexión o una mutación concurrente
+posterior al despacho no deshacen una petición ya enviada a GitHub.
+
+Regresiones de generación, scopes, retirada/movimiento del repo, permisos,
+plan alterado/config antigua, audit requerido, archivo/rama existente y fallos
+parciales viven en `internal/pages/workflow`, `internal/githubapp` e
+`internal/admin`. `OZAL_WORKFLOW_BROWSER=1 go test ./internal/admin -run
+TestWorkflowBrowserAcceptance -count=1 -v` ejecuta el SPA embebido y los handlers
+reales en loopback, con I/O GitHub y datos de deployments simulados. Requiere
+`agent-browser`, `CHROME` y las bibliotecas del navegador; `OZAL_BROWSER_ARGS`
+permite configurar sus argumentos locales. `OZAL_WORKFLOW_ARTIFACTS` guarda
+capturas privadas. No acredita una instalación de App ni un PR/build real.
+
 La migración explícita de un publicador existente usa
 `config.PlanProjectTrust` (núcleo puro) y un endpoint exclusivo del socket
 administrativo. No amplía la autoridad de los tokens web ni el flujo de
@@ -242,6 +275,16 @@ por figurar en VISION. Diseño detallado al aprobar la implementación, dentro
 de esta guía o su contrato canónico, sin crear otra hoja de ruta.
 
 ## Criterio de desarrollo y stack
+
+La consola usa la identidad Umbral/Marfil de Ozal con la misma tipografía y
+paleta del sitio. El shell autenticado es una barra tipográfica en desktop y
+un directorio modal propio en móvil: conserva herramientas, URLs y foco al
+navegar; Escape cierra el menú y Tab queda contenido. El arco marca el espacio
+activo sin inventar estado de servicio. Overview usa nombres de rutas en HTML
+para conservar legibilidad al redimensionar, separa estado del conector de una
+prueba de app y muestra historial limitado a eventos retenidos, con listas de
+sitios/cambios propias para móvil. Sin sesión solo se descarga el acceso y su
+marca; no se exponen navegación, aplicaciones ni datos administrativos.
 
 Evaluación de 2026-10-27: mantener Go, Svelte/Vite, SQLite y stdlib. Go encaja
 con red/TLS y distribución binaria; la consola se compila a archivos estáticos,

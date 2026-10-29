@@ -141,15 +141,21 @@ ruta pública. El bootstrap no convierte al primer visitante en dueño.
    una aplicación en ejecución (URL privada), archivos estáticos o una app detrás
    de un conector ya enrolado. Con archivos estáticos subes el `tar.gz` de
    `dist` en el mismo paso: el nombre del sitio sale de la dirección (se puede
-   cambiar) y la primera publicación crea el sitio. Ozal no compila.
+   cambiar) y la primera publicación crea el sitio. También puedes elegir
+   **From GitHub** para guardar la ruta sin subir un archivo y continuar en
+   Sites con la selección del repositorio y la propuesta de workflow. Un build
+   retenido con el mismo nombre se sirve al guardar; sin uno, la ruta no tiene
+   contenido hasta la primera publicación. Ozal no compila.
 2. **Quién entra.** Un grupo, cualquier persona autenticada o público. Por
    defecto se pide un grupo; varios grupos significan **todos**. Opcionalmente
    escribes correos para invitar: cada persona recibe un enlace de un solo uso
    para crear su passkey y queda en esos grupos.
 3. **Revisión.** Muestra destino, acceso, invitaciones y certificado. Nada cambia
    hasta guardar; la confirmación vuelve a comprobar el digest de la config.
-4. **Conectar.** Al guardar se publica el build, se guarda la ruta y se crean las
-   invitaciones (sus enlaces se copian ahí, solo esa vez). El panel muestra el
+4. **Conectar.** Al guardar se publica el build si se subió uno, se guarda la
+   ruta y se crean las invitaciones (sus enlaces se copian ahí, solo esa vez).
+   Desde GitHub se continúa primero en Sites y se verifica la publicación
+   antes de mover DNS. Para las demás opciones, el panel muestra el
    **único registro DNS** que falta y lo comprueba cada pocos segundos:
    DNS → certificado → una petición pública con un token de un solo uso que solo
    este edge responde (`/.well-known/ozal-probe/…`, antes del pipeline).
