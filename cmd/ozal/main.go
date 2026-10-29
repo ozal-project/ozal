@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"errors"
 	"flag"
 	"fmt"
@@ -541,20 +542,15 @@ func formatTime(t time.Time) string {
 // directory, so a second process pointed at the same state fails here
 // instead of racing on the account, the generations or the DNS intents.
 func startCertificateManager(ctx context.Context, cfg *config.Config, sink events.Sink) (*certs.Manager, func(), error) {
-	token, err := config.ResolveSecret(cfg.TLS.DNS01.DNSToken)
+	dnsProvider, err := newDNSProvider(cfg.TLS.DNS01)
 	if err != nil {
-		return nil, nil, fmt.Errorf("tls.dns01.dns_token: %w", err)
+		return nil, nil, err
 	}
 	state, err := certs.OpenFileStore(cfg.TLS.DNS01.StateDir, cfg.TLS.DNS01.DirectoryURL)
 	if err != nil {
 		return nil, nil, err
 	}
 	closeState := func() { state.Close() }
-	dnsProvider, err := certs.NewCloudflareClient(certs.CloudflareConfig{Token: token})
-	if err != nil {
-		closeState()
-		return nil, nil, err
-	}
 	issuer, err := certs.NewACMEIssuer(certs.ACMEConfig{
 		DirectoryURL: cfg.TLS.DNS01.DirectoryURL,
 		Email:        cfg.TLS.Email,
@@ -837,4 +833,40 @@ func writeSetupLink(path, text string) error {
 		return err
 	}
 	return os.Rename(tmp.Name(), path)
+}
+
+// newDNSProvider builds the DNS-01 adapter the configuration selects. Both
+// adapters satisfy certs.DNSProvider, so the ACME flow is the same; secrets
+// are resolved here, at composition time, and never stored in the config.
+func newDNSProvider(dns01 *config.DNS01) (certs.DNSProvider, error) {
+	switch dns01.DNSProvider {
+	case "rfc2136":
+		r := dns01.RFC2136
+		resolved, err := config.ResolveSecret(r.Secret)
+		if err != nil {
+			return nil, fmt.Errorf("tls.dns01.rfc2136.secret: %w", err)
+		}
+		secret, err := base64.StdEncoding.DecodeString(strings.TrimSpace(resolved))
+		if err != nil {
+			return nil, errors.New("tls.dns01.rfc2136.secret is not base64")
+		}
+		return certs.NewRFC2136Client(certs.RFC2136Config{
+			Server: r.Server, Zone: r.Zone, KeyName: r.KeyName, Algorithm: r.Algorithm, Secret: secret,
+		})
+	case "hetzner":
+		h := dns01.Hetzner
+		token, err := config.ResolveSecret(h.Token)
+		if err != nil {
+			return nil, fmt.Errorf("tls.dns01.hetzner.token: %w", err)
+		}
+		return certs.NewHetznerClient(certs.HetznerConfig{Token: token, Zone: h.Zone})
+	case "", "cloudflare":
+		token, err := config.ResolveSecret(dns01.DNSToken)
+		if err != nil {
+			return nil, fmt.Errorf("tls.dns01.dns_token: %w", err)
+		}
+		return certs.NewCloudflareClient(certs.CloudflareConfig{Token: token})
+	default:
+		return nil, fmt.Errorf("tls.dns01 dns_provider %q is not supported", dns01.DNSProvider)
+	}
 }

@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -154,20 +155,46 @@ type TLS struct {
 	// certificate). Changing it requires a restart.
 	OriginClientCAFile string `json:"origin_client_ca_file,omitempty"`
 	// DNS01 switches the public listener to Ozal's own bounded ACME
-	// DNS-01 manager (EDGE-007): no port 80 and no inbound validation, one
-	// hostname, Cloudflare DNS. Nil keeps the autocert HTTP-01 path.
+	// DNS-01 manager (EDGE-007): no port 80 and no inbound validation. The
+	// DNS provider is Cloudflare (default) or any server that accepts
+	// signed RFC 2136 updates. Nil keeps the autocert HTTP-01 path.
 	DNS01 *DNS01 `json:"dns01,omitempty"`
 }
 
 // DNS01 configures the own certificate manager. DNSToken is a secret
 // reference (file: or env:) for a zone-scoped API token; the resolved value
-// never reaches config, logs or events.
+// never reaches config, logs or events. DNSProvider selects the adapter:
+// "cloudflare" (default, needs DNSToken) or "rfc2136" (needs RFC2136 and
+// refuses DNSToken) or "hetzner" (needs Hetzner and refuses DNSToken). The
+// ACME flow does not change with the provider.
 type DNS01 struct {
 	// CertificateRootsFile optionally supplies explicit roots for staging certificates.
-	CertificateRootsFile string `json:"certificate_roots_file,omitempty"`
-	StateDir             string `json:"state_dir"`
-	DirectoryURL         string `json:"directory_url"`
-	DNSToken             string `json:"dns_token"`
+	CertificateRootsFile string        `json:"certificate_roots_file,omitempty"`
+	StateDir             string        `json:"state_dir"`
+	DirectoryURL         string        `json:"directory_url"`
+	DNSProvider          string        `json:"dns_provider,omitempty"`
+	DNSToken             string        `json:"dns_token,omitempty"`
+	RFC2136              *DNS01RFC2136 `json:"rfc2136,omitempty"`
+	Hetzner              *DNS01Hetzner `json:"hetzner,omitempty"`
+}
+
+// DNS01Hetzner selects the Hetzner Cloud DNS API for one explicit zone.
+// Token is a file: or env: reference to an API token; the value never
+// reaches config.
+type DNS01Hetzner struct {
+	Zone  string `json:"zone"`
+	Token string `json:"token"`
+}
+
+// DNS01RFC2136 points at an authoritative server that accepts TSIG-signed
+// dynamic updates (BIND, PowerDNS, Knot). Secret is a file: or env:
+// reference to the base64 TSIG secret; the value never reaches config.
+type DNS01RFC2136 struct {
+	Server    string `json:"server"`
+	Zone      string `json:"zone"`
+	KeyName   string `json:"key_name"`
+	Algorithm string `json:"algorithm,omitempty"`
+	Secret    string `json:"secret"`
 }
 
 // DNS describes how visitors' DNS reaches this edge, so the console can name
@@ -1088,11 +1115,125 @@ func normalizeDNS01(tls *TLS) error {
 	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
 		return fmt.Errorf("config: tls.dns01 directory_url %q must be an absolute https URL", dns01.DirectoryURL)
 	}
-	if strings.TrimSpace(dns01.DNSToken) == "" {
-		return fmt.Errorf("config: tls.dns01 requires dns_token")
+	return normalizeDNS01Provider(tls)
+}
+
+// normalizeDNS01Provider validates the DNS adapter selection. Each provider
+// owns its settings and refuses the other's, so a copied block cannot be
+// silently ignored.
+func normalizeDNS01Provider(tls *TLS) error {
+	dns01 := tls.DNS01
+	dns01.DNSProvider = strings.ToLower(strings.TrimSpace(dns01.DNSProvider))
+	if dns01.DNSProvider == "" {
+		dns01.DNSProvider = "cloudflare"
 	}
-	if err := ValidateSecretReference("tls.dns01.dns_token", dns01.DNSToken); err != nil {
+	switch dns01.DNSProvider {
+	case "cloudflare":
+		if dns01.RFC2136 != nil {
+			return fmt.Errorf("config: tls.dns01.rfc2136 requires dns_provider \"rfc2136\"")
+		}
+		if dns01.Hetzner != nil {
+			return fmt.Errorf("config: tls.dns01.hetzner requires dns_provider \"hetzner\"")
+		}
+		if strings.TrimSpace(dns01.DNSToken) == "" {
+			return fmt.Errorf("config: tls.dns01 requires dns_token")
+		}
+		if err := ValidateSecretReference("tls.dns01.dns_token", dns01.DNSToken); err != nil {
+			return fmt.Errorf("config: %w", err)
+		}
+		return nil
+	case "rfc2136":
+		return normalizeRFC2136(tls)
+	case "hetzner":
+		return normalizeHetzner(tls)
+	default:
+		return fmt.Errorf("config: tls.dns01 dns_provider %q is not supported (cloudflare, rfc2136 or hetzner)", dns01.DNSProvider)
+	}
+}
+
+func normalizeHetzner(tls *TLS) error {
+	dns01 := tls.DNS01
+	if dns01.DNSToken != "" {
+		return fmt.Errorf("config: tls.dns01 dns_token belongs to the cloudflare provider; hetzner uses hetzner.token")
+	}
+	if dns01.RFC2136 != nil {
+		return fmt.Errorf("config: tls.dns01.rfc2136 requires dns_provider \"rfc2136\"")
+	}
+	h := dns01.Hetzner
+	if h == nil {
+		return fmt.Errorf("config: tls.dns01 dns_provider \"hetzner\" requires the hetzner block")
+	}
+	h.Zone = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(h.Zone)), ".")
+	if h.Zone == "" || strings.Contains(h.Zone, "..") || strings.ContainsAny(h.Zone, "/?# ") {
+		return fmt.Errorf("config: tls.dns01.hetzner.zone is required")
+	}
+	if !strings.HasPrefix(h.Token, "env:") && !strings.HasPrefix(h.Token, "file:") {
+		return fmt.Errorf("config: tls.dns01.hetzner.token must be an env: or file: reference, not an inline value")
+	}
+	if err := ValidateSecretReference("tls.dns01.hetzner.token", h.Token); err != nil {
 		return fmt.Errorf("config: %w", err)
+	}
+	for _, domain := range tls.Domains {
+		base := strings.TrimPrefix(domain, "*.")
+		if base != h.Zone && !strings.HasSuffix(base, "."+h.Zone) {
+			return fmt.Errorf("config: tls.dns01.hetzner.zone %q does not contain tls.domains entry %q", h.Zone, domain)
+		}
+	}
+	return nil
+}
+
+func normalizeRFC2136(tls *TLS) error {
+	dns01 := tls.DNS01
+	if dns01.DNSToken != "" {
+		return fmt.Errorf("config: tls.dns01 dns_token belongs to the cloudflare provider; rfc2136 uses rfc2136.secret")
+	}
+	if dns01.Hetzner != nil {
+		return fmt.Errorf("config: tls.dns01.hetzner requires dns_provider \"hetzner\"")
+	}
+	r := dns01.RFC2136
+	if r == nil {
+		return fmt.Errorf("config: tls.dns01 dns_provider \"rfc2136\" requires the rfc2136 block")
+	}
+	host, port, err := net.SplitHostPort(strings.TrimSpace(r.Server))
+	if err != nil || host == "" {
+		return fmt.Errorf("config: tls.dns01.rfc2136.server must be host:port")
+	}
+	if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
+		return fmt.Errorf("config: tls.dns01.rfc2136.server port is not valid")
+	}
+	r.Server = net.JoinHostPort(host, port)
+	r.Zone = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(r.Zone)), ".")
+	if r.Zone == "" || strings.Contains(r.Zone, "..") {
+		return fmt.Errorf("config: tls.dns01.rfc2136.zone is required")
+	}
+	if strings.TrimSpace(r.KeyName) == "" {
+		return fmt.Errorf("config: tls.dns01.rfc2136.key_name is required")
+	}
+	r.Algorithm = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(r.Algorithm)), ".")
+	if r.Algorithm == "" {
+		r.Algorithm = "hmac-sha256"
+	}
+	switch r.Algorithm {
+	case "hmac-sha256", "hmac-sha384", "hmac-sha512":
+	default:
+		return fmt.Errorf("config: tls.dns01.rfc2136.algorithm %q is not supported (hmac-sha256, hmac-sha384 or hmac-sha512)", r.Algorithm)
+	}
+	if strings.TrimSpace(r.Secret) == "" {
+		return fmt.Errorf("config: tls.dns01.rfc2136 requires secret")
+	}
+	if !strings.HasPrefix(r.Secret, "env:") && !strings.HasPrefix(r.Secret, "file:") {
+		return fmt.Errorf("config: tls.dns01.rfc2136.secret must be an env: or file: reference, not an inline value")
+	}
+	if err := ValidateSecretReference("tls.dns01.rfc2136.secret", r.Secret); err != nil {
+		return fmt.Errorf("config: %w", err)
+	}
+	// The challenge of every certificate name lives at _acme-challenge.<name>:
+	// the zone must contain it, or issuance would fail at the first renewal.
+	for _, domain := range tls.Domains {
+		base := strings.TrimPrefix(domain, "*.")
+		if base != r.Zone && !strings.HasSuffix(base, "."+r.Zone) {
+			return fmt.Errorf("config: tls.dns01.rfc2136.zone %q does not contain tls.domains entry %q", r.Zone, domain)
+		}
 	}
 	return nil
 }
@@ -1140,6 +1281,14 @@ func Clone(source Config) Config {
 	}
 	if source.TLS.DNS01 != nil {
 		dns01 := *source.TLS.DNS01
+		if source.TLS.DNS01.RFC2136 != nil {
+			rfc2136 := *source.TLS.DNS01.RFC2136
+			dns01.RFC2136 = &rfc2136
+		}
+		if source.TLS.DNS01.Hetzner != nil {
+			hetzner := *source.TLS.DNS01.Hetzner
+			dns01.Hetzner = &hetzner
+		}
 		clone.TLS.DNS01 = &dns01
 	}
 	if source.DNS != nil {

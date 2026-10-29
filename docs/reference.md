@@ -229,10 +229,68 @@ DNS-01 usa `tls.domains` y un bloque `tls.dns01`:
 }
 ```
 
-Va dentro de `tls`; su adaptador actual es Cloudflare. El conjunto acotado de
+Va dentro de `tls`; sin `dns_provider` el adaptador es Cloudflare. El conjunto acotado de
 nombres puede incluir wildcard de un nivel y apex adicional. TLS-ALPN/HTTP no
 son necesarios para esa emisión. El estado guarda cuenta, generaciones y cleanup;
 un segundo escritor se rechaza. Cambiar estas opciones requiere reinicio.
+
+#### Proveedor DNS independiente (RFC 2136)
+
+Para no depender de la API de un proveedor, `dns_provider: "rfc2136"` crea y
+borra los TXT del desafío con UPDATE dinámico firmado (TSIG) contra un servidor
+autoritativo que acepte actualizaciones (BIND, PowerDNS, Knot):
+
+```json
+"dns01": {
+  "state_dir": "/var/lib/ozal/origin-cert",
+  "directory_url": "https://acme-v02.api.letsencrypt.org/directory",
+  "dns_provider": "rfc2136",
+  "rfc2136": {
+    "server": "ns1.example.com:53",
+    "zone": "example.com",
+    "key_name": "ozal-acme",
+    "algorithm": "hmac-sha256",
+    "secret": "file:/etc/ozal/acme-tsig.secret"
+  }
+}
+```
+
+`secret` es una referencia `file:` o `env:` al secreto TSIG en base64 (un valor
+en línea se rechaza) y `dns_token` no se admite con este proveedor. La zona es
+explícita y debe contener cada nombre de `tls.domains`; el adaptador no envía
+actualizaciones para nombres fuera de ella. Solo se aceptan `hmac-sha256`
+(por defecto), `hmac-sha384` y `hmac-sha512`. La transacción va por TCP, una
+respuesta de éxito sin firma válida cuenta como resultado desconocido y el
+borrado retira únicamente el registro creado (nombre y valor exactos), nunca el
+conjunto. En el servidor, limita la clave a ese nombre con una regla
+`update-policy` equivalente a `grant ozal-acme name _acme-challenge.example.com. TXT;`.
+Este camino prueba la emisión sin Cloudflare; no cambia quién es el DNS
+autoritativo de tu zona ni sustituye su protección de red.
+
+#### Hetzner Cloud DNS
+
+`dns_provider: "hetzner"` usa la API de DNS de Hetzner Cloud para una zona
+explícita:
+
+```json
+"dns01": {
+  "state_dir": "/var/lib/ozal/origin-cert",
+  "directory_url": "https://acme-v02.api.letsencrypt.org/directory",
+  "dns_provider": "hetzner",
+  "hetzner": {"zone": "example.com", "token": "file:/etc/ozal/hetzner-dns.token"}
+}
+```
+
+`token` es una referencia `file:` o `env:` (un valor en línea se rechaza) y
+`dns_token` no se admite. La zona debe contener cada nombre de `tls.domains` y
+el adaptador no actúa fuera de ella; no hace falta permiso para listar zonas.
+Cada cambio es una Action asíncrona: el adaptador espera su fin antes de dar el
+registro por creado o borrado, y una Action que no termina cuenta como
+resultado desconocido. El borrado retira solo el registro creado (la API los
+identifica por valor dentro del RRSet). El TTL se fija en 60 s, el mínimo.
+**Pendiente de comprobar con una zona real:** la spec oficial no indica cómo se
+escriben los TXT; se envían entre comillas y esa decisión vive en un solo
+lugar (`hetznerTXTValue`). Hasta esa prueba, usa el proveedor en staging.
 
 Staging usa otra carpeta y roots explícitos por `certificate_roots_file`,
 que reemplazan los roots de validación de esa emisión; no usarlo para debilitar
