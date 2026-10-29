@@ -111,8 +111,9 @@ preview, tunnel edge and connector all run artifact `14fde470…` (previous
 binaries kept), the tunnel-edge database migrated 008–015 with a pre-migration
 backup, preview healthz 200 and preview/`sigea-api` 200 through the tunnel.
 The tunnel edge's TCP `/_/api/status` now returns 503 without `admin.token`
-(status is read over the admin socket). The old connector briefly ran against
-the new edge. **Still unverified:** real login, allowed/denied policy, origin
+(status is read over the admin socket). Over the admin socket the edge reports the
+same `config_sha256` (`4b3415c9…`) and both hosts as "Connector connected". The
+old connector briefly ran against the new edge. **Still unverified:** real login, allowed/denied policy, origin
 without spoofed identity/session cookie, publication and its rollback, off-host
 copy and durable audit. Measured install interruption: tunnel edge stopped
 100 s (18:09:55→18:11:35), preview and connector restarted within one second,

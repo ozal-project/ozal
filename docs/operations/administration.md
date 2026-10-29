@@ -219,9 +219,10 @@ token dejan de servir.
 
 No verificado: login real, política permitida/denegada, ausencia de identidad
 falsificada y cookie de sesión en el origen, publicación de prueba y su
-rollback, HTTPS público, `config_sha256` del edge por el socket tras la
-actualización, y el registro del conector adjunto. Sin copia fuera del host ni
-audit. No declara aceptado el corte.
+rollback. Verificado por el socket admin del edge tras la actualización:
+`config_sha256` `4b3415c9…` (igual que antes) y "Connector connected" para
+`preview.octaviosantacruz.com` y `sigea-api.octaviosantacruz.com`. Sin copia
+fuera del host ni audit. No declara aceptado el corte.
 
 Interrupción medida de la instalación (journal, UTC): tunnel edge parado
 18:09:55→18:11:35 (100 s); preview reiniciado por `ozalctl` en 18:11:11 (la
