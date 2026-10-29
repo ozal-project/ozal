@@ -158,7 +158,7 @@ var completionScripts = map[string]string{
 	"bash": `# Add to ~/.bashrc: eval "$(ozal completion bash)"
 _ozal_complete() {
   local current="${COMP_WORDS[COMP_CWORD]}"
-  local commands="audit completion console db doctor github init migrate notify policy runtime schema setup site tunnel tunnel-spike upgrade user validate version connector"
+  local commands="audit completion console db doctor github init migrate notify policy project runtime schema setup site tunnel tunnel-spike upgrade user validate version connector"
   if (( COMP_CWORD == 1 )); then
     COMPREPLY=( $(compgen -W "$commands" -- "$current") )
     return
@@ -169,6 +169,7 @@ _ozal_complete() {
       console) COMPREPLY=( $(compgen -W "login list revoke" -- "$current") ) ;;
       connector) COMPREPLY=( $(compgen -W "prepare sign check enroll rotate current revoke list" -- "$current") ) ;;
       github) COMPREPLY=( $(compgen -W "connect disconnect" -- "$current") ) ;;
+      project) COMPREPLY=( $(compgen -W "trust" -- "$current") ) ;;
       runtime) COMPREPLY=( $(compgen -W "init" -- "$current") ) ;;
       db) COMPREPLY=( $(compgen -W "backup restore" -- "$current") ) ;;
       migrate) COMPREPLY=( $(compgen -W "up status" -- "$current") ) ;;
@@ -196,6 +197,7 @@ _ozal() {
     'migrate:inspect or apply database migrations'
     'notify:notification commands'
     'policy:policy commands'
+    'project:migrate publisher trust on the host'
     'runtime:initialize operational policy'
     'schema:print JSON Schema'
     'setup:create a protected local installation'
@@ -216,6 +218,7 @@ _ozal() {
     github) _values 'github action' connect disconnect ;;
     db) _values 'db action' backup restore ;;
     migrate) _values 'migration action' up status ;;
+    project) _values 'project action' trust ;;
     runtime) _values 'runtime action' init ;;
     site) _values 'site action' deploy list rollback ;;
     tunnel) _values 'tunnel action' edge connect renew ;;
@@ -226,9 +229,10 @@ _ozal() {
 compdef _ozal ozal
 `,
 	"fish": `# Save as ~/.config/fish/completions/ozal.fish:
-complete -c ozal -f -n '__fish_use_subcommand' -a 'audit completion console db doctor github init migrate notify policy runtime schema setup site tunnel tunnel-spike upgrade user validate version connector'
+complete -c ozal -f -n '__fish_use_subcommand' -a 'audit completion console db doctor github init migrate notify policy project runtime schema setup site tunnel tunnel-spike upgrade user validate version connector'
 complete -c ozal -f -n '__fish_seen_subcommand_from console' -a 'login list revoke'
 complete -c ozal -f -n '__fish_seen_subcommand_from github' -a 'connect disconnect'
+complete -c ozal -f -n '__fish_seen_subcommand_from project' -a 'trust'
 complete -c ozal -f -n '__fish_seen_subcommand_from runtime' -a 'init'
 complete -c ozal -f -n '__fish_seen_subcommand_from connector' -a 'prepare sign check enroll rotate current revoke list'
 complete -c ozal -f -n '__fish_seen_subcommand_from audit' -a 'keygen checkpoint repair verify'
@@ -242,7 +246,7 @@ complete -c ozal -f -n '__fish_seen_subcommand_from tunnel-spike' -a 'init edge 
 	"powershell": `# Add to $PROFILE:
 Register-ArgumentCompleter -Native -CommandName ozal -ScriptBlock {
   param($wordToComplete, $commandAst, $cursorPosition)
-  $words = @('audit','completion','console','db','doctor','github','init','migrate','notify','policy','runtime','schema','setup','site','tunnel','tunnel-spike','upgrade','user','validate','version','connector')
+  $words = @('audit','completion','console','db','doctor','github','init','migrate','notify','policy','project','runtime','schema','setup','site','tunnel','tunnel-spike','upgrade','user','validate','version','connector')
   $tokens = $commandAst.CommandElements | ForEach-Object { $_.ToString() }
   if ($tokens.Count -gt 1) {
     switch ($tokens[1]) {
@@ -251,6 +255,7 @@ Register-ArgumentCompleter -Native -CommandName ozal -ScriptBlock {
       'github' { $words = @('connect','disconnect') }
       'db' { $words = @('backup','restore') }
       'migrate' { $words = @('up','status') }
+      'project' { $words = @('trust') }
       'runtime' { $words = @('init') }
       'connector' { $words = @('prepare','sign','check','enroll','rotate','current','revoke','list') }
       'policy' { $words = @('explain','replay','who-can','review') }

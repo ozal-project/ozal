@@ -1,10 +1,29 @@
-# Implemented — Switchboard
+# Implemented — Ozal
 
-**Last review:** 2026-10-28
+**Last review:** 2026-10-29
 **Code reviewed up to:** baseline `0ddb606`; feature commits listed below.
 
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
+
+## SITE-006 — Ozal public hostname and Actions publication — 2026-10-29 (`78f9ef6`)
+
+`https://ozal.octaviosantacruz.com` serves the existing Pages site with the
+Ozal canonical URL; the previous hostname route is retained. The Cloudflare
+proxied A record and per-host Origin Pulls association were created with the
+historical publisher adapter, preserving the source record and association.
+The operator saved the alias through the private API and migrated only this
+project's OIDC trust to `ozal-project/ozal` (repository ID 1437830234, owner ID
+349604721, `main`, `.github/workflows/site.yml`). The runtime backup was retained.
+
+`OZAL_SITE_DEPLOY_ENABLED=true`; [site run 40872207147](https://github.com/ozal-project/ozal/actions/runs/40872207147)
+published and passed public acceptance. CI [40872207158](https://github.com/ozal-project/ozal/actions/runs/40872207158)
+also passed. Independent public checks: HTTPS 200, a content-hashed JS asset
+identical to the build, HTTP 301 to HTTPS and 404 for `/_headers`, `/.env` and
+unknown asset/page paths. Both public A addresses served HTTPS; the local
+resolver briefly retained NXDOMAIN. This closes hostname/content publication,
+not owner acceptance of the identity (`SITE-005`), production binary upgrade or
+the generic provider/Origin Pulls automation still tracked in `REL-013`.
 
 ## REL-015 — consolidated product documentation — 2026-10-28 (`85c3d32`)
 

@@ -51,6 +51,7 @@ const auditStartupFailure = "durable audit journal unavailable; verify with 'oza
 func subcommands() map[string]func(context.Context, []string, io.Writer) error {
 	return map[string]func(context.Context, []string, io.Writer) error{
 		"app":          runApp,
+		"project":      runProject,
 		"audit":        runAudit,
 		"completion":   runCompletion,
 		"console":      runConsole,

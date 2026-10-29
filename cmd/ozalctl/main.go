@@ -18,12 +18,16 @@ import (
 	"time"
 
 	"github.com/ozal-project/ozal/internal/certs"
+	"github.com/ozal-project/ozal/internal/config"
 	"github.com/ozal-project/ozal/internal/ctl"
 	"github.com/ozal-project/ozal/internal/ctl/publish"
 	"github.com/ozal-project/ozal/internal/ctl/sshexec"
 )
 
 const usage = `usage:
+  ozalctl project trust -project NAME -repository-id ID -owner-id ID -workflow-ref WORKFLOW [-ref REF] [-apply]
+      Migrate an existing GitHub publisher through the edge's private socket.
+      The default is a plan; -apply keeps previous trust metadata on the edge.
   ozalctl edge upgrade [-targets FILE] [-target NAME] [-repo DIR] [-ref REF] [-apply]
       Build a committed ref, upload it and run "ozal upgrade" on the edge.
   ozalctl edge config -base FILE [-cloudflare-ranges] [-targets FILE] [-target NAME] [-apply]
@@ -69,11 +73,12 @@ func run(args []string) int {
 		return 2
 	}
 	commands := map[string]func([]string) int{
-		"edge upgrade": edgeUpgrade,
-		"edge config":  edgeConfig,
-		"site publish": sitePublish,
-		"app alias":    appAlias,
-		"site cutover": siteCutover,
+		"edge upgrade":  edgeUpgrade,
+		"edge config":   edgeConfig,
+		"site publish":  sitePublish,
+		"app alias":     appAlias,
+		"project trust": projectTrust,
+		"site cutover":  siteCutover,
 	}
 	command, ok := commands[args[0]+" "+args[1]]
 	if !ok {
@@ -296,6 +301,30 @@ func siteCutover(args []string) int {
 		Evidence: filepath.Join(home, ".local", "state", "ozalctl"), Stamp: time.Now().UTC().Format("20060102T150405Z"),
 		Public: &http.Client{Timeout: 15 * time.Second, CheckRedirect: noRedirect}}
 	return finish(publish.Cutover(ctx, os.Stdout, client, req))
+}
+
+func projectTrust(args []string) int {
+	fs := flag.NewFlagSet("project trust", flag.ContinueOnError)
+	project := fs.String("project", "", "existing project")
+	trust := config.ProjectGitHubTrust{}
+	fs.Int64Var(&trust.RepositoryID, "repository-id", 0, "verified numeric GitHub repository ID")
+	fs.Int64Var(&trust.RepositoryOwnerID, "owner-id", 0, "verified numeric GitHub owner ID")
+	fs.StringVar(&trust.Ref, "ref", "refs/heads/main", "only ref allowed to deploy")
+	fs.StringVar(&trust.WorkflowRef, "workflow-ref", "", "exact GitHub workflow_ref claim")
+	apply := fs.Bool("apply", false, "save the reviewed trust (default: plan)")
+	c, ok := setup(fs, args)
+	if !ok {
+		return 2
+	}
+	if fs.NArg() != 0 {
+		return finish(errors.New("unexpected project trust arguments"))
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return finish(ctl.ProjectTrust(ctx, os.Stdout, c.remote, ctl.ProjectTrustRequest{
+		Name: c.name, Target: c.target, Project: *project, Trust: trust, Apply: *apply,
+		Stamp: time.Now().UTC().Format("20060102T150405.000000000Z"),
+	}))
 }
 
 func defaultTargets(home string) string {

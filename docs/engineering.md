@@ -153,6 +153,16 @@ hostnames y publicadores; el endpoint dedicado recibe artefactos, no ejecuta
 builds. El admin continúa privado. El publicador puede ser OIDC Actions o un
 token limitado por proyecto; GitHub App de descubrimiento es independiente.
 
+La migración explícita de un publicador existente usa
+`config.PlanProjectTrust` (núcleo puro) y un endpoint exclusivo del socket
+administrativo. No amplía la autoridad de los tokens web ni el flujo de
+descubrimiento por App. Requiere exactamente un publicador GitHub, mantiene los
+otros deployers y aplica por `Manager.PutProject` con el digest revisado:
+validación, persistencia y snapshot pasan por el mismo bloqueo del edge que las
+ediciones de consola. El CLI guarda antes un archivo nuevo 0600 con sólo los
+metadatos GitHub anteriores y confirma luego la confianza activa. Un resultado
+de red indeterminado requiere reconciliación; no dispara una reversión ciega.
+
 OIDC exige issuer/JWKS/RS256, audiencia, vida breve, IDs de repo/propietario,
 ref, workflow y eventos autorizados (`push`/`workflow_dispatch`). La ref de
 `pull_request_target` no autoriza por sí sola un despliegue. Replay por `jti`

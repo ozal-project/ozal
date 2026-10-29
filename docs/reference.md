@@ -277,6 +277,16 @@ SIGHUP recarga el estado válido; cambios de listener/identidad/TLS requieren
 reinicio. Un error conserva el snapshot previo. Las ediciones operativas
 comparan revisión/digest para no sobrescribir cambios concurrentes.
 
+`ozal project trust -project NAME -repository-id ID -owner-id ID -ref REF
+-workflow-ref WORKFLOW` muestra el plan de migración del publicador GitHub de un
+proyecto existente. `-apply -backup FILE` conserva primero los metadatos de
+confianza anteriores (archivo nuevo, modo 0600) y confirma el estado activo.
+Requiere `admin.socket` o `-admin unix:/ruta`: TCP y los tokens web se rechazan.
+El endpoint `PUT /_/api/projects/{name}/github-trust` es exclusivo del socket;
+su cuerpo lleva `trust`, `expected` y `apply` (false por defecto). No usa ni
+reemplaza la exploración mediante GitHub App. La variante remota es
+`ozalctl project trust`; consulta [operación remota](operations/administration.md#operacion-remota-con-ozalctl).
+
 `audit` tiene `dir`, `include` (`access`, `admin`), `admin_mode` y
 `max_segment_bytes`. Para `access`, privadas default required y públicas
 best_effort; `audit_mode` de ruta permite elección explícita. Para admin,

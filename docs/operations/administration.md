@@ -231,6 +231,7 @@ ozalctl edge upgrade [-ref REF] [-apply]
 ozalctl edge config -base FILE [-cloudflare-ranges] [-apply]
 ozalctl site publish -site NAME -dir DIST [-host HOST] [-apply]
 ozalctl app alias -from HOST -to HOST [-manual-dns] [-wait 90s] [-apply]
+ozalctl project trust -project NAME -repository-id ID -owner-id ID -workflow-ref WORKFLOW [-ref refs/heads/main] [-apply]
 ozalctl site cutover -host HOST -to IP -cloudflare-token FILE [-dir DIST] [-apply]
 ozalctl site cutover -host HOST -back EVIDENCE -cloudflare-token FILE [-apply]
 ```
@@ -243,6 +244,24 @@ las rutas desde la consola a partir de entonces.
 
 Publish empaqueta archivos regulares, publica por el admin privado y comprueba
 el contenido cuando se pide `-host`; un fallo revierte al artefacto anterior.
+
+`project trust` migra el publicador GitHub de un proyecto existente cuando cambia
+el repositorio o su organización. Verifica los IDs numéricos en GitHub y fija la
+ref completa y el claim `owner/repo/.github/workflows/site.yml@refs/heads/main`.
+Por defecto muestra el cambio; `-apply` conserva los metadatos anteriores en un
+archivo privado `project-trust-NAME-FECHA.json` junto a la DB del servicio.
+El archivo contiene IDs/ref/workflow para volver a configurar la confianza,
+sin tokens, claves ni una copia completa del runtime. No se sobrescribe.
+El edge compara el digest revisado, guarda por su API y confirma la confianza
+activa; no necesita SIGHUP ni ediciones externas del runtime. Conserva sitios,
+rutas y otros publicadores. Requiere exactamente un publicador GitHub previo;
+si hay varios, revisa su configuración explícitamente. Esta autoridad pertenece
+al socket del host, nunca a un token web o de publicación. Un error de red puede
+dejar el resultado indeterminado: vuelve a consultar el plan antes de reintentar;
+para revertir usa los valores `before` del backup en un nuevo comando revisado.
+Como `app alias`, requiere primero un `edge upgrade` con un binario que incluya
+el subcomando; la guardia se niega ante binarios anteriores sin arrancarlos.
+
 `app alias` da a un sitio público existente un segundo hostname sin tocar el
 primero. `ozalctl` ejecuta `ozal app alias` en el edge como su cuenta de
 servicio (`sudo`, con tu terminal), así que usa el socket admin local y no hay

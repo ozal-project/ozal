@@ -115,14 +115,8 @@ func ValidateProjects(projects []Project, routes []Route) error {
 			}
 			if deployer.GitHub != nil {
 				github := deployer.GitHub
-				if github.RepositoryID < 1 || github.RepositoryOwnerID < 1 {
-					return fmt.Errorf("%s.github repository and owner IDs must be positive", deployerField)
-				}
-				if !validProjectRef(github.Ref) {
-					return fmt.Errorf("%s.github.ref must start with refs/heads/ or refs/tags/ and include a name", deployerField)
-				}
-				if !validWorkflowRef(github.WorkflowRef) {
-					return fmt.Errorf("%s.github.workflow_ref must name the deploy workflow as owner/repo/.github/workflows/FILE.yml@refs/heads/BRANCH", deployerField)
+				if err := ValidateProjectGitHubTrust(*github); err != nil {
+					return fmt.Errorf("%s.github: %w", deployerField, err)
 				}
 
 				key := githubTrust{repositoryID: github.RepositoryID, ref: github.Ref}
