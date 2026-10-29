@@ -70,6 +70,10 @@ function render(root: HTMLElement, report: Report | { error: string }, app: stri
   }
   const d = describe(report);
   verdict.dataset.state = d.state;
+  // Restart the arrival animation so each new answer reads as a new answer.
+  verdict.classList.remove("verdict-new");
+  void verdict.offsetWidth;
+  verdict.classList.add("verdict-new");
   text($(root, "[data-verdict-title]"), d.title);
   text($(root, "[data-code]"), report.decision.code);
   text($(root, "[data-reason]"), plainDecision(report, app, visitor));
