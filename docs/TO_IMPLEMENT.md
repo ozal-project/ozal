@@ -113,9 +113,12 @@ backup, preview healthz 200 and preview/`sigea-api` 200 through the tunnel.
 The tunnel edge's TCP `/_/api/status` now returns 503 without `admin.token`
 (status is read over the admin socket). The old connector briefly ran against
 the new edge. **Still unverified:** real login, allowed/denied policy, origin
-without spoofed identity/session cookie, publication and its rollback, public
-HTTPS, off-host copy and durable audit; stop times of preview/tunnel edge were
-not measured. `REL-013/017` stays open until that acceptance.
+without spoofed identity/session cookie, publication and its rollback, off-host
+copy and durable audit. Measured install interruption: tunnel edge stopped
+100 s (18:09:55→18:11:35), preview and connector restarted within one second,
+public content back by 18:12:23 at the latest (≈2 min 30 s upper bound); public
+HTTPS answers 200 via Cloudflare and the internal paths 404 from outside.
+`REL-013/017` stays open until that acceptance.
 
 ## Recommended order
 

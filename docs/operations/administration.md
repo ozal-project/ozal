@@ -220,9 +220,17 @@ token dejan de servir.
 No verificado: login real, política permitida/denegada, ausencia de identidad
 falsificada y cookie de sesión en el origen, publicación de prueba y su
 rollback, HTTPS público, `config_sha256` del edge por el socket tras la
-actualización, y el registro del conector adjunto. Las horas de parada de preview
-y tunnel edge de esta ventana no se midieron. Sin copia fuera del host ni
+actualización, y el registro del conector adjunto. Sin copia fuera del host ni
 audit. No declara aceptado el corte.
+
+Interrupción medida de la instalación (journal, UTC): tunnel edge parado
+18:09:55→18:11:35 (100 s); preview reiniciado por `ozalctl` en 18:11:11 (la
+parada y el arranque caen en el mismo segundo); conector cambiado en 18:12:14
+(mismo segundo). El contenido público sale por el túnel: estuvo sin servicio
+desde 18:09:55 hasta que el conector se reenganchó, con cotas observadas de
+200 por el túnel a las 18:12:23 (≈2 min 30 s como máximo). Tras la
+actualización, `https://preview.octaviosantacruz.com/` responde 200 vía
+Cloudflare y `/_/healthz` y `/_/api/status` dan 404 desde fuera.
 
 El esquema instalado del tunnel edge tiene **ocho migraciones pendientes**
 (008–015) respecto del candidato `8f20fbe`; la actualización migra esa DB y la
