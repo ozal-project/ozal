@@ -9,6 +9,11 @@ if [[ -z "$helper" ]]; then
   (cd "$root" && go build -o "$helper" ./cmd/ozal)
 fi
 export OZAL_BIN=$helper
+# Unsupported helpers must not be executed: old roots may start a server.
+printf '#!/bin/sh\ntouch "%s"\n' "$work/old-was-executed" > "$work/old-ozal"
+chmod +x "$work/old-ozal"
+if OZAL_BIN=$work/old-ozal "$root/scripts/release/install.sh" unused unused "$work/unused" >/dev/null 2>&1; then exit 1; fi
+[[ ! -e "$work/old-was-executed" ]]
 mkdir "$work/pack"
 printf '%s\n' '#!/bin/sh' 'echo fixture-version' > "$work/pack/ozal"
 tar -czf "$work/release.tar.gz" -C "$work/pack" ozal

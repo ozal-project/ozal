@@ -123,7 +123,11 @@ func CI(ctx context.Context, out io.Writer, issuer TokenSource, r CIRequest) (Re
 	if token == "" || len(token) > 16<<10 || strings.IndexFunc(token, unicode.IsSpace) >= 0 {
 		return Receipt{}, errors.New("token source returned an invalid credential")
 	}
-	client := withoutRedirects(r.Client)
+	client := r.Client
+	if client == nil {
+		client = &http.Client{Timeout: 120 * time.Second}
+	}
+	client = withoutRedirects(client)
 	base := strings.TrimRight(r.Endpoint, "/") + "/v1/projects/" + url.PathEscape(r.Project) + "/deployments"
 	call := func(method, address string, body io.Reader, expected int) (Receipt, error) {
 		deadline, cancel := context.WithTimeout(ctx, 120*time.Second)

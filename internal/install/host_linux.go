@@ -31,10 +31,19 @@ func (LinuxHost) Account(ctx context.Context) (Account, error) {
 			return Account{}, errors.New("cannot inspect new service account")
 		}
 	}
+	group, err := user.LookupGroup("ozal")
+	if err != nil {
+		return Account{}, errors.New("cannot inspect fixed service group")
+	}
+	return serviceAccount(account, group)
+}
+
+func serviceAccount(account *user.User, group *user.Group) (Account, error) {
 	uid, e1 := strconv.ParseUint(account.Uid, 10, 32)
 	gid, e2 := strconv.ParseUint(account.Gid, 10, 32)
-	if e1 != nil || e2 != nil || uid == 0 || gid == 0 {
-		return Account{}, errors.New("service account must not be privileged")
+	unitGID, e3 := strconv.ParseUint(group.Gid, 10, 32)
+	if e1 != nil || e2 != nil || e3 != nil || uid == 0 || gid == 0 || gid != unitGID {
+		return Account{}, errors.New("service account must be unprivileged and use the fixed ozal group")
 	}
 	return Account{UID: int(uid), GID: int(gid)}, nil
 }

@@ -74,6 +74,18 @@ func TestCloudflarePlanBackupScopedWriteAndConcurrentRefusal(t *testing.T) {
 		if !race && (f.writes != 1 || f.set.Rules[0].ID != "unrelated") {
 			t.Fatal("unrelated rule changed")
 		}
+		data, readErr := os.ReadFile(backup)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		var metadata struct {
+			Host    string `json:"hostname"`
+			Zone    string `json:"zone_id"`
+			Ruleset string `json:"ruleset_id"`
+		}
+		if json.Unmarshal(data, &metadata) != nil || metadata.Host != "deploy.example.com" || metadata.Zone != "zone" || metadata.Ruleset != "set" {
+			t.Fatal("backup lacks the identity needed to restore the rule")
+		}
 		info, err := os.Stat(backup)
 		if err != nil || info.Mode().Perm() != 0600 {
 			t.Fatal(info, err)

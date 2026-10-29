@@ -31,7 +31,9 @@ staticcheck, govulncheck, console/site/WASM, staged real-binary installers), plu
 focused integrity/redirect regressions. Removing the CA suitability check via a
 temporary Go overlay makes its regression fail. No real root service install,
 VPS binary upgrade or CA rotation was performed. Hosted Actions/public delivery
-is checked separately from these local and provider-plan checks. Broader remote
+is verified at `900003e`: [CI Linux/macOS](https://github.com/ozal-project/ozal/actions/runs/40885475457) and
+[native site deploy/public acceptance](https://github.com/ozal-project/ozal/actions/runs/40885475813)
+both passed. Broader remote
 operator adoption and provider-neutral DNS remain active under `REL-013`.
 
 ## SITE-006 — Ozal public hostname and Actions publication — 2026-10-29 (`78f9ef6`)

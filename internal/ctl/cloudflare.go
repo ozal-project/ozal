@@ -72,7 +72,7 @@ func Cloudflare(ctx context.Context, out io.Writer, provider CloudflareOperation
 		if !r.Apply || !changed {
 			return nil
 		}
-		if err := metadataBackup(r.Backup, current); err != nil {
+		if err := metadataBackup(r.Backup, map[string]any{"version": 1, "kind": r.Kind, "hostname": host, "before": current, "after": want}); err != nil {
 			return err
 		}
 		fresh, err := provider.OriginPull(ctx, host)
@@ -103,7 +103,7 @@ func Cloudflare(ctx context.Context, out io.Writer, provider CloudflareOperation
 		if !r.Apply || plan.Action == "ok" {
 			return nil
 		}
-		if err := metadataBackup(r.Backup, plan.Before); err != nil {
+		if err := metadataBackup(r.Backup, map[string]any{"version": 1, "kind": r.Kind, "hostname": host, "zone_id": current.ZoneID, "ruleset_id": current.ID, "before": plan.Before, "after": plan.After}); err != nil {
 			return err
 		}
 		fresh, err := provider.ConfigurationRules(ctx, host)
