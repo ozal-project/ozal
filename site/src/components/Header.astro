@@ -5,11 +5,12 @@ const { here = "home" } = Astro.props;
 ---
 <a class="skip-link" href="#main-content">Skip to content</a>
 <header class="site-header"><div class="topbar frame">
-  <a href="/" class="mark" aria-label="Ozal home"><Logo size={28} animated /><span>ozal</span></a>
+  <a href="/" class="mark" aria-label="Ozal home"><Logo size={28} animated id="logo-head" /><span>ozal</span></a>
   <nav aria-label="Sections">
     <a href="/#how">How it works</a>
+    <a href="/#private">Private apps</a>
+    <a href="/#domains">Domains</a>
     <a href="/#tour">Tour</a>
-    <a href="/roadmap/" aria-current={here === "roadmap" ? "page" : undefined}>Roadmap</a>
     <a href="/#start">Availability</a>
   </nav>
   {here === "home" ? <a class="button button-brand header-action" href="#engine">Try the demo</a> : <a class="button header-action" href="/#engine">Try the demo</a>}

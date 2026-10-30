@@ -9,10 +9,9 @@ name: site
 on:
   push:
     branches: [main]
-    # The roadmap and changelog are read from the trackers at build time.
     # The live demo is the access decision compiled to WebAssembly, so a change
     # to the engine republishes the page.
-    paths: [site/**, docs/TO_IMPLEMENT.md, docs/IMPLEMENTED.md, scripts/pages/**, cmd/ozalctl/**, internal/ctl/**, internal/pages/**, scripts/build-site-engine.sh, internal/auth/**, internal/config/**, internal/policycontext/**, internal/policydemo/**, cmd/policywasm/**, .github/workflows/site.yml]
+    paths: [site/**, scripts/pages/**, cmd/ozalctl/**, internal/ctl/**, internal/pages/**, scripts/build-site-engine.sh, internal/auth/**, internal/config/**, internal/policycontext/**, internal/policydemo/**, cmd/policywasm/**, .github/workflows/site.yml]
   workflow_dispatch:
 
 permissions:

@@ -2,7 +2,7 @@
 // decision the edge runs compiled to WebAssembly, and shows what it answers for
 // a route and a visitor chosen on the page. Everything is rendered with
 // textContent: nothing typed or returned is ever parsed as HTML.
-import { describe, plainDecision, requestFor, stagesFor, type Report, type Visitor, APPS } from "../lib/engine";
+import { describe, plainDecision, requestFor, stagesFor, type Report, type Visitor, APPS, PEOPLE } from "../lib/engine";
 
 declare const Go: new () => { importObject: WebAssembly.Imports; run(instance: WebAssembly.Instance): Promise<void> };
 declare global {
@@ -70,6 +70,14 @@ function render(root: HTMLElement, report: Report | { error: string }, app: stri
   }
   const d = describe(report);
   verdict.dataset.state = d.state;
+  // The cord from the person to the app shows how far the request got.
+  const trace = $(root, "[data-trace]");
+  trace.dataset.state = d.state;
+  text($(root, "[data-trace-who]"), visitor.who === "none" ? "No session" : PEOPLE[visitor.who] ?? visitor.who);
+  text($(root, "[data-trace-app]"), APPS[app].host);
+  trace.classList.remove("trace-new");
+  void trace.offsetWidth;
+  trace.classList.add("trace-new");
   // Restart the arrival animation so each new answer reads as a new answer.
   verdict.classList.remove("verdict-new");
   void verdict.offsetWidth;
@@ -82,11 +90,12 @@ function render(root: HTMLElement, report: Report | { error: string }, app: stri
     li.className = "stage";
     const dot = document.createElement("span");
     dot.className = `lamp ${stage.state === "ok" ? "lamp-ok" : stage.state === "no" ? "lamp-no" : ""}`;
+    li.dataset.state = stage.state;
     const name = document.createElement("span");
     name.className = "stage-name";
     name.textContent = stage.name;
     const note = document.createElement("span");
-    note.className = stage.state === "skip" ? "quiet" : "soft";
+    note.className = "stage-note";
     note.textContent = stage.note;
     li.append(dot, name, note);
     stages.append(li);

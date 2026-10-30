@@ -1,46 +1,57 @@
 ---
 import { APPS } from "../lib/engine";
+import Logo from "./Logo.astro";
 const apps = Object.entries(APPS);
+const rule: Record<string, string> = { grafana: "Company email", billing: "Ana + device-bound passkey", wiki: "Recent company sign-in", blog: "Public" };
 const people = [["none", "Not signed in"], ["ana", "Ana", "ana@acme.dev"], ["carla", "Carla", "carla@acme.dev"], ["bob", "Bob", "bob@other.org"]];
 ---
-<section id="engine" aria-labelledby="engine-title" class="engine-stage" data-ui>
-  <div class="engine-heading"><h2 id="engine-title">Try an access decision</h2><p>Choose an app and a person. Read the reason.</p></div>
-  <div id="engine-demo">
+<section id="engine" aria-labelledby="engine-title" class="engine-stage window" data-ui>
+  <span class="window-bar" aria-hidden="true"><i></i><i></i><i></i><b>Access decision · running in your browser</b></span>
+  <h2 id="engine-title" class="sr-only">Try an access decision</h2>
+  <div id="engine-demo" class="engine-body">
     <div data-fallback class="engine-fallback">
       <p class="small quiet">Recorded example</p>
       <p class="decision-title">Refused</p>
       <p>Bob asks for grafana.acme.dev. Only people at acme.dev may open it; his email is bob@other.org.</p>
-      <p class="small quiet" data-status>The interactive demo needs JavaScript. This recorded answer remains available.</p>
+      <p class="small quiet">The interactive demo needs JavaScript. This recorded answer remains available.</p>
       <button type="button" data-start hidden class="button button-brand">Load the engine</button>
     </div>
     <div data-panel hidden class="engine-panel">
-      <div class="engine-choices">
-        <fieldset><legend>App</legend><div class="choice-grid">
-          {apps.map(([key, app], i) => <label class="opt"><input type="radio" name="app" value={key} checked={i === 0} /><span>{key.charAt(0).toUpperCase() + key.slice(1)}</span><small>{key === "grafana" ? "Company email" : key === "billing" ? "Ana + device-bound passkey" : key === "wiki" ? "Recent company sign-in" : "Public access"}</small><span class="sr-only">{app.host}. {app.blurb}</span></label>)}
+      <div class="engine-pick">
+        <fieldset><legend>App</legend><div class="chips">
+          {apps.map(([key, app], i) => <label class="chip"><input type="radio" name="app" value={key} checked={i === 0} /><span class="chip-name">{key.charAt(0).toUpperCase() + key.slice(1)}</span><small>{rule[key]}</small><span class="sr-only">{app.host}. {app.blurb}</span></label>)}
         </div></fieldset>
-        <fieldset><legend>Person</legend><div class="choice-grid">
-          {people.map(([value, label, email], i) => <label class="opt"><input type="radio" name="who" value={value} checked={i === 1} /><span>{label}</span><small>{email ?? "No session"}</small></label>)}
+        <fieldset><legend>Person</legend><div class="chips">
+          {people.map(([value, label, email], i) => <label class="chip chip-person"><input type="radio" name="who" value={value} checked={i === 1} /><span class={`avatar avatar-${value}`} aria-hidden="true">{value === "none" ? "?" : label[0]}</span><span class="chip-name">{label}</span><small>{email ?? "No session"}</small></label>)}
         </div></fieldset>
+        <details class="engine-settings"><summary>Sign-in details</summary><div>
+          <label><input type="checkbox" name="verified" checked />Email confirmed by the sign-in provider</label>
+          <label>Signed in with<select name="method" class="flat"><option value="passkey">a passkey</option><option value="oidc">an identity provider</option></select></label>
+          <label><input type="checkbox" name="bound" />The passkey stays on one device</label>
+        </div></details>
       </div>
-      <details class="engine-settings"><summary>Sign-in details</summary><div>
-        <label><input type="checkbox" name="verified" checked />Email confirmed by the sign-in provider</label>
-        <label>Signed in with<select name="method" class="flat"><option value="passkey">a passkey</option><option value="oidc">an identity provider</option></select></label>
-        <label><input type="checkbox" name="bound" />The passkey stays on one device</label>
-      </div></details>
-      <div data-verdict data-state="allowed" class="verdict" role="status" aria-live="polite" aria-atomic="true" aria-label="Decision">
-        <p data-verdict-title class="decision-title">—</p>
-        <p data-reason></p>
-        <p class="small">Decision code: <code data-code></code></p>
-        <details class="decision-stages"><summary>How this answer was reached</summary><ul data-stages></ul></details>
+      <div class="engine-result">
+        <div class="trace" data-trace data-state="allowed" aria-hidden="true">
+          <span class="trace-end" data-trace-who>ana@acme.dev</span>
+          <span class="trace-cord"><i></i></span>
+          <span class="trace-hub"><Logo size={22} id="logo-engine" /></span>
+          <span class="trace-cord trace-cord-out"><i></i></span>
+          <span class="trace-end trace-app" data-trace-app>grafana.acme.dev</span>
+        </div>
+        <div data-verdict data-state="allowed" class="verdict" role="status" aria-live="polite" aria-atomic="true" aria-label="Decision">
+          <p class="verdict-head"><span class="verdict-lamp" aria-hidden="true"></span><span data-verdict-title class="decision-title">—</span></p>
+          <p data-reason class="verdict-reason"></p>
+          <p class="verdict-code">code <code data-code></code></p>
+        </div>
+        <div class="decision-stages"><p class="stages-title">How this answer was reached</p><ol data-stages></ol></div>
+        <details class="engine-technical"><summary>Show the policy and raw answer</summary><div><h3>Route config</h3><pre data-config class="code" tabindex="0"></pre><h3>Raw answer</h3><pre data-raw class="code" tabindex="0"></pre></div></details>
       </div>
-      <details class="engine-technical"><summary>Show the policy and raw answer</summary><div><h3>Route config</h3><pre data-config class="code" tabindex="0"></pre><h3>Raw answer</h3><pre data-raw class="code" tabindex="0"></pre></div></details>
-      <p class="engine-status small quiet" data-status></p>
     </div>
   </div>
-  <p class="engine-scope">Demo identities only. Sign-in, TLS and rate limits run on the server, not here.</p>
+  <p class="engine-foot"><span data-status class="engine-status"></span><span>Demo identities only. Sign-in, TLS and rate limits run on the server, not here.</span></p>
 </section>
 <script>
   import { setup } from "../scripts/engine";
-  const root = document.getElementById("engine-demo");
+  const root = document.getElementById("engine");
   if (root) setup(root);
 </script>

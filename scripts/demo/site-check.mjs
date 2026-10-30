@@ -88,18 +88,9 @@ try {
   assert.equal(await staticPage.locator("h1").isVisible(), true);
   await staticPage.locator("label:has(#walk-4)").click();
   assert.equal(await staticPage.locator("#step-4").isVisible(), true);
-  assert.equal(await staticPage.locator('a[href="/roadmap/"]').first().isVisible(), true);
   await plain.close();
   console.log("PASS JavaScript disabled: explanation, recorded answer and walkthrough steps");
 
-  const roadmap = await browser.newContext({ viewport: { width: 390, height: 844 } });
-  const road = await roadmap.newPage(); checkPage(road);
-  await road.goto(`${url}/roadmap/`);
-  assert.ok((await road.locator(".module").count()) >= 5, "the roadmap lists its modules");
-  assert.ok((await road.locator(".shipped-month li").count()) > 10, "the roadmap lists the changelog");
-  assert.ok(await road.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "the roadmap overflows a phone");
-  await roadmap.close();
-  console.log("PASS roadmap page: modules, changelog, phone width");
 
   const failing = await browser.newContext();
   const retry = await failing.newPage(); checkPage(retry);
@@ -126,6 +117,18 @@ try {
   await live(saver); assert.equal(downloads, 1);
   await saving.close();
   console.log("PASS Save-Data: download waits for the visitor");
+  const moving = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const tour = await moving.newPage(); checkPage(tour);
+  await tour.goto(url);
+  await tour.locator(".walk").scrollIntoViewIfNeeded();
+  await tour.mouse.move(1, 1); // hovering the tour pauses it
+  await tour.locator("#walk-2:checked").waitFor({ state: "attached", timeout: 9000 });
+  await tour.locator("label:has(#walk-4)").click();
+  assert.equal(await tour.locator(".walk").getAttribute("data-auto"), null, "a click hands the tour to the visitor");
+  await tour.waitForTimeout(7000);
+  assert.equal(await tour.locator("#walk-4").isChecked(), true, "the tour does not move after the visitor chose a step");
+  await moving.close();
+  console.log("PASS tour: plays on its own, stops once the visitor chooses");
   assert.deepEqual(errors, [], "no uncaught browser errors");
 } finally {
   await browser.close();

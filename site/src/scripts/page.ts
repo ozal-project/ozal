@@ -9,7 +9,7 @@ if (!matchMedia("(prefers-reduced-motion: reduce)").matches && "IntersectionObse
       observer.unobserve(entry.target);
     }
   }, { threshold: 0.1 });
-  document.querySelectorAll<HTMLElement>(".try-copy > *, .section-intro > *, .works li, .timeline li, .map, .how > *, .walk-tabs, .availability > *").forEach((node) => {
+  document.querySelectorAll<HTMLElement>(".try-copy > *, .section-intro > *, .works li, .timeline li, .map, .how > *, .walk-tabs, .availability > *, .flow > li, .zone-card").forEach((node) => {
     // Siblings arrive one after another instead of as a block.
     const i = node.parentElement ? [...node.parentElement.children].indexOf(node) : 0;
     node.style.setProperty("--i", String(Math.min(i, 8)));
@@ -32,7 +32,7 @@ const links = [...document.querySelectorAll<HTMLAnchorElement>('header nav a[hre
 if (links.length && "IntersectionObserver" in window) {
   const byId = new Map(links.map((a) => [a.getAttribute("href")!.slice(2), a]));
   // Sections without a nav link still count, so "Tour" is not left lit while reading the roadmap.
-  const sections = ["how", "tour", "today", "roadmap", "start"];
+  const sections = ["how", "private", "domains", "tour", "today", "roadmap", "start"];
   const spy = new IntersectionObserver((entries) => {
     for (const entry of entries) {
       if (!entry.isIntersecting) continue;
@@ -48,4 +48,25 @@ if (links.length && "IntersectionObserver" in window) {
     for (const a of links) a.removeAttribute("aria-current");
     byId.get("start")?.setAttribute("aria-current", "location");
   }).observe(footer);
+}
+
+// The tour plays itself while it is on screen: each tab's bar fills (CSS) and
+// its end opens the next one. The first click or key inside hands control to
+// the visitor for good; hovering only pauses. Reduced motion: no autoplay.
+const walk = document.querySelector<HTMLElement>(".walk");
+if (walk && !matchMedia("(prefers-reduced-motion: reduce)").matches && "IntersectionObserver" in window) {
+  const tabs = [...walk.querySelectorAll<HTMLInputElement>(".walk-tabs input")];
+  const seen = new IntersectionObserver((entries) => {
+    if (walk.dataset.auto) walk.dataset.auto = entries.some((e) => e.isIntersecting) ? "on" : "paused";
+  }, { threshold: 0.35 });
+  const stop = () => { delete walk.dataset.auto; seen.disconnect(); };
+  walk.dataset.auto = "paused";
+  walk.addEventListener("animationend", (e) => {
+    if (e.animationName !== "walk-progress" || !walk.dataset.auto) return;
+    const at = tabs.findIndex((t) => t.checked);
+    tabs[(at + 1) % tabs.length].checked = true;
+  });
+  walk.addEventListener("pointerdown", stop, { once: true });
+  walk.addEventListener("keydown", stop, { once: true });
+  seen.observe(walk);
 }

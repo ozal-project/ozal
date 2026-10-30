@@ -1,10 +1,28 @@
 ---
 // Umbral: a doorway, and the light of the open door. Ivory arch, camel
-// light, warm graphite leaf. Animated, the door opens.
-const { size = 24, animated = false } = Astro.props;
+// light, warm graphite leaf; the same mark and motion as the console.
+// animated: the arch rises, the leaf swings open and a beam crosses the door.
+// entrance: the longer arrival, where the arch is first traced as an outline,
+// then filled, before the door opens. Both rest on the static mark.
+// id keeps the clip and gradient of several marks on one page apart.
+const { size = 24, animated = false, entrance = false, id = "logo" } = Astro.props;
+const doorway = "M10.4 30V14.8A5.6 5.6 0 0 1 21.6 14.8V30Z";
+const arch = "M5 30V14.5A11 11 0 0 1 27 14.5V30H21.6V14.8A5.6 5.6 0 0 0 10.4 14.8V30Z";
 ---
-<svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" class:list={["logo", animated && "logo-live"]}>
-  <path class="logo-arch" d="M5 30V14.5A11 11 0 0 1 27 14.5V30H21.6V14.8A5.6 5.6 0 0 0 10.4 14.8V30Z" fill="var(--color-brand)" />
-  <path class="logo-leaf" d="M10.4 30V14.8A5.6 5.6 0 0 1 16 9.2V30Z" fill="var(--color-depth)" />
-  <path class="logo-light" d="M16 9.2A5.6 5.6 0 0 1 21.6 14.8V30H16Z" fill="var(--color-signal)" />
+<svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" class:list={["logo", animated && "logo-live", entrance && "logo-entrance"]}>
+  <defs>
+    <clipPath id={`${id}-door`}><path d={doorway} /></clipPath>
+    <linearGradient id={`${id}-beam`} x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="var(--color-brand)" stop-opacity="0" />
+      <stop offset="0.5" stop-color="var(--color-brand)" stop-opacity="0.8" />
+      <stop offset="1" stop-color="var(--color-brand)" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+  <g class="logo-door" clip-path={`url(#${id}-door)`}>
+    <path class="logo-light" d={doorway} fill="var(--color-signal)" />
+    <rect class="logo-beam" x="4" y="8" width="5" height="24" fill={`url(#${id}-beam)`} opacity="0" />
+    <path class="logo-leaf" d="M10.4 30V14.8A5.6 5.6 0 0 1 16 9.2V30Z" fill="var(--color-depth)" />
+  </g>
+  <path class="logo-arch" d={arch} fill="var(--color-brand)" />
+  {entrance && <path class="logo-trace" d={arch} pathLength="100" stroke-dasharray="100" fill="none" stroke="var(--color-brand)" stroke-width="0.6" stroke-linejoin="round" />}
 </svg>
