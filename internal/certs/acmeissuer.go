@@ -50,6 +50,11 @@ type ACMEConfig struct {
 	// the domain; from then on only the zone holding the target needs an
 	// adapter. The CNAME is verified before any record is created.
 	Delegations map[string]string
+	// DelegationSuffix, when set, delegates a domain without an entry in
+	// Delegations to "<domain>.<suffix>": the builtin DNS server's zone,
+	// where zones added at runtime (EDGE-008) write their challenge. The
+	// CNAME is verified the same way before any record is created.
+	DelegationSuffix string
 	// ExternalAccount binds the new ACME account to one already held at the
 	// CA (RFC 8555 section 7.3.4). Google Trust Services and ZeroSSL require
 	// it; Let's Encrypt does not. It is used only when an account is first
@@ -109,7 +114,13 @@ func NewACMEIssuer(cfg ACMEConfig, state *FileStore) (*ACMEIssuer, error) {
 		return nil, err
 	}
 	cfg.Delegations = delegations
-	if len(delegations) > 0 {
+	cfg.DelegationSuffix = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(cfg.DelegationSuffix)), ".")
+	if cfg.DelegationSuffix != "" {
+		if _, err := wireName(cfg.DelegationSuffix); err != nil || strings.ContainsAny(cfg.DelegationSuffix, " *") {
+			return nil, fmt.Errorf("certs: delegation suffix %q is not a valid host name", cfg.DelegationSuffix)
+		}
+	}
+	if len(delegations) > 0 || cfg.DelegationSuffix != "" {
 		resolver := cfg.Resolver
 		if resolver == nil {
 			resolver = net.DefaultResolver
@@ -212,7 +223,7 @@ func (i *ACMEIssuer) authorize(ctx context.Context, client *acme.Client, names [
 	}
 	fqdn := ChallengeFQDN(names[index]) // the name the CA queries
 	target := fqdn                      // the name the record is written to
-	if delegated, ok := i.cfg.Delegations[baseOf(names[index])]; ok {
+	if delegated, ok := i.delegation(baseOf(names[index])); ok {
 		if err := i.checkDelegation(ctx, fqdn, delegated); err != nil {
 			return err
 		}
@@ -499,6 +510,18 @@ func classifyACME(ctx context.Context, stage string, err error) error {
 // fake so no test ever depends on public DNS.
 type CNAMEResolver interface {
 	LookupCNAME(ctx context.Context, host string) (string, error)
+}
+
+// delegation returns where a domain's challenge is written instead of
+// _acme-challenge.<domain>, if anywhere.
+func (i *ACMEIssuer) delegation(base string) (string, bool) {
+	if target, ok := i.cfg.Delegations[base]; ok {
+		return target, true
+	}
+	if i.cfg.DelegationSuffix != "" {
+		return strings.ToLower(base) + "." + i.cfg.DelegationSuffix, true
+	}
+	return "", false
 }
 
 // normalizeDelegations lower-cases and validates the delegation table. The

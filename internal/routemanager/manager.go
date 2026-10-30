@@ -78,6 +78,13 @@ func WithPasskeyDirectory(dir passkey.Directory) Option {
 	return func(m *Manager) { m.passkeys = dir }
 }
 
+// WithInstallHook calls hook with every configuration installed — the
+// initial one, reloads and API edits — after it serves. hook runs under the
+// reload lock, so it must hand the work off instead of blocking.
+func WithInstallHook(hook func(config.Config)) Option {
+	return func(m *Manager) { m.onInstall = hook }
+}
+
 // WithSites serves "site" routes from the deployment store (PAGES-002).
 func WithSites(sites proxy.SiteDirs) Option {
 	return func(m *Manager) { m.sites = sites }
@@ -140,6 +147,7 @@ type Manager struct {
 	connectorRoutes     ConnectorRoutes
 	sites               proxy.SiteDirs
 	passkeys            passkey.Directory
+	onInstall           func(config.Config)
 }
 
 // loginGate is what a protected snapshot needs from a login method: the
@@ -603,6 +611,9 @@ func (m *Manager) install(candidate *Snapshot) {
 	// state: keep the installed ones across reloads and drop them only when
 	// rate limiting is disabled or reconfigured.
 	m.rateLimiters = candidate.rateLimiters
+	if m.onInstall != nil {
+		m.onInstall(config.Clone(candidate.cfg))
+	}
 }
 
 func (m *Manager) discard(candidate *Snapshot) {

@@ -89,3 +89,31 @@ func (m *Manager) RemoveApplication(host, expected string) error {
 	}
 	return m.persistAndInstall(cfg)
 }
+
+// AddZone adds a runtime zone (EDGE-008) under the reviewed digest.
+func (m *Manager) AddZone(name, expected string) error {
+	return m.mutateZones(expected, func(cfg config.Config) (config.Config, error) { return config.WithZone(cfg, name) })
+}
+
+// RemoveZone removes a runtime zone under the reviewed digest; a zone that
+// still serves an application is refused by config.WithoutZone.
+func (m *Manager) RemoveZone(name, expected string) error {
+	return m.mutateZones(expected, func(cfg config.Config) (config.Config, error) { return config.WithoutZone(cfg, name) })
+}
+
+func (m *Manager) mutateZones(expected string, change func(config.Config) (config.Config, error)) error {
+	m.reloadMu.Lock()
+	defer m.reloadMu.Unlock()
+	if err := m.contextError(); err != nil {
+		return err
+	}
+	current := m.current.Load()
+	if current == nil || expected == "" || current.digest != expected {
+		return ErrConfigChanged
+	}
+	next, err := change(current.cfg)
+	if err != nil {
+		return err
+	}
+	return m.persistAndInstall(next)
+}

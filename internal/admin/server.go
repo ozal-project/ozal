@@ -42,6 +42,7 @@ type Handler struct {
 	sink                   events.Sink
 	broker                 *events.Broker
 	certificate            func() CertificateStatus
+	zoneCertificates       zoneCertificates
 	auditStatus            func() AuditStatus
 	mutationAudit          events.AuditAppender
 	auditMutationsRequired bool
@@ -89,6 +90,9 @@ func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 	h.mux.HandleFunc("POST /routes", h.requireTool("applications", h.addRoute))
 	h.mux.HandleFunc("DELETE /routes/{host}", h.requireTool("applications", h.deleteRoute))
 	h.mux.HandleFunc("POST /_/api/policy/explain", h.requireTool("applications", h.explainPolicy))
+	h.mux.HandleFunc("GET /_/api/zones", h.requireTool("applications", h.listZones))
+	h.mux.HandleFunc("POST /_/api/zones", h.requireTool("applications", h.addZone))
+	h.mux.HandleFunc("DELETE /_/api/zones/{name}", h.requireTool("applications", h.removeZone))
 	for _, opt := range opts {
 		opt(h)
 	}

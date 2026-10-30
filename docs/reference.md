@@ -230,11 +230,51 @@ DNS-01 usa `tls.domains` y un bloque `tls.dns01`:
 }
 ```
 
-Va dentro de `tls`; sin `dns_provider` el adaptador es Cloudflare. El conjunto acotado de
-nombres (hasta 8 en un mismo certificado: se autorizan uno tras otro dentro de los 5
-minutos de un intento) puede incluir wildcard de un nivel y apex adicional. TLS-ALPN/HTTP no
+Va dentro de `tls`; sin `dns_provider` el adaptador es Cloudflare. `tls.domains`
+admite hasta 8 nombres, con wildcard de un nivel y apex adicional; sus bases
+son las zonas iniciales (ver [Zonas](#zonas-un-certificado-por-dominio)). TLS-ALPN/HTTP no
 son necesarios para esa emisión. El estado guarda cuenta, generaciones y cleanup;
 un segundo escritor se rechaza. Cambiar estas opciones requiere reinicio.
+
+#### Zonas: un certificado por dominio
+
+Con `tls.dns01` el edge emite **un certificado por zona**, con la forma de un
+certificado universal: `example.com` y `*.example.com`. Cada zona tiene su
+almacenamiento (`_zone.<zona>` en `state_dir`), su backoff y su renovación:
+si el desafío de una zona falla, las demás siguen sirviendo y renovando. Las
+zonas se emiten de a una, porque comparten la cuenta ACME y el proveedor; esperar
+turno no cuenta para el límite de 5 minutos de cada intento.
+
+Las zonas tienen dos orígenes:
+
+| Origen | Definición | Cambio |
+|---|---|---|
+| `config` | La base de cada nombre de `tls.domains` (`*.example.com` y `example.com` son la zona `example.com`) | Editando la configuración del host y reiniciando |
+| `runtime` | `zones` en el `runtime_file`, agregadas por la API o la consola | `POST /_/api/zones` y `DELETE /_/api/zones/{zona}`, sin reinicio |
+
+```sh
+# Herramienta applications (token, socket o sesión de operador).
+curl -s --unix-socket /run/ozal/admin.sock http://localhost/_/api/zones
+curl -s --unix-socket /run/ozal/admin.sock -X POST http://localhost/_/api/zones \
+  -d '{"name": "example.org", "expected": "<config_sha256 del listado>"}'
+```
+
+El listado devuelve por zona su origen, estado (`pending`, `queued`,
+`issuing`, `active`, `renewing`, `renewal_failed`, `expiring`, `failed`),
+vencimiento, último error, las aplicaciones que cubre y el registro DNS a
+crear (`challenge`). Con `dns_provider: "builtin"` una zona sin entrada en
+`challenge_delegation` delega en `<zona>.<builtin.zone>`: crea el CNAME
+`_acme-challenge.<zona>` hacia ese nombre; el edge lo verifica antes de escribir
+nada. Con `hetzner` o `rfc2136` se rechaza una zona cuyo desafío quede fuera de
+la zona del proveedor. Quitar una zona `config` se rechaza, igual que una zona
+que todavía es el único certificado de alguna aplicación.
+
+Migración: el certificado combinado anterior (clave del primer nombre de
+`tls.domains`) se carga sólo como respaldo y ya no se renueva. Responde por sus
+nombres mientras la zona correspondiente no tenga certificado propio, también
+después de reiniciar; nunca se sobrescribe. Un nombre fuera de toda zona y del
+respaldo falla cerrado. `ozal dns01 try` y `dns01 check` siguen ensayando los
+nombres de `tls.domains` como un solo certificado.
 
 #### Otra CA: cuenta externa (EAB) y Google Trust Services
 

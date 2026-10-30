@@ -368,10 +368,13 @@ type RateLimit struct {
 type Config struct {
 	RuntimeFile string     `json:"runtime_file,omitempty"`
 	GitHub      *GitHubApp `json:"github,omitempty"`
-	Listen      string     `json:"listen"`
-	TLS         TLS        `json:"tls,omitempty"`
-	Auth        Auth       `json:"auth,omitempty"`
-	Admin       Admin      `json:"admin,omitempty"`
+	// Zones are domains served with their own certificate, added through
+	// the admin API (EDGE-008); see zones.go.
+	Zones  []Zone `json:"zones,omitempty"`
+	Listen string `json:"listen"`
+	TLS    TLS    `json:"tls,omitempty"`
+	Auth   Auth   `json:"auth,omitempty"`
+	Admin  Admin  `json:"admin,omitempty"`
 	// TrustedProxies opts specific TCP peer IPs or CIDRs into CF-Connecting-IP.
 	// Empty means no forwarding peer is trusted.
 	TrustedProxies []string `json:"trusted_proxies,omitempty"`
@@ -686,6 +689,9 @@ func Validate(cfg Config) (*Config, error) {
 		return nil, fmt.Errorf("config: tls.origin_client_ca_file requires tls.enabled")
 	} else if cfg.TLS.DNS01 != nil {
 		return nil, fmt.Errorf("config: tls.dns01 requires tls.enabled")
+	}
+	if err := normalizeZones(&cfg); err != nil {
+		return nil, err
 	}
 
 	if err := normalizeDNS(cfg.DNS); err != nil {
@@ -1444,6 +1450,7 @@ func Clone(source Config) Config {
 		clone.GitHub = &github
 	}
 	clone.TLS.Domains = slices.Clone(source.TLS.Domains)
+	clone.Zones = slices.Clone(source.Zones)
 	if source.Tunnel != nil {
 		tunnel := *source.Tunnel
 		clone.Tunnel = &tunnel

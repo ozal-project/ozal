@@ -261,6 +261,8 @@ func main() {
 			}()
 		}
 	}
+	zoneChanges := make(zoneUpdates, 1)
+	managerOpts = append(managerOpts, routemanager.WithInstallHook(zoneChanges.publish))
 	manager, err := routemanager.New(ctx, *configPath, healthCheckInterval, managerOpts...)
 	if err != nil {
 		log.Fatalf("routes: %v", err)
@@ -276,13 +278,16 @@ func main() {
 	// EDGE-007: with tls.dns01 configured, Ozal owns the origin
 	// certificate lifecycle. The manager holds the single-writer lock on its
 	// state directory until shutdown.
-	var certificateManager *certs.Manager
+	var certificateManager *certs.Zones
 	closeCertificates := func() {}
 	if cfg.TLS.Enabled && cfg.TLS.DNS01 != nil {
 		certificateManager, closeCertificates, err = startCertificateManager(ctx, &cfg, sink)
 		if err != nil {
 			log.Fatalf("certificate manager: %v", err)
 		}
+		// EDGE-008: zones added or removed through the admin API (or a
+		// SIGHUP) reach the certificate set without a restart.
+		go zoneChanges.apply(ctx, certificateManager)
 	}
 
 	hup := make(chan os.Signal, 1)
@@ -313,6 +318,9 @@ func main() {
 	// one-time token the public listener answers before routing.
 	probeTokens := probe.NewTokens(nil)
 	adminOpts = append(adminOpts, admin.WithDomains(probe.NewService(probeTokens)))
+	if certificateManager != nil {
+		adminOpts = append(adminOpts, admin.WithZones(certificateManager))
+	}
 	adminServer, err := startAdmin(&cfg, manager, sink, broker, certificateStatus(certificateManager), adminOpts...)
 	if err != nil {
 		log.Fatalf("admin listener: %v", err)
@@ -493,26 +501,39 @@ type certificateProvider interface {
 	GetCertificate(*tls.ClientHelloInfo) (*tls.Certificate, error)
 }
 
-// certificateStatus projects the manager state into the console's shape.
-// A nil manager (autocert mode) omits the certificate panel.
-func certificateStatus(manager *certs.Manager) func() admin.CertificateStatus {
-	if manager == nil {
+// certificateStatus summarizes the zones for the console's certificate
+// panel: valid only when every zone is, the earliest expiry, the first
+// failure. A nil set (autocert mode) omits the panel.
+func certificateStatus(zones *certs.Zones) func() admin.CertificateStatus {
+	if zones == nil {
 		return nil
 	}
 	return func() admin.CertificateStatus {
-		status := manager.Status()
-		return admin.CertificateStatus{
-			Host:        strings.Join(status.Names, ", "),
-			Names:       status.Names,
-			Mode:        "ACME DNS-01",
-			Valid:       status.Valid,
-			NotAfter:    formatTime(status.NotAfter),
-			LastOutcome: status.LastOutcome,
-			LastError:   status.LastError,
-			LastAttempt: formatTime(status.LastAttempt),
-			NextAttempt: formatTime(status.NextAttempt),
-			Pending:     status.PendingIntents,
+		list := zones.Status()
+		out := admin.CertificateStatus{Mode: "ACME DNS-01, one certificate per zone", Valid: len(list) > 0, Pending: zones.PendingIntents()}
+		var notAfter, lastAttempt, nextAttempt time.Time
+		var zoneNames []string
+		for _, zone := range list {
+			zoneNames = append(zoneNames, zone.Zone)
+			out.Names = append(out.Names, zone.Names...)
+			out.Valid = out.Valid && zone.Valid
+			if zone.Valid && (notAfter.IsZero() || zone.NotAfter.Before(notAfter)) {
+				notAfter = zone.NotAfter
+			}
+			if zone.LastAttempt.After(lastAttempt) {
+				lastAttempt = zone.LastAttempt
+				out.LastOutcome = zone.LastOutcome
+			}
+			if !zone.NextAttempt.IsZero() && (nextAttempt.IsZero() || zone.NextAttempt.Before(nextAttempt)) {
+				nextAttempt = zone.NextAttempt
+			}
+			if zone.LastError != "" && out.LastError == "" {
+				out.LastError = zone.Zone + ": " + zone.LastError
+			}
 		}
+		out.Host = strings.Join(zoneNames, ", ")
+		out.NotAfter, out.LastAttempt, out.NextAttempt = formatTime(notAfter), formatTime(lastAttempt), formatTime(nextAttempt)
+		return out
 	}
 }
 
@@ -549,10 +570,12 @@ func formatTime(t time.Time) string {
 }
 
 // startCertificateManager builds the bounded DNS-01 stack and starts its
-// renewal loop. The file store holds an exclusive lock on the state
+// renewal loop: one certificate per zone (EDGE-008), the zones being the
+// bases of tls.domains plus the runtime's. The certificate in service before
+// zones is loaded read-only as their fallback and never renewed again. The file store holds an exclusive lock on the state
 // directory, so a second process pointed at the same state fails here
 // instead of racing on the account, the generations or the DNS intents.
-func startCertificateManager(ctx context.Context, cfg *config.Config, sink events.Sink) (*certs.Manager, func(), error) {
+func startCertificateManager(ctx context.Context, cfg *config.Config, sink events.Sink) (*certs.Zones, func(), error) {
 	var (
 		dnsProvider certs.DNSProvider
 		stopDNS     = func() {}
@@ -579,11 +602,13 @@ func startCertificateManager(ctx context.Context, cfg *config.Config, sink event
 		return nil, nil, err
 	}
 	issuer, err := certs.NewACMEIssuer(certs.ACMEConfig{
-		DirectoryURL:    cfg.TLS.DNS01.DirectoryURL,
-		Email:           cfg.TLS.Email,
-		DNS:             dnsProvider,
-		Delegations:     cfg.TLS.DNS01.ChallengeDelegation,
-		ExternalAccount: account,
+		DirectoryURL: cfg.TLS.DNS01.DirectoryURL,
+		Email:        cfg.TLS.Email,
+		DNS:          dnsProvider,
+		Delegations:  cfg.TLS.DNS01.ChallengeDelegation,
+		// The same default config.ChallengeFor shows the operator.
+		DelegationSuffix: builtinZone(cfg.TLS.DNS01),
+		ExternalAccount:  account,
 	}, state)
 	if err != nil {
 		closeState()
@@ -602,25 +627,72 @@ func startCertificateManager(ctx context.Context, cfg *config.Config, sink event
 			return nil, nil, errors.New("tls.dns01.certificate_roots_file contains no certificate")
 		}
 	}
-	manager, err := certs.NewManager(certs.ManagerConfig{
-		RootCAs:  roots,
-		Host:     cfg.TLS.Domains[0],
-		AltNames: cfg.TLS.Domains[1:],
-		Sink:     sink,
-	}, state, issuer)
+	base := certs.ManagerConfig{RootCAs: roots, Sink: sink}
+	legacyConfig := base
+	legacyConfig.Host, legacyConfig.AltNames = cfg.TLS.Domains[0], cfg.TLS.Domains[1:]
+	legacy, err := certs.NewManager(legacyConfig, state, issuer)
 	if err != nil {
 		closeState()
 		return nil, nil, err
 	}
-	// Before any listener exists, so its first status check is true.
-	manager.LoadStored(ctx)
-	return manager, runCertificateManager(ctx, manager, closeState), nil
+	legacy.LoadStored(ctx)
+	zones, err := certs.NewZones(base, state, issuer, legacy)
+	if err != nil {
+		closeState()
+		return nil, nil, err
+	}
+	// Before any listener exists, so its first handshake finds what is on disk.
+	if err := zones.Set(ctx, config.ServedZoneNames(*cfg)); err != nil {
+		closeState()
+		return nil, nil, err
+	}
+	return zones, runCertificateManager(ctx, zones, closeState), nil
+}
+
+func builtinZone(dns01 *config.DNS01) string {
+	if dns01.DNSProvider == "builtin" && dns01.Builtin != nil {
+		return dns01.Builtin.Zone
+	}
+	return ""
+}
+
+// zoneUpdates hands each installed configuration's zones to the
+// certificate set without blocking the reload lock: only the newest set is
+// kept, and applying it may wait for a cancelled issuance to clean up.
+type zoneUpdates chan []string
+
+func (u zoneUpdates) publish(cfg config.Config) {
+	names := config.ServedZoneNames(cfg)
+	for {
+		select {
+		case u <- names:
+			return
+		default:
+			select {
+			case <-u:
+			default:
+			}
+		}
+	}
+}
+
+func (u zoneUpdates) apply(ctx context.Context, zones *certs.Zones) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case names := <-u:
+			if err := zones.Set(ctx, names); err != nil {
+				log.Printf("zones: %v", err)
+			}
+		}
+	}
 }
 
 // startTLS serves public HTTPS. The autocert path also binds :80 for HTTP-01
 // challenges; the DNS-01 path binds only :443, because validation never
 // reaches this host.
-func startTLS(cfg *config.Config, handler http.Handler, sink events.Sink, certificateManager *certs.Manager, current func() config.Config) ([]*http.Server, error) {
+func startTLS(cfg *config.Config, handler http.Handler, sink events.Sink, certificateManager *certs.Zones, current func() config.Config) ([]*http.Server, error) {
 	if cfg.TLS.DNS01 != nil {
 		return startManagedTLS(cfg, handler, sink, certificateManager)
 	}
@@ -649,7 +721,7 @@ func routeHostPolicy(configured []string, current func() config.Config) autocert
 // certificate policy is applied without the ACME ALPN exemption: this
 // listener answers no tls-alpn-01 validation, so an acme-tls/1 connection
 // without a client certificate is refused like any other.
-func startManagedTLS(cfg *config.Config, handler http.Handler, sink events.Sink, certificateManager *certs.Manager) ([]*http.Server, error) {
+func startManagedTLS(cfg *config.Config, handler http.Handler, sink events.Sink, certificateManager *certs.Zones) ([]*http.Server, error) {
 	if certificateManager == nil {
 		return nil, errors.New("dns-01 listener requires the certificate manager")
 	}
@@ -670,13 +742,15 @@ func startManagedTLS(cfg *config.Config, handler http.Handler, sink events.Sink,
 		IdleTimeout:       idleTimeout,
 	}
 	go func() {
-		log.Printf("ozal listening on :443 (HTTPS, ACME DNS-01 for %s)", strings.Join(cfg.TLS.Domains, ", "))
+		log.Printf("ozal listening on :443 (HTTPS, ACME DNS-01, one certificate per zone: %s)", strings.Join(config.ServedZoneNames(*cfg), ", "))
 		if err := server.ServeTLS(listener, "", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Printf("public listener :443: %v", err)
 		}
 	}()
-	if status := certificateManager.Status(); !status.Valid {
-		log.Printf("origin certificate not available yet: TLS handshakes fail closed until issuance succeeds")
+	for _, zone := range certificateManager.Status() {
+		if !zone.Valid {
+			log.Printf("zone %s has no certificate of its own yet: its names use the previous certificate if it covers them, otherwise handshakes fail closed until issuance succeeds", zone.Zone)
+		}
 	}
 	return []*http.Server{server}, nil
 }

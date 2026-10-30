@@ -139,6 +139,10 @@ func tlsCoverage(cfg config.Config, host string) string {
 			return "configured_coverage_certificate_not_probed"
 		}
 	}
+	// EDGE-008: a zone's certificate covers its apex and one level below.
+	if _, ok := certs.ServingZone(config.ServedZoneNames(cfg), name); ok && (name == host || strings.HasSuffix(host, ":443")) {
+		return "configured_coverage_certificate_not_probed"
+	}
 	// HTTP-01: the listener orders a certificate for any configured route on
 	// its first visit (routeHostPolicy), so only names a public CA would
 	// refuse, or routes on another port, stay uncovered.

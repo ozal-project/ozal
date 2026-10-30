@@ -15,6 +15,9 @@ type operatingConfig struct {
 	Routes   []Route    `json:"routes"`
 	Projects []Project  `json:"projects"`
 	GitHub   *GitHubApp `json:"github"`
+	// Zones is omitted while empty, so a runtime file without zones stays
+	// readable by binaries that predate them (a paired rollback).
+	Zones []Zone `json:"zones,omitempty"`
 }
 
 func loadOperating(base *Config, root []byte) (*Config, string, error) {
@@ -38,6 +41,7 @@ func loadOperating(base *Config, root []byte) (*Config, string, error) {
 	cfg.Routes = operational.Routes
 	cfg.Projects = operational.Projects
 	cfg.GitHub = operational.GitHub
+	cfg.Zones = operational.Zones
 	validated, err := Validate(cfg)
 	if err != nil {
 		return nil, "", err
@@ -69,7 +73,7 @@ func OperatingJSON(cfg Config) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := json.MarshalIndent(operatingConfig{Routes: validated.Routes, Projects: validated.Projects, GitHub: validated.GitHub}, "", "  ")
+	data, err := json.MarshalIndent(operatingConfig{Routes: validated.Routes, Projects: validated.Projects, GitHub: validated.GitHub, Zones: validated.Zones}, "", "  ")
 	if err != nil {
 		return nil, err
 	}

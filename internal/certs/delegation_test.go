@@ -149,3 +149,31 @@ func TestNoDelegationKeepsTheChallengeAtTheDomain(t *testing.T) {
 		t.Fatalf("created at %v, want %v", dns.createdNames, want)
 	}
 }
+
+// A zone added at runtime has no explicit delegation: with a suffix (the
+// builtin DNS zone) its challenge goes to "<domain>.<suffix>", only once
+// the operator's CNAME points there.
+func TestDelegationSuffixDelegatesZonesWithoutAnEntry(t *testing.T) {
+	_, server := newFakeACME(t, apexNames[0], apexNames[1:]...)
+	dns := newFakeDNS()
+	target := "example.com.acme.example.net"
+	resolver := &cnameResolver{dns: dns, cnames: map[string]string{"_acme-challenge.example.com": target}}
+	issuer, _ := testACMEIssuer(t, server, dns, resolver, ACMEConfig{DelegationSuffix: "ACME.example.net."})
+	if _, err := issuer.Obtain(context.Background(), apexNames, testSigningKey(t)); err != nil {
+		t.Fatalf("Obtain: %v", err)
+	}
+	if want := []string{target, target}; !slices.Equal(dns.createdNames, want) {
+		t.Fatalf("records created at %v, want %v", dns.createdNames, want)
+	}
+
+	_, server = newFakeACME(t, apexNames[0], apexNames[1:]...)
+	dns = newFakeDNS()
+	missing := &cnameResolver{dns: dns, cnames: map[string]string{}}
+	issuer, _ = testACMEIssuer(t, server, dns, missing, ACMEConfig{DelegationSuffix: "acme.example.net"})
+	if _, err := issuer.Obtain(context.Background(), apexNames, testSigningKey(t)); err == nil {
+		t.Fatal("issued without the CNAME in place")
+	}
+	if len(dns.createdNames) != 0 {
+		t.Fatalf("records written before the CNAME was verified: %v", dns.createdNames)
+	}
+}
