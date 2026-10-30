@@ -150,6 +150,10 @@ func (d *denialEmitter) emit(code Code, reason, remote string) {
 // default; only AllowACMEValidation re-opens the exact tls-alpn-01 validation
 // exchange.
 func ServerTLS(base *tls.Config, roots *x509.CertPool, sink events.Sink, opts ...Option) *tls.Config {
+	return serverTLS(base, func() *x509.CertPool { return roots }, sink, opts...)
+}
+
+func serverTLS(base *tls.Config, roots func() *x509.CertPool, sink events.Sink, opts ...Option) *tls.Config {
 	denials := newDenialEmitter(sink)
 	var cfgOpts options
 	for _, opt := range opts {
@@ -174,7 +178,7 @@ func ServerTLS(base *tls.Config, roots *x509.CertPool, sink events.Sink, opts ..
 		strict.ClientAuth = tls.RequestClientCert
 		strict.VerifyConnection = func(cs tls.ConnectionState) error {
 			now := time.Now()
-			d := Decide(cs.PeerCertificates, roots, now)
+			d := Decide(cs.PeerCertificates, roots(), now)
 			if d.Allowed {
 				return nil
 			}

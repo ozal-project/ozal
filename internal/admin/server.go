@@ -45,6 +45,7 @@ type Handler struct {
 	certificate            func() CertificateStatus
 	zoneCertificates       zoneCertificates
 	zoneLookup             func(ctx context.Context, host string) (string, error)
+	zoneSetup              zoneSetupService
 	auditStatus            func() AuditStatus
 	mutationAudit          events.AuditAppender
 	auditMutationsRequired bool
@@ -98,6 +99,8 @@ func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 	h.mux.HandleFunc("DELETE /_/api/zones/{name}", h.requireTool("applications", h.removeZone))
 	h.mux.HandleFunc("POST /_/api/zones/{name}/check", h.requireTool("applications", h.checkZone))
 	h.mux.HandleFunc("POST /_/api/zones/{name}/renew", h.requireTool("applications", h.renewZone))
+	h.mux.HandleFunc("GET /_/api/zones/{name}/setup", h.requireTool("applications", h.zoneSetupStatus))
+	h.mux.HandleFunc("POST /_/api/zones/{name}/setup", h.requireTool("applications", h.applyZoneSetup))
 	for _, opt := range opts {
 		opt(h)
 	}

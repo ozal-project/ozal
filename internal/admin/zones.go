@@ -12,6 +12,7 @@ import (
 	"github.com/ozal-project/ozal/internal/domaincheck"
 	"github.com/ozal-project/ozal/internal/events"
 	"github.com/ozal-project/ozal/internal/routemanager"
+	"github.com/ozal-project/ozal/internal/zonesetup/provider"
 )
 
 // zoneCertificates is what the zones page reads from the per-zone
@@ -95,8 +96,19 @@ func (h *Handler) listZones(w http.ResponseWriter, _ *http.Request) {
 		"config_sha256": h.manager.ConfigDigest(),
 		// Zones need the edge to issue its own certificates.
 		"available": cfg.TLS.Enabled && cfg.TLS.DNS01 != nil,
-		"zones":     zones,
+		// setup: the provider checklist exists; provider: it can be applied
+		// through an API rather than by hand.
+		"setup":    h.zoneSetup != nil,
+		"provider": zoneProvider(cfg),
+		"zones":    zones,
 	})
+}
+
+func zoneProvider(cfg config.Config) string {
+	if cfg.DNS != nil && cfg.DNS.Cloudflare != nil {
+		return "cloudflare"
+	}
+	return ""
 }
 
 func zoneTime(t time.Time) string {
@@ -248,4 +260,64 @@ func (h *Handler) renewZone(w http.ResponseWriter, r *http.Request) {
 	}
 	h.emit(events.Event{Type: events.Type("zone.renew_requested"), Actor: actor(r), Host: name, Code: "renew_requested"})
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "renew_requested"})
+}
+
+// zoneSetupService reads and applies what a zone still needs at its DNS
+// provider and proxy (EDGE-009).
+type zoneSetupService interface {
+	Inspect(ctx context.Context, cfg config.Config, zone string) provider.Report
+	Apply(ctx context.Context, cfg config.Config, zone string) (provider.Report, error)
+}
+
+// WithZoneSetup shows each zone's provider checklist and lets an operator
+// apply it through the provider API.
+func WithZoneSetup(service zoneSetupService) Option {
+	return func(h *Handler) { h.zoneSetup = service }
+}
+
+func (h *Handler) zoneSetupStatus(w http.ResponseWriter, r *http.Request) {
+	if h.zoneSetup == nil {
+		writeError(w, http.StatusServiceUnavailable, "zone setup is unavailable on this edge")
+		return
+	}
+	cfg := h.manager.Config()
+	name, ok := servedZone(cfg, r.PathValue("name"))
+	if !ok {
+		writeError(w, http.StatusNotFound, "this edge does not serve that zone")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	writeJSON(w, http.StatusOK, h.zoneSetup.Inspect(ctx, cfg, name))
+}
+
+// applyZoneSetup does every step the provider API can: it creates only what
+// is missing and never replaces a record or certificate the operator made.
+func (h *Handler) applyZoneSetup(w http.ResponseWriter, r *http.Request) {
+	if h.zoneSetup == nil {
+		writeError(w, http.StatusServiceUnavailable, "zone setup is unavailable on this edge")
+		return
+	}
+	cfg := h.manager.Config()
+	name, ok := servedZone(cfg, r.PathValue("name"))
+	if !ok {
+		writeError(w, http.StatusNotFound, "this edge does not serve that zone")
+		return
+	}
+	if !h.recordMutationIntent(w, r, "zone.setup", name) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
+	defer cancel()
+	report, err := h.zoneSetup.Apply(ctx, cfg, name)
+	for _, action := range report.Applied {
+		h.emit(events.Event{Type: events.Type("zone.setup_applied"), Actor: actor(r), Host: name, Code: action})
+	}
+	if err != nil {
+		// The report still says where the zone stands after the steps that
+		// did succeed; the message names the step and holds no secret.
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error(), "report": report})
+		return
+	}
+	writeJSON(w, http.StatusOK, report)
 }

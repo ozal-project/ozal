@@ -43,6 +43,7 @@ import (
 	"github.com/ozal-project/ozal/internal/routemanager"
 	"github.com/ozal-project/ozal/internal/store/sqlite"
 	"github.com/ozal-project/ozal/internal/tunnel"
+	zoneprovider "github.com/ozal-project/ozal/internal/zonesetup/provider"
 )
 
 const healthCheckInterval = 10 * time.Second
@@ -318,8 +319,22 @@ func main() {
 	// one-time token the public listener answers before routing.
 	probeTokens := probe.NewTokens(nil)
 	adminOpts = append(adminOpts, admin.WithDomains(probe.NewService(probeTokens)))
+	// EDGE-009: the public listener and the zone setup share one origin
+	// trust, so the proxy certificate the setup uploads is accepted from the
+	// next connection without a restart.
+	var originTrust *originauth.Trust
 	if certificateManager != nil {
 		adminOpts = append(adminOpts, admin.WithZones(certificateManager))
+		var identity *originauth.Identity
+		originTrust, identity, err = originIdentity(&cfg)
+		if err != nil {
+			log.Fatalf("origin identity: %v", err)
+		}
+		var setupIdentity zoneprovider.Identity
+		if identity != nil {
+			setupIdentity = identity
+		}
+		adminOpts = append(adminOpts, admin.WithZoneSetup(zoneprovider.New(setupIdentity, originTrust)))
 	}
 	adminServer, err := startAdmin(&cfg, manager, sink, broker, certificateStatus(certificateManager), adminOpts...)
 	if err != nil {
@@ -332,7 +347,7 @@ func main() {
 	}
 	publicHandler = probe.Handler(probeTokens, publicHandler)
 	if cfg.TLS.Enabled {
-		tlsServers, err := startTLS(&cfg, publicHandler, sink, certificateManager, manager.Config)
+		tlsServers, err := startTLS(&cfg, publicHandler, sink, certificateManager, originTrust, manager.Config)
 		if err != nil {
 			log.Fatalf("public listener: %v", err)
 		}
@@ -697,9 +712,9 @@ func (u zoneUpdates) apply(ctx context.Context, zones *certs.Zones) {
 // startTLS serves public HTTPS. The autocert path also binds :80 for HTTP-01
 // challenges; the DNS-01 path binds only :443, because validation never
 // reaches this host.
-func startTLS(cfg *config.Config, handler http.Handler, sink events.Sink, certificateManager *certs.Zones, current func() config.Config) ([]*http.Server, error) {
+func startTLS(cfg *config.Config, handler http.Handler, sink events.Sink, certificateManager *certs.Zones, trust *originauth.Trust, current func() config.Config) ([]*http.Server, error) {
 	if cfg.TLS.DNS01 != nil {
-		return startManagedTLS(cfg, handler, sink, certificateManager)
+		return startManagedTLS(cfg, handler, sink, certificateManager, trust)
 	}
 	return startAutocertTLS(cfg, handler, sink, current)
 }
@@ -726,11 +741,11 @@ func routeHostPolicy(configured []string, current func() config.Config) autocert
 // certificate policy is applied without the ACME ALPN exemption: this
 // listener answers no tls-alpn-01 validation, so an acme-tls/1 connection
 // without a client certificate is refused like any other.
-func startManagedTLS(cfg *config.Config, handler http.Handler, sink events.Sink, certificateManager *certs.Zones) ([]*http.Server, error) {
+func startManagedTLS(cfg *config.Config, handler http.Handler, sink events.Sink, certificateManager *certs.Zones, trust *originauth.Trust) ([]*http.Server, error) {
 	if certificateManager == nil {
 		return nil, errors.New("dns-01 listener requires the certificate manager")
 	}
-	tlsConfig, handler, err := managedTLSConfig(cfg, handler, sink, certificateManager)
+	tlsConfig, handler, err := managedTLSConfig(cfg, handler, sink, certificateManager, trust)
 	if err != nil {
 		return nil, err
 	}
@@ -849,28 +864,58 @@ func autocertTLSConfig(cfg *config.Config, handler http.Handler, sink events.Sin
 	return tlsConfig, handler, nil
 }
 
-// managedTLSConfig applies the origin trust boundary without an ALPN exception.
-func managedTLSConfig(cfg *config.Config, handler http.Handler, sink events.Sink, provider certificateProvider) (*tls.Config, http.Handler, error) {
+// managedTLSConfig applies the origin trust boundary without an ALPN
+// exception. trust is the shared live trust (EDGE-009); nil builds one from
+// the configured bundle alone.
+func managedTLSConfig(cfg *config.Config, handler http.Handler, sink events.Sink, provider certificateProvider, trust *originauth.Trust) (*tls.Config, http.Handler, error) {
 	tlsConfig := &tls.Config{
 		GetCertificate: provider.GetCertificate,
 		MinVersion:     tls.VersionTLS12,
 	}
 	if cfg.TLS.OriginClientCAFile != "" {
-		// Fail closed at startup: an unreadable or empty bundle must stop the
-		// listener, never leave it open.
-		bundle, err := os.ReadFile(cfg.TLS.OriginClientCAFile)
-		if err != nil {
-			return nil, nil, fmt.Errorf("read tls.origin_client_ca_file: %w", err)
+		if trust == nil {
+			var err error
+			if trust, err = loadOriginTrust(cfg); err != nil {
+				return nil, nil, err
+			}
 		}
-		roots, err := originauth.LoadPool(bundle)
-		if err != nil {
-			return nil, nil, fmt.Errorf("tls.origin_client_ca_file: %w", err)
-		}
-		tlsConfig = originauth.ServerTLS(tlsConfig, roots, sink)
+		tlsConfig = originauth.ServerTLSTrust(tlsConfig, trust, sink)
 		handler = originauth.RequireVerified(handler)
 	}
 
 	return tlsConfig, handler, nil
+}
+
+// loadOriginTrust reads the configured bundle. Fail closed at startup: an
+// unreadable or empty bundle must stop the listener, never leave it open.
+func loadOriginTrust(cfg *config.Config) (*originauth.Trust, error) {
+	bundle, err := os.ReadFile(cfg.TLS.OriginClientCAFile)
+	if err != nil {
+		return nil, fmt.Errorf("read tls.origin_client_ca_file: %w", err)
+	}
+	roots, err := originauth.LoadPool(bundle)
+	if err != nil {
+		return nil, fmt.Errorf("tls.origin_client_ca_file: %w", err)
+	}
+	return originauth.NewTrust(roots), nil
+}
+
+// originIdentity loads the edge's own proxy certificate (EDGE-009) next to
+// its certificate state. With no client-certificate policy there is no trust
+// to extend, and no identity is offered: uploading one would unlock nothing.
+func originIdentity(cfg *config.Config) (*originauth.Trust, *originauth.Identity, error) {
+	if cfg.TLS.OriginClientCAFile == "" || cfg.TLS.DNS01 == nil {
+		return nil, nil, nil
+	}
+	trust, err := loadOriginTrust(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	identity := originauth.NewIdentity(filepath.Join(cfg.TLS.DNS01.StateDir, "origin-identity"), trust)
+	if err := identity.Load(); err != nil {
+		return nil, nil, err
+	}
+	return trust, identity, nil
 }
 
 type certificateWorker interface{ Run(context.Context) }

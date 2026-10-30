@@ -275,6 +275,31 @@ crear. `POST /_/api/zones/{zona}/renew` pide un intento ya, sin esperar el
 backoff: responde 202, 409 si ya hay uno en curso o en cola, y 429 si el último
 fue hace menos de un minuto o la CA pidió esperar.
 
+**Alta en el proveedor (EDGE-009).** `GET /_/api/zones/{zona}/setup` devuelve
+lo que le falta a la zona fuera del edge, como pasos `challenge` (el CNAME de
+arriba), `encryption` (modo SSL del proxy) y `origin_pull` (certificado cliente
+que el proxy presenta), cada uno `done`, `todo`, `blocked`, `unknown` o
+`not_needed`, con la acción posible y la instrucción manual.
+`POST /_/api/zones/{zona}/setup` hace por la API de Cloudflare los pasos `todo`:
+crea el CNAME si el nombre está vacío, pasa `off`/`flexible` a Full (strict),
+sube el certificado propio del edge a Authenticated Origin Pulls a nivel de zona
+y lo activa. Nunca borra ni reemplaza un registro o certificado ajeno (un
+registro distinto queda `blocked`) y deja `full` como está. Responde el estado
+posterior; si un paso falla, 502 con `error` y `report`. Necesita
+`dns.cloudflare.token` con permisos *DNS · Edit*, *Zone Settings · Edit* y
+*SSL and Certificates · Edit* sobre la zona; sin token los pasos se leen de DNS
+público cuando se puede y el resto se describe a mano.
+
+El certificado del proxy es una identidad propia del edge en
+`<dns01.state_dir>/origin-identity/`: una CA de un solo uso firma un único
+certificado cliente (RSA, 3 años) y su clave se descarta sin tocar disco, así que
+nada en el host puede emitir otro certificado aceptado. `ca.pem` se suma a
+`tls.origin_client_ca_file` en el listener público sin reiniciar; `client.pem` y
+`client.key` (0600) existen sólo para subirlos al proxy. Sólo se ofrece cuando
+el edge exige certificado cliente (`tls.origin_client_ca_file`); un certificado
+de zona que el edge no confía se informa como `todo`, porque Cloudflare respondería
+520.
+
 Migración: el certificado combinado anterior (clave del primer nombre de
 `tls.domains`) se carga sólo como respaldo y ya no se renueva. Responde por sus
 nombres mientras la zona correspondiente no tenga certificado propio, también
@@ -519,7 +544,8 @@ listener público: es confianza de proxy, separada de TLS servidor y del túnel.
 
 Para el asistente de conexión, `dns.target` indica IP o hostname público,
 `dns.proxied` el modo del registro y el opcional `dns.cloudflare.token` habilita
-creación automática. Sin token se muestra el registro manual. Nunca reemplazar
+creación automática y el alta de zonas en Cloudflare (ver arriba). Sin token se
+muestra el registro manual. Nunca reemplazar
 silenciosamente un registro que podría servir un sitio existente.
 
 ## IP de visitante

@@ -3,6 +3,7 @@
   import PageHeader from "$lib/PageHeader.svelte";
   import Modal from "$lib/Modal.svelte";
   import DnsRecord from "$lib/DnsRecord.svelte";
+  import ZoneSetup from "$lib/ZoneSetup.svelte";
   import ConfirmAction from "$lib/ConfirmAction.svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -24,6 +25,7 @@
   let notices = $state<Record<string, { text: string; ok: boolean }>>({});
   let checks = $state<Record<string, ZoneCheck>>({});
   let busy = $state<Record<string, string>>({});
+  let ready = $state<Record<string, boolean>>({});
   const editable = $derived(can("applications"));
 
   async function load() {
@@ -176,7 +178,12 @@
             </div>
           {/if}
 
-          {#if zone.challenge.delegated}
+          {#if data.setup}
+            <details class="group px-5 pt-2 pb-1" open={ready[zone.name] === false}>
+              <summary class="text-muted-foreground hover:text-foreground cursor-pointer text-sm">{ready[zone.name] === false ? "Finish the setup at your DNS provider" : "Setup at your DNS provider"}</summary>
+              <div class="mt-3"><ZoneSetup {zone} {editable} onApplied={load} bind:ready={ready[zone.name]} /></div>
+            </details>
+          {:else if zone.challenge.delegated}
             <details class="group px-5 pt-2 pb-1" open={needsRecord}>
               <summary class="text-muted-foreground hover:text-foreground cursor-pointer text-sm">{needsRecord ? "Create this DNS record at your DNS provider" : "DNS record for certificates"}</summary>
               <div class="mt-3 grid gap-2">
@@ -203,7 +210,7 @@
   <p class="text-muted-foreground text-sm" role="status">Loading domains…</p>
 {/if}
 
-<Modal bind:open={adding} title={added ? `Connect ${added}` : "Add a domain"} intro={added ? "One DNS record, created once. After that, certificates are issued and renewed on their own." : "The domain you own. Ozal will hold one certificate for it and every address directly under it."}>
+<Modal bind:open={adding} title={added ? `Connect ${added}` : "Add a domain"} intro={added ? (data?.provider ? "One button does the rest at Cloudflare. After that, certificates are issued and renewed on their own." : "A few settings at your DNS provider, done once. After that, certificates are issued and renewed on their own.") : "The domain you own. Ozal will hold one certificate for it and every address directly under it."}>
   {#if !added}
     <form class="grid gap-4" onsubmit={submitAdd}>
       <div class="grid gap-2">
@@ -217,6 +224,12 @@
         <Button type="submit" disabled={addBusy || !newName.trim()}>{addBusy ? "Adding…" : "Add domain"}</Button>
       </div>
     </form>
+  {:else if addedZone && data?.setup}
+    <div class="grid gap-5">
+      <ZoneSetup zone={addedZone} {editable} onApplied={load} />
+      <p class="text-muted-foreground flex items-center gap-2 text-sm"><span class={["lamp", states[addedZone.state].lamp]} aria-hidden="true"></span>Certificate: {states[addedZone.state].label.toLowerCase()}. It is issued on its own once the DNS record is in place.</p>
+    </div>
+    <div class="mt-6 flex justify-end"><Button onclick={() => (adding = false)}>Done</Button></div>
   {:else if addedZone}
     <ol class="grid gap-5">
       <li class="grid gap-2">

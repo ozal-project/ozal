@@ -198,11 +198,16 @@ siga abierto, **todavía puede eludirse la nueva política**.
          "cloudflare": { "token": "file:/etc/ozal/cloudflare-dns.token" } }
 ```
 
-- **Origin Pulls a nivel de zona.** Detrás del proxy de Cloudflare, activa
-  *Authenticated Origin Pulls* para toda la zona con el mismo certificado
-  cliente (cuya CA está en `tls.origin_client_ca_file`). Así un hostname nuevo no
-  necesita una asociación por hostname. Es un ajuste único en el panel de
-  Cloudflare; el edge no cambia.
+- **Un dominio nuevo detrás de Cloudflare.** En **Domains → Add domain** la
+  tarjeta muestra lo que falta en Cloudflare: el registro para certificados, el
+  modo SSL Full (strict) y el certificado que el proxy presenta al edge
+  (*Authenticated Origin Pulls*, si el edge usa `tls.origin_client_ca_file`; sin
+  él Cloudflare responde 520). Con `dns.cloudflare.token` (permisos *DNS · Edit*,
+  *Zone Settings · Edit* y *SSL and Certificates · Edit*) el botón **Set up in
+  Cloudflare** hace los tres: sube un certificado propio del edge a nivel de
+  zona, así cada dirección futura del dominio funciona sin otra asociación. Sin
+  token, cada paso dice qué tocar en el panel de Cloudflare. Nada se borra ni se
+  reemplaza.
 - **Apps privadas en otro dominio.** Con el login de passkeys, una app privada
   fuera de `auth.cookie_domain` recibe su propia sesión del host después del
   login central (un código de un solo uso, ver

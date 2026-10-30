@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"runtime"
 	"strings"
@@ -13,6 +14,8 @@ import (
 	"github.com/ozal-project/ozal/internal/config"
 	"github.com/ozal-project/ozal/internal/domaincheck"
 	"github.com/ozal-project/ozal/internal/routemanager"
+	"github.com/ozal-project/ozal/internal/zonesetup"
+	"github.com/ozal-project/ozal/internal/zonesetup/provider"
 )
 
 // zoneManager applies zone edits to its in-memory configuration with the
@@ -253,5 +256,56 @@ func TestZoneRenewMapsTheManagerLimits(t *testing.T) {
 	}
 	if rec := request(New(manager, nil), http.MethodPost, "/_/api/zones/example.com/renew", readToken, ""); rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("renew without certificates = %d", rec.Code)
+	}
+}
+
+// zoneSetupFake answers Inspect and Apply with fixed reports.
+type zoneSetupFake struct {
+	applyErr error
+	applied  []string
+	zones    []string
+}
+
+func (f *zoneSetupFake) Inspect(_ context.Context, _ config.Config, zone string) provider.Report {
+	f.zones = append(f.zones, zone)
+	return provider.Report{Zone: zone, Provider: "cloudflare", Steps: []zonesetup.Step{{Name: zonesetup.OriginPull, State: zonesetup.Todo, Action: zonesetup.UploadIdentity}}}
+}
+
+func (f *zoneSetupFake) Apply(ctx context.Context, cfg config.Config, zone string) (provider.Report, error) {
+	report := f.Inspect(ctx, cfg, zone)
+	report.Applied = f.applied
+	return report, f.applyErr
+}
+
+// EDGE-009: the zone setup endpoints read and apply only served zones, and
+// a failed apply still returns where the zone stands.
+func TestZoneSetupEndpoints(t *testing.T) {
+	manager := zoneTestManager(t)
+	setup := &zoneSetupFake{applied: []string{"set_strict"}}
+	handler := New(manager, nil, WithZoneSetup(setup))
+
+	rec := request(handler, http.MethodGet, "/_/api/zones/example.com/setup", readToken, "")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"upload_certificate"`) {
+		t.Fatalf("GET setup = %d %s", rec.Code, rec.Body)
+	}
+	if rec := request(handler, http.MethodPost, "/_/api/zones/example.com/setup", readToken, ""); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"set_strict"`) {
+		t.Fatalf("POST setup = %d %s", rec.Code, rec.Body)
+	}
+	if rec := request(handler, http.MethodPost, "/_/api/zones/other.dev/setup", readToken, ""); rec.Code != http.StatusNotFound {
+		t.Fatalf("unserved zone = %d", rec.Code)
+	}
+	for _, z := range setup.zones {
+		if z != "example.com" {
+			t.Fatalf("setup ran for %q", z)
+		}
+	}
+
+	setup.applyErr = errors.New("Full (strict) failed: API error 403")
+	rec = request(handler, http.MethodPost, "/_/api/zones/example.com/setup", readToken, "")
+	if rec.Code != http.StatusBadGateway || !strings.Contains(rec.Body.String(), `"report"`) || !strings.Contains(rec.Body.String(), "403") {
+		t.Fatalf("failed apply = %d %s", rec.Code, rec.Body)
+	}
+	if rec := request(New(manager, nil), http.MethodGet, "/_/api/zones/example.com/setup", readToken, ""); rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("setup without a service = %d", rec.Code)
 	}
 }

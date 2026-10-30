@@ -21,6 +21,7 @@ import (
 
 	"github.com/ozal-project/ozal/internal/config"
 	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/originauth"
 )
 
 // ARCH-010 A: the documented direct profile needs no DNS-provider token,
@@ -149,7 +150,7 @@ func TestManagedTLSNeverExemptsACMEClientAuthentication(t *testing.T) {
 	}
 	cfg := &config.Config{TLS: config.TLS{OriginClientCAFile: path}}
 	recorder := &events.Recorder{}
-	tlsConfig, handler, err := managedTLSConfig(cfg, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }), recorder, unusedCertificateProvider{})
+	tlsConfig, handler, err := managedTLSConfig(cfg, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }), recorder, unusedCertificateProvider{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,5 +170,64 @@ func TestManagedTLSNeverExemptsACMEClientAuthentication(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("request without verified client: %d", rec.Code)
+	}
+}
+
+// EDGE-009: the listener and the zone setup share one trust. The proxy
+// certificate created after startup passes the listener's policy at once,
+// and only when the edge checks client certificates at all.
+func TestOriginIdentitySharesTheListenerTrust(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "configured origin CA"}, IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour)}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "origin-ca.crt")
+	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{TLS: config.TLS{OriginClientCAFile: path, DNS01: &config.DNS01{StateDir: dir}}}
+	trust, identity, err := originIdentity(cfg)
+	if err != nil || trust == nil || identity == nil {
+		t.Fatalf("originIdentity: %v %v %v", trust, identity, err)
+	}
+	tlsConfig, _, err := managedTLSConfig(cfg, http.NotFoundHandler(), &events.Recorder{}, unusedCertificateProvider{}, trust)
+	if err != nil {
+		t.Fatal(err)
+	}
+	strict, err := tlsConfig.GetConfigForClient(&tls.ClientHelloInfo{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	certPEM, _, err := originauth.NewIdentity(t.TempDir(), nil).Ensure(time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	foreign := originauth.ParseCertificates(certPEM)
+	if strict.VerifyConnection(tls.ConnectionState{PeerCertificates: foreign}) == nil {
+		t.Fatal("another edge's identity passed")
+	}
+	ours, _, err := identity.Ensure(time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := strict.VerifyConnection(tls.ConnectionState{PeerCertificates: originauth.ParseCertificates(ours)}); err != nil {
+		t.Fatalf("the edge's own identity was refused after Ensure: %v", err)
+	}
+	// Restarted: the identity is read back and trusted before any request.
+	trust2, _, err := originIdentity(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !trust2.Trusts(originauth.ParseCertificates(ours), time.Now()) {
+		t.Fatal("the identity is not trusted after a restart")
+	}
+	if trust, identity, err := originIdentity(&config.Config{TLS: config.TLS{DNS01: &config.DNS01{StateDir: dir}}}); trust != nil || identity != nil || err != nil {
+		t.Fatal("an identity was offered by an edge that checks no client certificates")
 	}
 }

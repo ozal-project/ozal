@@ -110,8 +110,8 @@ export type Report = {
   scope: "authorization_only" | "gate_only" | "public_route";
 };
 
-const boundedSignal = (signal?: AbortSignal) => {
-  const timeout = AbortSignal.timeout(15_000);
+const boundedSignal = (signal?: AbortSignal, ms = 15_000) => {
+  const timeout = AbortSignal.timeout(ms);
   return signal ? AbortSignal.any([signal, timeout]) : timeout;
 };
 
@@ -218,13 +218,13 @@ export async function fetchPeople(signal?: AbortSignal): Promise<People> {
   return { enabled: body.enabled, users: body.users ?? [], protected_hosts: body.protected_hosts ?? [] };
 }
 
-async function adminPost<T>(token: string, url: string, payload?: unknown, signal?: AbortSignal): Promise<T> {
+async function adminPost<T>(token: string, url: string, payload?: unknown, signal?: AbortSignal, timeoutMs?: number): Promise<T> {
   const res = await fetch(url, {
     method: "POST",
     cache: "no-store",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: payload === undefined ? undefined : JSON.stringify(payload),
-    signal: boundedSignal(signal),
+    signal: boundedSignal(signal, timeoutMs),
   });
   const body = await res.json().catch(() => ({}));
   if (res.status === 401) throw new Error("The admin token was rejected.");
@@ -347,9 +347,15 @@ export type Zone = {
   challenge: { name: string; target: string; delegated: boolean };
   hosts: string[];
 };
-export type Zones = { config_sha256: string; available: boolean; zones: Zone[] };
+export type Zones = { config_sha256: string; available: boolean; setup?: boolean; provider?: string; zones: Zone[] };
 export type ZoneCheck = { zone: string; state?: ZoneState; challenge: { state: CheckState; detail: string; record?: DNSRecord } };
 export const fetchZones = (signal?: AbortSignal) => getJSON<Zones>("/_/api/zones", signal);
+// EDGE-009: what a domain still needs at its DNS provider and proxy.
+export type SetupStepState = "done" | "todo" | "blocked" | "unknown" | "not_needed";
+export type SetupStep = { name: "challenge" | "encryption" | "origin_pull"; state: SetupStepState; action?: string; title: string; detail: string; manual?: string };
+export type ZoneSetup = { zone: string; provider?: string; ready: boolean; steps: SetupStep[]; error?: string; applied?: string[] };
+export const fetchZoneSetup = (name: string, signal?: AbortSignal) => getJSON<ZoneSetup>(`/_/api/zones/${encodeURIComponent(name)}/setup`, signal);
+export const applyZoneSetup = (token: string, name: string) => adminPost<ZoneSetup>(token, `/_/api/zones/${encodeURIComponent(name)}/setup`, undefined, undefined, 75_000);
 export const addZone = (token: string, name: string, expected: string) => adminPost<{ config_sha256: string }>(token, "/_/api/zones", { name, expected });
 export const checkZone = (token: string, name: string) => adminPost<ZoneCheck>(token, `/_/api/zones/${encodeURIComponent(name)}/check`);
 export const renewZone = (token: string, name: string) => adminPost<{ status: string }>(token, `/_/api/zones/${encodeURIComponent(name)}/renew`);
