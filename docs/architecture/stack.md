@@ -34,7 +34,8 @@ ni mantener una tabla de estado de tareas en este archivo.
 
 La consola se construye en `internal/admin/console` y se sirve con embed.FS.
 Vite genera scripts externos compatibles con la CSP del proyecto. El token
-administrativo vive en memoria de la pestaña. SvelteKit/SSR no son necesarios
+administrativo vive en memoria de la pestaña; tras una recarga lo devuelve el
+edge desde una cookie `HttpOnly` limitada a su endpoint de reanudación. SvelteKit/SSR no son necesarios
 para esta consola; React con Vite sería técnicamente posible, pero no hay una
 necesidad demostrada que justifique migrar.
 

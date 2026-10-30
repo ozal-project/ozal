@@ -108,8 +108,11 @@ la credencial completa del host y no se limitan.
 
 - El enlace sirve una vez durante cinco minutos. Su fragmento se elimina de
   la URL al abrirlo y se intercambia por una credencial de quince minutos.
-- La credencial activa vive solo en la memoria de esa pestaña. Recargarla,
-  cerrarla, bloquearla o reiniciar el proceso termina esa comodidad de acceso.
+- La credencial activa vive en la memoria de esa pestaña. Recargar la página
+  no cierra la sesión: el navegador guarda la misma credencial en una cookie
+  `HttpOnly` y `SameSite=Strict` que solo recibe `POST /_/api/operators/resume`,
+  y ese endpoint exige el mismo origen de la consola y no alarga la sesión.
+  Cerrar sesión, revocarla, que venza o reiniciar el proceso la terminan.
 - `console list` muestra IDs, nombres y vencimientos; `console revoke -id ID`
   revoca un enlace pendiente o su sesión activa, conservando el mismo ID.
 - Las mutaciones llevan actor `operator:<nombre>`. Se registran emisión,

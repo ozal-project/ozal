@@ -158,12 +158,11 @@ try {
   assert.deepEqual((await admins()).find((a) => a.email === "bea@acme.dev").tools, ["people"]);
 
   step = "reset another administrator's passkeys";
-  // A reload ends the tab's session; signing in again returns to the same page.
+  // A reload keeps the session: the edge resumes it from its HttpOnly cookie.
   await laptop.page.reload();
-  await signedOut(laptop.page);
-  await laptop.page.getByRole("button", { name: "Sign in with your passkey" }).click();
   await laptop.page.locator("#main-content h1", { hasText: "People" }).waitFor();
-  assert.equal(new URL(laptop.page.url()).pathname, "/administrators", "sign-in did not return to the same view");
+  assert.equal(new URL(laptop.page.url()).pathname, "/administrators", "the reload did not keep the session on the same view");
+  assert.equal(await laptop.page.evaluate(() => document.cookie), "", "the session cookie must not be readable by page script");
   await laptop.page.locator("li", { hasText: "bea@acme.dev" }).getByRole("button", { name: "Reset passkeys" }).click();
   const recovery = (await laptop.page.getByText("Recovery link for bea@acme.dev").locator("..").locator("code").textContent()).trim();
   step = "recovery link on a new device";

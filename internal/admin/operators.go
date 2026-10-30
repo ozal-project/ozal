@@ -242,6 +242,69 @@ func (h *Handler) registerOperators() {
 	h.mux.HandleFunc("DELETE /_/api/operators/{id}", h.requireLocal(h.revokeOperator))
 	h.mux.HandleFunc("POST /_/api/operators/logout", h.requireBearer(h.logoutOperator))
 	h.mux.HandleFunc("POST /_/api/operators/renew", h.requireBearer(h.renewOperator))
+	h.mux.HandleFunc("POST "+resumePath, h.resumeOperator)
+}
+
+// A reload must not sign the person out, yet the session token must stay out
+// of anything page script can read. The token therefore also travels in an
+// HttpOnly, SameSite=Strict cookie that only the resume endpoint receives; a
+// reloaded tab asks that endpoint, from the console's own origin, for the
+// session back. Every other API keeps authenticating the bearer token.
+const (
+	resumeCookie = "ozal_console_session"
+	resumePath   = "/_/api/operators/resume"
+)
+
+// rememberSession lets a reload of this browser resume the session until it
+// could at most last: its absolute limit when it slides, else its expiry. The
+// server still checks the session on every resume.
+func (h *Handler) rememberSession(w http.ResponseWriter, r *http.Request, token string, g operatorGrant) {
+	until := g.Expires
+	if g.idle > 0 {
+		until = g.limit
+	}
+	seconds := int(until.Sub(h.operators.now()).Seconds())
+	if seconds <= 0 {
+		return
+	}
+	http.SetCookie(w, &http.Cookie{Name: resumeCookie, Value: token, Path: resumePath, MaxAge: seconds, HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteStrictMode})
+}
+
+func forgetSession(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{Name: resumeCookie, Value: "", Path: resumePath, MaxAge: -1, HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteStrictMode})
+}
+
+// sameOrigin reports whether a browser request comes from the console page
+// itself. Browsers always send Origin on a cross-site POST, and page script
+// cannot forge it.
+func sameOrigin(r *http.Request) bool {
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	return r.Header.Get("Origin") == scheme+"://"+r.Host
+}
+
+// resumeOperator hands a reloaded tab its still-valid session back. It does
+// not extend the session: only activity in the console renews it.
+func (h *Handler) resumeOperator(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	if !sameOrigin(r) {
+		writeError(w, 403, "resume the session from this private console origin")
+		return
+	}
+	cookie, err := r.Cookie(resumeCookie)
+	if err != nil || cookie.Value == "" || len(cookie.Value) > 128 {
+		writeError(w, 401, "no session to resume")
+		return
+	}
+	g, ok := h.operators.authenticate(cookie.Value)
+	if !ok {
+		forgetSession(w, r)
+		writeError(w, 401, "the session ended; sign in again")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"token": cookie.Value, "name": g.Name, "id": g.ID, "expires": g.Expires, "tools": g.Tools, "renewable": g.idle > 0, "passkey": h.operators.account(g.ID) != ""})
 }
 
 // operatorSession describes only the credential presented by this request.
@@ -307,11 +370,7 @@ func (h *Handler) issueOperator(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 201, map[string]any{"token": token, "id": g.ID, "expires": g.Expires})
 }
 func (h *Handler) exchangeOperator(w http.ResponseWriter, r *http.Request) {
-	scheme := "http"
-	if r.TLS != nil {
-		scheme = "https"
-	}
-	if r.Header.Get("Origin") != scheme+"://"+r.Host {
+	if !sameOrigin(r) {
 		writeError(w, 403, "open the login on this private console origin")
 		return
 	}
@@ -328,6 +387,7 @@ func (h *Handler) exchangeOperator(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.emit(events.Event{Type: events.Type("operator.signed_in"), Actor: "operator:" + g.Name, Code: g.ID})
+	h.rememberSession(w, r, token, g)
 	writeJSON(w, 200, map[string]any{"token": token, "name": g.Name, "id": g.ID, "expires": g.Expires, "tools": g.Tools})
 }
 func (h *Handler) listOperators(w http.ResponseWriter, r *http.Request) {
@@ -353,6 +413,7 @@ func (h *Handler) logoutOperator(w http.ResponseWriter, r *http.Request) {
 		h.operators.revoke(g.ID)
 		h.emit(events.Event{Type: events.Type("operator.signed_out"), Actor: "operator:" + g.Name, Code: g.ID})
 	}
+	forgetSession(w, r)
 	writeJSON(w, 200, map[string]bool{"signed_out": true})
 }
 func (h *Handler) withOperator(r *http.Request) (*http.Request, bool) {

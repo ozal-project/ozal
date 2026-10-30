@@ -12,6 +12,21 @@ export function takeHostLink(): HostLink | null {
   return link;
 }
 
+export type ResumedSession = { token: string; name: string; expires: string; tools: string[]; renewable: boolean; passkey: boolean };
+
+// resumeSession asks the edge for this browser's session after a reload. The
+// edge reads it from an HttpOnly cookie that page script cannot see; null means
+// there is no live session and the sign-in screen is the right answer.
+export async function resumeSession(): Promise<ResumedSession | null> {
+  try {
+    const res = await fetch("/_/api/operators/resume", { method: "POST", cache: "no-store", credentials: "same-origin", signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 export async function exchangeHostLogin(token: string): Promise<{ token: string; name: string; expires: string; tools: string[] }> {
   const res = await fetch("/_/api/operators/exchange", {
     method: "POST", headers: { "Content-Type": "application/json" },

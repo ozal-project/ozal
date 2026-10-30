@@ -1,5 +1,7 @@
 // The operator credential, shared by the console pages that change state. It
-// lives only in this tab's memory: never storage, cookies or the URL.
+// lives in this tab's memory, never in storage or the URL. A reload gets it
+// back from the edge, which keeps it in an HttpOnly cookie that only its
+// resume endpoint receives (see resumeSession).
 // `tools` are the areas the host login granted; a pasted admin token is the
 // host's own credential and carries every tool.
 export const tools = [

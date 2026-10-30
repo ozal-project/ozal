@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { admin, signOut, startSession } from "$lib/adminToken.svelte";
-  import { exchangeHostLogin, takeHostLink } from "$lib/operatorLogin";
+  import { exchangeHostLogin, resumeSession, takeHostLink } from "$lib/operatorLogin";
   import { renewSession } from "$lib/passkey";
   import AuthScreen from "$lib/auth/AuthScreen.svelte";
 
@@ -19,6 +19,11 @@
       void exchangeHostLogin(link.token).then((session) => {
         startSession(session, false);
       }).catch((e) => { admin.notice = (e as Error).message; }).finally(() => { admin.ready = true; });
+    } else if (!admin.token) {
+      // A reload keeps the session: the edge hands it back if it is still alive.
+      void resumeSession().then((session) => {
+        if (session && !admin.token) startSession(session, session.passkey);
+      }).finally(() => { admin.ready = true; });
     } else admin.ready = true;
   }
 

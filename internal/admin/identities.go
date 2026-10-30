@@ -553,7 +553,7 @@ func (h *Handler) enrolFinish(w http.ResponseWriter, r *http.Request) {
 		h.devices.revokeAccount(account.ID)
 	}
 	h.emit(events.Event{Type: events.Type("admin.passkey_registered"), Actor: "admin:" + account.Email, Code: account.ID})
-	h.startAdminSession(w, account, credential.ID)
+	h.startAdminSession(w, r, account, credential.ID)
 }
 
 func (h *Handler) adminLoginBegin(w http.ResponseWriter, r *http.Request) {
@@ -622,12 +622,12 @@ func (h *Handler) adminLoginFinish(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "that passkey is no longer active")
 		return
 	}
-	h.startAdminSession(w, found, credential.ID)
+	h.startAdminSession(w, r, found, credential.ID)
 }
 
-// startAdminSession turns a verified administrator into the same short,
-// memory-only operator session the host login produces.
-func (h *Handler) startAdminSession(w http.ResponseWriter, account adminid.Account, credentialID []byte) {
+// startAdminSession turns a verified administrator into the same short
+// operator session the host login produces.
+func (h *Handler) startAdminSession(w http.ResponseWriter, r *http.Request, account adminid.Account, credentialID []byte) {
 	token, grant, err := h.operators.issueSliding(account.Name, account.Tools...)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "the session could not be opened")
@@ -635,6 +635,7 @@ func (h *Handler) startAdminSession(w http.ResponseWriter, account adminid.Accou
 	}
 	h.operators.bind(grant.ID, account.ID, credentialID)
 	h.emit(events.Event{Type: events.Type("operator.signed_in"), Actor: "admin:" + account.Email, Code: grant.ID, Reason: "passkey"})
+	h.rememberSession(w, r, token, grant)
 	writeJSON(w, http.StatusOK, map[string]any{"token": token, "name": grant.Name, "id": grant.ID, "expires": grant.Expires, "tools": grant.Tools, "renewable": true})
 }
 
@@ -912,7 +913,7 @@ func (h *Handler) finishDevice(w http.ResponseWriter, r *http.Request, rp *webau
 		return
 	}
 	h.emit(events.Event{Type: events.Type("admin.passkey_added"), Actor: "admin:" + account.Email, Reason: "another browser"})
-	h.startAdminSession(w, account, credential.ID)
+	h.startAdminSession(w, r, account, credential.ID)
 }
 
 type passkeyView struct {
