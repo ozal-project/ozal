@@ -306,6 +306,11 @@ type Admin struct {
 	// file mode (0600) is its credential: a request on it acts as the host
 	// operator, needs no bearer and may run host-only operations.
 	Socket string `json:"socket,omitempty"`
+	// SocketGroup optionally opens Socket to one system group (mode 0660):
+	// its members act as the host operator without sudo, and the audit
+	// names each one by the uid the kernel reports. The service account
+	// must belong to the group (systemd SupplementaryGroups).
+	SocketGroup string `json:"socket_group,omitempty"`
 }
 
 // Notify configures outbound notifications (NTF-001). Channels are opt-in:
@@ -502,6 +507,9 @@ func Validate(cfg Config) (*Config, error) {
 		return nil, fmt.Errorf("config: %w", err)
 	}
 	if err := validateAdminSocket(cfg.Admin.Socket); err != nil {
+		return nil, fmt.Errorf("config: %w", err)
+	}
+	if err := validateAdminSocketGroup(cfg.Admin.Socket, cfg.Admin.SocketGroup); err != nil {
 		return nil, fmt.Errorf("config: %w", err)
 	}
 	if len(cfg.Routes) == 0 {

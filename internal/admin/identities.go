@@ -325,7 +325,7 @@ func (h *Handler) issueEnrolment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "enrolment could not be issued")
 		return
 	}
-	h.emit(events.Event{Type: events.Type("admin.enrolment_issued"), Actor: "local", Code: req.Kind})
+	h.emit(events.Event{Type: events.Type("admin.enrolment_issued"), Actor: localActor(r), Code: req.Kind})
 	writeJSON(w, http.StatusCreated, map[string]any{"token": token, "expires": expires})
 }
 
@@ -1057,7 +1057,7 @@ func (h *Handler) actorOf(r *http.Request) string {
 	if grant, ok := r.Context().Value(operatorKey{}).(operatorGrant); ok {
 		return "operator:" + grant.Name
 	}
-	return "local"
+	return localActor(r)
 }
 
 func (h *Handler) setAdminDisabled(disabled bool) http.HandlerFunc {

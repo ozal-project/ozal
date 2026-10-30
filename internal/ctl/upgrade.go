@@ -24,6 +24,9 @@ type Remote interface {
 	// returns its exit status; 255 means SSH itself failed. It returns an
 	// error only when no terminal is available.
 	Terminal(ctx context.Context, command string) (int, error)
+	// Stream runs a command without a terminal, its output going to the
+	// operator, and returns its exit status; 255 means SSH itself failed.
+	Stream(ctx context.Context, command string) (int, error)
 }
 
 // Binary is a built Ozal executable.

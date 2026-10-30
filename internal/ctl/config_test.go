@@ -317,3 +317,8 @@ func TestConfigRootScriptRefusesBeforeChangingAnything(t *testing.T) {
 		}
 	}
 }
+
+func (f *configRemote) Stream(_ context.Context, command string) (int, error) {
+	f.ran = append(f.ran, "STREAM "+command)
+	return 0, nil
+}

@@ -190,6 +190,11 @@ func (f *fakeRemote) Run(_ context.Context, command string, stdin io.Reader) (st
 	return "", nil
 }
 
+func (f *fakeRemote) Stream(_ context.Context, command string) (int, error) {
+	f.ran = append(f.ran, "STREAM "+command)
+	return f.code, nil
+}
+
 func (f *fakeRemote) Terminal(_ context.Context, command string) (int, error) {
 	f.ran = append(f.ran, "TERMINAL "+command)
 	if !f.terminal {
@@ -415,5 +420,44 @@ func TestAliasOldBinaryAndMissingTerminal(t *testing.T) {
 	}
 	if err := Alias(context.Background(), io.Discard, &fakeRemote{terminal: true, code: 1}, aliasRequest(true)); err == nil {
 		t.Fatal("a failing alias must be an error")
+	}
+}
+
+// With edge.socket_group the SSH user opens the socket itself: no sudo, no
+// terminal, and a guard that stops before running when it cannot.
+func TestAliasWithSocketGroupNeedsNoSudoOrTerminal(t *testing.T) {
+	req := aliasRequest(true)
+	req.Target.Edge.SocketGroup = "ozal-admin"
+	r := &fakeRemote{} // no terminal available
+	if err := Alias(context.Background(), io.Discard, r, req); err != nil {
+		t.Fatal(err)
+	}
+	e := req.Target.Edge
+	if len(r.ran) != 1 || !strings.HasPrefix(r.ran[0], "STREAM ") || strings.Contains(r.ran[0], "sudo") {
+		t.Fatalf("ran %q", r.ran)
+	}
+	guard := "test -r " + Quote(e.Socket) + " -a -w " + Quote(e.Socket) + " || exit 4; "
+	if !strings.Contains(r.ran[0], guard+Quote(e.Binary)+" 'app' 'alias' '-admin' 'unix:"+e.Socket+"'") {
+		t.Fatalf("socket guard missing or misplaced: %s", r.ran[0])
+	}
+	r = &fakeRemote{code: ExitNoSocketAccess}
+	if err := Alias(context.Background(), io.Discard, r, req); err == nil || !strings.Contains(err.Error(), "usermod -aG ozal-admin") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestTargetSocketGroupNeedsSocketAndPlainName(t *testing.T) {
+	target := goodTarget()
+	target.Edge.SocketGroup = "ozal-admin"
+	if err := target.Validate(); err == nil {
+		t.Fatal("socket_group without socket accepted")
+	}
+	target.Edge.Socket = "/run/ozal/admin.sock"
+	if err := target.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	target.Edge.SocketGroup = "x; rm -rf /"
+	if err := target.Validate(); err == nil {
+		t.Fatal("unsafe group name accepted")
 	}
 }

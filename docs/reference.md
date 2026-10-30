@@ -89,6 +89,7 @@ crea tu archivo local y no lo subas a Git. La validación rechaza claves descono
 | `listen` | Listener HTTP; se ignora cuando TLS usa los listeners públicos fijos |
 | `admin.listen` | Administración loopback; predeterminado `127.0.0.1:9090` |
 | `admin.socket` | Socket Unix privado; su permiso de archivo concede autoridad local |
+| `admin.socket_group` | Grupo del sistema con acceso al socket (modo `0660`); sus miembros operan sin `sudo` y se auditan como `local:<usuario>`. Requiere `admin.socket`; rechaza `root`/`wheel` y falla al arrancar si el servicio no pertenece al grupo o el directorio no es recorrible |
 | `admin.token` | Referencia de credencial administrativa completa |
 | `admin.sites_token` | Referencia de publicador limitado de sitios |
 | `runtime_file` | Proyección operativa del servicio: rutas, proyectos y GitHub |

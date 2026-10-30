@@ -53,6 +53,10 @@ type Edge struct {
 	// Socket is the edge's admin Unix socket. `edge config` reads the
 	// digest in effect there as root, with no token.
 	Socket string `json:"socket,omitempty"`
+	// SocketGroup says the SSH user belongs to the edge's admin.socket_group:
+	// API-backed commands (app alias, project trust) then open Socket as that
+	// user, with no sudo and no terminal. Leave it empty to keep `sudo -u`.
+	SocketGroup string `json:"socket_group,omitempty"`
 	// Admin is the edge's loopback admin listener (host:port on the edge);
 	// `site publish` reaches it through an SSH tunnel.
 	Admin string `json:"admin,omitempty"`
@@ -113,6 +117,11 @@ func (t Target) Validate() error {
 	if t.Edge.Socket != "" {
 		if err := plainAbsolute(t.Edge.Socket); err != nil {
 			return fmt.Errorf("edge.socket: %w", err)
+		}
+	}
+	if t.Edge.SocketGroup != "" {
+		if t.Edge.Socket == "" || !account.MatchString(t.Edge.SocketGroup) {
+			return errors.New("edge.socket_group needs edge.socket and a plain group name")
 		}
 	}
 	if t.Edge.Admin != "" {

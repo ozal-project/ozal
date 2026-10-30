@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -188,6 +189,27 @@ func validateAdminSocket(path string) error {
 	}
 	if len(path) > maxSocketPath {
 		return fmt.Errorf("admin.socket is longer than %d bytes", maxSocketPath)
+	}
+	return nil
+}
+
+var socketGroupName = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
+
+// validateAdminSocketGroup accepts no group, or a plain system group name
+// for an existing socket. Root's group would hand the host operator to
+// every account in it, so it is refused by name.
+func validateAdminSocketGroup(socket, group string) error {
+	if group == "" {
+		return nil
+	}
+	if socket == "" {
+		return fmt.Errorf("admin.socket_group requires admin.socket")
+	}
+	if !socketGroupName.MatchString(group) {
+		return fmt.Errorf("admin.socket_group must be a system group name (lowercase letters, digits, _ or -)")
+	}
+	if group == "root" || group == "wheel" {
+		return fmt.Errorf("admin.socket_group must be a dedicated group, not %q", group)
 	}
 	return nil
 }

@@ -366,7 +366,7 @@ func (h *Handler) issueOperator(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 503, "host login could not be issued")
 		return
 	}
-	h.emit(events.Event{Type: events.Type("operator.login_issued"), Actor: "local", Host: g.Name, Code: g.ID, Reason: "tools: " + strings.Join(g.Tools, ",")})
+	h.emit(events.Event{Type: events.Type("operator.login_issued"), Actor: localActor(r), Host: g.Name, Code: g.ID, Reason: "tools: " + strings.Join(g.Tools, ",")})
 	writeJSON(w, 201, map[string]any{"token": token, "id": g.ID, "expires": g.Expires})
 }
 func (h *Handler) exchangeOperator(w http.ResponseWriter, r *http.Request) {
@@ -405,7 +405,7 @@ func (h *Handler) revokeOperator(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.operators.revoke(r.PathValue("id"))
-	h.emit(events.Event{Type: events.Type("operator.revoked"), Actor: "local", Code: r.PathValue("id")})
+	h.emit(events.Event{Type: events.Type("operator.revoked"), Actor: localActor(r), Code: r.PathValue("id")})
 	writeJSON(w, 200, map[string]bool{"revoked": true})
 }
 func (h *Handler) logoutOperator(w http.ResponseWriter, r *http.Request) {

@@ -19,6 +19,10 @@ type trustRemote struct {
 func (r *trustRemote) Run(context.Context, string, io.Reader) (string, error) {
 	return "", errors.New("unexpected non-terminal operation")
 }
+func (r *trustRemote) Stream(_ context.Context, command string) (int, error) {
+	r.command = "STREAM " + command
+	return r.code, r.err
+}
 func (r *trustRemote) Terminal(_ context.Context, command string) (int, error) {
 	r.command = command
 	return r.code, r.err

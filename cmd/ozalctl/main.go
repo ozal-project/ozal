@@ -56,8 +56,10 @@ const usage = `usage:
       route with the reviewed digest, creates the proxied DNS record with its
       own provider credential (dns.cloudflare) and waits until dns,
       certificate and reach are ok. The previous hostname is never changed and
-      an existing record is never replaced. Runs "ozal app alias" on the edge as
-      its service account through sudo, so it needs your terminal.
+      an existing record is never replaced. Runs "ozal app alias" on the edge
+      against its admin socket: as your SSH user when the target sets
+      edge.socket_group, otherwise as the service account through sudo (your
+      terminal).
 
   ozalctl site cutover -host HOST -to IP -cloudflare-token FILE [-dir DIST] [-apply]
   ozalctl site cutover -host HOST -back EVIDENCE -cloudflare-token FILE [-apply]

@@ -404,6 +404,11 @@ func startAdmin(cfg *config.Config, manager *routemanager.Manager, sink events.S
 			listener.Close()
 			return nil, err
 		}
+		if err := shareAdminSocket(cfg.Admin.Socket, cfg.Admin.SocketGroup); err != nil {
+			socket.Close()
+			listener.Close()
+			return nil, err
+		}
 		go func() {
 			log.Printf("ozal admin listening on unix:%s", cfg.Admin.Socket)
 			if err := server.Serve(socket); err != nil && !errors.Is(err, http.ErrServerClosed) {

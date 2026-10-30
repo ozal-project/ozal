@@ -69,6 +69,21 @@ func (s Remote) Terminal(ctx context.Context, command string) (int, error) {
 	return 0, nil
 }
 
+// Stream implements ctl.Remote: no TTY, so no prompt can appear and it
+// works from scripts; the remote output goes to the operator's terminal.
+func (s Remote) Stream(ctx context.Context, command string) (int, error) {
+	cmd := exec.CommandContext(ctx, "ssh", append(s.base("-o", "BatchMode=yes"), command)...)
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		var exit *exec.ExitError
+		if errors.As(err, &exit) {
+			return exit.ExitCode(), nil
+		}
+		return 255, nil
+	}
+	return 0, nil
+}
+
 // GitBuilder builds a committed ref of a Ozal checkout for linux/amd64.
 // It builds from `git archive`, so uncommitted files never reach an edge.
 type GitBuilder struct {

@@ -30,11 +30,7 @@ func ProjectTrustCommand(e Edge, r ProjectTrustRequest) string {
 		backup := path.Join(path.Dir(e.StateDB), "project-trust-"+r.Project+"-"+r.Stamp+".json")
 		args = append(args, "-apply", "-backup", backup)
 	}
-	for i := range args {
-		args[i] = Quote(args[i])
-	}
-	return fmt.Sprintf("grep -qaF 'ozal project trust' %s || exit 3; sudo -u %s %s %s",
-		Quote(e.Binary), Quote(e.ServiceUser), Quote(e.Binary), strings.Join(args, " "))
+	return socketCommand(e, "ozal project trust", 3, args)
 }
 
 func ProjectTrust(ctx context.Context, out io.Writer, remote Remote, r ProjectTrustRequest) error {
@@ -49,9 +45,9 @@ func ProjectTrust(ctx context.Context, out io.Writer, remote Remote, r ProjectTr
 		return errors.New("a safe backup timestamp is required")
 	}
 	fmt.Fprintf(out, "==> %s: migrate GitHub publisher of %s (apply=%t)\n", r.Name, r.Project, r.Apply)
-	code, err := remote.Terminal(ctx, ProjectTrustCommand(e, r))
+	code, err := runOnSocket(ctx, remote, e, ProjectTrustCommand(e, r))
 	if err != nil {
-		return fmt.Errorf("%w: run from your terminal so sudo can ask for the password", err)
+		return err
 	}
 	if code == 3 {
 		return errors.New("the edge has no `project trust` yet: run `ozalctl edge upgrade -apply` first; nothing changed")

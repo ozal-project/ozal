@@ -568,6 +568,38 @@ ozalctl site cutover -host HOST -to IP -cloudflare-token FILE [-dir DIST] [-appl
 ozalctl site cutover -host HOST -back EVIDENCE -cloudflare-token FILE [-apply]
 ```
 
+### Operar sin `sudo`: grupo del socket
+
+Por defecto `app alias` y `project trust` corren en el edge como la cuenta de
+servicio (`sudo -u`), así que piden tu contraseña y una terminal. Con
+`admin.socket_group` el socket admin queda en modo `0660` para un grupo
+dedicado: tu usuario SSH, si pertenece al grupo, abre el socket y los
+comandos corren sin `sudo` ni TTY (sirven también desde scripts). La
+auditoría registra `local:<usuario>` con el uid que informa el kernel; la
+cuenta de servicio sigue figurando como `local`. Pertenecer al grupo equivale
+a la autoridad del host (enrolar conectores, recuperar administradores):
+dáselo sólo a quien ya tendría `sudo` en el edge.
+
+```sh
+sudo groupadd --system ozal-admin
+sudo usermod -aG ozal-admin deploy        # tu usuario SSH; vuelve a iniciar sesión
+sudo systemctl edit ozal                  # drop-in:
+#   [Service]
+#   SupplementaryGroups=ozal-admin
+#   RuntimeDirectoryMode=0711
+# config: "admin": {"socket": "/run/ozal/admin.sock", "socket_group": "ozal-admin"}
+sudo systemctl restart ozal
+```
+
+`RuntimeDirectoryMode=0711` deja recorrer `/run/ozal` sin listarlo; el socket
+mismo sigue cerrado a quien no está en el grupo. El servicio no arranca si el
+grupo no existe, si su cuenta no pertenece a él o si el directorio del socket
+no es recorrible: nunca queda un socket que parece compartido y no lo está.
+En el archivo de targets agrega `"socket_group": "ozal-admin"` al `edge`;
+si tu usuario todavía no puede abrir el socket, `ozalctl` se detiene antes de
+ejecutar nada e indica el `usermod`. Instalar binarios, config y unidades
+(`edge upgrade`, `edge config`, `pair-upgrade`) sigue necesitando root.
+
 Upgrade construye un ref comprometido y usa el procedimiento anterior. Config
 requiere una base con `runtime_file` y sin rutas/proyectos/GitHub: conserva
 la proyección operativa existente, valida como el servicio y verifica el digest
@@ -595,9 +627,9 @@ Como `app alias`, requiere primero un `edge upgrade` con un binario que incluya
 el subcomando; la guardia se niega ante binarios anteriores sin arrancarlos.
 
 `app alias` da a un sitio público existente un segundo hostname sin tocar el
-primero. `ozalctl` ejecuta `ozal app alias` en el edge como su cuenta de
-servicio (`sudo`, con tu terminal), así que usa el socket admin local y no hay
-token nuevo en tu máquina. El edge guarda la ruta con el digest revisado, crea
+primero. `ozalctl` ejecuta `ozal app alias` en el edge contra el socket admin
+local (como la cuenta de servicio con `sudo`, o como tu usuario con
+`socket_group`), así que no hay token nuevo en tu máquina. El edge guarda la ruta con el digest revisado, crea
 el registro A proxied con su propia credencial (`dns.cloudflare.token`, un token
 de Zone DNS Edit; puede ser el archivo que ya usa `tls.dns01`) y espera a que
 `dns`, `certificate` y `reach` estén en `ok`. Nunca reemplaza un registro

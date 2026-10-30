@@ -692,3 +692,31 @@ func TestValidateAdminSocket(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateAdminSocketGroup(t *testing.T) {
+	absolute, err := filepath.Abs(filepath.Join("run", "ozal", "admin.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		socket, group string
+		ok            bool
+	}{
+		{absolute, "", true},
+		{absolute, "ozal-admin", true},
+		{"", "ozal-admin", false},  // a group without a socket opens nothing
+		{absolute, "root", false},  // never hand the operator to root's group
+		{absolute, "wheel", false}, // or to every sudoer
+		{absolute, "Ozal Admin", false},
+		{absolute, "../etc", false},
+	} {
+		cfg := Config{
+			Listen: ":8888",
+			Admin:  Admin{Socket: c.socket, SocketGroup: c.group},
+			Routes: []Route{{Host: "app.localhost", Target: "http://localhost:9000"}},
+		}
+		if _, err := Validate(cfg); (err == nil) != c.ok {
+			t.Errorf("socket %q group %q: err = %v, want ok=%v", c.socket, c.group, err, c.ok)
+		}
+	}
+}

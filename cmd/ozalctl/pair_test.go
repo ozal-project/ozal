@@ -42,3 +42,8 @@ func TestPairStatusToleratesLegacy404OnlyBeforeCandidateAPIIsRunning(t *testing.
 		})
 	}
 }
+
+func (r *pairRemoteStub) Stream(_ context.Context, command string) (int, error) {
+	r.terminal = command
+	return 0, nil
+}

@@ -560,7 +560,7 @@ func actor(r *http.Request) string {
 		return "operator:" + operator.Name
 	}
 	if isLocal(r) {
-		return "local"
+		return localActor(r)
 	}
 	if r.RemoteAddr == "" {
 		return "unknown"
