@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { accessSummary, attention, certificateView, changes, headline } from "./overview.ts";
+import { accessScope, accessSummary, applications, attention, certificateView, changes, headline, streamNotices } from "./overview.ts";
 import type { AccessEvent, RouteStatus, StatusResponse } from "./api.ts";
 
 const route = (over: Partial<RouteStatus> = {}): RouteStatus => ({
@@ -131,4 +131,39 @@ test("an expired certificate says so", () => {
   const view = certificateView(cert({ valid: false }), new Date("2027-02-01T00:00:00Z"));
   assert.match(view!.expires, /^expired on /);
   assert.equal(view?.tone, "bad");
+});
+
+test("the application list puts what is down first and leaves sites to the Sites list", () => {
+  const rows = applications([
+    route({ host: "wiki.example.com:8443", access: "Protected" }),
+    route({ host: "blog.example.com", is_static: true }),
+    route({ host: "reports.example.com", state_class: "unhealthy" }),
+    route({ host: "api.example.com", state_class: "unknown" }),
+  ]);
+  assert.deepEqual(rows.map((r) => [r.name, r.state, r.label]), [
+    ["reports.example.com", "down", "not answering"],
+    ["api.example.com", "unchecked", "public"],
+    ["wiki.example.com", "up", "sign-in"],
+  ]);
+  assert.equal(rows[2].host, "wiki.example.com:8443", "the link keeps the configured host");
+});
+
+const whole = { missed: 0, restarted: false, partial: false };
+
+test("rows already on screen never hide a lost stream, missed events or a restart", () => {
+  assert.deepEqual(streamNotices("live", whole, 12), []);
+  assert.deepEqual(streamNotices("lost", whole, 0), [], "with nothing shown, the empty states already say it");
+  assert.match(streamNotices("lost", whole, 12)[0], /stopped.*out of date/);
+  assert.match(streamNotices("reconnected", { ...whole, missed: 3 }, 12)[0], /^3 events did not reach this page.*incomplete/);
+  assert.match(streamNotices("live", { ...whole, restarted: true }, 12)[0], /restarted/);
+  assert.equal(streamNotices("lost", { missed: 1, restarted: true, partial: true }, 5).length, 3);
+});
+
+test("the access counts say which events they cover", () => {
+  const at = new Date("2026-10-30T15:39:00Z");
+  assert.equal(accessScope("live", whole, at, 7), "All 7 events since this edge started.");
+  assert.match(accessScope("live", { ...whole, partial: true }, at, 200), /^Last 200 events, since .*Older ones are no longer held\.$/);
+  assert.match(accessScope("live", { ...whole, restarted: true }, at, 9), /across a restart/);
+  assert.equal(accessScope("lost", whole, null, 0), "The event stream is unavailable.");
+  assert.equal(accessScope("locked", whole, null, 0), "Sign in to see access decisions.");
 });

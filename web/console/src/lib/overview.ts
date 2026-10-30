@@ -1,7 +1,7 @@
 // What the Overview page says, as pure functions over data the console already
 // reads (status, live events). Wording lives here, not in the page, so it is
 // tested and the page only lays it out. Nothing here decides access.
-import type { AccessEvent, CertificateStatus, StatusResponse } from "./api";
+import type { AccessEvent, CertificateStatus, RouteStatus, StatusResponse } from "./api";
 import { eventReason, friendlyHealth, whoActed } from "./wording.ts";
 
 export type Attention = {
@@ -107,6 +107,22 @@ export function attention(status: StatusResponse | null, now: Date = new Date())
     });
   }
   return items;
+}
+
+export type AppRow = { host: string; name: string; state: "down" | "up" | "unchecked"; label: string };
+
+// The application routes as one short list: the ones not answering first, then
+// by name. Static sites are left to the Sites list beside it.
+export function applications(routes: RouteStatus[]): AppRow[] {
+  const rank = { down: 0, up: 1, unchecked: 1 } as const;
+  return routes
+    .filter((r) => !r.is_static)
+    .map((r): AppRow => {
+      const state = r.state_class === "unhealthy" ? "down" : r.state_class === "healthy" ? "up" : "unchecked";
+      const label = state === "down" ? "not answering" : r.access === "Protected" ? "sign-in" : "public";
+      return { host: r.host, name: r.host.replace(/:\d+$/, ""), state, label };
+    })
+    .sort((a, b) => rank[a.state] - rank[b.state] || a.name.localeCompare(b.name));
 }
 
 const refusalText: Record<string, string> = {
@@ -215,4 +231,30 @@ export function changes(events: AccessEvent[], subjects?: Map<string, string>): 
     }
   }
   return out;
+}
+
+export type StreamState = "locked" | "connecting" | "live" | "reconnected" | "lost";
+type FeedView = { missed: number; restarted: boolean; partial: boolean };
+
+const timeOf = (d: Date) => d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+// What the page must say about its own data before anyone reads a count: the
+// live view can stop, skip events or span a restart, and rows already on
+// screen would otherwise look complete.
+export function streamNotices(stream: StreamState, feed: FeedView, held: number): string[] {
+  const out: string[] = [];
+  if (stream === "lost" && held > 0) out.push("Live updates stopped and are retrying. What is shown below may be out of date.");
+  if (feed.missed > 0) out.push(`${plural(feed.missed, "event")} did not reach this page (a slow connection, or history the edge no longer holds): the counts and changes below are incomplete.`);
+  if (feed.restarted) out.push("Ozal restarted while this page was open. Rows from before the restart come from the previous run.");
+  return out;
+}
+
+// Which events the access counts cover. They are a live view held in memory,
+// never the whole history; say so whenever older events are already gone.
+export function accessScope(stream: StreamState, feed: FeedView, oldest: Date | null, held: number): string {
+  if (stream === "locked") return "Sign in to see access decisions.";
+  if (held === 0 || !oldest) return stream === "lost" ? "The event stream is unavailable." : stream === "connecting" ? "Connecting to the live stream…" : "Waiting for the first events.";
+  if (feed.partial) return `Last ${plural(held, "event")}, since ${timeOf(oldest)}. Older ones are no longer held.`;
+  if (feed.restarted) return `${plural(held, "event")} since ${timeOf(oldest)}, across a restart.`;
+  return `All ${plural(held, "event")} since this edge started.`;
 }

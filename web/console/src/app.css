@@ -224,24 +224,9 @@
   .console-tabs { gap: 20px; }
 }
 
-/* Native text stays legible as the access path changes size. The Umbral
-   mark owns the decision point; each branch is an actual configured route. */
-.edge-journey { display: grid; grid-template-columns: 116px minmax(0, 1fr); align-items: center; gap: 20px; padding: 0 20px 20px; }
-.edge-threshold { display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.edge-direction { color: var(--muted-foreground); transform: rotate(90deg); }
-.edge-threshold-mark { display: flex; flex-direction: column; align-items: center; }
-.edge-paths { min-width: 0; padding-left: 16px; border-left: 1px solid var(--border); }
-.edge-route { position: relative; display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 40px; padding: 8px 0; color: var(--foreground); text-decoration: none; }
-.edge-route::before { content: ""; position: absolute; top: 50%; left: -16px; width: 8px; border-top: 1px solid var(--border); }
-.edge-route:hover { color: var(--primary); }
-.edge-route:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; border-radius: 3px; }
+/* One application on the Overview: its lamp, its name and how people get in.
+   A live, answering route lights in the signal colour. */
+.app-row { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 40px; padding: 8px 20px; color: var(--foreground); text-decoration: none; }
+.app-row:hover { background: color-mix(in oklab, var(--muted) 45%, transparent); }
+.app-row:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 .edge-live { --lamp: var(--signal); }
-@media (max-width: 639px) {
-  .edge-journey { grid-template-columns: minmax(0, 1fr); gap: 16px; }
-  .edge-threshold { flex-direction: row; justify-content: flex-start; gap: 12px; }
-  .edge-direction { transform: none; }
-  .edge-threshold-mark { flex-direction: row; gap: 8px; }
-  .edge-threshold-mark svg { width: 24px; height: 24px; }
-  .edge-threshold-mark span { margin-top: 0; }
-  .edge-threshold-mark span:last-child { display: none; }
-}

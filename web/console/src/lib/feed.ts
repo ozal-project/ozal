@@ -10,9 +10,12 @@ export type FeedState = {
   last: number;
   missed: number;
   restarted: boolean;
+  // The current run's first event reached this view with a sequence above 1:
+  // earlier events of this run were already gone from the server's history.
+  partial: boolean;
 };
 
-export const emptyFeed = (): FeedState => ({ seen: new Set(), epoch: "", last: 0, missed: 0, restarted: false });
+export const emptyFeed = (): FeedState => ({ seen: new Set(), epoch: "", last: 0, missed: 0, restarted: false, partial: false });
 
 const SEEN_LIMIT = 2000;
 
@@ -29,6 +32,7 @@ export function receive(state: FeedState, id: string | undefined): { state: Feed
   if (epoch !== state.epoch) {
     // A new process numbers from 1 again; what came before is not a gap.
     next.restarted = state.epoch !== "";
+    next.partial = seq > 1;
     next.epoch = epoch;
     next.last = seq;
     return { state: next, accept: true };

@@ -44,3 +44,9 @@ test("an event without an identity is shown, not counted", () => {
   assert.equal(accepted.length, 2);
   assert.equal(state.missed, 0);
 });
+
+test("history that starts late is partial; one that starts at 1 is whole", () => {
+  assert.equal(feed(["ab-301", "ab-302"]).state.partial, true);
+  assert.equal(feed(["ab-1", "ab-2"]).state.partial, false);
+  assert.equal(feed(["ab-301", "cd-1"]).state.partial, false, "a new run seen from its start is whole again");
+});
