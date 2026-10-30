@@ -1,7 +1,7 @@
 # Ozal project page
 
-Static site for `ozal.octaviosantacruz.com` (the old `switchboard.` hostname stays as an
-alias), built with Astro and served by Ozal Pages. Its tokens (warm graphite, Marfil
+Static site for `ozal.dev` (`ozal.octaviosantacruz.com` and the old `switchboard.`
+hostname stay as aliases), built with Astro and served by Ozal Pages. Its tokens (warm graphite, Marfil
 ivory and camel, Geist) are shared with the
 console (`UI-005`).
 
