@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from "svelte";
+  import { onDestroy, onMount, tick } from "svelte";
   import { route, navigate, type Page } from "$lib/router.svelte";
   import UserMenu from "$lib/UserMenu.svelte";
   import PasskeysDialog from "$lib/PasskeysDialog.svelte";
@@ -17,6 +17,8 @@
   import Wordmark from "$lib/brand/Wordmark.svelte";
   import MenuIcon from "@lucide/svelte/icons/menu";
   import XIcon from "@lucide/svelte/icons/x";
+  import { fetchUpdateStatus } from "$lib/api";
+  import { availableUpdateNotice, type AvailableUpdateNotice } from "$lib/updateStatus";
 
   // Few entries, grouped by what the product does. Related views of one thing
   // (an application and its routing table; people, their groups and who runs
@@ -90,6 +92,25 @@
   // A signed-in session without the page's tool sees why, not a page of 403s.
   const blocked = $derived(route.path !== "/routes" && !!currentItem.tool && !can(currentItem.tool));
 
+  let updateNotice = $state<AvailableUpdateNotice | null>(null);
+  let dismissedVersion = "";
+  let updatePoll: ReturnType<typeof setInterval> | undefined;
+  let updateRequest: AbortController | undefined;
+  async function checkUpdateNotice() {
+    if (!can("updates")) { updateNotice = null; return; }
+    updateRequest?.abort();
+    const current = new AbortController();
+    updateRequest = current;
+    try {
+      const status = await fetchUpdateStatus(current.signal);
+      if (current.signal.aborted) return;
+      const notice = availableUpdateNotice(status);
+      updateNotice = notice && notice.version !== dismissedVersion ? notice : null;
+    } catch {
+      // Release notices are optional; a local status read must not interrupt access.
+    }
+  }
+
   const go = (e: MouseEvent, path: Page) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
     e.preventDefault();
@@ -109,6 +130,15 @@
     });
     mounted = true;
     void search;
+  });
+
+  onMount(() => {
+    void checkUpdateNotice();
+    updatePoll = setInterval(() => void checkUpdateNotice(), 5 * 60_000);
+  });
+  onDestroy(() => {
+    clearInterval(updatePoll);
+    updateRequest?.abort();
   });
 </script>
 
@@ -174,3 +204,14 @@
     </div>{/key}
   </main>
 </div>
+
+{#if updateNotice}
+  <aside class="border-primary/30 bg-popover fixed top-20 right-4 z-50 w-[calc(100vw-2rem)] max-w-sm rounded-xl border p-4 shadow-2xl" role="status" aria-live="polite">
+    <div class="flex items-start justify-between gap-4">
+      <div class="min-w-0">
+        <p class="text-sm font-medium">Ozal {updateNotice.version} is available</p>
+      </div>
+      <button type="button" class="text-muted-foreground hover:text-foreground shrink-0 text-xs underline" onclick={() => { dismissedVersion = updateNotice?.version ?? ""; updateNotice = null; }}>Dismiss</button>
+    </div>
+  </aside>
+{/if}

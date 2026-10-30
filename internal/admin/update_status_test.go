@@ -48,6 +48,9 @@ func TestUpdateStatusAPIReturnsUnknownBeforeFirstRun(t *testing.T) {
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"result":"unknown"`) {
 		t.Fatalf("status = %d %s", rec.Code, rec.Body.String())
 	}
+	if rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal("unknown update status response can be cached")
+	}
 }
 
 func TestUpdateStatusAPIRefusesMalformedOrSymlinkedFile(t *testing.T) {

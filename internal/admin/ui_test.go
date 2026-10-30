@@ -149,7 +149,7 @@ func TestConsoleHomeAndAssets(t *testing.T) {
 	bundle := scripts.String()
 	// The Overview (UI-005) is the console's first page and says what needs the
 	// operator, what changed, who got in and where each site came from.
-	for _, want := range []string{"Nothing needs you right now.", "Recent changes", "Who got in", "What is live, and where it came from", "uploaded by hand"} {
+	for _, want := range []string{"Nothing needs you right now.", "Recent changes", "Who got in", "What is live, and where it came from", "uploaded by hand", "is available"} {
 		if !strings.Contains(bundle, want) {
 			t.Errorf("the embedded overview console lacks %q", want)
 		}
@@ -169,7 +169,7 @@ func TestConsoleHomeAndAssets(t *testing.T) {
 	}
 
 	// Unknown paths are 404, and control-plane paths never fall through to the app.
-	for _, path := range []string{"/nope", "/assets/missing.js", "/_/unknown", "/console.go", "/console/index.html"} {
+	for _, path := range []string{"/nope", "/updates", "/assets/missing.js", "/_/unknown", "/console.go", "/console/index.html"} {
 		if got := request(handler, http.MethodGet, path, "", "").Code; got != http.StatusNotFound {
 			t.Errorf("%s: got %d, want 404", path, got)
 		}

@@ -214,6 +214,47 @@ rechaza cualquier comando, path, rol o resultado desconocido. Ningún endpoint
 inicia una actualización. El timer de ejemplo solo consulta releases y el
 corte de Edge + conector lo coordina `ozalctl` desde la máquina del operador.
 
+### Servicio de releases y configuración — contrato objetivo 2026-10-30
+
+La consola ya usa la API privada del edge para aplicaciones, identidades y
+estado. El cliente de releases consulta GitHub y restringe los hosts de descarga;
+no existe todavía una API de releases de `ozal.dev` implementada o validada.
+`GET /_/api/updates/status` informa un resultado anterior, no consulta releases
+ni instala una versión. No confundir ese estado con una comprobación en vivo.
+
+Contrato objetivo para un servicio público de metadatos bajo `ozal.dev`:
+
+- `GET /api/v1/releases/{channel}/{os}/{arch}` devuelve JSON con `schema`,
+  `channel`, `version`, `published_at`, `archive_url`, `checksums_url` y
+  `signature_url`. No incluye secretos, identificadores de instalación ni
+  instrucciones ejecutables; las URLs usan HTTPS y hosts de descarga
+  explícitamente permitidos.
+- `GET /api/v1/announcements?lang={locale}` devuelve avisos públicos con
+  `id`, `published_at`, `title`, `body`, `severity` y `url`. Los avisos son
+  informativos: no cambian configuración ni se ejecutan como comandos.
+- Los checksums siguen firmados con Ed25519. Cada instalación conserva una
+  clave pública fijada localmente y verifica firma, hash, plataforma y versión
+  antes de instalar; TLS o una respuesta de `ozal.dev` no reemplazan esa prueba.
+- Las consultas son anónimas, de solo lectura y sin telemetría. No se mandan
+  versión instalada, host, IP reenviada, usuario ni configuración. Cachear el
+  catálogo público es aceptable; el estado privado local continúa `no-store`.
+- Si `ozal.dev` no responde, login, políticas, rutas y tráfico ya configurados
+  continúan. Cuando la consola consuma el catálogo, distinguirá un fallo remoto
+  de un fallo al leer el reporte local. No se instala automáticamente.
+
+Este contrato no es una API desplegada: dominio operativo, publicación,
+claves y automatización de anuncios aún no están implementados ni aceptados.
+El edge no recibe credenciales del servicio ni capacidad de ejecutar comandos.
+
+La experiencia de consola usa un toast breve, no una página de configuración:
+cuando el reporte local confirma una versión disponible y tiene menos de 24
+horas, muestra su número y permite cerrar el aviso por el resto de la sesión.
+La consola consulta solo el reporte local (al abrirse y cada cinco minutos); no
+llama a `ozal.dev` ni instala. El permiso `updates` controla esta notificación
+opcional.
+El corte coordinado y los permisos del host siguen en `REL-019`; el contrato
+remoto, el updater que lo consuma y la entrega de avisos quedan pendientes.
+
 Autenticar/limitar/registrar intent requerido **antes de consumir el body**.
 Archivos regulares, límites de cantidad/tamaño, no enlaces/traversal, rutas
 internas/secretos rechazados, manifest inmutable y activación atómica. Site

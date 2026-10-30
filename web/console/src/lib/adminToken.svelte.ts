@@ -9,6 +9,7 @@ export const tools = [
   { id: "applications", label: "Applications", can: "Add, change and remove applications and routes" },
   { id: "people", label: "People", can: "Invite people, edit groups, disable accounts and passkeys" },
   { id: "sites", label: "Sites", can: "Publish and roll back static sites" },
+  { id: "updates", label: "Updates", can: "See when a signed release is available" },
   { id: "publishing", label: "CI publishing", can: "Choose which repositories may publish from CI" },
   { id: "connectors", label: "Connectors", can: "See private hosts (enrolment stays on the host)" },
 ] as const;

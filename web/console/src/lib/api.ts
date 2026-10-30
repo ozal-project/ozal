@@ -133,6 +133,10 @@ async function getJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
 export const fetchOverview = (signal?: AbortSignal) => getJSON<{ routes: RouteOverview[] }>("/_/overview", signal).then((r) => r.routes ?? []);
 export const fetchStatus = (signal?: AbortSignal) => getJSON<StatusResponse>("/_/api/status", signal);
 
+export type UpdateNodeStatus = { role: "edge" | "connector"; name: string; installed?: string; latest?: string; sha256?: string; result: string };
+export type UpdateStatus = { checked_at?: string; installed?: string; latest?: string; result: string; reason?: string; job_id?: string; phase?: string; nodes?: UpdateNodeStatus[] };
+export const fetchUpdateStatus = (signal?: AbortSignal) => getJSON<UpdateStatus>("/_/api/updates/status", signal);
+
 export class ExplainError extends Error {
   constructor(message: string, readonly status: number) {
     super(message);

@@ -52,6 +52,7 @@ type updateNodeStatus struct {
 // updateStatus serves only the fixed local status file. It never runs a host
 // command and does not accept paths or selectors from the request.
 func (h *Handler) updateStatus(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	if h.updateStatusFile == "" {
 		writeError(w, http.StatusServiceUnavailable, "update status is unavailable")
 		return
