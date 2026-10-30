@@ -239,6 +239,20 @@ func (z *Zones) Status() []ZoneStatus {
 	return out
 }
 
+// ErrUnknownZone: the zone is not served.
+var ErrUnknownZone = errors.New("certs: no such zone")
+
+// Renew asks one zone for an issuance attempt now (Manager.RenewNow).
+func (z *Zones) Renew(zone string) error {
+	z.mu.Lock()
+	run, ok := z.zones[zone]
+	z.mu.Unlock()
+	if !ok {
+		return ErrUnknownZone
+	}
+	return run.manager.RenewNow()
+}
+
 // PendingIntents is the DNS cleanup left after the startup recovery.
 func (z *Zones) PendingIntents() int {
 	z.mu.Lock()

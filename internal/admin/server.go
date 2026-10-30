@@ -2,6 +2,7 @@
 package admin
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/json"
@@ -43,6 +44,7 @@ type Handler struct {
 	broker                 *events.Broker
 	certificate            func() CertificateStatus
 	zoneCertificates       zoneCertificates
+	zoneLookup             func(ctx context.Context, host string) (string, error)
 	auditStatus            func() AuditStatus
 	mutationAudit          events.AuditAppender
 	auditMutationsRequired bool
@@ -93,6 +95,8 @@ func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 	h.mux.HandleFunc("GET /_/api/zones", h.requireTool("applications", h.listZones))
 	h.mux.HandleFunc("POST /_/api/zones", h.requireTool("applications", h.addZone))
 	h.mux.HandleFunc("DELETE /_/api/zones/{name}", h.requireTool("applications", h.removeZone))
+	h.mux.HandleFunc("POST /_/api/zones/{name}/check", h.requireTool("applications", h.checkZone))
+	h.mux.HandleFunc("POST /_/api/zones/{name}/renew", h.requireTool("applications", h.renewZone))
 	for _, opt := range opts {
 		opt(h)
 	}

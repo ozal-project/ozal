@@ -405,3 +405,63 @@ func TestZonesSetWhileRunning(t *testing.T) {
 		t.Fatalf("re-added zone: served=%t issued=%d", served(z, "new.dev"), issuer.count("new.dev"))
 	}
 }
+
+// An operator who fixed a record renews at once instead of waiting out the
+// backoff, but cannot hammer the CA.
+func TestZoneRenewNowSkipsTheBackoffWithinLimits(t *testing.T) {
+	f := newZoneFixture(t, "fixed.dev")
+	var mu sync.Mutex
+	fixed := false
+	issuer := &zoneIssuer{outcomes: map[string]func(context.Context) (StoredGeneration, error){
+		"fixed.dev": func(context.Context) (StoredGeneration, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			if !fixed {
+				return StoredGeneration{}, ErrDNS
+			}
+			return f.gens["fixed.dev"], nil
+		},
+	}}
+	clock := f.now
+	var clockMu sync.Mutex
+	cfg := f.config(t, time.Minute)
+	cfg.Now = func() time.Time { clockMu.Lock(); defer clockMu.Unlock(); return clock }
+	z, err := NewZones(cfg, f.store, issuer, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := z.Set(context.Background(), []string{"fixed.dev"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := z.Renew("other.dev"); !errors.Is(err, ErrUnknownZone) {
+		t.Fatalf("unknown zone: %v", err)
+	}
+	runZones(t, z)
+	eventually(t, "the first attempt to fail", func() bool { return z.Status()[0].LastOutcome == "failed" && !z.Status()[0].Attempting })
+	// The backoff is an hour; the record is fixed now.
+	if err := z.Renew("fixed.dev"); !errors.Is(err, ErrRenewTooSoon) {
+		t.Fatalf("renew right after an attempt: %v", err)
+	}
+	clockMu.Lock()
+	clock = clock.Add(MinManualInterval)
+	clockMu.Unlock()
+	mu.Lock()
+	fixed = true
+	mu.Unlock()
+	if err := z.Renew("fixed.dev"); err != nil {
+		t.Fatalf("renew after the interval: %v", err)
+	}
+	eventually(t, "the zone to be served after renewing", func() bool { return served(z, "fixed.dev") })
+	if issuer.count("fixed.dev") != 2 {
+		t.Fatalf("attempts = %d, want the failed one and the renewal", issuer.count("fixed.dev"))
+	}
+}
+
+func TestRenewNowRespectsTheCARateLimit(t *testing.T) {
+	now := time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC)
+	m := testManager(t, testStore(t), &stubIssuer{}, now)
+	m.recordFailure(now.Add(-2*MinManualInterval), &RateLimitedError{RetryAfter: time.Hour, Err: errors.New("too many")})
+	if err := m.RenewNow(); !errors.Is(err, ErrRenewTooSoon) {
+		t.Fatalf("renew during the CA's wait: %v", err)
+	}
+}

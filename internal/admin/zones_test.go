@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"runtime"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/ozal-project/ozal/internal/certs"
 	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/domaincheck"
 	"github.com/ozal-project/ozal/internal/routemanager"
 )
 
@@ -45,6 +47,19 @@ func (m *zoneManager) change(expected string, apply func(config.Config) (config.
 type zoneStates []certs.ZoneStatus
 
 func (s zoneStates) Status() []certs.ZoneStatus { return s }
+func (s zoneStates) Renew(string) error         { return nil }
+
+// renewer scripts Renew's answer and records the zone asked for.
+type renewer struct {
+	zoneStates
+	err   error
+	asked []string
+}
+
+func (r *renewer) Renew(zone string) error {
+	r.asked = append(r.asked, zone)
+	return r.err
+}
 
 func zoneTestManager(t *testing.T) *zoneManager {
 	t.Helper()
@@ -171,5 +186,72 @@ func TestApplicationCoverageIncludesZones(t *testing.T) {
 	}
 	if got := tlsCoverage(next, "a.b.other.dev"); got != "not_covered" {
 		t.Fatalf("two labels below a zone: %s", got)
+	}
+}
+
+func TestZoneCheckReturnsTheRecordToCreate(t *testing.T) {
+	manager := zoneTestManager(t)
+	answers := map[string]string{"_acme-challenge.example.com": "example-com.acme.example.net."}
+	var asked []string
+	handler := New(manager, nil, WithZoneResolver(func(_ context.Context, host string) (string, error) {
+		asked = append(asked, host)
+		if target, ok := answers[host]; ok {
+			return target, nil
+		}
+		return host + ".", nil // no CNAME
+	}))
+	rec := request(handler, http.MethodPost, "/_/api/zones/example.com/check", readToken, "")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"state":"ok"`) {
+		t.Fatalf("delegated zone in place = %d %s", rec.Code, rec.Body)
+	}
+	next, err := config.WithZone(manager.cfg, "other.dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager.cfg = next
+	rec = request(handler, http.MethodPost, "/_/api/zones/other.dev/check", readToken, "")
+	var body struct {
+		Challenge domaincheck.ChallengeCheck `json:"challenge"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Challenge.State != "bad" || body.Challenge.Record == nil || body.Challenge.Record.Content != "other.dev.acme.example.net" {
+		t.Fatalf("missing CNAME = %+v", body.Challenge)
+	}
+	// Only served zones are looked up: the edge never resolves names for anyone.
+	if rec := request(handler, http.MethodPost, "/_/api/zones/victim.example/check", readToken, ""); rec.Code != http.StatusNotFound {
+		t.Fatalf("unserved zone = %d", rec.Code)
+	}
+	if len(asked) != 2 {
+		t.Fatalf("lookups = %v", asked)
+	}
+}
+
+func TestZoneRenewMapsTheManagerLimits(t *testing.T) {
+	manager := zoneTestManager(t)
+	for _, c := range []struct {
+		err  error
+		code int
+	}{
+		{nil, http.StatusAccepted},
+		{certs.ErrAttemptRunning, http.StatusConflict},
+		{certs.ErrRenewTooSoon, http.StatusTooManyRequests},
+	} {
+		r := &renewer{err: c.err}
+		handler := New(manager, nil, WithZones(r))
+		if rec := request(handler, http.MethodPost, "/_/api/zones/example.com/renew", readToken, ""); rec.Code != c.code {
+			t.Errorf("Renew error %v -> %d, want %d", c.err, rec.Code, c.code)
+		}
+		if len(r.asked) != 1 || r.asked[0] != "example.com" {
+			t.Errorf("asked %v", r.asked)
+		}
+	}
+	r := &renewer{}
+	if rec := request(New(manager, nil, WithZones(r)), http.MethodPost, "/_/api/zones/other.dev/renew", readToken, ""); rec.Code != http.StatusNotFound || len(r.asked) != 0 {
+		t.Fatalf("unserved zone renewed: %d %v", rec.Code, r.asked)
+	}
+	if rec := request(New(manager, nil), http.MethodPost, "/_/api/zones/example.com/renew", readToken, ""); rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("renew without certificates = %d", rec.Code)
 	}
 }

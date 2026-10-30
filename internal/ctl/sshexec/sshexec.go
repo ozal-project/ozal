@@ -196,6 +196,54 @@ func (s Remote) Forward(ctx context.Context, remote string) (string, func(), err
 	}
 }
 
+// ForwardSocket implements ctl.SocketForwarder: `ssh -N -L` from a new
+// unix socket in a private (0700) directory to the edge's admin socket. A
+// loopback TCP port would hand the host operator's authority to every local
+// user for the life of the tunnel; the private directory does not. The edge
+// opens its socket as the SSH user, so that user must be in the edge's
+// admin.socket_group. stop ends the tunnel and removes the directory.
+func (s Remote) ForwardSocket(ctx context.Context, remote string) (string, func(), error) {
+	dir, err := os.MkdirTemp("", "ozalctl-")
+	if err != nil {
+		return "", nil, err
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		os.RemoveAll(dir)
+		return "", nil, err
+	}
+	local := filepath.Join(dir, "admin.sock")
+	tunnelCtx, cancel := context.WithCancel(ctx)
+	cmd := exec.CommandContext(tunnelCtx, "ssh", s.base("-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", "-N", "-L", local+":"+remote)...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		cancel()
+		os.RemoveAll(dir)
+		return "", nil, err
+	}
+	exited := make(chan struct{})
+	go func() { _ = cmd.Wait(); close(exited) }()
+	stop := func() { cancel(); <-exited; os.RemoveAll(dir) }
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		select {
+		case <-exited:
+			cancel()
+			os.RemoveAll(dir)
+			return "", nil, fmt.Errorf("ssh tunnel ended: %s", strings.TrimSpace(stderr.String()))
+		default:
+		}
+		if _, err := os.Stat(local); err == nil {
+			return local, stop, nil
+		}
+		if time.Now().After(deadline) {
+			stop()
+			return "", nil, errors.New("ssh tunnel did not come up within 15 seconds")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
 // ReadToken reads a token file on the operator's machine (~ expanded),
 // refusing one other users can read.
 func ReadToken(path string) (string, error) {

@@ -563,6 +563,7 @@ ozalctl edge pair-upgrade -ref vX.Y.Z -public-key FILE [-force] [-apply]
 ozalctl edge config -base FILE [-cloudflare-ranges] [-apply]
 ozalctl site publish -site NAME -dir DIST [-host HOST] [-apply]
 ozalctl app alias -from HOST -to HOST [-manual-dns] [-wait 90s] [-apply]
+ozalctl api [-d JSON|@FILE|@-] METHOD /_/api/PATH
 ozalctl project trust -project NAME -repository-id ID -owner-id ID -workflow-ref WORKFLOW [-ref refs/heads/main] [-apply]
 ozalctl site cutover -host HOST -to IP -cloudflare-token FILE [-dir DIST] [-apply]
 ozalctl site cutover -host HOST -back EVIDENCE -cloudflare-token FILE [-apply]
@@ -599,6 +600,29 @@ En el archivo de targets agrega `"socket_group": "ozal-admin"` al `edge`;
 si tu usuario todavía no puede abrir el socket, `ozalctl` se detiene antes de
 ejecutar nada e indica el `usermod`. Instalar binarios, config y unidades
 (`edge upgrade`, `edge config`, `pair-upgrade`) sigue necesitando root.
+
+### La API como segundo camino: `ozalctl api`
+
+Todo lo que expone la API admin (`/_/api/...`: zonas, aplicaciones, personas,
+grupos, sitios, proyectos, conectores, política) se puede usar desde tu máquina
+con `ozalctl api`, además del CLI y la consola. Necesita `socket_group` en el
+target: el socket del edge se reenvía por SSH a un socket local dentro de un
+directorio `0700` (nunca a un puerto TCP, que cualquier usuario local podría
+usar) y la petición la hace tu usuario SSH, sin `sudo` ni token en tu máquina.
+
+```sh
+ozalctl api GET /_/api/zones
+ozalctl api -d '{"name":"example.org","expected":"<config_sha256>"}' POST /_/api/zones
+ozalctl api POST /_/api/zones/example.org/check
+ozalctl api -d @people.json PUT /_/api/people/ana@example.org/groups
+```
+
+Sólo acepta rutas `/_/api/`, cuerpos JSON de hasta 1 MB y los métodos GET,
+POST, PUT, PATCH y DELETE. Imprime la respuesta (JSON indentado); un HTTP 4xx o
+5xx termina con estado 1 después de mostrarla. Antes de enviar nada comprueba
+que el edge responde por el socket: si tu usuario no está en el grupo, se detiene
+sin enviar la petición. Un error de red después de enviar deja el resultado
+indeterminado: consulta el estado antes de repetir un cambio.
 
 Upgrade construye un ref comprometido y usa el procedimiento anterior. Config
 requiere una base con `runtime_file` y sin rutas/proyectos/GitHub: conserva

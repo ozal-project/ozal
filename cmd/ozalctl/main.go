@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -25,6 +26,10 @@ import (
 )
 
 const usage = `usage:
+  ozalctl api [-targets FILE] [-target NAME] [-d JSON|@FILE|@-] METHOD /_/api/PATH
+      Call the edge's admin API through its socket over SSH, as your SSH user
+      (edge.socket_group): no sudo and no token on this machine. Prints the
+      answer; an HTTP error exits 1. Example: ozalctl api GET /_/api/zones
   ozalctl site check -dir DIST
   ozalctl site pack -dir DIST -out ARCHIVE
   ozalctl site deploy -endpoint HTTPS_URL -project NAME -archive ARCHIVE -result FILE [-apply]
@@ -81,6 +86,9 @@ func main() {
 }
 
 func run(args []string) int {
+	if len(args) > 0 && args[0] == "api" {
+		return apiCall(args[1:])
+	}
 	if len(args) < 2 {
 		fmt.Fprint(os.Stderr, usage)
 		return 2
@@ -261,6 +269,41 @@ func sitePublish(args []string) int {
 }
 
 const pagesHint = "if the name is a custom domain of a Cloudflare Pages project, Cloudflare keeps sending it to Pages whatever the DNS says: remove the custom domain in Pages (Workers & Pages → project → Custom domains) now"
+
+func apiCall(args []string) int {
+	fs := flag.NewFlagSet("api", flag.ContinueOnError)
+	data := fs.String("d", "", "JSON body, @FILE to read it from a file or @- from stdin")
+	c, ok := setup(fs, args)
+	if !ok {
+		return 2
+	}
+	if fs.NArg() != 2 {
+		fmt.Fprintln(os.Stderr, "usage: ozalctl api [-target NAME] [-d JSON|@FILE|@-] METHOD /_/api/PATH")
+		return 2
+	}
+	body, err := apiBody(*data)
+	if err != nil {
+		return finish(err)
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return finish(ctl.API(ctx, os.Stdout, c.remote, ctl.APIRequest{Name: c.name, Target: c.target,
+		Method: fs.Arg(0), Path: fs.Arg(1), Body: body}))
+}
+
+// apiBody reads -d like curl: inline, @FILE or @- for stdin.
+func apiBody(value string) ([]byte, error) {
+	switch {
+	case value == "":
+		return nil, nil
+	case value == "@-":
+		return io.ReadAll(io.LimitReader(os.Stdin, 1<<20+1))
+	case strings.HasPrefix(value, "@"):
+		return os.ReadFile(strings.TrimPrefix(value, "@"))
+	default:
+		return []byte(value), nil
+	}
+}
 
 func appAlias(args []string) int {
 	fs := flag.NewFlagSet("app alias", flag.ContinueOnError)

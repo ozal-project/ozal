@@ -87,7 +87,22 @@ type Manager struct {
 	nextAttempt    time.Time
 	failures       int
 	pendingIntents int
+	lastCode       string
+	// forced asks for an attempt now (RenewNow); wake interrupts the wait.
+	forced bool
+	wake   chan struct{}
 }
+
+// MinManualInterval is how soon after an attempt RenewNow is accepted: a
+// button pressed repeatedly must not spend the CA's failed-validation budget.
+const MinManualInterval = time.Minute
+
+var (
+	// ErrAttemptRunning: an attempt is running or waiting for its turn.
+	ErrAttemptRunning = errors.New("certs: an issuance attempt is already running or queued")
+	// ErrRenewTooSoon: the last attempt was too recent, or the CA asked to wait.
+	ErrRenewTooSoon = errors.New("certs: the last attempt was too recent or the CA asked to wait")
+)
 
 type activeCertificate struct {
 	cert *tls.Certificate
@@ -152,7 +167,7 @@ func NewManager(cfg ManagerConfig, store Store, issuer Issuer) (*Manager, error)
 	if cfg.Sink == nil {
 		cfg.Sink = events.Discard
 	}
-	return &Manager{cfg: cfg, store: store, issuer: issuer}, nil
+	return &Manager{cfg: cfg, store: store, issuer: issuer, wake: make(chan struct{}, 1)}, nil
 }
 
 // GetCertificate is the only method the public listener needs; it is
@@ -198,6 +213,8 @@ func (m *Manager) Run(ctx context.Context) {
 			case <-ctx.Done():
 				timer.Stop()
 				return
+			case <-m.wake:
+				timer.Stop()
 			case <-timer.C:
 			}
 			continue
@@ -267,8 +284,11 @@ func (m *Manager) recoverIntents(ctx context.Context) {
 // is due now.
 func (m *Manager) waitFor(now time.Time) time.Duration {
 	m.mu.Lock()
-	next := m.nextAttempt
+	next, forced := m.nextAttempt, m.forced
 	m.mu.Unlock()
+	if forced {
+		return 0
+	}
 	if next.After(now) {
 		return next.Sub(now)
 	}
@@ -301,6 +321,9 @@ func (m *Manager) attempt(ctx context.Context) {
 		return
 	}
 	defer m.attempting.Store(false)
+	m.mu.Lock()
+	m.forced = false
+	m.mu.Unlock()
 
 	attemptCtx, cancel := context.WithTimeout(ctx, m.cfg.AttemptTimeout)
 	defer cancel()
@@ -337,6 +360,7 @@ func (m *Manager) recordSuccess(at time.Time, leaf *x509.Certificate) {
 	}
 	m.mu.Lock()
 	m.failures = 0
+	m.lastCode = ""
 	m.lastOutcome = "renewed"
 	m.lastError = ""
 	m.lastAttempt = at
@@ -361,6 +385,7 @@ func (m *Manager) recordSuccess(at time.Time, leaf *x509.Certificate) {
 func (m *Manager) recordFailure(at time.Time, err error) {
 	m.mu.Lock()
 	m.failures++
+	m.lastCode = failureCode(err)
 	delay := m.backoffDelay(err, m.failures)
 	m.lastOutcome = "failed"
 	m.lastError = err.Error()
@@ -398,6 +423,33 @@ func (m *Manager) backoffDelay(err error, failures int) time.Duration {
 		delay = m.cfg.BackoffMax
 	}
 	return m.cfg.Jitter(delay)
+}
+
+// RenewNow asks the renewal loop for an attempt now, whatever the schedule
+// (an operator who fixed a DNS record should not wait for the backoff). It
+// is refused while an attempt runs or waits, within MinManualInterval of
+// the last one, and while the CA's own rate-limit wait lasts.
+func (m *Manager) RenewNow() error {
+	if m.attempting.Load() || m.waiting.Load() {
+		return ErrAttemptRunning
+	}
+	now := m.now()
+	m.mu.Lock()
+	if m.forced {
+		m.mu.Unlock()
+		return ErrAttemptRunning
+	}
+	if (!m.lastAttempt.IsZero() && now.Sub(m.lastAttempt) < MinManualInterval) || (m.lastCode == "rate_limited" && m.nextAttempt.After(now)) {
+		m.mu.Unlock()
+		return ErrRenewTooSoon
+	}
+	m.forced = true
+	m.mu.Unlock()
+	select {
+	case m.wake <- struct{}{}:
+	default:
+	}
+	return nil
 }
 
 // Status is the manager's observable state for the trust console.

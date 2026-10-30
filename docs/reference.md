@@ -269,6 +269,12 @@ nada. Con `hetzner` o `rfc2136` se rechaza una zona cuyo desafío quede fuera de
 la zona del proveedor. Quitar una zona `config` se rechaza, igual que una zona
 que todavía es el único certificado de alguna aplicación.
 
+`POST /_/api/zones/{zona}/check` consulta el CNAME `_acme-challenge` de una zona
+servida (nunca de otros nombres) y responde `ok` o `bad` con el registro exacto a
+crear. `POST /_/api/zones/{zona}/renew` pide un intento ya, sin esperar el
+backoff: responde 202, 409 si ya hay uno en curso o en cola, y 429 si el último
+fue hace menos de un minuto o la CA pidió esperar.
+
 Migración: el certificado combinado anterior (clave del primer nombre de
 `tls.domains`) se carga sólo como respaldo y ya no se renueva. Responde por sus
 nombres mientras la zona correspondiente no tenga certificado propio, también
