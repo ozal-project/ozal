@@ -6,7 +6,7 @@
   import Freshness from "$lib/Freshness.svelte";
   import { Button } from "$lib/components/ui/button";
   import { fetchPeople, fetchSites, fetchStatus, PagesDisabledError, type AccessEvent, type Site, type StatusResponse } from "$lib/api";
-  import { accessSummary, attention, changes, headline } from "$lib/overview";
+  import { accessSummary, attention, certificateView, changes, headline } from "$lib/overview";
   import { subjectsOf } from "$lib/wording.ts";
   import { emptyFeed, receive } from "$lib/feed";
   import { openEventStream } from "$lib/eventStream";
@@ -33,6 +33,7 @@
   const sitesRequest = new LatestRequest();
 
   const needs = $derived(attention(status));
+  const certificate = $derived(certificateView(status?.certificate, new Date()));
   const summary = $derived(accessSummary(events));
   const recent = $derived(changes(events, subjects).slice(0, 5));
   const oldest = $derived(events.length ? new Date(events[events.length - 1].time) : null);
@@ -173,6 +174,21 @@
     </div>
   </Panel>
 </div>
+
+{#if certificate}
+  <div class="mb-5">
+    <Panel label="TLS" title="Certificate" sub={certificate.note}>
+      <dl class="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-[auto_1fr]">
+        <dt class="text-muted-foreground">Covers</dt>
+        <dd class="flex flex-wrap gap-1.5">{#each certificate.names as name (name)}<code class="bg-muted rounded-md px-1.5 py-0.5 text-xs">{name}</code>{/each}</dd>
+        <dt class="text-muted-foreground">Valid until</dt>
+        <dd class={certificate.tone === "bad" ? "text-destructive" : ""}>{certificate.expires}</dd>
+        <dt class="text-muted-foreground">Next renewal</dt>
+        <dd>{certificate.renews}</dd>
+      </dl>
+    </Panel>
+  </div>
+{/if}
 
 <div class="grid items-start gap-5 xl:grid-cols-[1fr_1.2fr]">
   <Panel label="What changed" title="Recent changes" sub="Deploys, reloads, people and connectors, newest first." bodyClass="p-0">

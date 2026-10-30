@@ -31,6 +31,7 @@ export type RouteStatus = {
 
 export type CertificateStatus = {
   host: string;
+  names?: string[];
   mode: string;
   valid: boolean;
   not_after: string;

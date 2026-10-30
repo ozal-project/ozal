@@ -48,3 +48,14 @@ func TestStatusOmitsCertificatePanelWithoutProvider(t *testing.T) {
 		t.Fatal("autocert mode must not render a DNS-01 certificate panel")
 	}
 }
+
+func TestAPIStatusListsEveryCertificateName(t *testing.T) {
+	manager := &fakeManager{cfg: config.Config{Admin: config.Admin{Token: readToken}}}
+	status := CertificateStatus{Host: "a.example, b.example", Names: []string{"a.example", "b.example"}, Valid: true}
+	handler := New(manager, nil, WithCertificateStatus(func() CertificateStatus { return status }))
+
+	body := request(handler, http.MethodGet, "/_/api/status", readToken, "").Body.String()
+	if !strings.Contains(body, `"names":["a.example","b.example"]`) {
+		t.Fatalf("api status must list each certificate name: %s", body)
+	}
+}

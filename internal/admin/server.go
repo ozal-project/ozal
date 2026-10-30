@@ -168,15 +168,18 @@ func loopbackHost(host string) bool {
 // certificate manager into this shape, so admin needs no dependency on the
 // certificate package.
 type CertificateStatus struct {
-	Host        string `json:"host"`
-	Mode        string `json:"mode"`
-	Valid       bool   `json:"valid"`
-	NotAfter    string `json:"not_after"`
-	LastOutcome string `json:"last_outcome"`
-	LastError   string `json:"last_error"`
-	LastAttempt string `json:"last_attempt"`
-	NextAttempt string `json:"next_attempt"`
-	Pending     int    `json:"pending"`
+	Host string `json:"host"`
+	// Names lists every name the certificate is configured to cover, one per
+	// entry; Host joins them for older readers.
+	Names       []string `json:"names,omitempty"`
+	Mode        string   `json:"mode"`
+	Valid       bool     `json:"valid"`
+	NotAfter    string   `json:"not_after"`
+	LastOutcome string   `json:"last_outcome"`
+	LastError   string   `json:"last_error"`
+	LastAttempt string   `json:"last_attempt"`
+	NextAttempt string   `json:"next_attempt"`
+	Pending     int      `json:"pending"`
 }
 
 // AuditStatus is an operational projection for the configured durable access

@@ -1,7 +1,7 @@
 // What the Overview page says, as pure functions over data the console already
 // reads (status, live events). Wording lives here, not in the page, so it is
 // tested and the page only lays it out. Nothing here decides access.
-import type { AccessEvent, StatusResponse } from "./api";
+import type { AccessEvent, CertificateStatus, StatusResponse } from "./api";
 import { eventReason, friendlyHealth, whoActed } from "./wording.ts";
 
 export type Attention = {
@@ -32,6 +32,38 @@ export type AccessSummary = {
   reasons: { code: string; text: string; count: number }[];
 };
 
+export type CertificateView = {
+  names: string[];
+  expires: string;
+  renews: string;
+  // "bad" when the certificate is not valid or runs out within `soonDays`.
+  tone: "good" | "bad";
+  note: string;
+};
+
+// A renewal normally lands ~30 days before expiry, so under this many days
+// left means the edge is overdue even though the certificate still works.
+const soonDays = 14;
+const dayMs = 86_400_000;
+
+const dateOf = (iso: string): string => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "unknown";
+  return d.toLocaleDateString([], { year: "numeric", month: "short", day: "numeric" });
+};
+
+export function certificateView(cert: CertificateStatus | undefined, now: Date): CertificateView | null {
+  if (!cert) return null;
+  const names = cert.names?.length ? cert.names : cert.host ? cert.host.split(", ") : [];
+  const end = new Date(cert.not_after);
+  const left = Number.isNaN(end.getTime()) ? null : Math.floor((end.getTime() - now.getTime()) / dayMs);
+  const expires = left === null ? "unknown" : left < 0 ? `expired on ${dateOf(cert.not_after)}` : `${dateOf(cert.not_after)} (${plural(left, "day")} left)`;
+  const renews = cert.next_attempt ? dateOf(cert.next_attempt) : "not scheduled";
+  const bad = !cert.valid || (left !== null && left < soonDays);
+  const note = cert.last_error ? `The last renewal attempt failed: ${cert.last_error}.` : !cert.valid ? "It is not valid right now." : bad ? "It expires soon and has not been renewed." : "Renewed automatically.";
+  return { names, expires, renews, tone: bad ? "bad" : "good", note };
+}
+
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 export function headline(status: StatusResponse | null, needAttention: number): string {
@@ -43,7 +75,7 @@ export function headline(status: StatusResponse | null, needAttention: number): 
   return `${configured} configured. ${state}`;
 }
 
-export function attention(status: StatusResponse | null): Attention[] {
+export function attention(status: StatusResponse | null, now: Date = new Date()): Attention[] {
   if (!status) return [];
   const items: Attention[] = [];
   for (const r of status.routes) {
@@ -58,11 +90,12 @@ export function attention(status: StatusResponse | null): Attention[] {
     });
   }
   const cert = status.certificate;
-  if (cert && (!cert.valid || cert.last_error)) {
+  const view = certificateView(cert, now);
+  if (cert && view && (view.tone === "bad" || cert.last_error)) {
     items.push({
       kind: "certificate",
       title: `The certificate for ${cert.host} needs attention`,
-      detail: cert.last_error ? `The last renewal attempt failed: ${cert.last_error}.` : "It is not valid right now.",
+      detail: view.note === "Renewed automatically." ? `The last renewal attempt failed: ${cert.last_error}.` : view.note,
     });
   }
   const audit = status.audit;

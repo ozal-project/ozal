@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { accessSummary, attention, changes, headline } from "./overview.ts";
+import { accessSummary, attention, certificateView, changes, headline } from "./overview.ts";
 import type { AccessEvent, RouteStatus, StatusResponse } from "./api.ts";
 
 const route = (over: Partial<RouteStatus> = {}): RouteStatus => ({
@@ -99,4 +99,36 @@ test("a new passkey names the person, never the login page it was created on", (
   assert.equal(named.detail, "A passkey that stays on one device.");
   const [unknown] = changes([event("passkey.registered", { host: "auth.example.com", actor: "sb:other", code: "synced" })], people);
   assert.equal(unknown.title, "Someone added a passkey", "an id that maps to nobody is not shown as if it were a name");
+});
+
+const cert = (over: Partial<NonNullable<StatusResponse["certificate"]>> = {}) => ({
+  host: "*.example.com, example.com", names: ["*.example.com", "example.com"], mode: "ACME DNS-01", valid: true,
+  not_after: "2027-01-28T00:08:22Z", last_outcome: "renewed", last_error: "", last_attempt: "", next_attempt: "2026-12-29T00:08:22Z", pending: 0, ...over,
+});
+
+test("the certificate view lists every name, the days left and the next renewal", () => {
+  const view = certificateView(cert(), new Date("2026-10-30T12:00:00Z"));
+  assert.deepEqual(view?.names, ["*.example.com", "example.com"]);
+  assert.match(view!.expires, /\(89 days left\)/);
+  assert.equal(view?.tone, "good");
+  assert.equal(certificateView(undefined, new Date()), null);
+});
+
+test("an older edge without names still shows them from host", () => {
+  assert.deepEqual(certificateView(cert({ names: undefined }), new Date("2026-10-30T00:00:00Z"))?.names, ["*.example.com", "example.com"]);
+});
+
+test("a certificate close to its end is attention even though it still works", () => {
+  const now = new Date("2027-01-20T00:00:00Z");
+  assert.equal(certificateView(cert(), now)?.tone, "bad");
+  const items = attention(status([], { certificate: cert() }), now);
+  assert.deepEqual(items.map((i) => i.kind), ["certificate"]);
+  assert.match(items[0].detail, /expires soon/);
+  assert.equal(attention(status([], { certificate: cert() }), new Date("2026-10-30T00:00:00Z")).length, 0);
+});
+
+test("an expired certificate says so", () => {
+  const view = certificateView(cert({ valid: false }), new Date("2027-02-01T00:00:00Z"));
+  assert.match(view!.expires, /^expired on /);
+  assert.equal(view?.tone, "bad");
 });

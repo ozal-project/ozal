@@ -495,6 +495,7 @@ func certificateStatus(manager *certs.Manager) func() admin.CertificateStatus {
 		status := manager.Status()
 		return admin.CertificateStatus{
 			Host:        strings.Join(status.Names, ", "),
+			Names:       status.Names,
 			Mode:        "ACME DNS-01",
 			Valid:       status.Valid,
 			NotAfter:    formatTime(status.NotAfter),
