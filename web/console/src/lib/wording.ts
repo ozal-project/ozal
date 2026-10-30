@@ -62,3 +62,29 @@ export function applicationAccess(route: { auth_required?: boolean; access?: Rec
   if (extra && groups && !email) return "Group members · extra checks";
   return extra ? `${who} · extra checks` : who;
 }
+
+// What serves an application, in words a non-developer reads at a glance.
+export function servedBy(route: { target?: string; upstreams?: string[]; site?: string; connector?: string; root?: string }): string {
+  if (route.site) return `Static website · ${route.site}`;
+  if (route.connector) return `Machine connected through ${route.connector}`;
+  if (route.root) return `Folder on this server · ${route.root}`;
+  if (route.upstreams?.length) return `${route.upstreams.length} servers, shared between them`;
+  if (!route.target) return "Not set";
+  try {
+    const url = new URL(route.target);
+    const local = ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname);
+    return local ? `App on this server · port ${url.port || (url.protocol === "https:" ? "443" : "80")}` : `App at ${url.host}`;
+  } catch { return route.target; }
+}
+
+// Who may open an application: a tone for the badge and one sentence.
+export function whoMayEnter(route: { auth_required?: boolean; access?: Record<string, unknown> }): { tone: "public" | "private"; text: string } {
+  if (!route.auth_required && route.access == null) return { tone: "public", text: "Public · anyone with the link" };
+  const policy = route.access ?? {};
+  const list = (key: string) => (Array.isArray(policy[key]) ? (policy[key] as string[]) : []);
+  const groups = list("required_groups");
+  const emails = [...list("allowed_emails"), ...list("allowed_domains").map((d) => `@${d}`)];
+  if (groups.length) return { tone: "private", text: `Private · members of ${groups.join(" and ")}` };
+  if (emails.length) return { tone: "private", text: `Private · ${emails.length === 1 ? emails[0] : `${emails.length} approved addresses`}` };
+  return { tone: "private", text: "Private · anyone with an account" };
+}

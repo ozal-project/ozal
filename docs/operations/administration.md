@@ -494,8 +494,8 @@ ozal github connect -config /etc/ozal/config.json \
   -app-id 123 -installation-id 456 -key file:/etc/ozal/github-app-key
 ```
 
-Para una web nueva también puedes empezar en **Applications → Add website →
-From GitHub**. Guarda la ruta revisada y continúa en Sites; la ruta puede
+Para una web nueva también puedes empezar en **Applications → Add application →
+A website built from GitHub**. Guarda la ruta revisada y continúa en Sites; la ruta puede
 servir un build retenido con ese nombre inmediatamente y, si todavía no hay
 ninguno, no tiene contenido hasta publicar. Verifica la primera publicación
 antes de mover DNS. Esta opción necesita las herramientas de aplicaciones y

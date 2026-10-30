@@ -524,8 +524,13 @@ func certificateStatus(zones *certs.Zones) func() admin.CertificateStatus {
 				lastAttempt = zone.LastAttempt
 				out.LastOutcome = zone.LastOutcome
 			}
-			if !zone.NextAttempt.IsZero() && (nextAttempt.IsZero() || zone.NextAttempt.Before(nextAttempt)) {
-				nextAttempt = zone.NextAttempt
+			// The next attempt, or for a healthy zone its scheduled renewal.
+			next := zone.NextAttempt
+			if next.IsZero() {
+				next = zone.RenewAt
+			}
+			if !next.IsZero() && (nextAttempt.IsZero() || next.Before(nextAttempt)) {
+				nextAttempt = next
 			}
 			if zone.LastError != "" && out.LastError == "" {
 				out.LastError = zone.Zone + ": " + zone.LastError

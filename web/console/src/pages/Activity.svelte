@@ -226,7 +226,7 @@
   </Panel>
 
   <div class="space-y-6">
-    <Panel label="Access by hostname" sub="Who each hostname lets in">
+    <Panel label="Who each address lets in" sub="Test access shows the decision for a person you describe">
       <div class="mb-3"><Freshness observedAt={routesObservedAt} refreshing={routesRefreshing} error={routesError ? "Route configuration could not be refreshed" : ""} /></div>
       {#if !routes}
         {#if routesError}<p class="text-destructive text-sm">Routes could not be read. <button class="underline" onclick={loadRoutes}>Retry</button></p>
@@ -237,13 +237,13 @@
         <ul class="divide-border -my-2 divide-y">
           {#each routes as r (r.host)}
             <li class="flex items-start gap-3 py-3">
-              <span class={["lamp mt-1.5", r.protected ? "lamp-wait" : "lamp-on"]} aria-hidden="true"></span>
+              <span class={["lamp mt-1.5", r.protected ? "lamp-on" : "lamp-warn"]} aria-hidden="true"></span>
               <div class="min-w-0 flex-1">
-                <a href={`/routes?host=${encodeURIComponent(r.host)}`} onclick={(event) => { event.preventDefault(); inspect(r.host); }} class="truncate font-mono text-[0.8rem] underline underline-offset-4" title={r.host}>{r.host}</a>
-                <div class="text-muted-foreground mt-0.5 text-xs">{r.protected ? "Login · " : "Public · "}{r.policy}</div>
-                {#if r.connector}<div class="text-muted-foreground font-mono text-xs">{r.connector} · {r.connection}</div>{/if}
+                <p class="truncate text-sm" title={r.host}>{r.host}</p>
+                <p class={["mt-0.5 text-xs", r.protected ? "text-muted-foreground" : "text-warning"]}>{r.protected ? "Private" : "Public"} · {r.policy}</p>
+                {#if r.connector}<p class="text-muted-foreground text-xs">Through {r.connector} · {r.connection}</p>{/if}
               </div>
-              <Button variant="ghost" size="sm" onclick={() => inspect(r.host)}>Inspect</Button>
+              <Button variant="ghost" size="sm" aria-label={`Test who can open ${r.host}`} onclick={() => inspect(r.host)}>Test access</Button>
             </li>
           {/each}
         </ul>
@@ -252,7 +252,7 @@
     <div class="border-border rounded-xl border border-dashed p-5">
       <p class="plate mb-2">About this view</p>
       <div class="text-muted-foreground space-y-2 text-sm leading-relaxed">
-        <p>The feed replays recent in-memory events. A restart clears history; slow clients may miss events.</p>
+        <p>This list shows recent events since the server started; a restart clears it. For a permanent record, enable the audit log in the server configuration.</p>
       </div>
     </div>
   </div>

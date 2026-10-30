@@ -464,6 +464,9 @@ type Status struct {
 	LastAttempt    time.Time
 	NextAttempt    time.Time
 	PendingIntents int
+	// RenewAt is when the served certificate is due for renewal (two
+	// thirds of its lifetime); zero without a valid certificate.
+	RenewAt time.Time
 	// Waiting is true while the manager waits for its Turn; Attempting
 	// while an issuance attempt runs.
 	Waiting    bool
@@ -478,6 +481,9 @@ func (m *Manager) Status() Status {
 		status.Valid = !now.Before(active.leaf.NotBefore) && now.Before(active.leaf.NotAfter)
 		status.NotBefore = active.leaf.NotBefore
 		status.NotAfter = active.leaf.NotAfter
+		if status.Valid {
+			status.RenewAt = active.leaf.NotAfter.Add(-active.leaf.NotAfter.Sub(active.leaf.NotBefore) / 3)
+		}
 	}
 	m.mu.Lock()
 	status.LastOutcome = m.lastOutcome

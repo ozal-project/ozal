@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applicationAccess, eventReason, friendlyHealth, shortId, subjectsOf, whoActed } from "./wording.ts";
+import { applicationAccess, eventReason, friendlyHealth, shortId, subjectsOf, whoActed, servedBy, whoMayEnter } from "./wording.ts";
 
 test("an admin request names the admin API, not a throwaway port", () => {
   assert.equal(whoActed("127.0.0.1:56198"), "the admin API");
@@ -68,4 +68,20 @@ test("application access summaries preserve identity and session restrictions", 
     assert.equal(applicationAccess({ access: policy }), "Sign-in with extra checks");
   }
   assert.equal(applicationAccess({ access: { required_groups: ["ops"], methods: ["passkey"] } }), "Group members · extra checks");
+});
+
+test("what serves an application reads without knowing the config", () => {
+  assert.equal(servedBy({ target: "http://127.0.0.1:3000" }), "App on this server · port 3000");
+  assert.equal(servedBy({ target: "http://10.0.0.5:8080" }), "App at 10.0.0.5:8080");
+  assert.equal(servedBy({ site: "blog" }), "Static website · blog");
+  assert.equal(servedBy({ connector: "homelab" }), "Machine connected through homelab");
+  assert.equal(servedBy({ upstreams: ["a", "b"] }), "2 servers, shared between them");
+});
+
+test("who may enter is one sentence with a public or private tone", () => {
+  assert.deepEqual(whoMayEnter({}), { tone: "public", text: "Public · anyone with the link" });
+  assert.deepEqual(whoMayEnter({ access: {} }), { tone: "private", text: "Private · anyone with an account" });
+  assert.deepEqual(whoMayEnter({ access: { required_groups: ["ops", "staff"] } }), { tone: "private", text: "Private · members of ops and staff" });
+  assert.deepEqual(whoMayEnter({ access: { allowed_domains: ["acme.dev"] } }), { tone: "private", text: "Private · @acme.dev" });
+  assert.equal(whoMayEnter({ auth_required: true }).tone, "private");
 });

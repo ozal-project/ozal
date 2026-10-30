@@ -33,7 +33,7 @@ export type AccessSummary = {
 };
 
 export type CertificateView = {
-  names: string[];
+  names: string[]; domains: string[];
   expires: string;
   renews: string;
   // "bad" when the certificate is not valid or runs out within `soonDays`.
@@ -55,13 +55,15 @@ const dateOf = (iso: string): string => {
 export function certificateView(cert: CertificateStatus | undefined, now: Date): CertificateView | null {
   if (!cert) return null;
   const names = cert.names?.length ? cert.names : cert.host ? cert.host.split(", ") : [];
+  // EDGE-008: an edge with one certificate per domain lists its domains.
+  const domains = cert.mode.includes("per zone") && cert.host ? cert.host.split(", ") : [];
   const end = new Date(cert.not_after);
   const left = Number.isNaN(end.getTime()) ? null : Math.floor((end.getTime() - now.getTime()) / dayMs);
   const expires = left === null ? "unknown" : left < 0 ? `expired on ${dateOf(cert.not_after)}` : `${dateOf(cert.not_after)} (${plural(left, "day")} left)`;
   const renews = cert.next_attempt ? dateOf(cert.next_attempt) : "not scheduled";
   const bad = !cert.valid || (left !== null && left < soonDays);
   const note = cert.last_error ? `The last renewal attempt failed: ${cert.last_error}.` : !cert.valid ? "It is not valid right now." : bad ? "It expires soon and has not been renewed." : "Renewed automatically.";
-  return { names, expires, renews, tone: bad ? "bad" : "good", note };
+  return { names, domains, expires, renews, tone: bad ? "bad" : "good", note };
 }
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;

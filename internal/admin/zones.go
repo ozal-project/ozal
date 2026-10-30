@@ -53,6 +53,7 @@ type zoneView struct {
 	State       string            `json:"state"`
 	Names       []string          `json:"names"`
 	NotAfter    string            `json:"not_after,omitempty"`
+	RenewsAt    string            `json:"renews_at,omitempty"`
 	LastAttempt string            `json:"last_attempt,omitempty"`
 	NextAttempt string            `json:"next_attempt,omitempty"`
 	LastError   string            `json:"last_error,omitempty"`
@@ -85,7 +86,7 @@ func (h *Handler) listZones(w http.ResponseWriter, _ *http.Request) {
 			view.LastError = status.LastError
 			view.LastAttempt, view.NextAttempt = zoneTime(status.LastAttempt), zoneTime(status.NextAttempt)
 			if status.Valid {
-				view.NotAfter = zoneTime(status.NotAfter)
+				view.NotAfter, view.RenewsAt = zoneTime(status.NotAfter), zoneTime(status.RenewAt)
 			}
 		}
 		zones = append(zones, view)

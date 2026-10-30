@@ -3,9 +3,10 @@
   import { admin, askForToken } from "$lib/adminToken.svelte";
   import ConfirmAction from "$lib/ConfirmAction.svelte";
   import Modal from "$lib/Modal.svelte";
+  import CopyCommand from "$lib/CopyCommand.svelte";
   import UploadIcon from "@lucide/svelte/icons/upload";
   import FileArchiveIcon from "@lucide/svelte/icons/file-archive";
-  let { site }: { site: string } = $props();
+  let { site, ask = $bindable(false), button = true }: { site: string; ask?: boolean; button?: boolean } = $props();
   let dialogOpen = $state(false);
   let file = $state<File | null>(null);
   let selected = $state<File | null>(null);
@@ -15,6 +16,7 @@
   let failure = $state(false);
   const size = (bytes: number) => (bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KiB` : `${(bytes / 1024 / 1024).toFixed(1)} MiB`);
   function start() { file = selected = null; message = ""; failure = false; dialogOpen = true; }
+  $effect(() => { if (ask) { ask = false; start(); } });
   async function upload() {
     if (!selected) return;
     waiting = true; message = ""; failure = false;
@@ -32,14 +34,15 @@
     selected = file; open = true;
   }
 </script>
-<Button variant="ghost" size="sm" aria-label={`Publish an artifact to ${site}`} onclick={start}><UploadIcon class="size-3.5" /> Publish</Button>
-<Modal bind:open={dialogOpen} title="Publish a build" intro={`Make a new version of ${site} live.`}>
-  <p class="text-muted-foreground mb-4 text-sm">Build locally or in CI and pack the contents of <code class="font-mono">dist</code> as tar.gz. Ozal validates and activates the artifact; it does not run build commands.</p>
+{#if button}<Button variant="ghost" size="sm" aria-label={`Publish an artifact to ${site}`} onclick={start}><UploadIcon class="size-3.5" /> Publish</Button>{/if}
+<Modal bind:open={dialogOpen} title="Publish a new version" intro={`Replace what ${site} shows with new files. The previous version is kept for rollback.`}>
+  <p class="text-muted-foreground mb-2 text-sm">Pack the folder your build produced (often <code class="font-mono">dist</code>) into one file:</p>
+  <div class="mb-4"><CopyCommand command="tar -czf site.tar.gz -C dist ." label="Copy packing command" /></div>
   <label class="border-input hover:border-ring has-[:focus-visible]:ring-ring/50 flex cursor-pointer items-center gap-3 rounded-lg border border-dashed px-4 py-5 transition-colors has-[:focus-visible]:ring-3">
     <span class="bg-muted grid size-10 shrink-0 place-items-center rounded-lg"><FileArchiveIcon class="text-muted-foreground size-5" /></span>
     <span class="min-w-0 text-sm">
       {#if file}<span class="block truncate font-medium">{file.name}</span><span class="text-muted-foreground text-xs">{size(file.size)} · choose another</span>
-      {:else}<span class="block font-medium">Choose a tar.gz artifact</span><span class="text-muted-foreground text-xs">Up to 100 MiB</span>{/if}
+      {:else}<span class="block font-medium">Choose site.tar.gz</span><span class="text-muted-foreground text-xs">Up to 100 MiB</span>{/if}
     </span>
     <input type="file" accept=".gz,.tgz" disabled={waiting} onchange={(e) => { file = e.currentTarget.files?.[0] ?? null; message = ""; failure = false; }} class="sr-only" />
   </label>

@@ -79,7 +79,7 @@ try {
   await ab("set", "viewport", "1440", "1000");
   await button("Workflow acceptance");
   await button("Sign out");
-  await ab("wait", "--text", "Sign in");
+  await ab("wait", "--text", "Private console");
   assert.equal(await evaluate("document.body.textContent.includes('octavia/website')"), false, "repository remained visible after sign-out");
   console.log("Workflow browser acceptance passed: preview, edited-input invalidation, Escape, explicit PR, session cleanup; axe 0 at 1440/1024/390/320.");
 } finally {

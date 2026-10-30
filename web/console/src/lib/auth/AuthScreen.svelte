@@ -6,7 +6,6 @@
   import CopyCommand from "$lib/CopyCommand.svelte";
   import EnrolForm from "$lib/EnrolForm.svelte";
   import HostLogin from "$lib/auth/HostLogin.svelte";
-  import Wordmark from "$lib/brand/Wordmark.svelte";
   import Logo from "$lib/brand/Logo.svelte";
 
   // The only thing a signed-out tab shows. It says what this is and how to get
@@ -48,61 +47,70 @@
     finally { waiting = false; }
   }
 
-  const heading = $derived(admin.enrol ? "Create your passkey" : mode === "host" ? "Sign in from the host" : enrolled === false ? "Set up the first administrator" : "Sign in");
+  const heading = $derived(admin.enrol ? "Create your passkey" : mode === "host" ? "Host login" : enrolled === false ? "Set up the first administrator" : "Sign in");
 </script>
 
 <main class="auth-shell">
-  <div class="auth-layout">
-    <section class="auth-identity" aria-label="Ozal private console">
-      <Wordmark sub="Private console" />
-      <div class="auth-story">
-        <Logo size={88} animated />
-        <p class="auth-statement">Your access.<br />Your control.</p>
-        <p class="auth-description">A private place to manage access to the applications you host.</p>
+  <div class="auth-column">
+    <header class="auth-mark">
+      <Logo size={72} entrance />
+      <div>
+        <p class="auth-name">ozal</p>
+        <p class="auth-sub">Private console</p>
       </div>
-      <p class="auth-footnote">Self-hosted. On your infrastructure.</p>
-    </section>
-    <div class="auth-form">
-    <div class="auth-form-body">
-      <h1 class="text-xl font-semibold">{heading}</h1>
+    </header>
+
+    <section class="auth-card" aria-labelledby="auth-title">
+      <h1 id="auth-title" class="text-lg font-semibold">{heading}</h1>
 
       {#if admin.enrol}
-        <p class="text-muted-foreground mt-1 mb-5 text-sm">This link was opened for you. Your passkey stays on your device; from now on you sign in with it.</p>
+        <p class="text-muted-foreground mt-1 mb-5 text-sm">Create the passkey you will sign in with. It stays on this device.</p>
         <EnrolForm />
       {:else if mode === "host"}
-        <p class="text-muted-foreground mt-1 mb-5 text-sm">For the host's operator when no passkey is available. The login is issued on the host and lasts 15 minutes.</p>
+        <p class="text-muted-foreground mt-1 mb-5 text-sm">Paste the one-time login printed on the server. It lasts 15 minutes.</p>
         <HostLogin />
-        {#if enrolled !== null}<button type="button" class="text-muted-foreground hover:text-foreground mt-6 text-sm underline-offset-4 hover:underline" onclick={() => { mode = "passkey"; }}>{enrolled === false ? "Back to setup" : "Back to passkey sign-in"}</button>{/if}
       {:else if enrolled === false}
-        <p class="text-muted-foreground mt-1 mb-4 text-sm">Open the setup link the installer printed, or paste it here.</p>
+        <p class="text-muted-foreground mt-1 mb-4 text-sm">Paste the setup link the installer printed.</p>
         <form class="flex items-center gap-2" onsubmit={usePasted}>
           <label class="sr-only" for="setup-link">Setup link</label>
-          <input id="setup-link" bind:value={pasted} autocomplete="off" spellcheck="false" placeholder="http://ozal.localhost:…/overview#enrol=…"
+          <input id="setup-link" bind:value={pasted} autocomplete="off" spellcheck="false" placeholder="http://ozal.localhost:…#enrol=…"
             class="border-input bg-background focus-visible:ring-ring h-9 min-w-0 flex-1 rounded-md border px-2.5 font-mono text-xs focus-visible:ring-2 focus-visible:outline-none" />
           <Button type="submit" size="sm" disabled={!pasted.trim()}>Continue</Button>
         </form>
         {#if pasteError}<p class="text-destructive mt-2 text-xs" role="alert">{pasteError}</p>{/if}
         <details class="mt-5 text-sm">
-          <summary class="text-muted-foreground hover:text-foreground cursor-pointer">No link?</summary>
-          <p class="text-muted-foreground mt-2 mb-2 text-xs">The host keeps a fresh one in a root-only file at every start, and this command prints a new one:</p>
+          <summary class="text-muted-foreground hover:text-foreground cursor-pointer">Lost the link?</summary>
+          <p class="text-muted-foreground mt-2 mb-2 text-xs">Run this on the server for a new one:</p>
           <CopyCommand command={enrolCommand} label="Copy enrol command" />
         </details>
       {:else if enrolled}
-        <p class="text-muted-foreground mt-1 mb-6 text-sm">Use the passkey you created for this console.</p>
-        {#if error || admin.notice}<p class="text-destructive mb-4 text-sm" role="alert">{error || admin.notice}</p>{/if}
-        <Button class="w-full" onclick={passkey} disabled={waiting || !onLocalhost}>{waiting ? "Waiting for your device…" : "Sign in with your passkey"}</Button>
-        <p class="text-muted-foreground mt-4 text-xs leading-relaxed">A passkey works in the browser or password manager that saved it. To use this browser too, sign in where it works and choose <span class="text-foreground">Sign in on another browser</span> in your menu.</p>
+        {#if admin.notice && !error}<p class="text-muted-foreground mt-1 text-sm" role="status">{admin.notice}</p>
+        {:else}<p class="text-muted-foreground mt-1 text-sm">Welcome back.</p>{/if}
+        {#if error}<p class="text-destructive mt-3 text-sm" role="alert">{error}</p>{/if}
+        <Button class="mt-6 w-full" onclick={passkey} disabled={waiting || !onLocalhost}>{waiting ? "Waiting for your device…" : "Sign in with passkey"}</Button>
       {:else}
         <p class="text-muted-foreground mt-2 text-sm" role="status">Checking…</p>
       {/if}
 
       {#if !onLocalhost && !admin.enrol && mode === "passkey" && enrolled !== undefined}
-        <p class="border-warning/40 bg-warning/[0.06] mt-4 rounded-md border px-3 py-2 text-xs" role="status">Passkeys need this console opened as <span class="font-mono">ozal.localhost</span> (for example http://ozal.localhost:{location.port || "9091"}), not by IP address.</p>
+        <p class="border-warning/40 bg-warning/[0.06] mt-4 rounded-md border px-3 py-2 text-xs" role="status">Open this console as <span class="font-mono">ozal.localhost:{location.port || "9091"}</span>: passkeys do not work on an IP address.</p>
       {/if}
-    </div>
-    {#if !admin.enrol && mode === "passkey" && enrolled !== undefined}
-      <p class="mt-5 text-center"><button type="button" class="text-muted-foreground hover:text-foreground text-xs underline-offset-4 hover:underline" onclick={() => { mode = "host"; }}>{enrolled === false ? "Use a host login instead" : "No passkey? Use a host login"}</button></p>
+    </section>
+
+    {#if !admin.enrol && enrolled !== undefined}
+      <div class="auth-links text-xs">
+        {#if mode === "host"}
+          {#if enrolled !== null}<button type="button" class="text-muted-foreground hover:text-foreground underline-offset-4 hover:underline" onclick={() => { mode = "passkey"; }}>{enrolled === false ? "Back to setup" : "Sign in with passkey"}</button>{/if}
+        {:else}
+          {#if enrolled}
+            <details class="text-muted-foreground w-full text-center">
+              <summary class="hover:text-foreground cursor-pointer list-none underline-offset-4 hover:underline">Passkey on another device?</summary>
+              <p class="mt-2 leading-relaxed">Sign in where your passkey works, then choose <span class="text-foreground">Sign in on another browser</span> in your account menu.</p>
+            </details>
+          {/if}
+          <button type="button" class="text-muted-foreground hover:text-foreground underline-offset-4 hover:underline" onclick={() => { mode = "host"; }}>{enrolled === false ? "Use a host login instead" : "Use a host login"}</button>
+        {/if}
+      </div>
     {/if}
-    </div>
   </div>
 </main>

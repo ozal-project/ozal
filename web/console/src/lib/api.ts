@@ -331,3 +331,30 @@ export const setAdminDisabled = (token: string, id: string, disabled: boolean, s
   adminPost(token, `/_/api/admins/${encodeURIComponent(id)}/${disabled ? "disable" : "enable"}`, undefined, signal);
 export const recoverAdmin = (token: string, id: string, signal?: AbortSignal) =>
   adminPost<{ token: string; expires: string; email: string }>(token, `/_/api/admins/${encodeURIComponent(id)}/recover`, undefined, signal);
+
+// EDGE-008: domains (zones), each with its own certificate.
+export type ZoneState = "pending" | "queued" | "issuing" | "active" | "renewing" | "renewal_failed" | "expiring" | "failed";
+export type Zone = {
+  name: string;
+  source: "config" | "runtime";
+  state: ZoneState;
+  names: string[];
+  not_after?: string;
+  renews_at?: string;
+  last_attempt?: string;
+  next_attempt?: string;
+  last_error?: string;
+  challenge: { name: string; target: string; delegated: boolean };
+  hosts: string[];
+};
+export type Zones = { config_sha256: string; available: boolean; zones: Zone[] };
+export type ZoneCheck = { zone: string; state?: ZoneState; challenge: { state: CheckState; detail: string; record?: DNSRecord } };
+export const fetchZones = (signal?: AbortSignal) => getJSON<Zones>("/_/api/zones", signal);
+export const addZone = (token: string, name: string, expected: string) => adminPost<{ config_sha256: string }>(token, "/_/api/zones", { name, expected });
+export const checkZone = (token: string, name: string) => adminPost<ZoneCheck>(token, `/_/api/zones/${encodeURIComponent(name)}/check`);
+export const renewZone = (token: string, name: string) => adminPost<{ status: string }>(token, `/_/api/zones/${encodeURIComponent(name)}/renew`);
+export async function removeZone(token: string, name: string, expected: string): Promise<void> {
+  const res = await fetch(`/_/api/zones/${encodeURIComponent(name)}`, { method: "DELETE", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ expected }), signal: boundedSignal() });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ?? `The domain could not be removed (HTTP ${res.status}).`);
+}

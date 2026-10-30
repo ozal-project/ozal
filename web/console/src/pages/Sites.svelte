@@ -146,7 +146,7 @@
   const total = $derived(sites?.reduce((n, s) => n + s.deployments.length, 0) ?? 0);
 </script>
 
-<PageHeader title="Sites" intro="Static sites served by Ozal. Each version is kept whole, so going live or back is one switch.">
+<PageHeader title="Sites" intro="Static websites Ozal serves. Every published version is kept, so going back to an earlier one is one click.">
   <div class="flex flex-col items-start gap-2 sm:items-end">
     <Button variant="outline" size="sm" onclick={load} disabled={loading}><RefreshIcon class={["size-3.5", loading && "animate-spin"]} /> Refresh</Button>
     <Freshness observedAt={observedAt} refreshing={loading && sites !== null} error={error} />
@@ -158,7 +158,7 @@
     <p class="text-muted-foreground text-sm">Add a <code class="font-mono">pages</code> block (an absolute <code class="font-mono">dir</code>) and start Ozal with <code class="font-mono">-db</code>. Routes then serve a deployment with <code class="font-mono">"site": "name"</code>.</p>
   </Panel>
 {:else}
-  <Summary label="Sites summary" items={[{ value: sites ? sites.length : "—", label: "sites" }, { value: sites ? total : "—", label: "versions kept for rollback" }]} />
+  <Summary label="Sites summary" items={[{ value: sites ? sites.length : "—", label: "websites" }, { value: sites ? total : "—", label: "versions kept" }]} />
 
   {#if error && sites}<p class="border-warning/40 bg-warning/[0.06] mb-4 rounded-md border p-3 text-sm" role="status">Showing the last successful read. Refresh failed: {error}</p>{/if}
   {#if routeStatusError}<p class="text-destructive mb-4 text-sm" role="alert">Hostname mappings could not be refreshed. Retry before changing a live build. <button class="underline" onclick={load}>Retry</button></p>{/if}
@@ -185,7 +185,7 @@
                 <div class="flex items-start justify-between gap-3">
                   <div class="min-w-0"><p class="break-all font-mono text-sm" title={d.id}>{d.id.slice(0, 12)}</p><p class="text-muted-foreground text-xs">{when(d.created_at)}</p></div>
                   {#if d.live}<span class="inline-flex shrink-0 items-center gap-2 font-mono text-xs"><span class="lamp lamp-on" aria-hidden="true"></span>live</span>
-                  {:else}<Button variant="outline" size="sm" disabled={siteBusy(site.name)} onclick={() => restore(site, d)} aria-label={`Review activation of ${d.id.slice(0, 12)} for ${site.name}`}><UndoIcon class="size-3.5" /> Review</Button>{/if}
+                  {:else}<Button variant="outline" size="sm" disabled={siteBusy(site.name)} onclick={() => restore(site, d)} aria-label={`Restore ${d.id.slice(0, 12)} for ${site.name}`}><UndoIcon class="size-3.5" /> Restore</Button>{/if}
                 </div>
                 <p class="text-muted-foreground mt-2 text-xs">{d.files} files · {size(d.bytes)}</p>
                 {#if mutations[key]}<div class="mt-2"><Button variant="ghost" size="sm" onclick={() => stopRestore(key)}>Stop waiting</Button></div>{/if}
@@ -196,7 +196,7 @@
           <div class="hidden overflow-x-auto md:block" role="region" tabindex="0" aria-label={`Deployments for ${site.name}`}>
             <Table.Root>
               <Table.Header><Table.Row>
-                <Table.Head class="plate pl-5">Deployment</Table.Head><Table.Head class="plate">Uploaded</Table.Head><Table.Head class="plate">Contents</Table.Head><Table.Head class="plate pr-5 text-right">State</Table.Head>
+                <Table.Head class="plate pl-5">Version</Table.Head><Table.Head class="plate">Published</Table.Head><Table.Head class="plate">Contents</Table.Head><Table.Head class="plate pr-5 text-right"><span class="sr-only">State</span></Table.Head>
               </Table.Row></Table.Header>
               <Table.Body>
                 {#each site.deployments as d (d.id)}
@@ -209,8 +209,8 @@
                       {#if d.live}
                         <span class="inline-flex items-center gap-2 font-mono text-xs"><span class="lamp lamp-on" aria-hidden="true"></span>live</span>
                       {:else}
-                        <Button variant="outline" size="sm" disabled={siteBusy(site.name)} onclick={() => restore(site, d)} aria-label={`Review activation of ${d.id.slice(0, 12)} for ${site.name}`}>
-                          <UndoIcon class="size-3.5" /> {mutations[key] ? "Waiting…" : "Review activation"}
+                        <Button variant="outline" size="sm" disabled={siteBusy(site.name)} onclick={() => restore(site, d)} aria-label={`Restore ${d.id.slice(0, 12)} for ${site.name}`}>
+                          <UndoIcon class="size-3.5" /> {mutations[key] ? "Waiting…" : "Restore"}
                         </Button>
                         {#if mutations[key]}<Button variant="ghost" size="sm" onclick={() => stopRestore(key)}>Stop waiting</Button>{/if}
                       {/if}
@@ -232,12 +232,12 @@
 
 <ConfirmAction
   bind:open={reviewOpen}
-  title="Change the live site build?"
+  title="Restore this version?"
   target={review?.site ?? ""}
   current={review?.current ? `Live ${review.current.id.slice(0, 12)}` : "No live deployment recorded"}
   requested={review ? `Live ${review.deployment.id.slice(0, 12)}` : ""}
   consequence="Requests to the mapped hostnames will receive the selected build as soon as the server switches it."
   detail={review ? `Mapped hostnames: ${review.hosts.length ? review.hosts.join(", ") : "none"}. Previous build remains selectable if retained: ${review.current?.id.slice(0, 12) ?? "none"}.` : ""}
-  confirmLabel="Make build live"
+  confirmLabel="Restore version"
   onConfirm={commitRestore}
 />

@@ -41,6 +41,17 @@
     finally { if (run.isCurrent()) busy = false; run.finish(); }
   }
   onMount(() => { if (admin.token.trim()) void load(); return () => reads.cancel(); });
+  // The trusted workflow claim reads "owner/repo/.github/workflows/file@ref":
+  // show it as a repository, a branch and a file instead of numeric IDs.
+  function trusted(workflowRef: string | undefined, ref: string) {
+    const [path, at] = (workflowRef ?? "").split("@");
+    const cut = path.indexOf("/.github/workflows/");
+    return {
+      repository: cut > 0 ? path.slice(0, cut) : undefined,
+      workflow: cut > 0 ? path.slice(cut + "/.github/workflows/".length) : undefined,
+      branch: (at || ref).replace(/^refs\/heads\//, "") || undefined,
+    };
+  }
   function select(repo: Repository) { selected = repo; name = repo.full_name.split("/")[1].toLowerCase().replace(/[^a-z0-9-]/g, "-"); ref = `refs/heads/${repo.default_branch}`; site = sites[0] ?? ""; }
   function prepare(e: SubmitEvent) {
     e.preventDefault(); if (!selected || !setup) return;
@@ -62,21 +73,24 @@
 </script>
 {#if embedded}
   <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
-    <div><p class="plate">Publishing</p><h2 class="mt-1 text-lg font-semibold tracking-tight">Who may publish from CI</h2><p class="text-muted-foreground text-sm">Choose which repository may publish each static site. Publishing and visitor access are separate permissions.</p></div>
-    <Button variant="outline" disabled={busy} onclick={load}>{busy ? "Reading…" : "Read projects & GitHub"}</Button>
+    <div class="max-w-2xl"><h2 class="text-lg font-semibold tracking-tight">Publishing from GitHub</h2><p class="text-muted-foreground mt-1 text-sm">Websites that update themselves: each push to the chosen branch builds in GitHub Actions and publishes here. Ozal trusts exactly one repository, branch and workflow per website; nothing else can publish it.</p></div>
+    <Button variant="outline" size="sm" aria-label="Refresh publishing" disabled={busy} onclick={load}>{busy ? "Reading…" : "Refresh"}</Button>
   </div>
 {:else}
-<PageHeader title="CI projects" intro="Choose which repository may publish each static site. Publishing and visitor access are separate permissions.">
-  <Button variant="outline" disabled={busy} onclick={load}>{busy ? "Reading…" : "Read projects & GitHub"}</Button>
+<PageHeader title="Publishing from GitHub" intro="Each push to the chosen branch builds in GitHub Actions and publishes here. Ozal trusts exactly one repository, branch and workflow per website.">
+  <Button variant="outline" size="sm" aria-label="Refresh publishing" disabled={busy} onclick={load}>{busy ? "Reading…" : "Refresh"}</Button>
 </PageHeader>
 {/if}
 {#if error}<p class="text-destructive mb-4 text-sm" role="alert">{error}</p>{/if}
 {#if notice}<p class="mb-4 text-sm" role="status">{notice}</p>{/if}
 {#if repositories && !repositories.configured}
-  <Panel label="Optional integration" title="Connect your own GitHub App" class="mb-6">
-    <p class="text-muted-foreground text-sm">Install a metadata-read GitHub App on selected repositories, then configure its App ID, installation ID and private-key file reference on this host. See the GitHub setup guide in the project documentation. No token or private key goes into this browser.</p>
-    <p class="mt-3 text-sm">Manual project configuration still works. GitHub is not required for manual uploads; your build secrets stay in GitHub and application secrets stay on their host.</p>
-  </Panel>
+  <details class="bg-card mb-6 rounded-lg px-5 py-4 text-sm">
+    <summary class="cursor-pointer font-medium">Optional: connect a GitHub App <span class="text-muted-foreground font-normal">· to pick repositories here and let Ozal propose the workflow</span></summary>
+    <div class="text-muted-foreground mt-3 grid gap-2">
+      <p>Without it, websites that already publish keep working; you add the workflow file to the repository yourself.</p>
+      <p>With it, you install your own GitHub App on the repositories you choose and set its App ID, installation ID and private-key file in this server's configuration (see the GitHub guide in the documentation). No GitHub token or key passes through this browser.</p>
+    </div>
+  </details>
 {:else if repositories?.configured}
   <Panel label="Repository discovery" title="Repositories this installation can see" class="mb-6">
     <p class="text-muted-foreground mb-3 text-sm">Only selected installation repositories are listed. This does not import GitHub users or teams.</p>
@@ -97,17 +111,36 @@
     </form>
   </Panel>
 {/if}
-<Panel label="Configured projects" title="Who may publish">
+<Panel label="Configured projects" title="Websites that publish from GitHub">
   {#if !projectsLoaded && busy}
     <p class="text-muted-foreground text-sm" aria-busy="true">Reading configured projects…</p>
   {:else if error && !projectsLoaded}
     <p class="text-destructive text-sm" role="alert">Configured projects could not be read ({error}). <button class="underline" onclick={load}>Retry</button></p>
   {:else if !projectsLoaded}
-    <p class="text-muted-foreground text-sm">Read projects to verify publisher access.</p>
+    <p class="text-muted-foreground text-sm">Loading…</p>
   {:else if projects.length === 0}
-    <p class="text-muted-foreground text-sm">No CI projects configured. Manual static uploads can still work.</p>
+    <p class="text-muted-foreground text-sm">No website publishes from GitHub yet. You can still publish by uploading files from Applications.</p>
   {:else}
-    <ul class="divide-y">{#each projects as p (p.name)}<li class="py-4"><div class="flex flex-wrap items-center justify-between gap-3"><h2 class="font-semibold">{p.name} · {p.site}</h2><Button variant="outline" size="sm" disabled={busy} onclick={() => { removing = p; frozen = null; confirm = true; }}>Disconnect publisher</Button></div><p class="text-muted-foreground mt-2 break-all text-sm">{p.hostnames.join(", ")}</p>{#each p.deployers as d}<p class="mt-2 break-all text-sm">{d.type === "github" ? `Repository ${d.github.repository_id} · ${d.github.ref} · ${d.github.workflow_ref}` : "Project-scoped token configured"}</p>{/each}{#if p.deployers.filter((d) => d.type === "github").length === 1}<WorkflowProposal project={p} {page} />{/if}</li>{/each}</ul>
+    <ul class="divide-y">
+      {#each projects as p (p.name)}
+        {@const github = p.deployers.flatMap((d) => (d.type === "github" ? [d.github] : []))}
+        <li class="grid gap-2 py-4">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="min-w-0">
+              <h3 class="font-medium">{p.site}{#if p.name !== p.site}<span class="text-muted-foreground font-normal"> · project {p.name}</span>{/if}</h3>
+              <p class="text-muted-foreground mt-0.5 text-sm break-all">{p.hostnames.length ? p.hostnames.join(", ") : "Not served at any address yet"}</p>
+            </div>
+            <Button variant="ghost" size="sm" class="text-muted-foreground" disabled={busy} onclick={() => { removing = p; frozen = null; confirm = true; }}>Stop publishing</Button>
+          </div>
+          {#each github as g (g.repository_id)}
+            {@const source = trusted(g.workflow_ref, g.ref)}
+            <p class="text-sm">Publishes from <span class="font-mono text-xs">{source.repository ?? `repository #${g.repository_id}`}</span>{#if source.branch}{" · branch "}<span class="font-mono text-xs">{source.branch}</span>{/if}{#if source.workflow}{" · "}<span class="font-mono text-xs">{source.workflow}</span>{/if}</p>
+          {/each}
+          {#if p.deployers.some((d) => d.type === "token")}<p class="text-sm">Publishes with a project token (for CI outside GitHub).</p>{/if}
+          {#if github.length === 1 && repositories?.configured}<WorkflowProposal project={p} {page} />{/if}
+        </li>
+      {/each}
+    </ul>
   {/if}
 </Panel>
-<ConfirmAction bind:open={confirm} title={removing ? "Disconnect this publisher?" : "Change publisher trust?"} target={removing?.name ?? frozen?.name ?? ""} current={removing ? "Configured deploy trust" : "Current project trust, if any"} requested={removing ? "No deploy trust for this project" : `${frozen?.ref} · ${frozen?.workflow}`} consequence={removing ? "Future deploy authentication for this project stops. Content remains. An already authenticated upload may finish." : "Only the selected repository, owner, ref and workflow will be trusted for this project. Previous token deployers will be removed."} detail="This does not change visitor access, uninstall the GitHub App or change any repository file." confirmLabel={removing ? "Disconnect publisher" : "Save publisher trust"} onConfirm={() => void save()} />
+<ConfirmAction bind:open={confirm} title={removing ? "Stop publishing from GitHub?" : "Change publisher trust?"} target={removing?.name ?? frozen?.name ?? ""} current={removing ? "Configured deploy trust" : "Current project trust, if any"} requested={removing ? "No deploy trust for this project" : `${frozen?.ref} · ${frozen?.workflow}`} consequence={removing ? "Future deploy authentication for this project stops. Content remains. An already authenticated upload may finish." : "Only the selected repository, owner, ref and workflow will be trusted for this project. Previous token deployers will be removed."} detail="This does not change visitor access, uninstall the GitHub App or change any repository file." confirmLabel={removing ? "Stop publishing" : "Save publisher trust"} onConfirm={() => void save()} />

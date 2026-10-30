@@ -36,7 +36,7 @@ implica que esa persona pueda administrar Ozal.
 
 Para un sitio estático, usa `setup -dir ./my-site -site portfolio`. La
 configuración ya tiene persistencia y Pages. La primera publicación aún falta:
-sube un tar.gz del contenido de `dist` en **Applications → Publish** (o al agregarla con **Add website**),
+sube un tar.gz del contenido de `dist` con **Applications → Más → Publish a new version** (o al agregarla con **Add application**),
 o usa `site deploy` con el token mediante su referencia a archivo. La web del
 proyecto se construye fuera del edge.
 
@@ -138,31 +138,36 @@ ruta pública. El bootstrap no convierte al primer visitante en dueño.
 
 ## Agregar una web desde Applications
 
-**Add website** es un solo recorrido en la consola (`UI-006`, 28/10/2026):
+**Add application** es un solo recorrido en la consola (`UI-006`; reescrito
+en lenguaje simple el 30/10/2026, `UI-011`):
 
-1. **Dirección y origen.** El hostname (nuevo o el que mudas) y qué la sirve:
-   una aplicación en ejecución (URL privada), archivos estáticos o una app detrás
-   de un conector ya enrolado. Con archivos estáticos subes el `tar.gz` de
-   `dist` en el mismo paso: el nombre del sitio sale de la dirección (se puede
-   cambiar) y la primera publicación crea el sitio. También puedes elegir
-   **From GitHub** para guardar la ruta sin subir un archivo y continuar en
-   Sites con la selección del repositorio y la propuesta de workflow. Un build
-   retenido con el mismo nombre se sirve al guardar; sin uno, la ruta no tiene
-   contenido hasta la primera publicación. Ozal no compila.
-2. **Quién entra.** Un grupo, cualquier persona autenticada o público. Por
-   defecto se pide un grupo; varios grupos significan **todos**. Opcionalmente
-   escribes correos para invitar: cada persona recibe un enlace de un solo uso
-   para crear su passkey y queda en esos grupos.
-3. **Revisión.** Muestra destino, acceso, invitaciones y certificado. Nada cambia
-   hasta guardar; la confirmación vuelve a comprobar el digest de la config.
-4. **Conectar.** Al guardar se publica el build si se subió uno, se guarda la
-   ruta y se crean las invitaciones (sus enlaces se copian ahí, solo esa vez).
-   Desde GitHub se continúa primero en Sites y se verifica la publicación
-   antes de mover DNS. Para las demás opciones, el panel muestra el
-   **único registro DNS** que falta y lo comprueba cada pocos segundos:
-   DNS → certificado → una petición pública con un token de un solo uso que solo
-   este edge responde (`/.well-known/ozal-probe/…`, antes del pipeline).
-   El mismo panel se abre en cada fila con el botón de globo.
+1. **Qué la sirve.** Una app que ya corre (la URL privada que usa Ozal, por
+   ejemplo `http://127.0.0.1:3000`), un sitio estático (el `tar.gz` de `dist`,
+   con el comando para empaquetarlo a la vista), un sitio que publica desde
+   GitHub o una app en otra máquina detrás de un conector ya enrolado (se elige
+   de la lista). El nombre del sitio sale de la dirección y se puede cambiar.
+   Ozal no compila. Al editar una app existente este paso permite conservar el
+   destino; publicar una versión nueva no se hace aquí sino desde **Más**.
+2. **Dirección.** Con dominios gestionados (`tls.dns01`), se escribe el
+   subdominio y se elige el dominio; la consola dice si su certificado lo cubre.
+   Una dirección fuera de los dominios exige agregarlo antes en **Domains**.
+3. **Quién entra.** Un esquema explica la capa de acceso (visita → passkey →
+   regla → la app recibe a la persona con `X-Auth-Request-Email` y
+   `X-Auth-Request-User`). Se elige un grupo, cualquier persona con cuenta o
+   público. Varios grupos significan **todos**. Opcionalmente se invitan
+   correos: cada persona recibe un enlace de un solo uso para crear su passkey
+   y queda en esos grupos.
+4. **Revisión.** Muestra destino, acceso, invitaciones y HTTPS. Nada cambia
+   hasta guardar y confirmar; la confirmación vuelve a comprobar el digest.
+
+Después de guardar se publica el build si se subió uno, se guarda la ruta, se
+crean las invitaciones (sus enlaces se copian ahí, solo esa vez) y el panel
+muestra el **único registro DNS** que falta y lo comprueba cada pocos segundos:
+DNS → certificado → una petición pública con un token de un solo uso que solo
+este edge responde (`/.well-known/ozal-probe/…`, antes del pipeline). Desde
+GitHub se continúa primero en Sites. Cada fila tiene **Edit** y un menú **Más**
+con *DNS & HTTPS*, *Publish a new version* y *Versions & rollback* (sitios),
+*Who opened it* y *Remove*.
 
 Si la petición llega a otro servidor, el DNS todavía apunta al hosting anterior.
 Si el proxy de Cloudflare responde 52x, no pudo hablar con el origen: revisa
@@ -175,8 +180,10 @@ siga abierto, **todavía puede eludirse la nueva política**.
 - **Certificados.** Con TLS por HTTP-01 (sin `tls.dns01`), cualquier ruta guardada
   obtiene su certificado en la primera visita, sin editar `tls.domains` ni
   reiniciar; el listener solo pide certificados para rutas configuradas. Con
-  `tls.dns01` el certificado gestionado define los nombres posibles (un wildcard
-  cubre sus subdominios); un hostname fuera de ellos se rechaza al guardar.
+  `tls.dns01` cada dominio de **Domains** tiene su propio certificado (el
+  dominio y un nivel de subdominios); se agregan desde la consola sin reiniciar
+  y un hostname fuera de ellos se rechaza al guardar
+  ([zonas](../reference.md#zonas-un-certificado-por-dominio)).
 - **DNS.** `dns.target` es la dirección pública del edge: una IP (registro A o
   AAAA) o un hostname (CNAME). Sin ella el panel igual verifica, pero no puede
   escribir el registro exacto. `dns.proxied` marca el registro como proxied.
@@ -202,9 +209,8 @@ siga abierto, **todavía puede eludirse la nueva política**.
   [sesiones por host](../architecture/host-sessions.md)). Con sólo OIDC
   externo sigue rechazándose al revisar.
 
-La ficha reúne destino y acceso, enlace al simulador, publicación de artefactos
-y acceso a versiones/rollback. **Configure** conserva campos avanzados cuando
-se elige mantener el destino o la política. Cambiar expresamente la política
+**Edit** conserva campos avanzados cuando se elige mantener el destino o la
+política. Cambiar expresamente la política
 básica la reemplaza: revisa antes qué acceso se está quitando o dando.
 
 ## Dominio, rollback y backend

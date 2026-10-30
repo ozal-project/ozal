@@ -114,6 +114,12 @@ test("the certificate view lists every name, the days left and the next renewal"
   assert.equal(certificateView(undefined, new Date()), null);
 });
 
+test("an edge with one certificate per domain lists its domains", () => {
+  const view = certificateView(cert({ mode: "ACME DNS-01, one certificate per zone", host: "example.com, other.dev", names: ["*.example.com", "example.com", "*.other.dev", "other.dev"] }), new Date("2026-10-30T12:00:00Z"));
+  assert.deepEqual(view?.domains, ["example.com", "other.dev"]);
+  assert.deepEqual(certificateView(cert(), new Date("2026-10-30T12:00:00Z"))?.domains, []);
+});
+
 test("an older edge without names still shows them from host", () => {
   assert.deepEqual(certificateView(cert({ names: undefined }), new Date("2026-10-30T00:00:00Z"))?.names, ["*.example.com", "example.com"]);
 });

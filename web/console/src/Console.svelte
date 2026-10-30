@@ -14,6 +14,7 @@
   import People from "./pages/People.svelte";
   import Administrators from "./pages/Administrators.svelte";
   import Groups from "./pages/Groups.svelte";
+  import Domains from "./pages/Domains.svelte";
   import Wordmark from "$lib/brand/Wordmark.svelte";
   import MenuIcon from "@lucide/svelte/icons/menu";
   import XIcon from "@lucide/svelte/icons/x";
@@ -30,6 +31,7 @@
     ] },
     { name: "Access", items: [
       { path: "/applications", label: "Applications", tool: "applications", also: ["/routes"] },
+      { path: "/domains", label: "Domains", tool: "applications" },
       { path: "/people", label: "People", tool: "people", also: ["/groups", "/administrators"] },
     ] },
     { name: "Edge", items: [
@@ -57,6 +59,7 @@
     "/overview": "What needs you, and what changed",
     "/applications": "Destinations and who may enter",
     "/routes": "Destinations and who may enter",
+    "/domains": "Domains and their certificates",
     "/people": "People, groups and administrators",
     "/administrators": "People, groups and administrators",
     "/sites": "Published versions and CI",
@@ -200,6 +203,7 @@
     {:else if route.path === "/groups"}<Groups />
     {:else if route.path === "/administrators"}<Administrators />
     {:else if route.path === "/sites"}<Sites />
+    {:else if route.path === "/domains"}<Domains />
     {:else}<Overview />{/if}
     </div>{/key}
   </main>

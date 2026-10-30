@@ -17,13 +17,13 @@ type ChallengeCheck struct {
 // written by the DNS provider itself, so nothing is checked or asked for.
 func AssessChallenge(name, target string, delegated bool, canonical string, lookupFailed bool) ChallengeCheck {
 	if !delegated {
-		return ChallengeCheck{Step: Step{State: StateOK, Detail: "the DNS provider writes " + name + " itself at each issuance; no record to create"}}
+		return ChallengeCheck{Step: Step{State: StateOK, Detail: "The DNS provider writes " + name + " itself at each issuance; no record to create"}}
 	}
 	record := &Record{Type: "CNAME", Name: name, Content: target}
 	canonical = strings.TrimSuffix(strings.ToLower(canonical), ".")
 	switch {
 	case lookupFailed || canonical == "" || canonical == name:
-		return ChallengeCheck{Step: Step{State: StateBad, Detail: "create " + name + " as a CNAME to " + target + " at the DNS that serves the domain"}, Record: record}
+		return ChallengeCheck{Step: Step{State: StateBad, Detail: "Create " + name + " as a CNAME to " + target + " at the DNS that serves the domain"}, Record: record}
 	case canonical != target:
 		return ChallengeCheck{Step: Step{State: StateBad, Detail: name + " points at " + canonical + "; change it to " + target}, Record: record}
 	default:

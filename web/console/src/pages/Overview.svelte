@@ -271,11 +271,12 @@
     </Panel>
 
     {#if certificate}
-      <Panel label="Certificate" sub={certificate.note}>
+      <Panel label={certificate.domains.length ? "Domains & certificates" : "Certificate"} sub={certificate.note}>
+        {#snippet actions()}{#if certificate.domains.length && can("applications")}<a href="/domains" onclick={(e) => { e.preventDefault(); navigate("/domains"); }} class="text-sm font-medium hover:underline">Manage →</a>{/if}{/snippet}
         <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
-          <dt class="text-muted-foreground">Covers</dt>
-          <dd class="flex min-w-0 flex-wrap gap-1.5">{#each certificate.names as name (name)}<code class="bg-muted rounded-md px-1.5 py-0.5 text-xs break-all">{name}</code>{/each}</dd>
-          <dt class="text-muted-foreground">Valid until</dt>
+          <dt class="text-muted-foreground">{certificate.domains.length ? "Domains" : "Covers"}</dt>
+          <dd class="flex min-w-0 flex-wrap gap-1.5">{#each certificate.domains.length ? certificate.domains : certificate.names as name (name)}<code class="bg-muted rounded-md px-1.5 py-0.5 text-xs break-all">{name}</code>{/each}</dd>
+          <dt class="text-muted-foreground">{certificate.domains.length ? "First to expire" : "Valid until"}</dt>
           <dd class={certificate.tone === "bad" ? "text-destructive" : ""}>{certificate.expires}</dd>
           <dt class="text-muted-foreground">Next renewal</dt>
           <dd>{certificate.renews}</dd>

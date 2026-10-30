@@ -1,6 +1,6 @@
 // A tiny History API router: a few fixed pages do not need a routing library.
 // The Go handler serves index.html for each of these paths.
-export const pages = ["/connectors", "/applications", "/overview", "/activity", "/routes", "/people", "/groups", "/administrators", "/sites"] as const;
+export const pages = ["/connectors", "/applications", "/domains", "/overview", "/activity", "/routes", "/people", "/groups", "/administrators", "/sites"] as const;
 export type Page = (typeof pages)[number];
 
 // Old bookmarks: CI projects live inside Sites, and the policy simulator moved

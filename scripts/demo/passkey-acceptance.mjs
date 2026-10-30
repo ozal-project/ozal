@@ -41,7 +41,7 @@ const device = async () => {
   return { context, page, credentials };
 };
 const inConsole = (page) => page.locator("#main-content h1", { hasText: "Overview" }).waitFor();
-const signedOut = (page) => page.getByRole("button", { name: "Sign in with your passkey" }).waitFor();
+const signedOut = (page) => page.getByRole("button", { name: "Sign in with passkey" }).waitFor();
 const menu = async (page, name) => { await page.getByRole("button", { name, exact: true }).click(); return page.locator("#user-menu"); };
 // A revoked session ends on the console's next request: either the page
 // already noticed (event stream, renewal) or the next navigation makes it.
@@ -76,9 +76,9 @@ try {
 
   step = "passkey sign-in after signing out";
   await signOut(laptop.page, "Olivia Owner");
-  await laptop.page.getByRole("button", { name: "Sign in with your passkey" }).click();
+  await laptop.page.getByRole("button", { name: "Sign in with passkey" }).click();
   await inConsole(laptop.page);
-  assert.match(await (await menu(laptop.page, "Olivia Owner")).textContent(), /Passkey · 6 of 6 tools/);
+  assert.match(await (await menu(laptop.page, "Olivia Owner")).textContent(), /Signed in with a passkey[\s\S]*Full access/);
   await laptop.page.keyboard.press("Escape");
 
   step = "another browser through a one-use device link";
@@ -94,7 +94,7 @@ try {
   await phone.page.getByRole("button", { name: "Create my passkey" }).click();
   await inConsole(phone.page);
   await signOut(phone.page, "Olivia Owner");
-  await phone.page.getByRole("button", { name: "Sign in with your passkey" }).click();
+  await phone.page.getByRole("button", { name: "Sign in with passkey" }).click();
   await inConsole(phone.page);
   assert.equal((await admins()).find((a) => a.email === "olivia@acme.dev").passkeys, 2, "the second browser's passkey was not added");
   const reused = await device();
@@ -133,7 +133,7 @@ try {
   await laptop.page.getByRole("button", { name: "Close menu" }).click();
   await laptop.page.setViewportSize({ width: 1280, height: 900 });
   await endedOnNextRequest(phone.page);
-  await phone.page.getByRole("button", { name: "Sign in with your passkey" }).click();
+  await phone.page.getByRole("button", { name: "Sign in with passkey" }).click();
   await phone.page.getByRole("alert").waitFor();
   assert.equal(await phone.page.locator("#main-content h1").count(), 0, "the removed passkey still signed in");
 
@@ -153,7 +153,7 @@ try {
   assert.equal(await bea.page.getByLabel("Full name").inputValue(), "Bea");
   await bea.page.getByRole("button", { name: "Create my passkey" }).click();
   await inConsole(bea.page);
-  assert.match(await (await menu(bea.page, "Bea")).textContent(), /1 of 6 tools/);
+  assert.match(await (await menu(bea.page, "Bea")).textContent(), /This session can invite people/);
   await bea.page.keyboard.press("Escape");
   assert.deepEqual((await admins()).find((a) => a.email === "bea@acme.dev").tools, ["people"]);
 
@@ -174,7 +174,7 @@ try {
   step = "the lost device is signed out and its passkey refused";
   // Her open session on the lost device ends on its next request.
   await endedOnNextRequest(bea.page);
-  await bea.page.getByRole("button", { name: "Sign in with your passkey" }).click();
+  await bea.page.getByRole("button", { name: "Sign in with passkey" }).click();
   await bea.page.getByRole("alert").waitFor();
   assert.equal(await bea.page.locator("#main-content h1").count(), 0, "a replaced passkey still signed in");
   assert.equal((await admins()).find((a) => a.email === "bea@acme.dev").passkeys, 1, "recovery kept the old passkey");
