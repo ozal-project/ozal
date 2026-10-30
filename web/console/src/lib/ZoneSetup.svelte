@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { Button } from "$lib/components/ui/button";
   import DnsRecord from "$lib/DnsRecord.svelte";
   import { admin } from "$lib/adminToken.svelte";
@@ -7,8 +7,8 @@
   // EDGE-009: what a domain still needs at its DNS provider and proxy, as a
   // checklist. With a Cloudflare token on the host one button does every
   // step; without it each step says what to click in Cloudflare.
-  // ready is bound by the card so it can open itself while steps remain.
-  let { zone, editable = false, onApplied, ready = $bindable(true) }: { zone: Zone; editable?: boolean; onApplied?: () => void; ready?: boolean } = $props();
+  // onReady lets the card open itself while steps remain.
+  let { zone, editable = false, onApplied, onReady }: { zone: Zone; editable?: boolean; onApplied?: () => void; onReady?: (ready: boolean) => void } = $props();
   let setup = $state<ZoneSetup | null>(null);
   let error = $state("");
   let busy = $state<"" | "check" | "apply">("");
@@ -17,7 +17,7 @@
   const visible = $derived(setup?.steps.filter((s) => s.state !== "not_needed") ?? []);
   const doable = $derived(!!setup?.provider && visible.some((s) => s.state === "todo" && s.action));
   const left = $derived(visible.filter((s) => s.state !== "done").length);
-  $effect(() => { if (setup) ready = setup.ready; });
+  $effect(() => { const r = setup?.ready; if (r !== undefined) untrack(() => onReady?.(r)); });
   const lamp: Record<SetupStep["state"], string> = { done: "lamp-on", todo: "lamp-wait", blocked: "lamp-off", unknown: "lamp-warn", not_needed: "" };
   const word: Record<SetupStep["state"], string> = { done: "Done", todo: "To do", blocked: "Needs you", unknown: "Check by hand", not_needed: "" };
   const actionWord: Record<string, string> = { create_cname: "created the DNS record for certificates", set_strict: "set encryption to Full (strict)", upload_certificate: "uploaded this edge's proxy certificate", enable_origin_pull: "turned on Authenticated Origin Pulls" };

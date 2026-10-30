@@ -26,6 +26,8 @@
   let checks = $state<Record<string, ZoneCheck>>({});
   let busy = $state<Record<string, string>>({});
   let ready = $state<Record<string, boolean>>({});
+  // A card the operator just set up stays open so the result stays readable.
+  let touched = $state<Record<string, boolean>>({});
   const editable = $derived(can("applications"));
 
   async function load() {
@@ -179,9 +181,9 @@
           {/if}
 
           {#if data.setup}
-            <details class="group px-5 pt-2 pb-1" open={ready[zone.name] === false}>
+            <details class="group px-5 pt-2 pb-1" open={ready[zone.name] === false || touched[zone.name]}>
               <summary class="text-muted-foreground hover:text-foreground cursor-pointer text-sm">{ready[zone.name] === false ? "Finish the setup at your DNS provider" : "Setup at your DNS provider"}</summary>
-              <div class="mt-3"><ZoneSetup {zone} {editable} onApplied={load} bind:ready={ready[zone.name]} /></div>
+              <div class="mt-3"><ZoneSetup {zone} {editable} onApplied={() => { touched = { ...touched, [zone.name]: true }; void load(); }} onReady={(r) => (ready = { ...ready, [zone.name]: r })} /></div>
             </details>
           {:else if zone.challenge.delegated}
             <details class="group px-5 pt-2 pb-1" open={needsRecord}>
