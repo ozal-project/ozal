@@ -139,8 +139,26 @@
 
 /* Identity motion. Every animation here stops under prefers-reduced-motion
    (rule above); none is needed to read or use a page. */
-.logo-live .logo-light { transform-box: fill-box; transform-origin: left center; animation: door-open 0.7s 0.2s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
-@keyframes door-open { from { opacity: 0; transform: scaleX(0); } }
+/* The mark's entrance: the arch rises, the leaf swings open from closed to its
+   resting angle on the left hinge, the light comes up behind it and a beam
+   crosses the doorway. Fill mode is backwards only, so each piece ends on the
+   static mark and hover styles still apply afterwards. */
+.logo-arch, .logo-leaf, .logo-light, .logo-beam { transform-box: fill-box; }
+.logo-arch { transform-origin: center bottom; transition: transform 0.35s cubic-bezier(0.3, 1.4, 0.5, 1); }
+.logo-leaf { transform-origin: left center; }
+.logo-live .logo-arch { animation: logo-rise 0.6s cubic-bezier(0.3, 1.35, 0.5, 1) backwards; }
+.logo-live .logo-leaf { animation: logo-swing 0.9s 0.35s cubic-bezier(0.55, 0, 0.2, 1) backwards; }
+.logo-live .logo-light { animation: logo-glow 0.9s 0.35s ease-out backwards; }
+.logo-live .logo-beam { animation: logo-beam 1.1s 1.05s cubic-bezier(0.4, 0, 0.2, 1); }
+@keyframes logo-rise { from { opacity: 0; transform: translateY(18%) scaleY(0.92); } }
+@keyframes logo-swing { from { transform: scaleX(2); } 70% { transform: scaleX(0.88); } }
+@keyframes logo-glow { from { opacity: 0.35; } }
+@keyframes logo-beam { from { opacity: 0; transform: translateX(0); } 20% { opacity: 1; } 80% { opacity: 1; } to { opacity: 0; transform: translateX(260%); } }
+/* Pointing at the brand lifts the arch and sends the beam through again
+   (a second keyframe name, because a finished animation does not restart). */
+.console-brand:hover .logo-arch, .console-brand:focus-visible .logo-arch { transform: translateY(-4%); }
+.console-brand:hover .logo-beam, .console-brand:focus-visible .logo-beam { animation: logo-beam-again 1s cubic-bezier(0.4, 0, 0.2, 1); }
+@keyframes logo-beam-again { from { opacity: 0; transform: translateX(0); } 20% { opacity: 1; } 80% { opacity: 1; } to { opacity: 0; transform: translateX(260%); } }
 .page-enter { min-width: 0; }
 
 /* Umbral is the sign-in's own object: an open door. The signed-out screen

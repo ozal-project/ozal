@@ -56,7 +56,7 @@
     <section class="auth-identity" aria-label="Ozal private console">
       <Wordmark sub="Private console" />
       <div class="auth-story">
-        <Logo size={88} />
+        <Logo size={88} animated />
         <p class="auth-statement">Your access.<br />Your control.</p>
         <p class="auth-description">A private place to manage access to the applications you host.</p>
       </div>

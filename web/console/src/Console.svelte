@@ -127,7 +127,7 @@
   <a href="#main-content" class="sr-only focus:not-sr-only focus:bg-background focus:text-foreground focus:ring-ring fixed top-2 left-2 z-50 rounded-md px-3 py-2 text-sm focus:ring-2">Skip to content</a>
   <header class="console-header">
     <div class="console-bar">
-      <a href="/overview" onclick={(e) => go(e, "/overview")} class="console-brand" aria-label="Ozal console home"><Wordmark sub="Private console" /></a>
+      <a href="/overview" onclick={(e) => go(e, "/overview")} class="console-brand" aria-label="Ozal console home"><Wordmark sub="Private console" animated /></a>
       <nav class="console-nav" aria-label="Console">
         {#each visible as group (group.name)}
           {#each group.items as item (item.path)}{@render link(item)}{/each}
