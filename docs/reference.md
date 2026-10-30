@@ -422,6 +422,23 @@ y 64 conexiones a la vez. Un dominio de `tls.domains` sin entrada en
 servidor no puede escribir fuera de su zona. Mantén la zona dedicada: **quien la
 controle puede emitir certificados para los dominios que la delegan**.
 
+##### Verificación previa: `ozal dns01 check`
+
+```
+ozal dns01 check -config config.json [-resolver 1.1.1.1:53]
+```
+
+No emite nada ni escribe estado. Comprueba, antes de gastar un intento en la
+CA: que cada `_acme-challenge.<dominio>` sea un CNAME al destino de
+`challenge_delegation` (si falta, imprime el registro exacto a crear), que cada
+`builtin.nameservers` resuelva a la IP de `builtin.listen` (el pegamento del
+padre) y que UDP y TCP de `listen` se puedan abrir. Un puerto ocupado es un
+aviso, no un fallo: es lo normal con el edge corriendo. **No puede comprobar
+que el puerto 53 sea alcanzable desde Internet** (firewall del host o de la
+nube): lo dice en un aviso y sugiere el `dig` para probarlo desde afuera. Sale
+con error solo si hay un fallo. `-resolver` consulta un DNS concreto en lugar
+del del sistema, útil cuando el local guardó en caché una respuesta negativa.
+
 ##### Ensayo sin tocar producción: `ozal dns01 try`
 
 ```

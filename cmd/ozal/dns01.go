@@ -21,12 +21,17 @@ import (
 	"github.com/ozal-project/ozal/internal/config"
 )
 
-// runDNS01 dispatches `ozal dns01 <command>`. The only command is `try`.
+// runDNS01 dispatches `ozal dns01 <command>`: `check` (preflight) or `try`.
 func runDNS01(ctx context.Context, args []string, out io.Writer) error {
-	if len(args) == 0 || args[0] != "try" {
-		return errors.New("usage: ozal dns01 try -config PATH [-allow-production] [-timeout 5m]")
+	if len(args) > 0 {
+		switch args[0] {
+		case "try":
+			return runDNS01Try(ctx, args[1:], out)
+		case "check":
+			return runDNS01Check(ctx, args[1:], out)
+		}
 	}
-	return runDNS01Try(ctx, args[1:], out)
+	return errors.New("usage: ozal dns01 check -config PATH [-resolver HOST:PORT] | ozal dns01 try -config PATH [-allow-production] [-timeout 5m]")
 }
 
 // runDNS01Try issues one certificate through the configured DNS-01 provider
