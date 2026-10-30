@@ -34,9 +34,37 @@ func WithConnectors(registry connectors) Option {
 func (h *Handler) registerConnectors() {
 	h.mux.HandleFunc("GET /_/api/connectors", h.requireTool("connectors", h.listConnectors))
 	h.mux.HandleFunc("GET /_/api/connectors/{name}", h.requireTool("connectors", h.currentConnector))
+	h.mux.HandleFunc("GET /_/api/connectors/{name}/ready", h.requireLocal(h.connectorReady))
 	h.mux.HandleFunc("POST /_/api/connectors", h.requireLocal(h.enrollConnector))
 	h.mux.HandleFunc("POST /_/api/connectors/{name}/rotate", h.requireLocal(h.rotateConnector))
 	h.mux.HandleFunc("POST /_/api/connectors/{name}/revoke", h.requireLocal(h.revokeConnector))
+}
+
+// connectorReady is a host-only readiness probe for local operators. It
+// reports ready only when the named connector is registered, has at least
+// one configured route, and every such route currently has a live tunnel.
+func (h *Handler) connectorReady(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if _, err := h.connectors.Current(r.Context(), name); err != nil {
+		h.connectorError(w, err)
+		return
+	}
+	routes := 0
+	connected := true
+	for _, status := range h.manager.RouteStatuses() {
+		if status.Route.Connector != name {
+			continue
+		}
+		routes++
+		connected = connected && status.ConnectorConnected
+	}
+	ready := routes > 0 && connected
+	code := http.StatusOK
+	if !ready {
+		code = http.StatusServiceUnavailable
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, code, map[string]any{"name": name, "ready": ready, "routes": routes})
 }
 
 type connectorView struct {

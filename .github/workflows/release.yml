@@ -69,3 +69,17 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Edges that update on their own (`ozal update`) install only a release
+      # whose checksums are signed by the key they pin. The key exists only as
+      # this secret; without it the job fails instead of leaving an unsigned
+      # release that every edge would refuse.
+      - name: Sign checksums
+        env:
+          OZAL_RELEASE_KEY: ${{ secrets.OZAL_RELEASE_KEY }}
+        run: |
+          test -n "$OZAL_RELEASE_KEY" || { echo "OZAL_RELEASE_KEY secret is not set: run 'ozal release keygen' and add it" >&2; exit 1; }
+          go run ./cmd/ozal release sign -key env:OZAL_RELEASE_KEY -in dist/checksums.txt -out dist/checksums.txt.sig
+      - name: Upload signature to the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/checksums.txt.sig --clobber

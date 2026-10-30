@@ -45,6 +45,7 @@ type Handler struct {
 	auditStatus            func() AuditStatus
 	mutationAudit          events.AuditAppender
 	auditMutationsRequired bool
+	updateStatusFile       string
 	pages                  deployments
 	identities             identities
 	identityMu             sync.Mutex
@@ -69,6 +70,8 @@ func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 	h.mux.HandleFunc("GET /_/healthz", h.healthz)
 	h.mux.HandleFunc("GET /_/status", h.requireBearer(h.status))
 	h.mux.HandleFunc("GET /_/api/status", h.requireBearer(h.apiStatus))
+	h.mux.HandleFunc("GET /_/api/updates/status", h.requireTool("updates", h.updateStatus))
+	h.mux.HandleFunc("POST /_/api/updates/status", h.requireLocal(h.reportUpdateStatus))
 	h.mux.HandleFunc("GET /_/api/setup", h.requireTool("applications", h.setupStatus))
 	h.mux.HandleFunc("POST /_/api/apps/plan", h.requireTool("applications", h.planApplication))
 	h.mux.HandleFunc("DELETE /_/api/apps/{host}", h.requireTool("applications", h.removeApplication))

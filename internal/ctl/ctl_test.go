@@ -49,6 +49,32 @@ func TestValidateRefusesUnsafeValues(t *testing.T) {
 	}
 }
 
+func TestCoordinatedTargetNeedsRestorableEdgeAndBoundConnectorIdentity(t *testing.T) {
+	target := goodTarget()
+	target.Connector = &Connector{SSH: SSH{Target: "ozal@connector.example.net", Key: "~/.ssh/connector"}, Name: "portfolio", Unit: "ozal-connector.service", ServiceUser: "ozal", Binary: "/home/ozal/bin/ozal", Stage: "/home/ozal/stage", Lock: "/home/ozal/lock"}
+	target.Edge.Socket = "/run/ozal/admin.sock"
+	if err := target.Validate(); err != nil {
+		t.Fatalf("valid coordinated target rejected: %v", err)
+	}
+	for name, mutate := range map[string]func(*Target){
+		"missing status socket":             func(v *Target) { v.Edge.Socket = "" },
+		"connector ssh account differs":     func(v *Target) { v.Connector.SSH.Target = "deploy@connector.example.net" },
+		"connector service account differs": func(v *Target) { v.Connector.ServiceUser = "root" },
+		"connector lock aliases binary":     func(v *Target) { v.Connector.Lock = v.Connector.Binary },
+		"unsafe connector name":             func(v *Target) { v.Connector.Name = "../portfolio" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			bad := target
+			copy := *target.Connector
+			bad.Connector = &copy
+			mutate(&bad)
+			if err := bad.Validate(); err == nil {
+				t.Fatal("invalid coordinated target accepted")
+			}
+		})
+	}
+}
+
 func TestParseTargetsIsStrict(t *testing.T) {
 	_, err := ParseTargets(strings.NewReader(`{"targets":{"a":{"ssh":{"target":"u@h","key":"k"},"edge":{},"typo":1}}}`))
 	if err == nil {
@@ -99,6 +125,16 @@ func TestUpgradeCommandCarriesTheLayout(t *testing.T) {
 		if !strings.Contains(cmd, want) {
 			t.Fatalf("missing %s in %s", want, cmd)
 		}
+	}
+}
+
+func TestPairUpgradeCommandDefersStartingTheEdge(t *testing.T) {
+	cmd := PairUpgradeCommand(goodTarget().Edge, "/home/deploy/stage/ozal.next", strings.Repeat("a", 64))
+	if !strings.Contains(cmd, "'-defer-start'") {
+		t.Fatalf("pair upgrade does not defer service start: %s", cmd)
+	}
+	if !strings.Contains(cmd, "'-db' '/var/lib/ozal/state.db'") || !strings.Contains(cmd, "'-user' 'ozal'") {
+		t.Fatalf("pair upgrade lost migration ownership settings: %s", cmd)
 	}
 }
 

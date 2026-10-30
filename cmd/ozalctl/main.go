@@ -39,6 +39,8 @@ const usage = `usage:
       The default is a plan; -apply keeps previous trust metadata on the edge.
   ozalctl edge upgrade [-targets FILE] [-target NAME] [-repo DIR] [-ref REF] [-apply]
       Build a committed ref, upload it and run "ozal upgrade" on the edge.
+  ozalctl edge pair-upgrade [-targets FILE] [-target NAME] -ref TAG -public-key FILE [-api URL] [-force] [-apply]
+      Verify one signed release and coordinate the configured tunnel edge and connector.
   ozalctl edge config -base FILE [-cloudflare-ranges] [-targets FILE] [-target NAME] [-apply]
       Install the host settings from FILE (listeners, TLS, identity, proxies,
       DNS). Routes and projects stay the edge's: the first install creates its
@@ -83,6 +85,7 @@ func run(args []string) int {
 	}
 	commands := map[string]func([]string) int{
 		"edge upgrade":           edgeUpgrade,
+		"edge pair-upgrade":      edgePairUpgrade,
 		"edge config":            edgeConfig,
 		"site publish":           sitePublish,
 		"app alias":              appAlias,
@@ -158,6 +161,9 @@ func edgeUpgrade(args []string) int {
 	c, ok := setup(fs, args)
 	if !ok {
 		return 2
+	}
+	if c.target.Connector != nil {
+		return finish(errors.New("this target has a tunnel connector; use `ozalctl edge pair-upgrade` so both peers move together"))
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

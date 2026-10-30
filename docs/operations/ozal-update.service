@@ -1,0 +1,15 @@
+[Unit]
+Description=Check the newest signed Ozal release
+Documentation=https://github.com/ozal-project/ozal/blob/main/docs/operations/administration.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# Check-only by default. Tunnel edge and connector updates must be coordinated
+# by the operator-side ozalctl workflow; this timer must not update one peer.
+ExecStart=/usr/local/lib/ozal/ozal update \
+  -public-key /etc/ozal/release.pub \
+  -unit ozal -binary /usr/local/lib/ozal/ozal \
+  -config /etc/ozal/config.json -db /var/lib/ozal/state.db -user ozal \
+  -status /var/lib/ozal/update-status.json

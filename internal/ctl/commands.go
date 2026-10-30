@@ -54,6 +54,16 @@ exit $code
 // UpgradeCommand is the one command run with the operator's terminal, so sudo
 // can ask for its password once.
 func UpgradeCommand(e Edge, staged, sha string) string {
+	return upgradeCommand(e, staged, sha, false)
+}
+
+// PairUpgradeCommand uses the same root-checked self-upgrade as a standalone
+// edge upgrade, but leaves the unit stopped until the connector is installed.
+func PairUpgradeCommand(e Edge, staged, sha string) string {
+	return upgradeCommand(e, staged, sha, true)
+}
+
+func upgradeCommand(e Edge, staged, sha string, deferStart bool) string {
 	keep := e.Keep
 	if keep == 0 {
 		keep = 3
@@ -66,6 +76,9 @@ func UpgradeCommand(e Edge, staged, sha string) string {
 		staged, sha, link, e.Binary, e.Config,
 		"-unit", e.Unit, "-binary", e.Binary, "-config", e.Config,
 		"-db", e.StateDB, "-user", e.ServiceUser, "-keep", strconv.Itoa(keep),
+	}
+	if deferStart {
+		args = append(args, "-defer-start")
 	}
 	quoted := make([]string, len(args))
 	for i, a := range args {

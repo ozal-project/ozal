@@ -1,0 +1,11 @@
+[Unit]
+Description=Check for a signed Ozal release every night
+
+[Timer]
+# A quiet hour, spread over 30 minutes so a fleet does not update at once.
+OnCalendar=*-*-* 04:00
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

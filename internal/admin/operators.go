@@ -24,7 +24,7 @@ type operatorKey struct{}
 // operatorTools are the console's areas of authority. A host login names the
 // tools its session may change; an unnamed login grants all of them. Reading
 // what the console shows is not a tool: it needs any operator session.
-var operatorTools = []string{"administrators", "applications", "connectors", "people", "publishing", "sites"}
+var operatorTools = []string{"administrators", "applications", "connectors", "people", "publishing", "sites", "updates"}
 
 type operatorGrant struct {
 	ID        string    `json:"id"`

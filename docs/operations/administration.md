@@ -118,6 +118,46 @@ contra el valor suministrado, no autentica por sí solo el canal de descarga.
 Los backups no se borran automáticamente. Una versión anterior puede rechazar
 un esquema nuevo; revertir solo el ejecutable puede ser insuficiente.
 
+### Actualización automática
+
+`ozal update` consulta la versión publicada más nueva. Con `-apply` instala
+en **un host**, usando `ozal upgrade` y su vuelta atrás. Solo acepta un release cuyo `checksums.txt`
+esté firmado (Ed25519) con la clave que el host fija en
+`/etc/ozal/release.pub`; comprueba el hash del archivo antes de extraer el
+binario y nunca instala una versión igual o más vieja que la instalada. Los
+borradores no cuentan, y los prereleases solo con `-prerelease`.
+
+```sh
+sudo install -m 0644 release.pub /etc/ozal/release.pub
+sudo /usr/local/lib/ozal/ozal update -public-key /etc/ozal/release.pub \
+  -unit ozal -binary /usr/local/lib/ozal/ozal -config /etc/ozal/config.json \
+  -db /var/lib/ozal/state.db -user ozal              # informa; -apply instala
+sudo install -m 0644 docs/operations/ozal-update.service docs/operations/ozal-update.timer /etc/systemd/system/
+sudo systemctl enable --now ozal-update.timer         # comprueba disponibilidad, cada noche
+```
+
+Un binario que no es un release (`ozal version` dice `dev`, compilado a
+mano) **no se reemplaza solo**: el release más nuevo podría ser más viejo que
+lo que corre. Pasa a releases una vez con `-apply -force` solo en un host
+independiente. El timer de ejemplo **solo consulta**: no instala nada por sí
+mismo. En el edge ALPN del túnel, actualízalo en coordinación con el conector;
+no uses ahí el `-apply` de una ejecución por host, porque una mezcla de
+versiones corta el túnel. `-status FILE` deja el resultado (`current`,
+`available`, `updated`, `failed`, `unversioned`) en JSON legible por la cuenta
+del servicio, sin claves ni tokens. La consola puede leer el estado autenticado
+en `GET /_/api/updates/status` con la herramienta de operador `updates`; la API
+solo informa, no inicia procesos. La razón mostrada se reduce a un mensaje
+seguro; los detalles quedan en el host. Salida 3 de `ozal upgrade` confirma
+reversión; salida 4 requiere intervención.
+
+Quien publica: `ozal release keygen -key release.key` crea la clave e imprime
+la pública. Guarda la privada como secreto `OZAL_RELEASE_KEY` del workflow
+`release` y borra el archivo; sin ese secreto el workflow falla en vez de dejar
+un release sin firma. El release sigue siendo un borrador hasta que alguien lo
+publica, y solo entonces lo ven los edges. **Quien tenga esa clave puede
+instalar código en todos los edges que la fijan**: rótala publicando la nueva
+pública en los edges antes de firmar con ella.
+
 ### Actualización coordinada del edge y el conector
 
 Para `REL-013/017`, trata ambos extremos como **una pareja de versiones**.
@@ -125,6 +165,28 @@ Para `REL-013/017`, trata ambos extremos como **una pareja de versiones**.
 conector, no pausa su renovación y no comprueba aplicaciones. Su salida 0
 prueba arranque y admin; todavía falta la aceptación del recorrido completo.
 No encadenes dos actualizaciones independientes suponiendo compatibilidad ALPN.
+
+El target puede incluir `connector` con su host SSH, cuenta de servicio, unidad
+de usuario, ejecutable, staging y lock. Entonces `ozalctl edge upgrade` se
+rechaza para ese target; usa `ozalctl edge pair-upgrade`. El comando construye
+un release Linux/amd64 firmado indicado con `-ref TAG` y `-public-key FILE`,
+toma ambos locks, verifica hashes instalados y subidos, guarda el ejecutable
+anterior en cada host y una copia consistente
+SQLite en el edge, detiene conector y edge, instala el mismo binario, inicia
+edge y conector y comprueba el túnel mediante el socket local. El upgrade del
+edge migra SQLite como su cuenta de servicio, pero deja la unidad detenida
+hasta instalar el conector. Ante un fallo
+después de iniciar el corte, intenta restaurar ambos ejecutables y la base del
+edge; si no puede confirmar recuperación, devuelve intervención requerida.
+El estado se informa por el socket local y queda disponible en
+`GET /_/api/updates/status` para sesiones con la herramienta `updates`.
+`GET /_/api/connectors/{name}/ready` es una sonda host-only usada por el
+coordinador. El POST de progreso se tolera como 404 solo antes de que el
+candidato instale esa ruta; si el edge ya volvió y el endpoint no existe, se
+revierte el trabajo. Las fases finales se guardan al volver el edge.
+Un 503 o cualquier otro error detiene el trabajo antes del corte o activa su
+reversión. El plan no contacta los hosts; `-apply` requiere una terminal
+interactiva para `sudo` en el edge. No despliega ni migra una VPS por sí solo.
 
 Antes de la ventana, completa esta ficha con datos observados, sin valores de
 secretos; conserva la evidencia operativa en un destino privado:
@@ -497,6 +559,7 @@ cuenta, socket, lock y archivo del token de publicación limitado.
 ```sh
 go build -o ./ozalctl ./cmd/ozalctl  # binario separado en la máquina operadora
 ozalctl edge upgrade [-ref REF] [-apply]
+ozalctl edge pair-upgrade -ref vX.Y.Z -public-key FILE [-force] [-apply]
 ozalctl edge config -base FILE [-cloudflare-ranges] [-apply]
 ozalctl site publish -site NAME -dir DIST [-host HOST] [-apply]
 ozalctl app alias -from HOST -to HOST [-manual-dns] [-wait 90s] [-apply]

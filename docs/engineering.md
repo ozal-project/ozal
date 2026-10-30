@@ -203,6 +203,17 @@ se guarda de forma durable; GET de estado no consume el permiso de upload.
 Ver [deployauth](../internal/pages/deployauth) y
 [deployapi](../internal/pages/deployapi) para códigos y endpoints exactos.
 
+La API `GET /_/api/updates/status` requiere la herramienta de operador
+`updates` y lee un archivo local fijo junto a la DB de estado. Devuelve
+`checked_at`, versiones, `result`, fase y nodos (si es una pareja); `reason` lo
+genera la API, sin reenviar errores arbitrarios del proceso. El archivo debe
+ser regular y menor de 64 KiB; si aún no existe, el resultado es `unknown`;
+archivos inválidos dan 503. `POST` en el mismo recurso solo acepta un registro
+de estado acotado por el socket Unix local, para que `ozalctl` informe el avance;
+rechaza cualquier comando, path, rol o resultado desconocido. Ningún endpoint
+inicia una actualización. El timer de ejemplo solo consulta releases y el
+corte de Edge + conector lo coordina `ozalctl` desde la máquina del operador.
+
 Autenticar/limitar/registrar intent requerido **antes de consumir el body**.
 Archivos regulares, límites de cantidad/tamaño, no enlaces/traversal, rutas
 internas/secretos rechazados, manifest inmutable y activación atómica. Site

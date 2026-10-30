@@ -34,6 +34,9 @@ type Plan struct {
 	Config string // routing config the unit runs with
 	DB     string // state database; empty when the unit runs without -db
 	Keep   int    // previous binaries kept beside Binary
+	// DeferStart installs but leaves the unit stopped for a pair coordinator
+	// to start only after its peer has also been installed.
+	DeferStart bool
 
 	Poll     time.Duration // between health checks (default 1s)
 	Attempts int           // health checks before giving up (default 20)
@@ -126,6 +129,11 @@ func Run(ctx context.Context, p Plan, sys System, out io.Writer) (Result, error)
 		return r.run(ctx, fmt.Errorf("swap: %w", err))
 	}
 	r.swapped = true
+	if p.DeferStart {
+		step("%s candidate installed; unit left stopped for coordinated peer update", p.Unit)
+		prune(p.Binary, p.Keep, out)
+		return Upgraded, nil
+	}
 	step("start %s", p.Unit)
 	sys.Systemctl(ctx, "reset-failed", p.Unit)
 	if err := sys.Systemctl(ctx, "start", p.Unit); err != nil {

@@ -15,6 +15,15 @@
         "admin": "127.0.0.1:9090",
         "sites_token": "~/.config/ozalctl/edge-1.sites.token",
         "keep": 3
+      },
+      "connector": {
+        "ssh": { "target": "ozal@connector.example.net", "key": "~/.ssh/id_ed25519" },
+        "name": "portfolio",
+        "unit": "ozal-tunnel-connector.service",
+        "service_user": "ozal",
+        "binary": "/home/ozal/.local/bin/ozal",
+        "stage": "/home/ozal/.local/share/ozal-stage",
+        "lock": "/home/ozal/.local/share/ozal-deploy.lock"
       }
     }
   }

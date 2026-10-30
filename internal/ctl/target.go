@@ -22,8 +22,9 @@ import (
 // decides (paths, unit, account) is data, never a constant in the tool, so a
 // second server is a second entry.
 type Target struct {
-	SSH  SSH  `json:"ssh"`
-	Edge Edge `json:"edge"`
+	SSH       SSH        `json:"ssh"`
+	Edge      Edge       `json:"edge"`
+	Connector *Connector `json:"connector,omitempty"`
 }
 
 // SSH is how to reach the edge.
@@ -60,6 +61,18 @@ type Edge struct {
 	// else. It is read when needed and never printed or sent to the edge
 	// on a command line.
 	SitesToken string `json:"sites_token,omitempty"`
+}
+
+// Connector describes the user-owned systemd service on the tunnel peer. Its
+// SSH login is the service account; no root command is needed on that host.
+type Connector struct {
+	SSH         SSH    `json:"ssh"`
+	Name        string `json:"name"`
+	Unit        string `json:"unit"`
+	ServiceUser string `json:"service_user"`
+	Binary      string `json:"binary"`
+	Stage       string `json:"stage"`
+	Lock        string `json:"lock"`
 }
 
 var (
@@ -110,6 +123,35 @@ func (t Target) Validate() error {
 	}
 	if t.Edge.Keep < 0 || t.Edge.Keep > 20 {
 		return errors.New("edge.keep must be between 0 and 20")
+	}
+	if t.Connector != nil {
+		c := t.Connector
+		if !sshUser.MatchString(c.SSH.Target) || strings.TrimSpace(c.SSH.Key) == "" {
+			return errors.New("connector ssh.target and ssh.key are required")
+		}
+		connectorSSHUser, _, _ := strings.Cut(c.SSH.Target, "@")
+		if !account.MatchString(c.ServiceUser) || connectorSSHUser != c.ServiceUser {
+			return errors.New("connector ssh user must equal connector.service_user")
+		}
+		if !unitName.MatchString(c.Unit) || !unitName.MatchString(c.Name) {
+			return errors.New("connector name and unit must be plain names")
+		}
+		for field, pathValue := range map[string]string{
+			"connector.binary": c.Binary, "connector.stage": c.Stage, "connector.lock": c.Lock,
+		} {
+			if err := plainAbsolute(pathValue); err != nil {
+				return fmt.Errorf("%s: %w", field, err)
+			}
+		}
+		if c.Stage == c.Binary || c.Lock == c.Binary || c.Lock == c.Stage {
+			return errors.New("connector binary, stage and lock paths must be distinct")
+		}
+		if t.Edge.Socket == "" {
+			return errors.New("edge.socket is required for coordinated updates")
+		}
+		if t.Edge.StateDB == "" {
+			return errors.New("edge.state_db is required for coordinated rollback")
+		}
 	}
 	return nil
 }

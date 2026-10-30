@@ -34,6 +34,7 @@ func runUpgrade(ctx context.Context, args []string, out io.Writer) error {
 	dbPath := fs.String("db", "", "state database the unit runs with (empty: none)")
 	account := fs.String("user", "", "service account that owns the state (required with -db)")
 	keep := fs.Int("keep", 3, "previous binaries to keep beside -binary")
+	deferStart := fs.Bool("defer-start", false, "leave the installed unit stopped for a coordinated peer update")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -80,6 +81,7 @@ func runUpgrade(ctx context.Context, args []string, out io.Writer) error {
 	plan := upgrade.Plan{
 		Unit: *unit, Binary: *binary, Source: source, SHA256: *sum,
 		Config: *configPath, DB: *dbPath, Keep: *keep,
+		DeferStart: *deferStart,
 	}
 	res, err := upgrade.Run(ctx, plan, sys, w)
 	if res == upgrade.Upgraded {

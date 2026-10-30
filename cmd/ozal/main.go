@@ -66,6 +66,8 @@ func subcommands() map[string]func(context.Context, []string, io.Writer) error {
 		"tunnel":       runTunnel,
 		"tunnel-spike": runTunnelSpike,
 		"upgrade":      runUpgrade,
+		"update":       runUpdate,
+		"release":      runRelease,
 		"connector":    runConnector,
 		"migrate":      runMigrate,
 		"notify":       runNotify,
@@ -187,6 +189,7 @@ func main() {
 		adminOpts = append(adminOpts, admin.WithPairing(pairer))
 	}
 	if *dbPath != "" {
+		adminOpts = append(adminOpts, admin.WithUpdateStatusFile(filepath.Join(filepath.Dir(*dbPath), "update-status.json")))
 		// Sessions survive a restart through the migrated state database.
 		// Migrations stay an explicit operator step: a stale schema stops
 		// startup instead of being applied silently.

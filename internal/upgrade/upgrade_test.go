@@ -158,6 +158,24 @@ func TestUpgradeMigratesSwapsAndKeepsThePrevious(t *testing.T) {
 	}
 }
 
+func TestCoordinatedUpgradeMigratesAndSwapsButLeavesTheUnitStopped(t *testing.T) {
+	s := newScene(t, "new")
+	s.host.pending = true
+	s.plan.DeferStart = true
+	if result, err := s.run(t); result != Upgraded || err != nil {
+		t.Fatalf("deferred result %v, %v\n%s", result, err, s.out.String())
+	}
+	if s.host.running() != "new" || s.read("state.db") != "v7" || s.host.active {
+		t.Fatalf("candidate=%q database=%q active=%v", s.host.running(), s.read("state.db"), s.host.active)
+	}
+	if slices.Contains(s.host.calls, "systemctl start ozal") {
+		t.Fatalf("deferred upgrade started before its peer was installed: %v", s.host.calls)
+	}
+	if len(s.host.asSvc) != 1 || !strings.Contains(s.host.asSvc[0], "migrate up") {
+		t.Fatalf("migration did not run as the service account: %v", s.host.asSvc)
+	}
+}
+
 // The source belongs to whoever staged it: only root's checked copy runs.
 func TestASourceThatIsNotTheBuiltBinaryIsRefusedBeforeTheStop(t *testing.T) {
 	s := newScene(t, "new")

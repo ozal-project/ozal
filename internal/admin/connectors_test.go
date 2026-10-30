@@ -19,6 +19,7 @@ import (
 
 	"github.com/ozal-project/ozal/internal/config"
 	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/routemanager"
 	"github.com/ozal-project/ozal/internal/store/sqlite"
 	"github.com/ozal-project/ozal/internal/tunnel"
 )
@@ -61,6 +62,7 @@ func local(handler http.Handler, method, target, body string) *httptest.Response
 	if body != "" {
 		req = httptest.NewRequestWithContext(req.Context(), method, target, strings.NewReader(body))
 		req.Host = "localhost"
+		req = req.WithContext(localRequest(method, target).Context())
 	}
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -156,6 +158,44 @@ func TestConnectorChangesAreHostOnly(t *testing.T) {
 		if event.Type != events.AdminMutationRequested || event.Host != "portfolio" || strings.Contains(event.Reason, "CERTIFICATE") {
 			t.Errorf("unsafe connector mutation intent: %+v", event)
 		}
+	}
+}
+
+func TestConnectorReadyIsLocalAndRequiresEveryConfiguredRoute(t *testing.T) {
+	ctx := context.Background()
+	db, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	migrations, err := sqlite.LoadMigrations(sqlite.Migrations())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlite.Migrate(ctx, db, migrations); err != nil {
+		t.Fatal(err)
+	}
+	route := config.Route{Host: "app.example.com", Target: "http://127.0.0.1:3000", Connector: "portfolio"}
+	manager := &fakeManager{cfg: config.Config{Admin: config.Admin{Token: "secret"}, Routes: []config.Route{route}}, statuses: []routemanager.RouteStatus{{Route: route, ConnectorConnected: true}}}
+	h := New(manager, nil, WithConnectors(tunnel.NewRegistry(db)))
+	cert, _ := certificatePEM(t)
+	body := jsonBody(t, map[string]string{"name": "portfolio", "certificate_pem": cert})
+	if rec := local(h, http.MethodPost, "/_/api/connectors", body); rec.Code != http.StatusCreated {
+		t.Fatalf("enrol = %d %s", rec.Code, rec.Body)
+	}
+	if rec := request(h, http.MethodGet, "/_/api/connectors/portfolio/ready", "secret", ""); rec.Code != http.StatusForbidden {
+		t.Fatalf("admin token ready probe = %d, want socket only", rec.Code)
+	}
+	if rec := local(h, http.MethodGet, "/_/api/connectors/portfolio/ready", ""); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"ready":true`) {
+		t.Fatalf("live connector readiness = %d %s", rec.Code, rec.Body)
+	}
+	manager.statuses[0].ConnectorConnected = false
+	if rec := local(h, http.MethodGet, "/_/api/connectors/portfolio/ready", ""); rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), `"ready":false`) {
+		t.Fatalf("offline connector readiness = %d %s", rec.Code, rec.Body)
+	}
+	manager.statuses = nil
+	if rec := local(h, http.MethodGet, "/_/api/connectors/portfolio/ready", ""); rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unrouted connector readiness = %d %s", rec.Code, rec.Body)
 	}
 }
 
