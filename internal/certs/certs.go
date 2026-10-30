@@ -10,10 +10,11 @@
 // cloudflare.go are adapters for one technology each. cmd/ozal is the
 // only place that constructs them.
 //
-// The scope is deliberately bounded: one certificate name, Cloudflare DNS.
-// The name is a hostname or one single-level wildcard (EDGE-002, names.go);
-// several independent names stay out of scope. Replacing the manager later
-// must not change the tls.Config.GetCertificate contract the listener uses.
+// A Manager owns one certificate: a hostname or a single-level wildcard plus
+// its alternative names (EDGE-002, names.go). Zones (EDGE-008, zones.go)
+// runs one Manager per zone — "example.com" plus "*.example.com" — over a
+// shared issuer, so zones are issued, stored and renewed independently.
+// Both keep the tls.Config.GetCertificate contract the listener uses.
 package certs
 
 import (

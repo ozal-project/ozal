@@ -55,6 +55,14 @@ type ManagerConfig struct {
 	Jitter func(time.Duration) time.Duration
 	Logger *slog.Logger
 	Sink   events.Sink
+	// Turn, when set, is taken before each issuance attempt and released
+	// after it, outside AttemptTimeout: managers sharing one issuer (one
+	// per zone) wait their turn instead of spending their attempt waiting.
+	// An error (ctx cancelled) skips the attempt without recording it.
+	Turn func(ctx context.Context) (release func(), err error)
+	// NoRecovery leaves DNS cleanup recovery to whoever owns the shared
+	// issuer, which runs it once before any manager attempts.
+	NoRecovery bool
 }
 
 // Manager owns the origin certificate: it serves the newest valid
@@ -69,6 +77,7 @@ type Manager struct {
 
 	current    atomic.Pointer[activeCertificate]
 	attempting atomic.Bool
+	waiting    atomic.Bool
 	loadOnce   sync.Once
 
 	mu             sync.Mutex
@@ -200,7 +209,9 @@ func (m *Manager) Run(ctx context.Context) {
 // startup reloads the last complete generation and reconciles DNS state.
 func (m *Manager) startup(ctx context.Context) {
 	m.LoadStored(ctx)
-	m.recoverIntents(ctx)
+	if !m.cfg.NoRecovery {
+		m.recoverIntents(ctx)
+	}
 }
 
 // LoadStored activates the last complete stored generation, once. It reads
@@ -277,6 +288,15 @@ func (m *Manager) waitFor(now time.Time) time.Duration {
 // current certificate keeps being served until a validated replacement is
 // durably stored.
 func (m *Manager) attempt(ctx context.Context) {
+	if m.cfg.Turn != nil {
+		m.waiting.Store(true)
+		release, err := m.cfg.Turn(ctx)
+		m.waiting.Store(false)
+		if err != nil {
+			return
+		}
+		defer release()
+	}
 	if !m.attempting.CompareAndSwap(false, true) {
 		return
 	}
@@ -392,11 +412,15 @@ type Status struct {
 	LastAttempt    time.Time
 	NextAttempt    time.Time
 	PendingIntents int
+	// Waiting is true while the manager waits for its Turn; Attempting
+	// while an issuance attempt runs.
+	Waiting    bool
+	Attempting bool
 }
 
 // Status reports the current generation and the last/next attempt.
 func (m *Manager) Status() Status {
-	status := Status{Host: m.cfg.Host, Names: m.names()}
+	status := Status{Host: m.cfg.Host, Names: m.names(), Waiting: m.waiting.Load(), Attempting: m.attempting.Load()}
 	now := m.now()
 	if active := m.current.Load(); active != nil {
 		status.Valid = !now.Before(active.leaf.NotBefore) && now.Before(active.leaf.NotAfter)
