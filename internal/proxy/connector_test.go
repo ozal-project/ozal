@@ -59,7 +59,7 @@ func TestProtectedConnectorRouteDeliversTheAuthorizedIdentity(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "http://app.localhost/", nil)
 	req.Header.Set(pipeline.IdentityUserHeader, "sub-mallory") // forged by the visitor
 	req.Header.Set(pipeline.VisitorUserHeader, "sub-mallory")
-	req.Header.Set("Cookie", auth.SessionCookieName+"=session; sb_handoff=legacy-binding; sb_handoff_transaction=binding; theme=dark")
+	req.Header.Set("Cookie", auth.SessionCookieName+"=session; sb_login=login-attempt; sb_handoff=legacy-binding; sb_handoff_transaction=binding; theme=dark")
 	rec := httptest.NewRecorder()
 	edge.ServeHTTP(rec, req)
 

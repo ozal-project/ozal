@@ -739,6 +739,62 @@ func TestAppendHonorsCancellationAndClosedWriter(t *testing.T) {
 	}
 }
 
+func TestInterruptedRecordRequiresExplicitRepairBeforeAppend(t *testing.T) {
+	requireAuditFS(t)
+	ctx := context.Background()
+	dir := filepath.Join(t.TempDir(), "audit")
+	w, err := Open(ctx, dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Append(ctx, events.Event{Type: events.AccessAllowed}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.OpenFile(segmentPath(dir, 1), os.O_WRONLY|os.O_APPEND, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	partial := []byte(`{"v":1,"log_id":"interrupted`)
+	if _, err := f.Write(partial); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if w, err := Open(ctx, dir, Options{}); !errors.Is(err, ErrIncompleteTail) {
+		if w != nil {
+			_ = w.Close()
+		}
+		t.Fatalf("Open after interruption: %v, want incomplete tail", err)
+	}
+	plan, err := InspectRepair(ctx, dir)
+	if err != nil || !plan.Needed || plan.RestoresRecord || plan.DiscardedBytes != int64(len(partial)) || plan.VerifiedRecords != 1 {
+		t.Fatalf("repair plan: %+v, %v", plan, err)
+	}
+	result, err := RepairDir(ctx, dir)
+	if err != nil || !result.Applied || result.RepairRecordSeq != 2 {
+		t.Fatalf("repair: %+v, %v", result, err)
+	}
+	w, err = Open(ctx, dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Append(ctx, events.Event{Type: events.AccessDenied}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var kinds []events.Type
+	v, err := ReadVerified(ctx, dir, func(r Record) error { kinds = append(kinds, r.Type); return nil })
+	if err != nil || v.Records != 3 || len(kinds) != 3 || kinds[0] != events.AccessAllowed || kinds[1] != events.AuditRepaired || kinds[2] != events.AccessDenied {
+		t.Fatalf("recovered records: %+v, %v, %v", v, kinds, err)
+	}
+}
+
 func TestRepairPreservesACompleteRecordMissingOnlyItsNewline(t *testing.T) {
 	requireAuditFS(t)
 	ctx := context.Background()

@@ -536,7 +536,7 @@ func stripCookie(header, name string) string {
 // them outside their browser-enforced path, including the legacy shared name.
 func stripAccessCookies(header string) string {
 	return stripCookies(header, func(name string) bool {
-		return name == auth.SessionCookieName || name == "sb_handoff" || strings.HasPrefix(name, auth.HandoffCookiePrefix)
+		return name == auth.SessionCookieName || name == auth.LoginCookieName || name == "sb_handoff" || strings.HasPrefix(name, auth.HandoffCookiePrefix)
 	})
 }
 
@@ -604,7 +604,7 @@ func upstreamHandler(r config.Route, devErrors, assertVisitor bool, transport ht
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			// The identify stage already read the session cookie; the outbound
 			// request is where it stops, so no upstream ever sees the edge
-			// session or handoff binding. Other cookies are preserved.
+			// session, login attempt, or handoff binding. Other cookies are preserved.
 			if cookie := stripAccessCookies(pr.Out.Header.Get("Cookie")); cookie != "" {
 				pr.Out.Header.Set("Cookie", cookie)
 			} else {

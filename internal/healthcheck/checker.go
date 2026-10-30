@@ -40,6 +40,7 @@ type Checker struct {
 	status       map[string]Status            // route host -> aggregate latest state
 	upstreams    map[string]map[string]Status // route host -> target -> latest state
 	routeTargets map[string][]string
+	failures     map[string]map[string]uint64 // passive failure generation per target
 }
 
 func New() *Checker {
@@ -48,6 +49,7 @@ func New() *Checker {
 		status:       make(map[string]Status),
 		upstreams:    make(map[string]map[string]Status),
 		routeTargets: make(map[string][]string),
+		failures:     make(map[string]map[string]uint64),
 	}
 }
 
@@ -103,6 +105,10 @@ func (c *Checker) ReportFailure(host, target string) {
 	now := time.Now()
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.failures[host] == nil {
+		c.failures[host] = make(map[string]uint64)
+	}
+	c.failures[host][target]++
 	c.recordTargetLocked(host, target, Status{
 		Healthy:   false,
 		Checked:   true,
@@ -195,6 +201,9 @@ func (c *Checker) probe(ctx context.Context, r config.Route) {
 }
 
 func (c *Checker) probeTarget(ctx context.Context, r config.Route, target string) {
+	c.mu.RLock()
+	generation := c.failures[r.Host][target]
+	c.mu.RUnlock()
 	path := r.HealthPath
 	if path == "" {
 		path = defaultPath
@@ -223,6 +232,12 @@ func (c *Checker) probeTarget(ctx context.Context, r config.Route, target string
 	now := time.Now()
 
 	c.mu.Lock()
+	// A probe already in flight when a passive failure occurs is stale and
+	// must not restore the target. A subsequent probe can establish recovery.
+	if generation != c.failures[r.Host][target] {
+		c.mu.Unlock()
+		return
+	}
 	c.recordTargetLocked(r.Host, target, Status{
 		Healthy:   healthy,
 		Checked:   true,

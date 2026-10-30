@@ -146,7 +146,9 @@ con `runtime_file`, la raíz no describe por sí sola las rutas/publicadores.
 
 #### Topología observada y checkpoint privado — 2026-10-29
 
-La lectura real encontró tres edges en la VPS y un conector en el homelab; los
+Inventario anterior a la instalación del 2026-10-29: la lectura encontró tres
+edges en la VPS y un conector en el homelab. Los binarios de la pareja en esta
+tabla son históricos; el resultado de la instalación figura más abajo. Los
 nombres históricos no describen una única función:
 
 | Extremo | Unidad / host | Ejecutable y SHA-256 | Estado observado |
@@ -233,10 +235,11 @@ desde 18:09:55 hasta que el conector se reenganchó, con cotas observadas de
 actualización, `https://preview.octaviosantacruz.com/` responde 200 vía
 Cloudflare y `/_/healthz` y `/_/api/status` dan 404 desde fuera.
 
-El esquema instalado del tunnel edge tiene **ocho migraciones pendientes**
-(008–015) respecto del candidato `8f20fbe`; la actualización migra esa DB y la
-reversión exige restaurar el snapshot previo a una ruta nueva. Entre
-`da3d0e6` y `8f20fbe` el preview no tiene migraciones pendientes. Ninguno de
+Antes de la instalación, el esquema del tunnel edge tenía **ocho migraciones
+pendientes** (008–015) respecto del candidato `8f20fbe`; estas se aplicaron
+durante la instalación registrada arriba. La reversión a la versión anterior
+exige restaurar el snapshot previo a una ruta nueva. Entre `da3d0e6` y
+`8f20fbe` el preview no tenía migraciones pendientes. Ninguno de
 los dos edges tiene `audit` configurado: no hay cadena/checkpoint durable que
 archivar; si se habilita, archivá la cadena anterior con su binario por el
 cambio de dominio del hash.

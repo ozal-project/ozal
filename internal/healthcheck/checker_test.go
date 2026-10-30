@@ -152,6 +152,36 @@ func TestMultipleTargetsHaveIndependentActiveAndPassiveHealth(t *testing.T) {
 	}
 }
 
+func TestProbeStartedBeforePassiveFailureCannotRestoreTarget(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	checker := New()
+	var calls atomic.Int32
+	checker.client.Transport = probeRoundTripperFunc(func(request *http.Request) (*http.Response, error) {
+		if calls.Add(1) == 1 {
+			close(started)
+			<-release
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("")), Request: request}, nil
+	})
+	route := config.Route{Host: "app.localhost", Target: "http://upstream.local"}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() { checker.Start(ctx, []config.Route{route}, time.Hour); close(done) }()
+	<-started
+	checker.ReportFailure(route.Host, route.Target)
+	close(release)
+	<-done
+	if checker.HealthyTarget(route.Host, route.Target) || checker.Healthy(route.Host) {
+		t.Fatal("an earlier probe restored a target after a passive failure")
+	}
+	checker.Start(ctx, []config.Route{route}, time.Hour)
+	if !checker.HealthyTarget(route.Host, route.Target) || !checker.Healthy(route.Host) {
+		t.Fatal("a new successful probe should restore the target")
+	}
+}
+
 func TestProbeAllBoundsConcurrencyAcrossTargets(t *testing.T) {
 	const targetCount = 40
 	var active atomic.Int64

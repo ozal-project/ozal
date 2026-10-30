@@ -746,7 +746,7 @@ func TestPublicRouteStripsSessionCookie(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "http://public.localhost/", nil)
 		req.Host = "public.localhost"
-		req.Header.Set("Cookie", session+"=edge-session; sb_handoff=legacy-binding; sb_handoff_transaction=binding; theme=dark")
+		req.Header.Set("Cookie", session+"=edge-session; sb_login=login-attempt; sb_handoff=legacy-binding; sb_handoff_transaction=binding; theme=dark")
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 
