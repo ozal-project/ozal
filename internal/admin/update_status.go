@@ -13,6 +13,9 @@ import (
 )
 
 const maxUpdateStatusBytes = 64 << 10
+const updateCheckFreshness = 24 * time.Hour
+const activeUpdateFreshness = time.Hour
+const allowedUpdateClockSkew = 5 * time.Minute
 
 var updateVersionText = regexp.MustCompile(`^[A-Za-z0-9.+-]{1,64}$`)
 var updateIdentifierText = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
@@ -30,14 +33,16 @@ func WithUpdateStatusFile(path string) Option {
 // updateStatusView is the secret-free projection shared by the updater and
 // the authenticated console API. A pair job may include its two participants.
 type updateStatusView struct {
-	CheckedAt string             `json:"checked_at"`
-	Installed string             `json:"installed"`
-	Latest    string             `json:"latest,omitempty"`
-	Result    string             `json:"result"`
-	Reason    string             `json:"reason,omitempty"`
-	JobID     string             `json:"job_id,omitempty"`
-	Phase     string             `json:"phase,omitempty"`
-	Nodes     []updateNodeStatus `json:"nodes,omitempty"`
+	CheckedAt  string             `json:"checked_at"`
+	Installed  string             `json:"installed"`
+	Latest     string             `json:"latest,omitempty"`
+	Result     string             `json:"result"`
+	Reason     string             `json:"reason,omitempty"`
+	Stale      bool               `json:"stale,omitempty"`
+	LastResult string             `json:"last_result,omitempty"`
+	JobID      string             `json:"job_id,omitempty"`
+	Phase      string             `json:"phase,omitempty"`
+	Nodes      []updateNodeStatus `json:"nodes,omitempty"`
 }
 
 type updateNodeStatus struct {
@@ -85,9 +90,44 @@ func (h *Handler) updateStatus(w http.ResponseWriter, _ *http.Request) {
 	if status.Result == "" {
 		status.Result = "unknown"
 	}
+	status.Stale = false
+	status.LastResult = ""
 	status.Reason = publicUpdateReason(status.Result)
+	status = expireUpdateStatus(status, time.Now())
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, status)
+}
+
+// expireUpdateStatus prevents an old check or interrupted in-progress job from
+// being presented as current. Terminal results remain useful as history.
+func expireUpdateStatus(status updateStatusView, now time.Time) updateStatusView {
+	maxAge := time.Duration(0)
+	switch status.Result {
+	case "current", "available", "unversioned":
+		maxAge = updateCheckFreshness
+	case "updating":
+		maxAge = activeUpdateFreshness
+	default:
+		return status
+	}
+	checkedAt, err := time.Parse(time.RFC3339, status.CheckedAt)
+	if err != nil {
+		return status
+	}
+	age := now.Sub(checkedAt)
+	if age <= maxAge && age >= -allowedUpdateClockSkew {
+		return status
+	}
+	status.Stale = true
+	status.LastResult = status.Result
+	status.Result = "unknown"
+	status.Reason = "the last update status is stale"
+	status.Installed = ""
+	status.Latest = ""
+	status.JobID = ""
+	status.Phase = ""
+	status.Nodes = nil
+	return status
 }
 
 // reportUpdateStatus accepts a small status record only over the host-only
@@ -118,6 +158,8 @@ func (h *Handler) reportUpdateStatus(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	status.Stale = false
+	status.LastResult = ""
 	status.Reason = publicUpdateReason(status.Result)
 	if err := saveUpdateStatus(h.updateStatusFile, status); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "update status could not be saved")

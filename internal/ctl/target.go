@@ -37,9 +37,12 @@ type SSH struct {
 type Edge struct {
 	Unit        string `json:"unit"`
 	ServiceUser string `json:"service_user"`
-	Binary      string `json:"binary"`
-	Config      string `json:"config"`
-	StateDB     string `json:"state_db"`
+	// ServiceGroup, when set, must match the unit's effective group. Leaving it
+	// empty lets the preflight discover the group and carries it into rollback.
+	ServiceGroup string `json:"service_group,omitempty"`
+	Binary       string `json:"binary"`
+	Config       string `json:"config"`
+	StateDB      string `json:"state_db"`
 	// Stage is a directory the SSH user owns: uploads land here and are only
 	// run by root after a hash check on a root-owned copy.
 	Stage string `json:"stage"`
@@ -82,6 +85,7 @@ type Connector struct {
 var (
 	unitName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.@-]{0,63}$`)
 	account  = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
+	groupID  = regexp.MustCompile(`^[0-9]{1,5}$`)
 	sshUser  = regexp.MustCompile(`^[A-Za-z0-9_.-]+@[A-Za-z0-9._:-]+$`)
 )
 
@@ -100,6 +104,9 @@ func (t Target) Validate() error {
 	}
 	if !account.MatchString(t.Edge.ServiceUser) {
 		return errors.New("edge.service_user must be a plain account name")
+	}
+	if t.Edge.ServiceGroup != "" && !account.MatchString(t.Edge.ServiceGroup) && !groupID.MatchString(t.Edge.ServiceGroup) {
+		return errors.New("edge.service_group must be a plain group name")
 	}
 	for name, p := range map[string]string{
 		"edge.binary": t.Edge.Binary, "edge.config": t.Edge.Config, "edge.state_db": t.Edge.StateDB,

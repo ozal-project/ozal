@@ -48,6 +48,8 @@ const usage = `usage:
       with the new DEPLOY_PROJECT. Undo by renaming back.
   ozalctl edge upgrade [-targets FILE] [-target NAME] [-repo DIR] [-ref REF] [-apply]
       Build a committed ref, upload it and run "ozal upgrade" on the edge.
+  ozalctl edge pair-preflight [-targets FILE] [-target NAME]
+      Inspect the configured edge and connector over SSH without changing them.
   ozalctl edge pair-upgrade [-targets FILE] [-target NAME] -ref TAG -public-key FILE [-api URL] [-force] [-apply]
       Verify one signed release and coordinate the configured tunnel edge and connector.
   ozalctl edge config -base FILE [-cloudflare-ranges] [-targets FILE] [-target NAME] [-apply]
@@ -99,6 +101,7 @@ func run(args []string) int {
 	}
 	commands := map[string]func([]string) int{
 		"edge upgrade":           edgeUpgrade,
+		"edge pair-preflight":    edgePairPreflight,
 		"edge pair-upgrade":      edgePairUpgrade,
 		"edge config":            edgeConfig,
 		"site publish":           sitePublish,

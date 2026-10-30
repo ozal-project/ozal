@@ -5,6 +5,7 @@
       "edge": {
         "unit": "ozal",
         "service_user": "ozal",
+        "service_group": "ozal",
         "binary": "/usr/local/lib/ozal/ozal",
         "config": "/etc/ozal/config.json",
         "state_db": "/var/lib/ozal/state.db",

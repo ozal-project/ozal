@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -32,6 +33,7 @@ type pairSSHNode struct {
 	role         string
 	unit         string
 	user         string
+	serviceGroup string
 	binary       string
 	stage        string
 	lock         string
@@ -45,6 +47,9 @@ type pairSSHNode struct {
 	dbBackup     string
 	previousHash string
 }
+
+var pairAccountName = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
+var pairNumericGroup = regexp.MustCompile(`^[0-9]{1,5}$`)
 
 func (n *pairSSHNode) Name() string { return n.name }
 
@@ -123,13 +128,132 @@ func (n *pairSSHNode) Inspect(ctx context.Context) (ctl.PairState, error) {
 		return state, fmt.Errorf("%s reports %s/%s; this coordinator builds one linux/amd64 candidate for the pair", n.name, info.OS, info.Arch)
 	}
 	if n.role == "edge" {
-		if err := n.root(ctx, n.serviceCommand("is-active --quiet")); err != nil {
+		state.ServiceUser = n.user
+		properties, err := n.run(ctx, "systemctl show --no-pager --property=User --property=Group "+ctl.Quote(n.unit), nil)
+		if err != nil {
+			return state, fmt.Errorf("read edge service identity: %w", err)
+		}
+		values, err := systemdIdentity(properties)
+		if err != nil {
+			return state, err
+		}
+		unitUser := values["User"]
+		if unitUser == "" {
+			unitUser = "root"
+		}
+		if unitUser != n.user {
+			return state, fmt.Errorf("edge unit runs as %s, target declares %s", unitUser, n.user)
+		}
+		group := values["Group"]
+		if group == "" {
+			group, err = n.run(ctx, "id -gn "+ctl.Quote(unitUser), nil)
+			if err != nil {
+				return state, fmt.Errorf("resolve edge service primary group: %w", err)
+			}
+			group = strings.TrimSpace(group)
+		}
+		if !pairAccountName.MatchString(group) && !pairNumericGroup.MatchString(group) {
+			return state, errors.New("edge unit has an unsupported service group")
+		}
+		if n.serviceGroup != "" && n.serviceGroup != group {
+			return state, fmt.Errorf("edge unit group is %s, target declares %s", group, n.serviceGroup)
+		}
+		state.ServiceGroup = group
+		if err := n.command(ctx, "systemctl is-active --quiet "+ctl.Quote(n.unit), nil); err != nil {
 			return state, fmt.Errorf("edge service is not active: %w", err)
 		}
 	} else if err := n.command(ctx, n.serviceCommand("is-active --quiet"), nil); err != nil {
 		return state, fmt.Errorf("connector service is not active: %w", err)
 	}
 	return state, nil
+}
+
+// CheckPreflight performs only read-only host checks. The update's apply path
+// rechecks service state under both locks before it stages or stops anything.
+func (n *pairSSHNode) CheckPreflight(ctx context.Context, state ctl.PairState) error {
+	if n.role == "edge" {
+		if err := n.checkUploadDirectory(ctx, n.stage); err != nil {
+			return fmt.Errorf("operator staging path is not writable: %w", err)
+		}
+		for _, dir := range []string{path.Dir(n.lock)} {
+			command := "test -d " + ctl.Quote(dir) + " && test -w " + ctl.Quote(dir) + " && test -x " + ctl.Quote(dir)
+			if _, err := n.run(ctx, command, nil); err != nil {
+				return fmt.Errorf("operator cannot create staging or lock entries under %s: %w", dir, err)
+			}
+		}
+		if err := n.ensureFreeLock(ctx); err != nil {
+			return err
+		}
+		service := "sudo -u " + ctl.Quote(state.ServiceUser) + " -g " + ctl.Quote(state.ServiceGroup)
+		checks := []string{
+			"test -f " + ctl.Quote(n.binary) + " && test ! -L " + ctl.Quote(n.binary) + " && test -x " + ctl.Quote(n.binary),
+			"test -d " + ctl.Quote(path.Dir(n.binary)) + " && test -w " + ctl.Quote(path.Dir(n.binary)),
+			service + " test -r " + ctl.Quote(n.config),
+			"test -f " + ctl.Quote(n.db) + " && test ! -L " + ctl.Quote(n.db),
+			service + " test -r " + ctl.Quote(n.db),
+			service + " test -w " + ctl.Quote(n.db),
+			"test -S " + ctl.Quote(n.socket),
+			"curl --silent --show-error --fail --max-time 2 --unix-socket " + ctl.Quote(n.socket) + " http://localhost/_/healthz >/dev/null",
+		}
+		return n.root(ctx, "sudo sh -c "+ctl.Quote(strings.Join(checks, " && ")))
+	}
+	if err := n.checkUploadDirectory(ctx, n.stage); err != nil {
+		return fmt.Errorf("connector staging path is not writable: %w", err)
+	}
+	for _, dir := range []string{path.Dir(n.binary), path.Dir(n.lock)} {
+		command := "test -d " + ctl.Quote(dir) + " && test -w " + ctl.Quote(dir) + " && test -x " + ctl.Quote(dir)
+		if _, err := n.run(ctx, command, nil); err != nil {
+			return fmt.Errorf("connector service user cannot write under %s: %w", dir, err)
+		}
+	}
+	if err := n.ensureFreeLock(ctx); err != nil {
+		return err
+	}
+	command := "test -f " + ctl.Quote(n.binary) + " && test ! -L " + ctl.Quote(n.binary) + " && test -x " + ctl.Quote(n.binary)
+	if _, err := n.run(ctx, command, nil); err != nil {
+		return fmt.Errorf("connector binary is not a regular executable: %w", err)
+	}
+	return nil
+}
+
+func (n *pairSSHNode) checkUploadDirectory(ctx context.Context, destination string) error {
+	parent := path.Dir(destination)
+	command := "test -d " + ctl.Quote(parent) + " && test -w " + ctl.Quote(parent) + " && test -x " + ctl.Quote(parent) + " && { { test ! -e " + ctl.Quote(destination) + " && test ! -L " + ctl.Quote(destination) + "; } || { test -d " + ctl.Quote(destination) + " && test ! -L " + ctl.Quote(destination) + " && test -w " + ctl.Quote(destination) + " && test -x " + ctl.Quote(destination) + "; }; }"
+	_, err := n.run(ctx, command, nil)
+	return err
+}
+
+func (n *pairSSHNode) ensureFreeLock(ctx context.Context) error {
+	command := "if [ -e " + ctl.Quote(n.lock) + " ] || [ -L " + ctl.Quote(n.lock) + " ]; then printf held; else printf free; fi"
+	state, err := n.run(ctx, command, nil)
+	if err != nil {
+		return fmt.Errorf("inspect update lock: %w", err)
+	}
+	if strings.TrimSpace(state) != "free" {
+		return errors.New("an update lock already exists; inspect it before proceeding")
+	}
+	return nil
+}
+
+func systemdIdentity(raw string) (map[string]string, error) {
+	values := make(map[string]string, 2)
+	for _, line := range strings.Split(strings.TrimSpace(raw), "\n") {
+		key, value, ok := strings.Cut(line, "=")
+		if !ok || (key != "User" && key != "Group") {
+			return nil, errors.New("systemd returned malformed service identity")
+		}
+		if _, duplicate := values[key]; duplicate {
+			return nil, errors.New("systemd returned duplicate service identity fields")
+		}
+		values[key] = strings.TrimSpace(value)
+	}
+	if _, ok := values["User"]; !ok {
+		return nil, errors.New("systemd did not report the service user")
+	}
+	if _, ok := values["Group"]; !ok {
+		return nil, errors.New("systemd did not report the service group")
+	}
+	return values, nil
 }
 
 func (n *pairSSHNode) Stage(ctx context.Context, bin ctl.Binary, want string) error {
@@ -234,7 +358,7 @@ func (n *pairSSHNode) Ready(ctx context.Context, expectedHash string) error {
 	return n.command(ctx, n.serviceCommand("is-active --quiet"), nil)
 }
 
-func (n *pairSSHNode) Restore(ctx context.Context, _ ctl.PairState) error {
+func (n *pairSSHNode) Restore(ctx context.Context, state ctl.PairState) error {
 	if n.role == "connector" {
 		pattern := path.Join(path.Dir(n.binary), ".ozal-restore.XXXXXX")
 		command := "set -eu; test -f " + ctl.Quote(n.binary) + " && test ! -L " + ctl.Quote(n.binary) + "; test -f " + ctl.Quote(n.backup) + " && test ! -L " + ctl.Quote(n.backup) + "; tmp=$(mktemp " + ctl.Quote(pattern) + "); trap 'rm -f \"$tmp\"' EXIT; cp " + ctl.Quote(n.backup) + " \"$tmp\"; chmod 755 \"$tmp\"; mv -f \"$tmp\" " + ctl.Quote(n.binary)
@@ -243,9 +367,16 @@ func (n *pairSSHNode) Restore(ctx context.Context, _ ctl.PairState) error {
 	pattern := path.Join(path.Dir(n.binary), ".ozal-restore.XXXXXX")
 	command := "set -eu; test -f " + ctl.Quote(n.binary) + " && test ! -L " + ctl.Quote(n.binary) + "; test -f " + ctl.Quote(n.backup) + " && test ! -L " + ctl.Quote(n.backup) + "; tmp=$(mktemp " + ctl.Quote(pattern) + "); trap 'rm -f \"$tmp\"' EXIT; cp -p " + ctl.Quote(n.backup) + " \"$tmp\"; mv -f \"$tmp\" " + ctl.Quote(n.binary)
 	if n.dbBackup != "" {
+		serviceUser := state.ServiceUser
+		if serviceUser == "" {
+			serviceUser = n.user
+		}
+		if !pairAccountName.MatchString(serviceUser) || (!pairAccountName.MatchString(state.ServiceGroup) && !pairNumericGroup.MatchString(state.ServiceGroup)) {
+			return errors.New("refusing SQLite rollback without a validated service user and group")
+		}
 		restored := n.db + ".restore-" + n.job
 		failed := n.db + ".failed-" + n.job
-		command += "; test -f " + ctl.Quote(n.dbBackup) + "; rm -f " + ctl.Quote(n.db+"-wal") + " " + ctl.Quote(n.db+"-shm") + "; mv " + ctl.Quote(n.db) + " " + ctl.Quote(failed) + "; " + ctl.Quote(n.binary) + " db restore -from " + ctl.Quote(n.dbBackup) + " -to " + ctl.Quote(restored) + "; chown " + ctl.Quote(n.user+":"+n.user) + " " + ctl.Quote(restored) + "; mv " + ctl.Quote(restored) + " " + ctl.Quote(n.db)
+		command += "; test -f " + ctl.Quote(n.dbBackup) + "; rm -f " + ctl.Quote(n.db+"-wal") + " " + ctl.Quote(n.db+"-shm") + "; mv " + ctl.Quote(n.db) + " " + ctl.Quote(failed) + "; " + ctl.Quote(n.binary) + " db restore -from " + ctl.Quote(n.dbBackup) + " -to " + ctl.Quote(restored) + "; chown " + ctl.Quote(serviceUser+":"+state.ServiceGroup) + " " + ctl.Quote(restored) + "; mv " + ctl.Quote(restored) + " " + ctl.Quote(n.db)
 	}
 	return n.root(ctx, "sudo sh -c "+ctl.Quote(command))
 }
@@ -304,13 +435,33 @@ func (b signedPairBuilder) Build(ctx context.Context, ref string) (ctl.Binary, e
 
 func edgePairNode(c *common, job, connector string) *pairSSHNode {
 	e := c.target.Edge
-	return &pairSSHNode{remote: c.remote, name: c.name + "-edge", role: "edge", unit: e.Unit, user: e.ServiceUser, binary: e.Binary, stage: e.Stage, lock: e.Lock, config: e.Config, db: e.StateDB, keep: e.Keep, socket: e.Socket, job: job, peer: connector}
+	return &pairSSHNode{remote: c.remote, name: c.name + "-edge", role: "edge", unit: e.Unit, user: e.ServiceUser, serviceGroup: e.ServiceGroup, binary: e.Binary, stage: e.Stage, lock: e.Lock, config: e.Config, db: e.StateDB, keep: e.Keep, socket: e.Socket, job: job, peer: connector}
 }
 
 func connectorPairNode(c *common, job string) *pairSSHNode {
 	x := c.target.Connector
 	remote := sshexec.Remote{Target: x.SSH.Target, Key: x.SSH.Key, Interactive: isTerminal(os.Stdin)}
 	return &pairSSHNode{remote: remote, name: x.Name, role: "connector", unit: x.Unit, user: x.ServiceUser, binary: x.Binary, stage: x.Stage, lock: x.Lock, job: job}
+}
+
+func edgePairPreflight(args []string) int {
+	fs := flag.NewFlagSet("edge pair-preflight", flag.ContinueOnError)
+	c, ok := setup(fs, args)
+	if !ok {
+		return 2
+	}
+	if c.target.Connector == nil {
+		return finish(errors.New("target.connector is required for a coordinated preflight"))
+	}
+	if !isTerminal(os.Stdin) {
+		return finish(errors.New("pair-preflight requires an interactive terminal for read-only sudo checks on the edge"))
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	edge := edgePairNode(c, "preflight", c.target.Connector.Name)
+	connector := connectorPairNode(c, "preflight")
+	fmt.Fprintln(os.Stdout, "==> read-only preflight; no files, locks or services will be changed")
+	return finish(ctl.PreflightPair(ctx, os.Stdout, edge, connector))
 }
 
 func edgePairUpgrade(args []string) int {

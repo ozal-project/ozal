@@ -30,6 +30,12 @@ func (n *pairNodeStub) Release(context.Context, string) error { return n.record(
 func (n *pairNodeStub) Inspect(context.Context) (PairState, error) {
 	return n.state, n.record("inspect")
 }
+func (n *pairNodeStub) CheckPreflight(_ context.Context, state PairState) error {
+	if state != n.state {
+		return errors.New("preflight received a different inspection")
+	}
+	return n.record("preflight")
+}
 func (n *pairNodeStub) Stage(_ context.Context, bin Binary, want string) error {
 	n.candidate = want
 	if want != sha(bin.Data) {
@@ -62,6 +68,33 @@ func TestUpdatePairPlanDoesNotContactNodes(t *testing.T) {
 	}
 	if len(*trace) != 0 {
 		t.Fatalf("plan changed remote state: %v", *trace)
+	}
+}
+
+func TestPreflightPairInspectsBothNodesWithoutAcquiringLocks(t *testing.T) {
+	edge, connector, trace, _ := pairFixture()
+	edge.state.ServiceUser, edge.state.ServiceGroup = "ozal", "ozal"
+	var output strings.Builder
+	if err := PreflightPair(context.Background(), &output, edge, connector); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"edge.inspect", "edge.preflight", "connector.inspect", "connector.preflight"}
+	if strings.Join(*trace, ",") != strings.Join(want, ",") {
+		t.Fatalf("preflight called %v, want %v", *trace, want)
+	}
+	if !strings.Contains(output.String(), "read-only preflight passed") {
+		t.Fatalf("preflight summary missing: %s", output.String())
+	}
+}
+
+func TestPreflightPairRejectsInvalidInspectionBeforeCheckingNextNode(t *testing.T) {
+	edge, connector, trace, _ := pairFixture()
+	edge.state.SHA256 = "invalid"
+	if err := PreflightPair(context.Background(), io.Discard, edge, connector); err == nil {
+		t.Fatal("invalid hash passed preflight")
+	}
+	if strings.Join(*trace, ",") != "edge.inspect" {
+		t.Fatalf("preflight continued after invalid edge hash: %v", *trace)
 	}
 }
 

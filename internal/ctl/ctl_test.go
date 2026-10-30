@@ -25,16 +25,17 @@ func goodTarget() Target {
 
 func TestValidateRefusesUnsafeValues(t *testing.T) {
 	for name, mutate := range map[string]func(*Target){
-		"relative binary":  func(x *Target) { x.Edge.Binary = "bin/ozal" },
-		"public admin":     func(x *Target) { x.Edge.Admin = "0.0.0.0:9091" },
-		"admin by name":    func(x *Target) { x.Edge.Admin = "edge.example.net:9091" },
-		"relative socket":  func(x *Target) { x.Edge.Socket = "run/admin.sock" },
-		"dotdot path":      func(x *Target) { x.Edge.Config = "/etc/../tmp/x" },
-		"newline in stage": func(x *Target) { x.Edge.Stage = "/a\nb" },
-		"bad host":         func(x *Target) { x.SSH.Target = "host; reboot" },
-		"bad unit":         func(x *Target) { x.Edge.Unit = "x; reboot" },
-		"bad account":      func(x *Target) { x.Edge.ServiceUser = "Root" },
-		"huge keep":        func(x *Target) { x.Edge.Keep = 99 },
+		"relative binary":   func(x *Target) { x.Edge.Binary = "bin/ozal" },
+		"public admin":      func(x *Target) { x.Edge.Admin = "0.0.0.0:9091" },
+		"admin by name":     func(x *Target) { x.Edge.Admin = "edge.example.net:9091" },
+		"relative socket":   func(x *Target) { x.Edge.Socket = "run/admin.sock" },
+		"dotdot path":       func(x *Target) { x.Edge.Config = "/etc/../tmp/x" },
+		"newline in stage":  func(x *Target) { x.Edge.Stage = "/a\nb" },
+		"bad host":          func(x *Target) { x.SSH.Target = "host; reboot" },
+		"bad unit":          func(x *Target) { x.Edge.Unit = "x; reboot" },
+		"bad account":       func(x *Target) { x.Edge.ServiceUser = "Root" },
+		"bad service group": func(x *Target) { x.Edge.ServiceGroup = "ozal;reboot" },
+		"huge keep":         func(x *Target) { x.Edge.Keep = 99 },
 	} {
 		t.Run(name, func(t *testing.T) {
 			target := goodTarget()
@@ -51,10 +52,16 @@ func TestValidateRefusesUnsafeValues(t *testing.T) {
 
 func TestCoordinatedTargetNeedsRestorableEdgeAndBoundConnectorIdentity(t *testing.T) {
 	target := goodTarget()
+	target.Edge.ServiceGroup = "ozal-state"
 	target.Connector = &Connector{SSH: SSH{Target: "ozal@connector.example.net", Key: "~/.ssh/connector"}, Name: "portfolio", Unit: "ozal-connector.service", ServiceUser: "ozal", Binary: "/home/ozal/bin/ozal", Stage: "/home/ozal/stage", Lock: "/home/ozal/lock"}
 	target.Edge.Socket = "/run/ozal/admin.sock"
 	if err := target.Validate(); err != nil {
 		t.Fatalf("valid coordinated target rejected: %v", err)
+	}
+	numericGroup := target
+	numericGroup.Edge.ServiceGroup = "1204"
+	if err := numericGroup.Validate(); err != nil {
+		t.Fatalf("numeric systemd group rejected: %v", err)
 	}
 	for name, mutate := range map[string]func(*Target){
 		"missing status socket":             func(v *Target) { v.Edge.Socket = "" },

@@ -208,11 +208,18 @@ La API `GET /_/api/updates/status` requiere la herramienta de operador
 `checked_at`, versiones, `result`, fase y nodos (si es una pareja); `reason` lo
 genera la API, sin reenviar errores arbitrarios del proceso. El archivo debe
 ser regular y menor de 64 KiB; si aún no existe, el resultado es `unknown`;
-archivos inválidos dan 503. `POST` en el mismo recurso solo acepta un registro
+archivos inválidos dan 503. Los resultados de consulta (`current`, `available`,
+`unversioned`) vencen a las 24 horas; `updating` vence a la hora. Un
+reporte vencido se entrega como `result: unknown`, `stale: true` y
+`last_result`, sin conservar versiones, fase o nodos que podrían confundirse
+con el estado actual. Los resultados terminales (`updated`, `rolled_back`,
+`failed`, `intervention_required`) quedan como historia. `POST` en el mismo recurso solo acepta un registro
 de estado acotado por el socket Unix local, para que `ozalctl` informe el avance;
 rechaza cualquier comando, path, rol o resultado desconocido. Ningún endpoint
 inicia una actualización. El timer de ejemplo solo consulta releases y el
 corte de Edge + conector lo coordina `ozalctl` desde la máquina del operador.
+`ozalctl edge pair-preflight` inspecciona ambos hosts por SSH sin modificar
+estado; la aplicación vuelve a inspeccionarlos bajo los locks de ambos nodos.
 
 ### Servicio de releases y configuración — contrato objetivo 2026-10-30
 

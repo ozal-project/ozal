@@ -185,8 +185,22 @@ coordinador. El POST de progreso se tolera como 404 solo antes de que el
 candidato instale esa ruta; si el edge ya volvió y el endpoint no existe, se
 revierte el trabajo. Las fases finales se guardan al volver el edge.
 Un 503 o cualquier otro error detiene el trabajo antes del corte o activa su
-reversión. El plan no contacta los hosts; `-apply` requiere una terminal
-interactiva para `sudo` en el edge. No despliega ni migra una VPS por sí solo.
+reversión. `ozalctl edge pair-upgrade` sin `-apply` solo descarga y verifica el
+artefacto: no contacta los hosts. Antes de aplicar, corre:
+
+```sh
+ozalctl edge pair-preflight [-targets FILE] [-target NAME]
+```
+
+Este comando sí conecta por SSH y verifica las versiones/hashes actuales, las
+unidades activas, usuario y grupo efectivos de systemd, acceso del servicio a
+configuración y SQLite, socket del admin, espacio de staging y locks libres.
+No crea archivos ni locks, no detiene servicios y requiere una terminal para
+las consultas `sudo` de solo lectura en Edge. El resultado es una observación,
+no una reserva: `pair-upgrade -apply` repite la inspección bajo ambos locks.
+`edge.service_group` en el target permite fijar el grupo esperado; si se omite,
+se descubre de la unidad y se usa al restaurar SQLite. No despliega ni migra
+una VPS por sí solo.
 
 Antes de la ventana, completa esta ficha con datos observados, sin valores de
 secretos; conserva la evidencia operativa en un destino privado:

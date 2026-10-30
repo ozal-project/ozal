@@ -18,8 +18,10 @@ var pairText = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 // node lock. The adapter's checkpoint must also preserve mutable state needed
 // to restore that executable safely.
 type PairState struct {
-	Version string
-	SHA256  string
+	Version      string
+	SHA256       string
+	ServiceUser  string
+	ServiceGroup string
 }
 
 // PairProgress is the allowlisted report posted to the edge's host-only
@@ -59,6 +61,47 @@ type PairNode interface {
 	Ready(context.Context, string) error
 	Restore(context.Context, PairState) error
 	Report(context.Context, PairProgress) error // edge adapter reports through its local status API
+}
+
+// PairPreflightNode exposes the read-only inspection used before a paired
+// update. CheckPreflight must not create files, acquire locks or change units.
+type PairPreflightNode interface {
+	Name() string
+	Inspect(context.Context) (PairState, error)
+	CheckPreflight(context.Context, PairState) error
+}
+
+// PreflightPair inspects both fixed peers without acquiring locks or changing
+// remote state. Apply repeats the checks while holding both update locks.
+func PreflightPair(ctx context.Context, out io.Writer, edge, connector PairPreflightNode) error {
+	if edge == nil || connector == nil || !pairText.MatchString(edge.Name()) || !pairText.MatchString(connector.Name()) || edge.Name() == connector.Name() {
+		return errors.New("a distinct edge and connector are required")
+	}
+	for _, node := range []PairPreflightNode{edge, connector} {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		state, err := node.Inspect(ctx)
+		if err != nil {
+			return fmt.Errorf("inspect %s: %w", node.Name(), err)
+		}
+		if !validSHA256(state.SHA256) {
+			return fmt.Errorf("%s reported an invalid binary hash", node.Name())
+		}
+		if err := node.CheckPreflight(ctx, state); err != nil {
+			return fmt.Errorf("preflight %s: %w", node.Name(), err)
+		}
+		version := state.Version
+		if version == "" {
+			version = "unversioned"
+		}
+		fmt.Fprintf(out, "%s: %s sha256 %s\n", node.Name(), version, state.SHA256)
+		if state.ServiceUser != "" || state.ServiceGroup != "" {
+			fmt.Fprintf(out, "  edge service identity: %s:%s\n", state.ServiceUser, state.ServiceGroup)
+		}
+	}
+	fmt.Fprintln(out, "read-only preflight passed; it did not reserve either update lock, so apply will recheck both hosts")
+	return nil
 }
 
 // PairUpdateRequest coordinates an edge and connector from one committed
