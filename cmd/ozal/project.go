@@ -26,6 +26,9 @@ type projectTrustResult struct {
 // runProject migrates an explicit host-operator trust binding. Repository
 // discovery remains App-verified; this separate command requires the socket.
 func runProject(ctx context.Context, args []string, out io.Writer) error {
+	if len(args) > 0 && args[0] == "rename" {
+		return runProjectRename(ctx, args[1:], out)
+	}
 	if len(args) == 0 || args[0] != "trust" {
 		return errors.New("usage: ozal project trust -project NAME -repository-id ID -owner-id ID -ref REF -workflow-ref WORKFLOW [-apply -backup FILE]")
 	}
@@ -135,4 +138,61 @@ func migrateProjectTrust(ctx context.Context, out io.Writer, client *adminClient
 		}
 	}
 	return errors.New("live publisher trust differs from the reviewed migration; backup retained")
+}
+
+// runProjectRename renames a project and its site through the host socket:
+// it prints the edge's plan and, with -apply, copies the live build to the
+// new site name and moves the project's routes there.
+func runProjectRename(ctx context.Context, args []string, out io.Writer) error {
+	fs := flag.NewFlagSet("project rename", flag.ContinueOnError)
+	fs.SetOutput(out)
+	af := addAdminFlags(fs)
+	name := fs.String("project", "", "project to rename")
+	to := fs.String("to", "", "new name for the project and its site")
+	apply := fs.Bool("apply", false, "rename after reviewing the plan (default: no change)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 || *name == "" || *to == "" {
+		return errors.New("usage: ozal project rename -project NAME -to NEW_NAME [-apply]")
+	}
+	if *af.target != "" && !strings.HasPrefix(*af.target, "unix:") {
+		return errors.New("renaming a project requires the host's Unix socket")
+	}
+	client, err := af.client()
+	if err != nil {
+		return err
+	}
+	var setup struct {
+		Expected string `json:"config_sha256"`
+	}
+	if err := client.do(ctx, http.MethodGet, "/_/api/setup", nil, &setup); err != nil {
+		return err
+	}
+	endpoint := "/_/api/projects/" + url.PathEscape(*name) + "/rename"
+	var plan struct {
+		To         string   `json:"to"`
+		SiteFrom   string   `json:"site_from"`
+		SiteTo     string   `json:"site_to"`
+		Hosts      []string `json:"hosts"`
+		Applied    bool     `json:"applied"`
+		Deployment string   `json:"deployment"`
+	}
+	if err := client.do(ctx, http.MethodPost, endpoint, map[string]any{"to": *to, "expected": setup.Expected}, &plan); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "Project %s -> %s\nSite %s -> %s (the live build is copied; the old one stays retained)\nAddresses moved: %s\n",
+		*name, plan.To, plan.SiteFrom, plan.SiteTo, strings.Join(plan.Hosts, ", "))
+	if !*apply {
+		fmt.Fprintln(out, "Plan only. Re-run with -apply to rename. CI must then publish with DEPLOY_PROJECT="+plan.To+".")
+		return nil
+	}
+	if err := client.do(ctx, http.MethodPost, endpoint, map[string]any{"to": *to, "expected": setup.Expected, "apply": true}, &plan); err != nil {
+		return fmt.Errorf("rename not confirmed; read the projects before retrying: %w", err)
+	}
+	if !plan.Applied {
+		return errors.New("the edge did not confirm the rename")
+	}
+	fmt.Fprintf(out, "Renamed. %s serves build %s. Undo: ozal project rename -project %s -to %s -apply\n", plan.SiteTo, shortID(plan.Deployment), plan.To, *name)
+	return nil
 }

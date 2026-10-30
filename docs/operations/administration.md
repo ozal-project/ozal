@@ -565,6 +565,7 @@ ozalctl site publish -site NAME -dir DIST [-host HOST] [-apply]
 ozalctl app alias -from HOST -to HOST [-manual-dns] [-wait 90s] [-apply]
 ozalctl api [-d JSON|@FILE|@-] METHOD /_/api/PATH
 ozalctl project trust -project NAME -repository-id ID -owner-id ID -workflow-ref WORKFLOW [-ref refs/heads/main] [-apply]
+ozalctl project rename -project NAME -to NUEVO [-apply]
 ozalctl site cutover -host HOST -to IP -cloudflare-token FILE [-dir DIST] [-apply]
 ozalctl site cutover -host HOST -back EVIDENCE -cloudflare-token FILE [-apply]
 ```

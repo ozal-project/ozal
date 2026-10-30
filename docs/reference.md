@@ -620,6 +620,17 @@ su cuerpo lleva `trust`, `expected` y `apply` (false por defecto). No usa ni
 reemplaza la exploración mediante GitHub App. La variante remota es
 `ozalctl project trust`; consulta [operación remota](operations/administration.md#operacion-remota-con-ozalctl).
 
+`ozal project rename -project NAME -to NUEVO [-apply]` renombra un proyecto y su
+sitio juntos. El plan nombra el sitio anterior, el nuevo y las direcciones que se
+mueven; con `-apply` el edge copia primero la versión en vivo al sitio nuevo
+(pasa por la misma validación que una subida) y después cambia proyecto, sitio y
+rutas en un solo cambio con digest revisado, así ninguna dirección queda sin
+contenido. El nombre nuevo no puede estar usado por otro proyecto ni por una
+ruta. Las versiones del sitio anterior quedan retenidas: renombrar al revés lo
+deshace. Después, el CI debe publicar con `DEPLOY_PROJECT` igual al nombre nuevo.
+Es exclusivo del socket (`POST /_/api/projects/{name}/rename` con `to`,
+`expected` y `apply`); la variante remota es `ozalctl project rename`.
+
 `audit` tiene `dir`, `include` (`access`, `admin`), `admin_mode` y
 `max_segment_bytes`. Para `access`, privadas default required y públicas
 best_effort; `audit_mode` de ruta permite elección explícita. Para admin,

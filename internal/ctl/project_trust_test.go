@@ -56,3 +56,23 @@ func TestProjectTrustOperatorGuardAndRecoveryPath(t *testing.T) {
 		t.Fatal("invalid IDs reached sudo")
 	}
 }
+
+func TestProjectRenameRunsOnTheSocketWithGuard(t *testing.T) {
+	target := goodTarget()
+	target.Edge.Socket = "/run/ozal/admin.sock"
+	remote := &trustRemote{}
+	r := ProjectRenameRequest{Name: "edge", Target: target, Project: "switchboard-site", To: "ozal-site", Apply: true}
+	if err := ProjectRename(context.Background(), io.Discard, remote, r); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(remote.command, "grep -qaF 'ozal project rename'") || !strings.Contains(remote.command, "'project' 'rename' '-admin' 'unix:/run/ozal/admin.sock' '-project' 'switchboard-site' '-to' 'ozal-site' '-apply'") {
+		t.Fatalf("command = %s", remote.command)
+	}
+	remote = &trustRemote{code: 3}
+	if err := ProjectRename(context.Background(), io.Discard, remote, r); err == nil || !strings.Contains(err.Error(), "edge upgrade") {
+		t.Fatalf("old binary: %v", err)
+	}
+	if err := ProjectRename(context.Background(), io.Discard, &trustRemote{}, ProjectRenameRequest{Target: target, Project: "a", To: "Bad Name"}); err == nil {
+		t.Fatal("invalid name accepted")
+	}
+}

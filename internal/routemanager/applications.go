@@ -92,16 +92,27 @@ func (m *Manager) RemoveApplication(host, expected string) error {
 
 // AddZone adds a runtime zone (EDGE-008) under the reviewed digest.
 func (m *Manager) AddZone(name, expected string) error {
-	return m.mutateZones(expected, func(cfg config.Config) (config.Config, error) { return config.WithZone(cfg, name) })
+	return m.mutate(expected, func(cfg config.Config) (config.Config, error) { return config.WithZone(cfg, name) })
 }
 
 // RemoveZone removes a runtime zone under the reviewed digest; a zone that
 // still serves an application is refused by config.WithoutZone.
 func (m *Manager) RemoveZone(name, expected string) error {
-	return m.mutateZones(expected, func(cfg config.Config) (config.Config, error) { return config.WithoutZone(cfg, name) })
+	return m.mutate(expected, func(cfg config.Config) (config.Config, error) { return config.WithoutZone(cfg, name) })
 }
 
-func (m *Manager) mutateZones(expected string, change func(config.Config) (config.Config, error)) error {
+// RenameProject renames a project and its site, moving the routes that
+// served it, under the reviewed digest (config.PlanProjectRename).
+func (m *Manager) RenameProject(from, to, expected string) error {
+	return m.mutate(expected, func(cfg config.Config) (config.Config, error) {
+		next, _, _, err := config.PlanProjectRename(cfg, from, to)
+		return next, err
+	})
+}
+
+// mutate applies one reviewed change: the digest the operator reviewed must
+// still be the one in effect.
+func (m *Manager) mutate(expected string, change func(config.Config) (config.Config, error)) error {
 	m.reloadMu.Lock()
 	defer m.reloadMu.Unlock()
 	if err := m.contextError(); err != nil {

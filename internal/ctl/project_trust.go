@@ -57,3 +57,40 @@ func ProjectTrust(ctx context.Context, out io.Writer, remote Remote, r ProjectTr
 	}
 	return nil
 }
+
+// ProjectRenameRequest is one run of `ozalctl project rename`.
+type ProjectRenameRequest struct {
+	Name, Project, To string
+	Target            Target
+	Apply             bool
+}
+
+// ProjectRenameCommand runs `ozal project rename` on the edge against its
+// admin socket. The guard refuses binaries that predate the subcommand.
+func ProjectRenameCommand(e Edge, r ProjectRenameRequest) string {
+	args := []string{"project", "rename", "-admin", "unix:" + e.Socket, "-project", r.Project, "-to", r.To}
+	if r.Apply {
+		args = append(args, "-apply")
+	}
+	return socketCommand(e, "ozal project rename", 3, args)
+}
+
+// ProjectRename prints the edge's rename plan and, with Apply, renames.
+func ProjectRename(ctx context.Context, out io.Writer, remote Remote, r ProjectRenameRequest) error {
+	e := r.Target.Edge
+	if !pages.ValidSiteName(r.Project) || !pages.ValidSiteName(r.To) || e.Socket == "" || e.Binary == "" || e.ServiceUser == "" {
+		return errors.New("valid -project and -to names and edge.socket, binary and service_user are required")
+	}
+	fmt.Fprintf(out, "==> %s: rename project %s to %s (apply=%t)\n", r.Name, r.Project, r.To, r.Apply)
+	code, err := runOnSocket(ctx, remote, e, ProjectRenameCommand(e, r))
+	if err != nil {
+		return err
+	}
+	if code == 3 {
+		return errors.New("the edge has no `project rename` yet: run `ozalctl edge upgrade -apply` first; nothing changed")
+	}
+	if code != 0 {
+		return fmt.Errorf("project rename ended with status %d; read its output above before retrying", code)
+	}
+	return nil
+}

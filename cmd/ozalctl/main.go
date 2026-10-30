@@ -42,6 +42,10 @@ const usage = `usage:
   ozalctl project trust -project NAME -repository-id ID -owner-id ID -workflow-ref WORKFLOW [-ref REF] [-apply]
       Migrate an existing GitHub publisher through the edge's private socket.
       The default is a plan; -apply keeps previous trust metadata on the edge.
+  ozalctl project rename -project NAME -to NEW_NAME [-apply]
+      Rename a project and its site on the edge: the live build is copied to
+      the new site name, then its addresses move there. CI must then publish
+      with the new DEPLOY_PROJECT. Undo by renaming back.
   ozalctl edge upgrade [-targets FILE] [-target NAME] [-repo DIR] [-ref REF] [-apply]
       Build a committed ref, upload it and run "ozal upgrade" on the edge.
   ozalctl edge pair-upgrade [-targets FILE] [-target NAME] -ref TAG -public-key FILE [-api URL] [-force] [-apply]
@@ -100,6 +104,7 @@ func run(args []string) int {
 		"site publish":           sitePublish,
 		"app alias":              appAlias,
 		"project trust":          projectTrust,
+		"project rename":         projectRename,
 		"site check":             func(args []string) int { return siteSnapshot(args, false) },
 		"site pack":              func(args []string) int { return siteSnapshot(args, true) },
 		"site deploy":            siteDeploy,
@@ -303,6 +308,20 @@ func apiBody(value string) ([]byte, error) {
 	default:
 		return []byte(value), nil
 	}
+}
+
+func projectRename(args []string) int {
+	fs := flag.NewFlagSet("project rename", flag.ContinueOnError)
+	project := fs.String("project", "", "project to rename")
+	to := fs.String("to", "", "new name for the project and its site")
+	apply := fs.Bool("apply", false, "do it (default: print the plan)")
+	c, ok := setup(fs, args)
+	if !ok {
+		return 2
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return finish(ctl.ProjectRename(ctx, os.Stdout, c.remote, ctl.ProjectRenameRequest{Name: c.name, Target: c.target, Project: *project, To: *to, Apply: *apply}))
 }
 
 func appAlias(args []string) int {
