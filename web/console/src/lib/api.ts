@@ -254,7 +254,7 @@ export async function setGroups(token: string, email: string, expected: string[]
   if (!res.ok) throw new Error(body.error ?? `Membership change failed (HTTP ${res.status}).`);
 }
 
-export type ApplicationRoute = { host: string; target?: string; upstreams?: string[]; connector?: string; site?: string; root?: string; spa?: boolean; health_path?: string; auth_required?: boolean; access?: Record<string, unknown>; resource?: Record<string, unknown>; audit_mode?: string };
+export type ApplicationRoute = { host: string; target?: string; upstreams?: string[]; connector?: string; site?: string; root?: string; redirect?: string; spa?: boolean; health_path?: string; auth_required?: boolean; access?: Record<string, unknown>; resource?: Record<string, unknown>; audit_mode?: string };
 export type SetupStatus = { config_sha256: string; methods: string[]; pages_enabled: boolean; tls_enabled: boolean; tls_mode: "off" | "automatic" | "dns01"; dns: { target: string; proxied: boolean; provider: "" | "cloudflare" }; login_url: string; admin_socket_configured: boolean; routes: ApplicationRoute[] };
 export type ApplicationDraft = { route: ApplicationRoute; expected: string; access_mode: "private" | "public" };
 export type ApplicationPlan = ApplicationDraft & { url: string; dns: string; tls: string; checks: string[] };

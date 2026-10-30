@@ -64,7 +64,10 @@ export function applicationAccess(route: { auth_required?: boolean; access?: Rec
 }
 
 // What serves an application, in words a non-developer reads at a glance.
-export function servedBy(route: { target?: string; upstreams?: string[]; site?: string; connector?: string; root?: string }): string {
+export function servedBy(route: { target?: string; upstreams?: string[]; site?: string; connector?: string; root?: string; redirect?: string }): string {
+  if (route.redirect) {
+    try { const url = new URL(route.redirect); return `Redirects to ${url.host}${url.pathname === "/" ? "" : url.pathname}`; } catch { return `Redirects to ${route.redirect}`; }
+  }
   if (route.site) return `Static website · ${route.site}`;
   if (route.connector) return `Machine connected through ${route.connector}`;
   if (route.root) return `Folder on this server · ${route.root}`;

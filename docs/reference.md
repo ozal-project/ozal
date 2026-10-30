@@ -103,7 +103,8 @@ del host. Revisa [propiedad del estado](operations/administration.md#servicio-y-
 ## Rutas y acceso
 
 Cada ruta elige **un** destino: `target` (URL), `upstreams` (varias URLs),
-`root` (directorio absoluto), `site` (Pages) o `connector` enrolado.
+`root` (directorio absoluto), `site` (Pages), `connector` enrolado o
+`redirect` (URL http(s) absoluta).
 Un host sin puerto atiende en cualquier puerto; uno con puerto coincide solo
 allí y tiene prioridad. Hosts desconocidos no revelan el catálogo público.
 
@@ -112,6 +113,7 @@ allí y tiene prioridad. Hosts desconocidos no revelan el catálogo público.
 | `health_path` | Probe HTTP; por defecto `/`; no prueba una ruta estática ni un conector |
 | `upstreams` | Selección entre orígenes saludables y fallos pasivos |
 | `spa` | En rutas estáticas, fallback de paths desconocidos a index |
+| `redirect` | Redirección permanente para un hostname retirado: GET/HEAD reciben 301 y el resto 308, conservando path y query (`viejo/docs?x=1` → `https://nuevo/docs?x=1`); un path en la URL es prefijo. Sin user info, query ni fragmento, nunca hacia su propio host; no admite `access`, `health_path` ni `spa` y no se sondea. En la consola: *Add application → A redirect to another address* |
 | `access` ausente | Ruta pública salvo shorthand legado `auth_required` |
 | `access: {}` | Requiere una identidad autenticada |
 | `access.allowed_emails`, `allowed_domains` | Allowlist por email **verificado**: coincidencias OR |

@@ -144,7 +144,7 @@ func (c *Checker) probeAll(ctx context.Context, routes []config.Route) {
 	}
 	total := 0
 	for _, route := range routes {
-		if !route.IsStatic() && route.Connector == "" {
+		if !route.IsStatic() && !route.IsRedirect() && route.Connector == "" {
 			total += len(route.UpstreamTargets())
 		}
 	}
@@ -168,7 +168,7 @@ func (c *Checker) probeAll(ctx context.Context, routes []config.Route) {
 	}
 enqueue:
 	for _, r := range routes {
-		if r.IsStatic() || r.Connector != "" {
+		if r.IsStatic() || r.IsRedirect() || r.Connector != "" {
 			continue // no upstream to probe; served from disk
 		}
 		targets := r.UpstreamTargets()

@@ -298,6 +298,10 @@ func (h *Handler) buildStatusView() statusView {
 			state = "Not probed"
 			stateClass = "unknown"
 		}
+		if status.Route.IsRedirect() {
+			kind = "Redirect"
+			state, stateClass, healthPath = "Not probed", "unknown", "Not probed"
+		}
 		if status.Route.Connector != "" {
 			kind = "Tunnel connector"
 			state, stateClass = "Connector offline", "unhealthy"

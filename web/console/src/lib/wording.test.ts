@@ -73,6 +73,8 @@ test("application access summaries preserve identity and session restrictions", 
 test("what serves an application reads without knowing the config", () => {
   assert.equal(servedBy({ target: "http://127.0.0.1:3000" }), "App on this server · port 3000");
   assert.equal(servedBy({ target: "http://10.0.0.5:8080" }), "App at 10.0.0.5:8080");
+  assert.equal(servedBy({ redirect: "https://ozal.dev" }), "Redirects to ozal.dev");
+  assert.equal(servedBy({ redirect: "https://ozal.dev/archive" }), "Redirects to ozal.dev/archive");
   assert.equal(servedBy({ site: "blog" }), "Static website · blog");
   assert.equal(servedBy({ connector: "homelab" }), "Machine connected through homelab");
   assert.equal(servedBy({ upstreams: ["a", "b"] }), "2 servers, shared between them");

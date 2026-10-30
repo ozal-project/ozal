@@ -25,13 +25,16 @@ import (
 const DefaultAdminListen = "127.0.0.1:9090"
 
 type Route struct {
-	Host         string        `json:"host"`
-	Target       string        `json:"target,omitempty"`
-	Upstreams    []string      `json:"upstreams,omitempty"`
-	Connector    string        `json:"connector,omitempty"`
-	Root         string        `json:"root,omitempty"`          // static site directory; alternative to Target
-	Site         string        `json:"site,omitempty"`          // deployed site (pages.dir); alternative to Root
-	SPA          bool          `json:"spa,omitempty"`           // static only: unknown paths fall back to index.html
+	Host      string   `json:"host"`
+	Target    string   `json:"target,omitempty"`
+	Upstreams []string `json:"upstreams,omitempty"`
+	Connector string   `json:"connector,omitempty"`
+	Root      string   `json:"root,omitempty"` // static site directory; alternative to Target
+	Site      string   `json:"site,omitempty"` // deployed site (pages.dir); alternative to Root
+	SPA       bool     `json:"spa,omitempty"`  // static only: unknown paths fall back to index.html
+	// Redirect sends every request permanently to this http(s) URL, keeping
+	// the request's path and query: a retired hostname pointing at its new one.
+	Redirect     string        `json:"redirect,omitempty"`
 	HealthPath   string        `json:"health_path,omitempty"`   // defaults to "/" if empty
 	AuthRequired bool          `json:"auth_required,omitempty"` // legacy shorthand for access: {}
 	Access       *AccessPolicy `json:"access,omitempty"`
@@ -83,9 +86,16 @@ func (r Route) IsStatic() bool {
 	return r.Root != "" || r.Site != ""
 }
 
+// IsRedirect reports whether the route answers with a permanent redirect
+// instead of serving or proxying anything.
+func (r Route) IsRedirect() bool { return r.Redirect != "" }
+
 // Destination is the human-readable upstream: the target URL, or the site
 // directory for static routes.
 func (r Route) Destination() string {
+	if r.Redirect != "" {
+		return "redirect:" + r.Redirect
+	}
 	if r.Connector != "" {
 		return "connector:" + r.Connector
 	}
@@ -567,7 +577,7 @@ func Validate(cfg Config) (*Config, error) {
 			return nil, fmt.Errorf("config: route missing host: %+v", *r)
 		}
 		destinations := 0
-		for _, value := range []string{r.Target, r.Root, r.Connector, r.Site} {
+		for _, value := range []string{r.Target, r.Root, r.Connector, r.Site, r.Redirect} {
 			if value != "" {
 				destinations++
 			}
@@ -576,7 +586,7 @@ func Validate(cfg Config) (*Config, error) {
 			destinations++
 		}
 		if destinations != 1 {
-			return nil, fmt.Errorf("config: route %q needs exactly one of target, upstreams, root, site or connector", r.Host)
+			return nil, fmt.Errorf("config: route %q needs exactly one of target, upstreams, root, site, connector or redirect", r.Host)
 		}
 		host, err := NormalizeHost(r.Host)
 		if err != nil {
@@ -603,6 +613,15 @@ func Validate(cfg Config) (*Config, error) {
 		}
 		if err := validateRouteResource(host, r.Resource); err != nil {
 			return nil, err
+		}
+		if r.Redirect != "" {
+			if r.RequiresAuth() || r.HealthPath != "" || r.SPA {
+				return nil, fmt.Errorf("config: redirect route %q cannot set access, auth_required, health_path or spa", host)
+			}
+			if _, err := ParseRedirect(host, r.Redirect); err != nil {
+				return nil, fmt.Errorf("config: route %q: %w", host, err)
+			}
+			continue
 		}
 		if r.Connector != "" {
 			if cfg.Tunnel == nil {

@@ -30,6 +30,7 @@
   import FileArchiveIcon from "@lucide/svelte/icons/file-archive";
   import CopyIcon from "@lucide/svelte/icons/copy";
   import ExternalIcon from "@lucide/svelte/icons/external-link";
+  import RedirectIcon from "@lucide/svelte/icons/corner-up-right";
 
   let status = $state<SetupStatus | null>(null);
   let known = $state<string[]>([]);
@@ -72,6 +73,7 @@
   let siteEdited = $state(false);
   let files = $state<File | null>(null);
   let connector = $state("");
+  let redirectTo = $state("");
   let privacy = $state("groups");
   let groups = $state("");
   let inviteText = $state("");
@@ -90,7 +92,7 @@
 
   function edit(route: ApplicationRoute | null) {
     base = route; host = route?.host ?? ""; target = route?.target ?? ""; site = route?.site ?? ""; siteEdited = !!route?.site;
-    connector = route?.connector ?? ""; kind = route ? "keep" : "backend";
+    connector = route?.connector ?? ""; redirectTo = route?.redirect ?? ""; kind = route ? "keep" : "backend";
     sub = ""; zone = zones[0] ?? "";
     privacy = route ? route.access || route.auth_required ? "keep" : "public" : "groups";
     groups = ""; inviteText = ""; files = null; invitations = [];
@@ -116,12 +118,17 @@
   function whatNext(e: SubmitEvent) {
     e.preventDefault(); formError = "";
     if (kind === "static" && !files) { formError = "Choose the .tar.gz with your site's files, or pick “An app that is already running” if something else serves it."; return; }
+    if (kind === "redirect" && !/^https?:\/\/[^/?#\s]+(\/[^?#\s]*)?$/i.test(redirectTo.trim())) { formError = "Write the full new address, such as https://example.com."; return; }
+    // A redirect is public by nature: nobody signs in to be sent elsewhere.
+    if (kind === "redirect" || (kind === "keep" && base?.redirect)) privacy = "public";
+    if (base && (kind === "redirect" || base.redirect && kind === "keep")) { void prepare(e); return; }
     step = base ? 3 : 2;
   }
   function addressNext(e: SubmitEvent) {
     e.preventDefault(); formError = "";
     if (!address || !/^[a-z0-9.-]+(:\d+)?$/i.test(address)) { formError = "Write an address such as app.example.com."; return; }
     if ((kind === "static" || kind === "github") && !site.trim()) site = slug(address);
+    if (kind === "redirect") { void prepare(e); return; }
     step = 3;
   }
 
@@ -129,9 +136,10 @@
     e.preventDefault(); if (!status) return;
     formError = ""; plan = null; checked = false;
     if (privacy === "groups" && !chosen.length) { formError = "Name at least one group, or choose “Anyone with an account”."; return; }
-    const route: ApplicationRoute = kind === "keep" ? { ...base!, host: address, auth_required: false } : { ...base, host: address, target: undefined, upstreams: undefined, site: undefined, root: undefined, connector: undefined, auth_required: false };
+    const route: ApplicationRoute = kind === "keep" ? { ...base!, host: address, auth_required: false } : { ...base, host: address, target: undefined, upstreams: undefined, site: undefined, root: undefined, connector: undefined, redirect: undefined, auth_required: false };
     if (kind === "static" || kind === "github") route.site = site.trim();
     else if (kind === "connector") route.connector = connector.trim();
+    else if (kind === "redirect") route.redirect = redirectTo.trim().replace(/\/+$/, "");
     else if (kind !== "keep") route.target = target.trim();
     if (privacy === "public") route.access = undefined;
     else if (privacy !== "keep") route.access = privacy === "groups" ? { required_groups: chosen } : {};
@@ -182,6 +190,7 @@
     { value: "static", label: "A static website", hint: status?.pages_enabled ? "HTML, CSS and JavaScript files, like the folder a build produces. Ozal stores and serves them." : "Needs Pages enabled in this server's configuration.", icon: LayersIcon, disabled: !status?.pages_enabled },
     ...(!base ? [{ value: "github", label: "A website built from GitHub", hint: !status?.pages_enabled ? "Needs Pages enabled in this server's configuration." : !can("publishing") ? "Your session does not include CI publishing." : "Every push builds in GitHub Actions and publishes here.", icon: GitIcon, disabled: !status?.pages_enabled || !can("publishing") }] : []),
     { value: "connector", label: "An app on another machine", hint: "A computer at home or in an office that cannot receive connections. It connects out to Ozal.", icon: PlugIcon },
+    { value: "redirect", label: "A redirect to another address", hint: "For an old or extra domain: every visit is sent to the new address, on the same page. Permanent (301).", icon: RedirectIcon },
   ]);
   const audiences = $derived<Choice[]>([
     ...(base && (base.access || base.auth_required) ? [{ value: "keep", label: "Keep as it is", hint: whoMayEnter(base).text, icon: CheckIcon }] : []),
@@ -191,7 +200,7 @@
   ]);
 
   const isPrivate = (app: ApplicationRoute) => !!(app.access || app.auth_required);
-  const icon = (app: ApplicationRoute) => (app.site ? LayersIcon : app.connector ? PlugIcon : ServerIcon);
+  const icon = (app: ApplicationRoute) => (app.redirect ? RedirectIcon : app.site ? LayersIcon : app.connector ? PlugIcon : ServerIcon);
   const certificate = (value: string) => value === "automatic_on_first_visit" ? "Issued automatically on the first visit" : value === "not_covered" ? "Not possible: add its domain in Domains first" : value === "external_or_local_tls_not_verified" ? "Handled in front of this server" : "Covered by this server's certificate";
   const size = (bytes: number) => (bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KiB` : `${(bytes / 1024 / 1024).toFixed(1)} MiB`);
   const totalSteps = $derived(base ? 3 : 4);
@@ -332,6 +341,12 @@
           <Input id="app-github-site" bind:value={site} placeholder="taken from its address" oninput={() => (siteEdited = true)} pattern="[a-z0-9]+(-[a-z0-9]+)*" class="font-mono" />
           <p class="text-muted-foreground text-xs">After saving you choose the repository in Sites and review the workflow it adds. The address shows nothing until the first publication.</p>
         </div>
+      {:else if kind === "redirect"}
+        <div class="grid gap-2">
+          <Label for="app-redirect">Send visitors to</Label>
+          <Input id="app-redirect" required type="url" bind:value={redirectTo} placeholder="https://example.com" class="font-mono" />
+          <p class="text-muted-foreground text-xs">The page is kept: <span class="font-mono">old-address/docs?x=1</span> goes to <span class="font-mono">{(redirectTo.trim() || "https://example.com").replace(/\/+$/, "")}/docs?x=1</span>. Browsers and search engines remember a permanent redirect, so use it for addresses you are retiring.</p>
+        </div>
       {:else if kind === "connector"}
         <div class="grid gap-2">
           <Label for="app-connector">Which machine?</Label>
@@ -410,14 +425,14 @@
       {#each [
         ["Address", plan.route.host],
         ["Served by", draft ? servedBy(draft.route) + (kind === "static" && files ? ` · uploads ${files.name}` : kind === "github" ? " · repository chosen after saving" : "") : ""],
-        ["Who can open it", draft?.access_mode === "public" ? "Everyone, without signing in" : privacy === "groups" && chosen.length ? `People in ${chosen.join(" and ")}, after signing in` : privacy === "signed-in" ? "Anyone with an account, after signing in" : whoMayEnter(base ?? {}).text],
+        ["Who can open it", draft?.route.redirect ? "Everyone: they are sent to the new address" : draft?.access_mode === "public" ? "Everyone, without signing in" : privacy === "groups" && chosen.length ? `People in ${chosen.join(" and ")}, after signing in` : privacy === "signed-in" ? "Anyone with an account, after signing in" : whoMayEnter(base ?? {}).text],
         ...(canInvite && emails.length ? [["Invitations", emails.join(", ")]] : []),
         ["HTTPS", certificate(plan.tls)],
         ["DNS", "Shown after saving, with a live check"],
       ] as [term, value] (term)}
         <div class="grid gap-1 px-4 py-2.5 sm:grid-cols-[9rem_1fr]">
           <dt class="text-muted-foreground">{term}</dt>
-          <dd class={["min-w-0 break-words", term === "Who can open it" && draft?.access_mode === "public" && "text-warning", term === "HTTPS" && plan.tls === "not_covered" && "text-destructive"]}>{value}</dd>
+          <dd class={["min-w-0 break-words", term === "Who can open it" && draft?.access_mode === "public" && !draft?.route.redirect && "text-warning", term === "HTTPS" && plan.tls === "not_covered" && "text-destructive"]}>{value}</dd>
         </div>
       {/each}
     </dl>
@@ -429,7 +444,7 @@
     {#if formError}<p class="text-destructive mt-3 text-sm" role="alert">{formError}</p>{/if}
     {#if waiting}<p class="text-muted-foreground mt-3 text-sm" role="status">{waiting}</p>{/if}
     <div class="mt-5 flex flex-wrap justify-between gap-2">
-      <Button variant="ghost" disabled={!!waiting} onclick={() => { step = 3; formError = ""; }}><ArrowLeftIcon class="size-4" /> Back</Button>
+      <Button variant="ghost" disabled={!!waiting} onclick={() => { step = kind === "redirect" || base?.redirect ? (base ? 1 : 2) : 3; formError = ""; }}><ArrowLeftIcon class="size-4" /> Back</Button>
       <Button disabled={!checked || !!waiting || plan.tls === "not_covered"} onclick={() => (review = true)}>Save application</Button>
     </div>
   {:else if step === 5}

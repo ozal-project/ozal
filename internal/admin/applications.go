@@ -95,10 +95,14 @@ func (h *Handler) planApplication(w http.ResponseWriter, r *http.Request) {
 	if !cfg.TLS.Enabled {
 		scheme = "http"
 	}
+	checks := []string{"Open the trial hostname and check real content, assets, callbacks and uploads", "Test an allowed person and a person without access", "Block the old direct origin before claiming private access", "Keep the previous hosting and DNS values until final acceptance"}
+	if normalized.IsRedirect() {
+		checks = []string{"Open the old address and a page under it: both land on the same page at the new address", "Keep the old address's DNS pointing here: the redirect only answers while it reaches this server"}
+	}
 	writeJSON(w, 200, map[string]any{"route": normalized, "expected": req.Expected, "access_mode": req.AccessMode,
 		"url": scheme + "://" + normalized.Host + "/", "dns": "manual_not_verified",
 		"tls":    tlsCoverage(cfg, normalized.Host),
-		"checks": []string{"Open the trial hostname and check real content, assets, callbacks and uploads", "Test an allowed person and a person without access", "Block the old direct origin before claiming private access", "Keep the previous hosting and DNS values until final acceptance"}})
+		"checks": checks})
 }
 
 func (h *Handler) applicationInput(w http.ResponseWriter, r *http.Request) (applicationRequest, bool) {

@@ -262,7 +262,7 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 		destination := r
 		targets := r.UpstreamTargets()
 		if r.Connector != "" {
-			if r.Target != "" || len(r.Upstreams) > 0 || r.IsStatic() {
+			if r.Target != "" || len(r.Upstreams) > 0 || r.IsStatic() || r.IsRedirect() {
 				return nil, fmt.Errorf("route %s: unsupported connector destination", r.Host)
 			}
 			transport = cfg.connectorTransports[r.Connector]
@@ -275,7 +275,7 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 		}
 		var handler http.Handler
 		var routeUpstreams []routeUpstream
-		if r.IsStatic() {
+		if r.IsStatic() || r.IsRedirect() {
 			handler, err = upstreamHandler(r, cfg.devErrors, assertVisitor, transport, cfg.sites, cfg.logger, responseBuffers, nil)
 			if err != nil {
 				return nil, err
@@ -575,6 +575,13 @@ func writeDevNotFound(w http.ResponseWriter, requested string, byHost map[string
 // upstreamHandler builds what a route forwards to. A static root must already
 // exist as a directory so a typo fails at startup instead of serving 404s.
 func upstreamHandler(r config.Route, devErrors, assertVisitor bool, transport http.RoundTripper, sites SiteDirs, logger *slog.Logger, responseBuffers *responseBufferPool, reportFailure func()) (http.Handler, error) {
+	if r.Redirect != "" {
+		base, err := config.ParseRedirect(r.Host, r.Redirect)
+		if err != nil {
+			return nil, fmt.Errorf("route %s: %w", r.Host, err)
+		}
+		return redirectHandler{base: base}, nil
+	}
 	if r.Site != "" {
 		// A site may have no deployment yet: that is a 503 at request time,
 		// not a startup error, so the first deploy can follow the route.

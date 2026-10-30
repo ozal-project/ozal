@@ -45,6 +45,9 @@ func (h *Handler) overview(w http.ResponseWriter, _ *http.Request) {
 		if route.IsStatic() {
 			kind = "Static files"
 		}
+		if route.IsRedirect() {
+			kind = "Redirect"
+		}
 		view := accessRoute{Host: route.Host, Protected: route.RequiresAuth(), Kind: kind, Policy: policyLabel(route)}
 		if route.Connector != "" {
 			view.Kind, view.Connector, view.Connection = "Tunnel connector", route.Connector, "Connector offline"
