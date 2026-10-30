@@ -1086,8 +1086,10 @@ func normalizeCertificateName(domain string) (string, error) {
 }
 
 // maxDNS01Names bounds the names on the one certificate: each costs an
-// authorization on every renewal.
-const maxDNS01Names = 4
+// authorization on every renewal, and authorizations run one after another
+// inside the manager's five-minute attempt timeout, so eight names (four
+// domains with a wildcard and their root) is what one attempt can finish.
+const maxDNS01Names = 8
 
 // normalizeDNS01 validates the own-manager TLS configuration and normalizes
 // the names on the one certificate it serves: hostnames or single-level

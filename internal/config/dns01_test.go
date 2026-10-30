@@ -76,9 +76,10 @@ func TestDNS01ConfigRefusals(t *testing.T) {
 	}{
 		{"disabled tls", func(tls *TLS) { tls.Enabled = false }, "requires tls.enabled"},
 		{"no domain", func(tls *TLS) { tls.Domains = nil }, "at least one domain"},
-		{"five domains", func(tls *TLS) {
-			tls.Domains = []string{"a.example.com", "b.example.com", "c.example.com", "d.example.com", "e.example.com"}
-		}, "1 to 4 domains"},
+		{"nine domains", func(tls *TLS) {
+			tls.Domains = []string{"a.example.com", "b.example.com", "c.example.com", "d.example.com", "e.example.com", "f.example.com",
+				"g.example.com", "h.example.com", "i.example.com"}
+		}, "1 to 8 domains"},
 		{"repeated domain", func(tls *TLS) { tls.Domains = append(tls.Domains, "PREVIEW.example.com") }, "twice"},
 		{"name the wildcard covers", func(tls *TLS) { tls.Domains = []string{"*.example.com", "preview.example.com"} }, "already covered"},
 		{"bad second name", func(tls *TLS) { tls.Domains = append(tls.Domains, "*.com") }, "tls.domains[1]"},
@@ -453,5 +454,22 @@ func TestDNS01BuiltinRefusals(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: err = %v, want mention of %q", name, err, tc.want)
 		}
+	}
+}
+
+func TestDNS01ConfigAcceptsSeveralDomainsOnOneCertificate(t *testing.T) {
+	skipOnWindows(t, "POSIX absolute-path fixtures")
+	cfg := dns01Config(t, `{
+		"enabled": true,
+		"domains": ["*.octaviosantacruz.com", "octaviosantacruz.com", "ozal.dev", "sboard.dev", "sigea.app"],
+		"email": "ops@example.com",
+		"dns01": {
+			"state_dir": "/var/lib/ozal/certs",
+			"directory_url": "https://acme-staging-v02.api.letsencrypt.org/directory",
+			"dns_token": "env:CLOUDFLARE_DNS_TOKEN"
+		}
+	}`)
+	if got := len(cfg.TLS.Domains); got != 5 {
+		t.Fatalf("domains = %d, want the five names kept", got)
 	}
 }

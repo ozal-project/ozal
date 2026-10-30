@@ -230,7 +230,8 @@ DNS-01 usa `tls.domains` y un bloque `tls.dns01`:
 ```
 
 Va dentro de `tls`; sin `dns_provider` el adaptador es Cloudflare. El conjunto acotado de
-nombres puede incluir wildcard de un nivel y apex adicional. TLS-ALPN/HTTP no
+nombres (hasta 8 en un mismo certificado: se autorizan uno tras otro dentro de los 5
+minutos de un intento) puede incluir wildcard de un nivel y apex adicional. TLS-ALPN/HTTP no
 son necesarios para esa emisión. El estado guarda cuenta, generaciones y cleanup;
 un segundo escritor se rechaza. Cambiar estas opciones requiere reinicio.
 
