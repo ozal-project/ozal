@@ -24,7 +24,7 @@ concurrency:
 
 env:
   DEPLOY_ENDPOINT: https://deploy.octaviosantacruz.com
-  DEPLOY_PROJECT: switchboard-site
+  DEPLOY_PROJECT: ozal-site
   SITE_URL: https://ozal.octaviosantacruz.com
 
 jobs:
@@ -108,5 +108,5 @@ jobs:
             "$RUNNER_TEMP/ozalctl" site deploy -archive "$RUNNER_TEMP/last-good/site.tar.gz" -result "$RUNNER_TEMP/rollback.json" -apply
             echo "Acceptance failed: rolled back to the last good build." >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "::error::Acceptance failed and no previous build is cached: roll back on the edge with 'ozal site rollback -site switchboard-site'."
+            echo "::error::Acceptance failed and no previous build is cached: roll back on the edge with 'ozal site rollback -site ozal-site'."
           fi
