@@ -141,31 +141,19 @@ func Upgrade(ctx context.Context, out io.Writer, remote Remote, builder Builder,
 	}
 
 	step("validate the live config with the new binary")
-	liveConfig, err := remote.Run(ctx, "cat "+Quote(e.Config), nil)
+	// A hardened edge keeps its config directory to root and the service
+	// account. This check is only an early warning: ozal upgrade validates the
+	// whole config as root before it stops anything.
+	readable, err := remote.Run(ctx, "test -r "+Quote(e.Config)+" && echo readable || echo hidden", nil)
 	if err != nil {
 		return err
 	}
-	check, split, err := RootCheck([]byte(liveConfig))
-	if err != nil {
-		return err
-	}
-	target := e.Config
-	if split {
-		target = e.Stage + "/config.check"
-		if _, err := remote.Run(ctx, "umask 077; cat > "+Quote(target), bytes.NewReader(check)); err != nil {
+	if strings.TrimSpace(readable) == "readable" {
+		if err := checkLiveConfig(ctx, remote, e.Config, e.Stage, final, note); err != nil {
 			return err
 		}
-	}
-	checked, err := remote.Run(ctx, Quote(final)+" validate -config "+Quote(target), nil)
-	if split {
-		_, _ = remote.Run(context.WithoutCancel(ctx), "rm -f "+Quote(target), nil)
-	}
-	if err != nil {
-		return fmt.Errorf("the new binary refuses the live config: %w", err)
-	}
-	note("%s", strings.TrimSpace(checked))
-	if split {
-		note("routes live in the runtime file only the service account reads: the root step validates them before it stops anything")
+	} else {
+		note("%s is not readable by the SSH user: the root step validates it before it stops anything", e.Config)
 	}
 
 	step("ozal upgrade on the edge as root (sudo asks for the password once)")
@@ -180,6 +168,38 @@ func Upgrade(ctx context.Context, out io.Writer, remote Remote, builder Builder,
 	}
 	_, _ = remote.Run(ctx, "rm -f "+Quote(final), nil)
 	step("%s is active with %s; previous binary kept as %s", e.Unit, bin.Commit, backup)
+	return nil
+}
+
+// checkLiveConfig validates, as the SSH user, what that user can read of the
+// live config with the staged binary.
+func checkLiveConfig(ctx context.Context, remote Remote, config, stage, binary string, note func(string, ...any)) error {
+	liveConfig, err := remote.Run(ctx, "cat "+Quote(config), nil)
+	if err != nil {
+		return err
+	}
+	check, split, err := RootCheck([]byte(liveConfig))
+	if err != nil {
+		return err
+	}
+	target := config
+	if split {
+		target = stage + "/config.check"
+		if _, err := remote.Run(ctx, "umask 077; cat > "+Quote(target), bytes.NewReader(check)); err != nil {
+			return err
+		}
+	}
+	checked, err := remote.Run(ctx, Quote(binary)+" validate -config "+Quote(target), nil)
+	if split {
+		_, _ = remote.Run(context.WithoutCancel(ctx), "rm -f "+Quote(target), nil)
+	}
+	if err != nil {
+		return fmt.Errorf("the new binary refuses the live config: %w", err)
+	}
+	note("%s", strings.TrimSpace(checked))
+	if split {
+		note("routes live in the runtime file only the service account reads: the root step validates them before it stops anything")
+	}
 	return nil
 }
 

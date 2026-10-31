@@ -162,6 +162,7 @@ func (b fakeBuilder) Build(context.Context, string) (Binary, error) { return b.b
 
 type fakeRemote struct {
 	config    string // the live config file ("" reads as {})
+	hidden    bool   // the SSH user cannot read the live config
 	checked   string // what the last validate was given, when staged
 	live      string
 	lock      string // reply to the lock command
@@ -183,6 +184,11 @@ func (f *fakeRemote) Run(_ context.Context, command string, stdin io.Reader) (st
 		f.uploaded = true
 		_, _ = io.Copy(io.Discard, stdin)
 		return f.uploadSHA + "  x\n", nil
+	case strings.HasPrefix(command, "test -r '/etc/"):
+		if f.hidden {
+			return "hidden\n", nil
+		}
+		return "readable\n", nil
 	case strings.HasPrefix(command, "cat '/etc/"):
 		if f.config == "" {
 			return "{}\n", nil
@@ -242,6 +248,26 @@ func TestBusyLockStopsBeforeUpload(t *testing.T) {
 	err := Upgrade(context.Background(), io.Discard, r, fakeBuilder{bin: Binary{Data: data, Commit: "c"}}, newRun(true))
 	if !errors.Is(err, ErrBusy) || r.uploaded {
 		t.Fatalf("err=%v uploaded=%v", err, r.uploaded)
+	}
+}
+
+// A hardened edge keeps its config directory from the SSH user: the early
+// check is skipped and ozal upgrade, as root, validates before stopping.
+func TestHiddenConfigLeavesValidationToTheRootStep(t *testing.T) {
+	r := &fakeRemote{live: "old", lock: "taken\n", uploadSHA: sha(data), terminal: true, hidden: true}
+	var out bytes.Buffer
+	if err := Upgrade(context.Background(), &out, r, fakeBuilder{bin: Binary{Data: data, Commit: "c"}}, newRun(true)); err != nil {
+		t.Fatal(err)
+	}
+	terminal := false
+	for _, c := range r.ran {
+		if strings.HasPrefix(c, "cat '/etc/") || strings.Contains(c, "validate -config") {
+			t.Fatalf("read or validated a config the SSH user cannot read: %q", c)
+		}
+		terminal = terminal || strings.HasPrefix(c, "TERMINAL ")
+	}
+	if !terminal || !strings.Contains(out.String(), "not readable by the SSH user") {
+		t.Fatalf("root step not reached or not explained:\n%s", out.String())
 	}
 }
 

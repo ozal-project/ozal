@@ -614,6 +614,11 @@ ozalctl site cutover -host HOST -to IP -cloudflare-token FILE [-dir DIST] [-appl
 ozalctl site cutover -host HOST -back EVIDENCE -cloudflare-token FILE [-apply]
 ```
 
+`edge upgrade` valida primero, como tu usuario SSH, la parte de la config que
+puede leer. Si el directorio de config es sólo de root y la cuenta de servicio
+(`0750`), lo dice y deja la validación completa a `ozal upgrade`, que la hace
+como root antes de detener la unidad; no hace falta abrir el directorio.
+
 ### Operar sin `sudo`: grupo del socket
 
 Por defecto `app alias` y `project trust` corren en el edge como la cuenta de
