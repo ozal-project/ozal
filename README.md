@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <a href="https://ozal.dev">Website</a> ·
   <a href="docs/operations/first-application.md">First application</a> ·
   <a href="docs/operations/download-install.md">Install</a> ·
   <a href="docs/reference.md">Reference</a> ·

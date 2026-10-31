@@ -39,58 +39,34 @@ A failed reload keeps the previous valid snapshot. `config_sha256` in the
 authenticated state identifies the effective configuration. Changing listeners,
 tunnel identity or `runtime_file` requires a restart.
 
-<a id="migrate-from-switchboard-to-ozal"></a>
-<a id="migrar-de-switchboard-a-ozal"></a>
+<a id="legacy-switchboard-names"></a>
 
-## Migrate from Switchboard to Ozal
+## Legacy Switchboard names
 
-The product and command names are now **Ozal** (`ozal` and `ozalctl`). An
-existing installation keeps its account, unit, configuration, socket, SQLite
-database, runtime, CA and TLS state. Do not run the new-install installer over it,
-and do not move state just to change the name. The installer rejects the old
-layout to avoid creating two services.
+Installations made with the Switchboard releases keep working with the legacy
+names, which Ozal still accepts for compatibility:
 
-Use the upgrade procedure in the next section with the Ozal binary and the
-**actual previous values** of `-unit`, `-binary`, `-config`, `-db` and `-user`.
-These flags do not depend on the product name. Keep the backups and the previous
-unit so you can roll back; renaming them is a separate operation. Renewal agents
-installed before the rename keep their original paths and units.
+- Variables: `SWITCHBOARD_CONFIG` and `SWITCHBOARD_ADMIN_TOKEN`. The `OZAL_*`
+  variables take priority when both are set.
+- Paths: `/etc/switchboard/config.json` and `switchboard.db`. `migrate` reuses
+  `switchboard.db` when it exists and `ozal.db` does not.
+- Hosts: `switchboard.localhost` keeps its existing passkeys.
 
-`OZAL_CONFIG` replaces `SWITCHBOARD_CONFIG`, and `OZAL_ADMIN_TOKEN` replaces
-`SWITCHBOARD_ADMIN_TOKEN`. The old variables are still accepted for
-compatibility. A new token takes priority if it is set, even if empty. Without
-`-config`, Ozal looks for the new variable, then the old one, then
-`./config.json`, `/etc/ozal/config.json` and finally `/etc/switchboard/config.json`.
-`migrate` uses `ozal.db` by default, but reuses `switchboard.db` when it exists and
-the new file does not. On installations, always use the real `-db`.
+Use the real `-config`, `-db` and `-unit` values of your installation with the
+upgrade procedure below. Do not run the new-install installer over an existing
+installation: it rejects the legacy layout to avoid creating two services.
 
-The console prefers **`ozal.localhost`**. Existing passkeys still work on
-`switchboard.localhost` or `localhost`, with their original RP ID. Sign in through
-that name, generate a link to add another browser, and open it on
-`ozal.localhost` to register a new passkey for the same account. The rename does
-not allow a credential for one RP ID to be used on another. Console sessions kept
-in memory end on restart, as before.
+Upgrading across the protocol change is **not backward compatible**:
 
-Protocol identifiers also move to Ozal: `X-Ozal-*` headers, the tunnel ALPN
-(`ozal-tunnel-spike/1`), the probe path (`/.well-known/ozal-probe/`), and the
-cryptographic derivation domains (login cookie, Telegram callback, deploy replay
-and the audit-log chain). **This is not backward compatible**:
+- Update the edge and its connector together. Mixed versions do not negotiate the tunnel ALPN.
+- OIDC login cookies issued before the change stop validating, so visitors sign in again.
+- An audit log written before the change does not verify with the new binary, because the
+  domain is part of each hash. Archive it with its previous binary and start a new log.
+- Legacy `X-Switchboard-Visitor-*` headers are still stripped from client input.
 
-- Edge and connector must be updated together; with mixed versions the tunnel
-  does not negotiate ALPN.
-- OIDC login cookies issued before the change stop validating: visitors sign in
-  again.
-- An audit log written before the change **does not verify** with the new binary,
-  because the domain is part of each hash. Archive it with its previous binary and
-  start a new log; do not rewrite it.
-- `X-Switchboard-Visitor-*` headers and their underscore variants are still
-  stripped as client input, but they no longer mean anything to Ozal.
-- Kept as they are: `sb_*` cookies, native `sb:` subjects, SQL migrations (with
-  their checksums) and the variables, paths and hostnames listed above.
-
-The source code and Go module already use `github.com/ozal-project/ozal`.
-Publishing the project website does not update the edge or connector binaries
-and does not imply that a new Ozal tag or download exists.
+Cookies `sb_*`, native `sb:` subjects and SQL migrations are unchanged.
+For the release that carried these names, see the
+[alpha.1 notes](../releases/v0.1.0-alpha.1.md).
 
 ## Upgrade and roll back
 

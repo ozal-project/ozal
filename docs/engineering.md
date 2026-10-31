@@ -837,7 +837,7 @@ nonce de uso único, token ligado a host/acción/expiración, clearance firmado,
 replay/tamper tests, accesibilidad y fallback explícito; log-only antes de
 enforce. No demuestra humanidad ni protección DDoS. Una futura CA privada,
 SSO para apps, Merkle/witnesses, AI y multi-edge no son capacidades actuales
-por figurar en VISION. Diseño detallado al aprobar la implementación, dentro
+por figurar en la dirección del producto. Diseño detallado al aprobar la implementación, dentro
 de esta guía o su contrato canónico, sin crear otra hoja de ruta.
 
 ## Criterio de desarrollo y stack
