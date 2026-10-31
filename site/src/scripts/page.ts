@@ -31,8 +31,8 @@ if (!matchMedia("(prefers-reduced-motion: reduce)").matches && "IntersectionObse
 const links = [...document.querySelectorAll<HTMLAnchorElement>('header nav a[href^="/#"]')];
 if (links.length && "IntersectionObserver" in window) {
   const byId = new Map(links.map((a) => [a.getAttribute("href")!.slice(2), a]));
-  // Sections without a nav link still count, so "Tour" is not left lit while reading the roadmap.
-  const sections = ["how", "private", "domains", "tour", "today", "roadmap", "start"];
+  // Sections without a nav link still count, so "Tour" is not left lit while reading the start section.
+  const sections = ["how", "private", "domains", "tour", "today", "start"];
   const spy = new IntersectionObserver((entries) => {
     for (const entry of entries) {
       if (!entry.isIntersecting) continue;

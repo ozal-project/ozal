@@ -2,7 +2,6 @@
 import Base from "../layouts/Base.astro";
 import Header from "../components/Header.astro";
 import Footer from "../components/Footer.astro";
-import { trains } from "../data/trains";
 import Engine from "../components/Engine.astro";
 import EdgeMap from "../components/EdgeMap.astro";
 import Logo from "../components/Logo.astro";
@@ -34,7 +33,6 @@ const pipeline = [
   { s: "forward", d: "HTTP upstream or a static site. Tunnels are experimental.", state: "built" },
 ] as const;
 // How far through the year of releases the page was built.
-const elapsed = Math.min(1, Math.max(0, (Date.now() - Date.UTC(2026, 9, 1)) / (Date.UTC(2027, 9, 1) - Date.UTC(2026, 9, 1)))).toFixed(3);
 const stateWord = { built: "Built", building: "In progress", planned: "Planned" } as const;
 
 // The console's "How private access works", word for word.
@@ -212,18 +210,6 @@ X-Auth-Request-User: sb:7f3c…e21a</code></pre><p class="small quiet">Use them 
       </dl>
     </section>
 
-    <section id="roadmap" class="section frame" aria-labelledby="roadmap-title">
-      <div class="section-intro"><h2 id="roadmap-title">Where it goes next.</h2><p>Four releases in a year, October 2026 to September 2027. Each one builds on the door the previous one opened.</p></div>
-      <div class="rail" style={`--done: ${elapsed}`} aria-hidden="true"><span class="rail-fill"></span><span class="rail-now"></span></div>
-      <ol class="timeline">{trains.map((t) => (
-        <li class={t.now ? "current" : ""} aria-current={t.now ? "step" : undefined}>
-          <p class="timeline-when small">{t.now ? "Now · " : ""}{t.when}</p>
-          <h3><span class="timeline-v">{t.v}</span> {t.n}</h3>
-          <p>{t.line}</p>
-          <ul class="timeline-items">{t.items.map((item) => <li>{item}</li>)}</ul>
-        </li>
-      ))}</ol>
-    </section>
 
     <section id="start" class="availability frame section" aria-labelledby="start-title">
       <div><h2 id="start-title">Explore the alpha.</h2><p>{sourcePublic ? "Explore the source and quickstart. Ozal release downloads are not published yet." : "The code and downloads are private for now."}</p></div>
