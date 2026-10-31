@@ -387,7 +387,11 @@ acompaña a TOTP es un secreto memorizado comprobado por el servidor, es decir,
 una contraseña (opción B, descartada). La otra vía técnica es un autenticador
 criptográfico multifactor propio o integrado, con clave en el dispositivo y
 activación local ([NIST](https://pages.nist.gov/800-63-4/sp800-63b.html));
-exige construir o integrar un cliente y queda como idea (`ID-020`).
+exige construir o integrar un cliente y queda como idea (`ID-020`): no una
+extensión de passkeys ni un gestor propio, sino un autenticador de dispositivo
+del agente de Ozal con la clave en TPM o Secure Enclave, ligado a la CA privada
+y al acceso a infraestructura. Para quien no tiene autenticador se sugieren
+gestores existentes, incluidos libres y autohospedables, sin depender de uno.
 
 **MVP:**
 
