@@ -953,3 +953,111 @@ func TestGateDelegatesAdminCeremoniesOnTheLoginHostOnly(t *testing.T) {
 		t.Fatal("an unanswered admin path was claimed by the gate")
 	}
 }
+
+// SEC-023: preflight discloses only the stored purpose. It cannot consume the
+// link, revoke anything or claim recovery completed.
+func TestEnrolInfoReportsPurposeWithoutUsingTheLink(t *testing.T) {
+	for _, recoverAccess := range []bool{false, true} {
+		t.Run(fmt.Sprint(recoverAccess), func(t *testing.T) {
+			h := newHarness(t)
+			token := h.invite(t, "ana@example.com", recoverAccess)
+			b := h.browser()
+			for i := 0; i < 2; i++ {
+				rec, info := b.post(t, "/_/auth/enrol/info", map[string]any{"token": token, "recovery": !recoverAccess})
+				if rec.Code != http.StatusOK || info["recovery"] != recoverAccess || len(info) != 1 {
+					t.Fatalf("info = %d %v", rec.Code, info)
+				}
+				if rec.Header().Get("Cache-Control") != "no-store" || len(rec.Result().Cookies()) != 0 || len(h.events.events) != 0 {
+					t.Fatal("preflight cached, created a ceremony or emitted a completion event")
+				}
+			}
+			if code := b.enrol(t, newAuthenticator(t), token); code != http.StatusOK {
+				t.Fatalf("enrol after preflight = %d", code)
+			}
+			principal, _ := b.signedIn()
+			var completed []events.Event
+			for _, e := range h.events.events {
+				if e.Type == events.UserRecovered || e.Type == events.PasskeyRegistered {
+					completed = append(completed, e)
+				}
+			}
+			want := events.PasskeyRegistered
+			if recoverAccess {
+				want = events.UserRecovered
+			}
+			if len(completed) != 1 || completed[0].Type != want || completed[0].Actor != principal.Subject || completed[0].Code != "device_bound" {
+				t.Fatalf("completion = %+v", completed)
+			}
+			rec, _ := b.post(t, "/_/auth/enrol/info", map[string]string{"token": token})
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("used link info = %d", rec.Code)
+			}
+		})
+	}
+}
+
+func TestEnrolInfoRefusesInvalidLinksAndForeignOrigins(t *testing.T) {
+	h := newHarness(t)
+	b := h.browser()
+	expired, err := h.identity.Invite(context.Background(), "ana@example.com", "", nil, true, -time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, token := range []string{"", "unknown", strings.Repeat("a", 129), expired.Token} {
+		rec, info := b.post(t, "/_/auth/enrol/info", map[string]string{"token": token})
+		if rec.Code != http.StatusBadRequest || len(info) != 1 || info["error"] == nil {
+			t.Fatalf("invalid link = %d %v", rec.Code, info)
+		}
+	}
+	token := h.invite(t, "bob@example.com", true)
+	b.origin = "https://foreign.example.test"
+	if rec, _ := b.post(t, "/_/auth/enrol/info", map[string]string{"token": token}); rec.Code != http.StatusForbidden {
+		t.Fatalf("foreign origin = %d", rec.Code)
+	}
+	if len(h.events.events) != 0 {
+		t.Fatal("invalid preflight emitted completion")
+	}
+}
+
+// A failed credential insert must roll back the destructive replacement and
+// emit no success. A retry with the same invitation may then succeed.
+func TestFailedRecoveryKeepsPreviousAccessAndEmitsNoCompletion(t *testing.T) {
+	h := newHarness(t)
+	old := h.browser()
+	lost := newAuthenticator(t)
+	if code := old.enrol(t, lost, h.invite(t, "ana@example.com", false)); code != http.StatusOK {
+		t.Fatal(code)
+	}
+	token := h.invite(t, "ana@example.com", true)
+	other := h.invite(t, "ana@example.com", true)
+	h.events.events = nil
+	if _, err := h.db.Exec(`CREATE TRIGGER fail_recovery_insert BEFORE INSERT ON passkeys BEGIN SELECT RAISE(ABORT, 'fixture failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if code := h.browser().enrol(t, newAuthenticator(t), token); code != http.StatusInternalServerError {
+		t.Fatalf("failed recovery = %d", code)
+	}
+	if h.events.has(events.UserRecovered, "device_bound") || h.events.has(events.PasskeyRegistered, "device_bound") {
+		t.Fatal("failed recovery claimed success")
+	}
+	if _, ok := old.signedIn(); !ok {
+		t.Fatal("failed recovery ended old session")
+	}
+	if code, _ := h.browser().login(t, lost, "", loginOrigin); code != http.StatusOK {
+		t.Fatalf("old passkey after failed recovery = %d", code)
+	}
+	for _, link := range []string{token, other} {
+		if rec, _ := h.browser().post(t, "/_/auth/enrol/info", map[string]string{"token": link}); rec.Code != http.StatusOK {
+			t.Fatalf("rollback consumed recovery link: %d", rec.Code)
+		}
+	}
+	if _, err := h.db.Exec(`DROP TRIGGER fail_recovery_insert`); err != nil {
+		t.Fatal(err)
+	}
+	if code := h.browser().enrol(t, newAuthenticator(t), token); code != http.StatusOK {
+		t.Fatalf("retry = %d", code)
+	}
+	if !h.events.has(events.UserRecovered, "device_bound") {
+		t.Fatal("retry emitted no recovery completion")
+	}
+}

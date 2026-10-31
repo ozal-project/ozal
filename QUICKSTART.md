@@ -56,7 +56,7 @@ rm -rf /tmp/ozal-demo
 - `*.localhost` resolves to `127.0.0.1` on most systems, so a browser can open
   <http://app.localhost:8888/> directly instead of sending a `Host` header.
 - `config.quickstart.json` leaves `admin.token` unset: this minimal trial does
-  not grant administrative access. See [secret references](docs/reference.md#secretos)
+  not grant administrative access. See [secret references](docs/reference.md#secrets)
   for `env:`/`file:` token references.
 - The admin listener is loopback-only and rejects any other `Host` (421).
 - `dev_errors: true` is local-only: it prints upstream addresses and the route

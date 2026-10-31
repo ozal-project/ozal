@@ -101,7 +101,7 @@ func (s *Identity) Invite(ctx context.Context, email, name string, groups []stri
 			return Invitation{}, fmt.Errorf("count passkeys: %w", err)
 		}
 		if active > 0 && !recoverAccess {
-			return Invitation{}, fmt.Errorf("user %s already has %d active passkey(s); use -recover to add another", email, active)
+			return Invitation{}, fmt.Errorf("user %s already has %d active passkey(s); use -recover to replace them", email, active)
 		}
 	}
 	purpose := "enrol"
@@ -122,36 +122,36 @@ func (s *Identity) Invite(ctx context.Context, email, name string, groups []stri
 }
 
 // InvitedUser implements passkey.Directory.
-func (s *Identity) InvitedUser(ctx context.Context, tokenHash []byte) (passkey.User, error) {
-	var userID string
+func (s *Identity) InvitedUser(ctx context.Context, tokenHash []byte) (passkey.User, bool, error) {
+	var userID, purpose string
 	err := s.db.QueryRowContext(ctx,
-		`SELECT user_id FROM invitations WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?`,
+		`SELECT user_id, purpose FROM invitations WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?`,
 		tokenHash, s.now().Unix(),
-	).Scan(&userID)
+	).Scan(&userID, &purpose)
 	if errors.Is(err, sql.ErrNoRows) {
-		return passkey.User{}, passkey.ErrInvitationInvalid
+		return passkey.User{}, false, passkey.ErrInvitationInvalid
 	}
 	if err != nil {
-		return passkey.User{}, fmt.Errorf("look up invitation: %w", err)
+		return passkey.User{}, false, fmt.Errorf("look up invitation: %w", err)
 	}
 	user, err := s.ActiveUser(ctx, userID)
 	if errors.Is(err, passkey.ErrNotFound) {
-		return passkey.User{}, passkey.ErrInvitationInvalid
+		return passkey.User{}, false, passkey.ErrInvitationInvalid
 	}
-	return user, err
+	return user, purpose == "recover", err
 }
 
 // Enrol implements passkey.Directory: the conditional UPDATE is what makes
 // an invitation single-use even when two browsers finish at once.
-func (s *Identity) Enrol(ctx context.Context, tokenHash []byte, userID string, credential webauthn.Credential) error {
+func (s *Identity) Enrol(ctx context.Context, tokenHash []byte, userID string, credential webauthn.Credential) (bool, error) {
 	encoded, err := json.Marshal(credential)
 	if err != nil {
-		return fmt.Errorf("encode credential: %w", err)
+		return false, fmt.Errorf("encode credential: %w", err)
 	}
 	now := s.now().Unix()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("begin enrol: %w", err)
+		return false, fmt.Errorf("begin enrol: %w", err)
 	}
 	defer tx.Rollback()
 	result, err := tx.ExecContext(ctx,
@@ -159,14 +159,14 @@ func (s *Identity) Enrol(ctx context.Context, tokenHash []byte, userID string, c
 		now, tokenHash, userID, now,
 	)
 	if err != nil {
-		return fmt.Errorf("use invitation: %w", err)
+		return false, fmt.Errorf("use invitation: %w", err)
 	}
 	if n, err := result.RowsAffected(); err != nil || n != 1 {
-		return passkey.ErrInvitationInvalid
+		return false, passkey.ErrInvitationInvalid
 	}
 	var purpose string
 	if err := tx.QueryRowContext(ctx, `SELECT purpose FROM invitations WHERE token_hash = ?`, tokenHash).Scan(&purpose); err != nil {
-		return fmt.Errorf("read invitation: %w", err)
+		return false, fmt.Errorf("read invitation: %w", err)
 	}
 	if purpose == "recover" {
 		// Recovery assumes the old passkeys are lost or exposed (SEC-023): they
@@ -174,25 +174,28 @@ func (s *Identity) Enrol(ctx context.Context, tokenHash []byte, userID string, c
 		// this one, all with the new passkey or not at all.
 		user, err := scanUser(tx.QueryRowContext(ctx, userColumns+` WHERE id = ?`, userID))
 		if err != nil {
-			return err
+			return false, err
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE passkeys SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`, now, userID); err != nil {
-			return fmt.Errorf("revoke replaced passkeys: %w", err)
+			return false, fmt.Errorf("revoke replaced passkeys: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE invitations SET used_at = ? WHERE user_id = ? AND purpose = 'recover' AND used_at IS NULL`, now, userID); err != nil {
-			return fmt.Errorf("retire recovery links: %w", err)
+			return false, fmt.Errorf("retire recovery links: %w", err)
 		}
 		if err := deleteSessions(ctx, tx, user); err != nil {
-			return err
+			return false, err
 		}
 	}
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO passkeys (credential_id, user_id, credential_json, backup_eligible, created_at, first_seen_pending) VALUES (?, ?, ?, ?, ?, 0)`,
 		credential.ID, userID, string(encoded), credential.Flags.BackupEligible, now,
 	); err != nil {
-		return fmt.Errorf("insert passkey: %w", err)
+		return false, fmt.Errorf("insert passkey: %w", err)
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("commit enrol: %w", err)
+	}
+	return purpose == "recover", nil
 }
 
 // UserByHandle implements passkey.Directory.

@@ -1,24 +1,24 @@
-# Configuración y CLI
+# Configuration and CLI
 
-Referencia del checkout actual. [Instalación](operations/download-install.md),
-[primera aplicación](operations/first-application.md) y
-[administración](operations/administration.md) contienen los recorridos completos.
-Para campos exactos genera el schema con el binario de tu versión y valida las
-reglas entre campos; no uses un ejemplo de otra release como configuración vigente.
+Reference for the current checkout. The [installation](operations/download-install.md),
+[first application](operations/first-application.md) and
+[administration](operations/administration.md) guides contain the full walkthroughs.
+For exact fields, generate the schema with your version's binary and validate the
+cross-field rules; do not use an example from another release as the active configuration.
 
 ```sh
 ozal schema > ozal-config.schema.json
 ozal validate -config config.json
 ozal doctor -config config.json -db ./state.db
 ozal version -json
-ozal completion bash  # también zsh, fish, powershell
+ozal completion bash  # also zsh, fish, powershell
 ```
 
-`doctor` comprueba configuración/DB, no disponibilidad pública de una app.
-`init -config FILE` crea un archivo privado nuevo; `setup -dir DIR` prepara una
-instalación local completa. Ambos rechazan sobrescrituras.
+`doctor` checks configuration and the database, not whether a public application is
+reachable. `init -config FILE` creates a new private file; `setup -dir DIR` prepares a
+complete local installation. Both refuse to overwrite.
 
-## Instalación y publicación en Go
+## Installation and publishing in Go
 
 ```sh
 ozal install binary -archive FILE.tar.gz -sha256 TRUSTED_HEX -destination NEW_FILE [-apply]
@@ -33,29 +33,28 @@ ozalctl cloudflare origin-pull -host HOST -like REFERENCE -token-file FILE [-bac
 ozalctl cloudflare deploy-rule -host HOST -token-file FILE [-backup NEW_FILE] [-apply]
 ```
 
-`install` y `site deploy` muestran plan por defecto. El instalador de servicio
-usa el propio ejecutable si se omite `-binary`; es exclusivo de Linux/systemd.
-`ozal update` descarga por streaming y exige tamaño/hash y versión de candidato
-coincidentes con la revisión. Comprueba presupuesto de espacio por filesystem
-con 64 MiB de margen; un `-apply` solo tiene éxito si la unidad ejecuta la
-imagen verificada y responde salud. Una consulta sin `-apply` sigue siendo
-solo metadatos. Detalles de presupuesto, permisos y operación en
-[administración](operations/administration.md#actualización-automática).
+`install` and `site deploy` show a plan by default. The service installer uses the
+executable itself when `-binary` is omitted; it is Linux/systemd only. `ozal update`
+downloads by streaming and requires the size, hash and candidate version to match the
+reviewed plan. It checks the space budget per filesystem with a 64 MiB margin; an
+`-apply` succeeds only if the unit runs the verified image and answers health checks.
+A check without `-apply` still returns metadata only. Details on the budget, permissions
+and operation are in [administration](operations/administration.md#actualización-automática).
 
-El escáner reconoce nombres privados y patrones conocidos; no demuestra ausencia
-de cualquier secreto. `site check/pack/accept` no usan targets ni credenciales; pack crea un archivo
-nuevo 0600. Deploy usa las variables de Actions `ACTIONS_ID_TOKEN_REQUEST_URL`
-y `ACTIONS_ID_TOKEN_REQUEST_TOKEN` sólo con `-apply`; `DEPLOY_ENDPOINT` y
-`DEPLOY_PROJECT` son defaults opcionales. No imprime ni guarda el JWT. El recibo
-nuevo 0600 contiene sólo proyecto, ID, live y commit. Si queda `confirmed:false`
-o hay error de red, consulta el estado antes de repetir: no hay reintento ciego.
-En Actions emite `live=true` en `GITHUB_OUTPUT` después del 201 validado para que
-el workflow pueda restaurar el último build aceptado incluso si falla el GET
-posterior. La aceptación compara un asset con SHA-256, exige 404 para rutas
-privadas/desconocidas y redirección HTTP a HTTPS del mismo host. Un sitio sin
-assets usa su index como prueba y por tanto exige HTML idéntico.
+The scanner recognizes private names and known patterns; it does not prove the absence
+of any secret. `site check`, `pack` and `accept` use no targets or credentials; `pack`
+creates a new 0600 archive. Deploy uses the Actions variables
+`ACTIONS_ID_TOKEN_REQUEST_URL` and `ACTIONS_ID_TOKEN_REQUEST_TOKEN`, only with `-apply`;
+`DEPLOY_ENDPOINT` and `DEPLOY_PROJECT` are optional defaults. It neither prints nor saves
+the JWT. The new 0600 receipt contains only the project, ID, live state and commit. If it
+ends with `confirmed:false` or a network error, check the state before repeating: there is
+no blind retry. In Actions it emits `live=true` to `GITHUB_OUTPUT` after a validated 201,
+so the workflow can restore the last accepted build even if the later GET fails.
+Acceptance compares an asset by SHA-256, requires 404 for private and unknown paths, and
+requires an HTTP-to-HTTPS redirect on the same host. A site without assets uses its index
+as proof, and therefore requires identical HTML.
 
-## Autoridad local de túneles
+## Local tunnel authority
 
 ```sh
 ozal tunnel ca init -dir NEW_PRIVATE_DIR [-days 366] [-apply]
@@ -64,17 +63,17 @@ ozal tunnel identity sign -role edge -ca CA_DIRECTORY -csr PUBLIC_CSR -out NEW_C
 ozal tunnel identity check -role edge -dir IDENTITY_DIRECTORY -ca PUBLIC_CA_FILE
 ```
 
-El rol también puede ser `connector`. Claves locales 0600, directorios nuevos
-0700 y sin sobrescrituras. Firmar sólo acepta un CSR público acotado y fija
-SAN/EKU al rol; no acepta identidades elegidas por el CSR. La CA debe ser vigente,
-aptamente marcada y conservar más de 37 días de vida. Crear una CA no despliega
-confianza, no enrola conectores ni automatiza el rollover. Usa `connector` para
-el enrolamiento y `tunnel renew` para el flujo operativo existente. Los pilotos
-históricos no son scripts requeridos por estos comandos.
+The role may also be `connector`. Local keys are 0600, new directories are 0700, and
+nothing is overwritten. Signing accepts only a bounded public CSR and fixes the SAN and
+EKU to the role; it does not accept identities chosen by the CSR. The CA must be current,
+correctly marked, and have more than 37 days of validity. Creating a CA does not deploy
+trust, enroll connectors or automate the rollover. Use `connector` for enrollment and
+`tunnel renew` for the existing operational flow. These commands do not require any
+historical scripts.
 
-## Configuración base
+## Base configuration
 
-Ejemplo de proxy HTTP local público, sin login:
+Example of a public local HTTP proxy, without login:
 
 ```json
 {
@@ -88,64 +87,63 @@ Ejemplo de proxy HTTP local público, sin login:
 ozal -config config.json
 ```
 
-`config.example.json` y `config.quickstart.json` en la raíz contienen ejemplos;
-crea tu archivo local y no lo subas a Git. La validación rechaza claves desconocidas.
+`config.example.json` and `config.quickstart.json` in the root contain examples; create
+your own local file and do not commit it to Git. Validation rejects unknown keys.
 
-| Campo | Uso |
+| Field | Use |
 |---|---|
-| `listen` | Listener HTTP; se ignora cuando TLS usa los listeners públicos fijos |
-| `admin.listen` | Administración loopback; predeterminado `127.0.0.1:9090` |
-| `admin.socket` | Socket Unix privado; su permiso de archivo concede autoridad local |
-| `admin.socket_group` | Grupo del sistema con acceso al socket (modo `0660`); sus miembros operan sin `sudo` y se auditan como `local:<usuario>`. Requiere `admin.socket`; rechaza `root`/`wheel` y falla al arrancar si el servicio no pertenece al grupo o el directorio no es recorrible |
-| `admin.login_host` | Las passkeys de administrador se crean y usan en `auth.passkeys.login_url` (HTTPS) en vez de `http://ozal.localhost`, donde muchos autenticadores no funcionan; la consola sigue en loopback y recibe la sesión con un código de un solo uso ligado a un verificador de la pestaña (`ID-021`). Requiere `auth.passkeys`. Las passkeys anteriores de `ozal.localhost` siguen sirviendo |
-| `admin.update_socket` | Socket Unix del ejecutor local de actualizaciones (`ozal update-executor`). Si se omite, la consola solo consulta el reporte de estado; no prepara planes ni instala. El perfil root-owned del ejecutor fija unidad, binario, configuración, catálogo, clave y directorio de trabajos |
-| `admin.token` | Referencia de credencial administrativa completa |
-| `admin.sites_token` | Referencia de publicador limitado de sitios |
-| `runtime_file` | Proyección operativa del servicio: rutas, proyectos y GitHub |
-| `routes` | Hosts y destinos, con política opcional |
-| `upstream_timeout_seconds` | Espera de headers upstream: 60 s por defecto, máximo 3600; no limita el body |
-| `dev_errors` | Diagnósticos locales; mantener `false` en una exposición pública |
+| `listen` | HTTP listener; ignored when TLS uses the fixed public listeners |
+| `admin.listen` | Loopback administration; default `127.0.0.1:9090` |
+| `admin.socket` | Private Unix socket; its file permission grants local authority |
+| `admin.socket_group` | System group with access to the socket (mode `0660`); its members operate without `sudo` and are audited as `local:<user>`. Requires `admin.socket`; rejects `root`/`wheel`, and startup fails if the service does not belong to the group or the directory is not traversable |
+| `admin.login_host` | Administrator passkeys are created and used at `auth.passkeys.login_url` (HTTPS) instead of `http://ozal.localhost`, where many authenticators do not work; the console stays on loopback and receives the session through a one-time code bound to a verifier in the tab. Requires `auth.passkeys`. Earlier passkeys on `ozal.localhost` keep working |
+| `admin.update_socket` | Unix socket of the local update executor (`ozal update-executor`). If omitted, the console only reads the status report; it prepares no plans and installs nothing. The executor's root-owned profile fixes the unit, binary, configuration, catalog, key and job directory |
+| `admin.token` | Reference to the full administrative credential |
+| `admin.sites_token` | Reference to a limited site-publisher credential |
+| `runtime_file` | Operational projection of the service: routes, projects and GitHub |
+| `routes` | Hosts and destinations, with optional policy |
+| `upstream_timeout_seconds` | Wait for upstream headers: 60 s by default, maximum 3600; does not limit the body |
+| `dev_errors` | Local diagnostics; keep `false` on any public exposure |
 
-El runtime se inicializa explícitamente y no reemplaza listeners, TLS o autoridad
-del host. Revisa [propiedad del estado](operations/administration.md#servicio-y-propiedad-del-estado).
+The runtime is initialized explicitly and does not replace listeners, TLS or host
+authority. See [service state ownership](operations/administration.md#servicio-y-propiedad-del-estado).
 
-## Rutas y acceso
+## Routes and access
 
-Cada ruta elige **un** destino: `target` (URL), `upstreams` (varias URLs),
-`root` (directorio absoluto), `site` (Pages), `connector` enrolado o
-`redirect` (URL http(s) absoluta).
-Un host sin puerto atiende en cualquier puerto; uno con puerto coincide solo
-allí y tiene prioridad. Hosts desconocidos no revelan el catálogo público.
+Each route chooses **one** destination: `target` (URL), `upstreams` (several URLs),
+`root` (absolute directory), `site` (Pages), an enrolled `connector`, or `redirect`
+(absolute http(s) URL). A host without a port answers on any port; one with a port matches
+only there and takes priority. Unknown hosts do not reveal the public catalog.
 
-| Campo de ruta | Comportamiento |
+| Route field | Behavior |
 |---|---|
-| `health_path` | Probe HTTP; por defecto `/`; no prueba una ruta estática ni un conector |
-| `upstreams` | Selección entre orígenes saludables y fallos pasivos |
-| `spa` | En rutas estáticas, fallback de paths desconocidos a index |
-| `redirect` | Redirección permanente para un hostname retirado: GET/HEAD reciben 301 y el resto 308, conservando path y query (`viejo/docs?x=1` → `https://nuevo/docs?x=1`); un path en la URL es prefijo. Sin user info, query ni fragmento, nunca hacia su propio host; no admite `access`, `health_path` ni `spa` y no se sondea. En la consola: *Add application → A redirect to another address* |
-| `access` ausente | Ruta pública salvo shorthand legado `auth_required` |
-| `access: {}` | Requiere una identidad autenticada |
-| `access.allowed_emails`, `allowed_domains` | Allowlist por email **verificado**: coincidencias OR |
-| `access.required_groups` | Debe tener **todos** los grupos; AND con la allowlist |
-| `access.methods` | Métodos configurados admitidos: `passkey`, `oidc` |
-| `access.max_auth_age_minutes` | Prueba reciente con passkey, step-up si excede |
-| `access.require_device_bound` | Exige passkey no sincronizable |
-| `access.context_rule` | Condición con fuentes explícitas; evidencia necesaria desconocida deniega |
-| `resource` | Owner/clase/sensibilidad/acciones declaradas; no son evidencia inferida |
-| `audit_mode` | `required` o `best_effort` para acceso cuando la familia está habilitada |
+| `health_path` | HTTP probe; defaults to `/`; does not probe a static route or a connector |
+| `upstreams` | Selection among healthy origins, with passive failure detection |
+| `spa` | For static routes, falls back unknown paths to the index |
+| `redirect` | Permanent redirect for a retired hostname: GET/HEAD get 301 and everything else 308, keeping path and query (`old/docs?x=1` → `https://new/docs?x=1`); a path in the URL is a prefix. No user info, query or fragment; never to its own host; does not accept `access`, `health_path` or `spa`, and is not probed. In the console: *Add application → A redirect to another address* |
+| `access` absent | Public route, except the legacy `auth_required` shorthand |
+| `access: {}` | Requires an authenticated identity |
+| `access.allowed_emails`, `allowed_domains` | Allowlist by **verified** email: matches are OR-ed |
+| `access.required_groups` | Must have **all** groups; AND with the allowlist |
+| `access.methods` | Allowed configured methods: `passkey`, `oidc` |
+| `access.max_auth_age_minutes` | Recent passkey proof; step-up if exceeded |
+| `access.require_device_bound` | Requires a non-syncable passkey |
+| `access.context_rule` | Condition with explicit sources; unknown required evidence denies |
+| `resource` | Declared owner, class, sensitivity and actions; not inferred evidence |
+| `audit_mode` | `required` or `best_effort` for access when the family is enabled |
 
-Upstream sin conexión responde 502; timeout de headers 504; sin upstream
-saludable 503. Un conector desconectado responde 502 y no tiene fallback TCP.
-Conectores pueden protegerse mediante `access` en el proceso integrado.
+An unavailable upstream answers 502; header timeout 504; no healthy upstream 503. A
+disconnected connector answers 502 and has no TCP fallback. Connectors can be protected
+through `access` in the integrated process.
 
-## Login y sesiones
+## Login and sessions
 
-OIDC externo configura `auth.issuer`, `client_id`, `client_secret` y
-`redirect_url`. Este último debe coincidir exactamente con el callback autorizado
-`/_/auth/callback`. Solo OIDC requiere `cookie_domain` común para privados en
-hosts distintos. Login y redirects se restringen a hosts autorizados.
+External OIDC configures `auth.issuer`, `client_id`, `client_secret` and `redirect_url`.
+The last must match exactly the authorized callback `/_/auth/callback`. Only OIDC requires
+a shared `cookie_domain` for private apps on different hosts. Login and redirects are
+restricted to authorized hosts.
 
-Passkeys nativas necesitan SQLite y:
+Native passkeys need SQLite and:
 
 ```json
 "auth": {
@@ -154,84 +152,81 @@ Passkeys nativas necesitan SQLite y:
 }
 ```
 
-Fragmento para una configuración completa, no archivo autónomo. Usa HTTPS salvo
-el contexto localhost de desarrollo. Las passkeys quedan ligadas a RP/origen;
-cambiar de dominio requiere enrolamiento, no copiar credenciales.
+This is a fragment for a complete configuration, not a standalone file. Use HTTPS except
+in the localhost development context. Passkeys are bound to the RP and origin; changing
+domain requires enrollment, not copying credentials.
 
-Pueden coexistir OIDC y passkeys: el callback es `login_url` +
-`/_/auth/callback`, `provider_name` etiqueta el botón y el visitante elige.
-Step-up reciente/dispositivo requiere passkeys; no sustituirlo por SSO silencioso.
+OIDC and passkeys can coexist: the callback is `login_url` + `/_/auth/callback`,
+`provider_name` labels the button, and the visitor chooses. A recent or device-bound
+step-up requires passkeys; it is not replaced by silent SSO.
 
-Sesiones por defecto: `session_ttl_minutes: 10080` (7 días absolutos) y
-`session_idle_minutes: 720` (12 h sin uso). Uso se registra a lo sumo una vez por
-minuto. Sin `-db`, sesiones en memoria; con DB migrada, hashes de IDs persistidos.
-Reducir TTL limita sesiones existentes sin extender su expiración emitida.
-Logout usa POST. Grupos actuales y revocaciones se verifican en el servidor.
+Default sessions: `session_ttl_minutes: 10080` (7 days absolute) and
+`session_idle_minutes: 720` (12 h without use). Use is recorded at most once per minute.
+Without `-db`, sessions live in memory; with a migrated database, the session ID hashes
+are persisted. Lowering the TTL limits existing sessions without extending their issued
+expiry. Logout uses POST. Current groups and revocations are checked on the server.
 
-El portal de visitante está en `/_/auth/me`, dispositivos en `/_/auth/devices`.
-Las privadas fuera de `cookie_domain` con login central passkey usan sesiones
-por host; el protocolo y sus límites están en
-[host-sessions](architecture/host-sessions.md). No confundir un cambio de código
-con aceptación HTTPS/navegadores/dominios reales; ver tracker de `ID-015`.
+The visitor portal is at `/_/auth/me`, and devices at `/_/auth/devices`. Private apps
+outside `cookie_domain` with central passkey login use host sessions; the protocol and its
+limits are in [host sessions](architecture/host-sessions.md). A code change is not the
+same as HTTPS, browser or real-domain acceptance; see the host-sessions guide.
 
-Invitaciones y recuperación: [primera aplicación](operations/first-application.md).
-La identidad administrativa es distinta de la de visitantes y tiene su propio
-ciclo de sesiones; los tiempos de esta sección no son los de la consola.
+Invitations and recovery: [first application](operations/first-application.md). The
+administrative identity is separate from visitor identities and has its own session
+lifecycle; the times in this section are not the console's.
 
-## Secretos
+## Secrets
 
-Credenciales admiten `env:NAME` o `file:/ruta/secret`; la fuente debe existir y
-no estar vacía. Los prefijos son reservados. La API persiste referencias, no
-valores resueltos. Evita secretos inline en instalaciones reales.
+Credentials accept `env:NAME` or `file:/path/to/secret`; the source must exist and not be
+empty. The prefixes are reserved. The API persists references, not resolved values. Avoid
+inline secrets in real installations.
 
-Un secreto OIDC no resoluble impide iniciar; el token administrativo no
-resoluble rechaza las operaciones que lo requieren. No copies tokens en ejemplos
-curl, URLs o chats. Usa el socket del host o referencias del CLI.
+An unresolvable OIDC secret prevents startup; an unresolvable administrative token rejects
+the operations that need it. Never copy tokens into curl examples, URLs or chats. Use the
+host socket or CLI references.
 
-## HTTPS y DNS
+## HTTPS and DNS
 
-`tls.enabled: true` usa :443. Sin `dns01`, autocert usa :80 para validación y
-redirección; DNS debe llegar a ese servidor. Conserva `tls.cache_dir` persistente.
-La política HTTP-01 sigue rutas configuradas: añadir un host autorizado no
-emite certificados para cualquier SNI ni exige reiniciar la whitelist de rutas.
+`tls.enabled: true` uses :443. Without `dns01`, autocert uses :80 for validation and
+redirection; DNS must reach that server. Keep `tls.cache_dir` persistent. The HTTP-01
+policy follows configured routes: adding an authorized host does not issue certificates
+for any SNI and does not require restarting the route allowlist.
 
-### Perfil directo sin Cloudflare
+### Direct profile without Cloudflare
 
-[config.direct.example.json](../config.direct.example.json) es una plantilla
-para un edge público propio con login passkey y dos apps privadas, una en otro
-dominio. Reemplaza dominios, email y destinos antes de usarla. No requiere
-`dns.cloudflare`, `tls.dns01`, `trusted_proxies` ni un certificado de Origin Pulls.
-`listen` solo corresponde al modo HTTP sin TLS: con TLS se usan :80 y :443.
+[config.direct.example.json](../config.direct.example.json) is a template for your own
+public edge with passkey login and two private apps, one on another domain. Replace the
+domains, email and destinations before using it. It requires no `dns.cloudflare`,
+`tls.dns01`, `trusted_proxies` or Origin Pulls certificate. `listen` applies only to HTTP
+mode without TLS; with TLS, :80 and :443 are used.
 
-En cualquier proveedor DNS, crea A/AAAA de `edge.example.com` hacia la IP del
-edge y un CNAME `*.example.com` hacia ese nombre. El wildcard DNS permite
-añadir subdominios sin crear otro registro; **no es un certificado wildcard**:
-HTTP-01 obtiene una hoja por nombre configurado. El apex y registros existentes
-necesitan revisión propia; un wildcard no los reemplaza. Para una app en otra
-zona, su propietario crea el A/AAAA/CNAME correspondiente hacia el mismo edge.
-No publiques un AAAA si IPv6 no llega al servidor. DNS debe resolver directamente
-al edge, con TCP 80/443 accesibles y sin otro proceso ocupándolos; comprueba
-también CAA si tu zona restringe las CA autorizadas.
+With any DNS provider, create A/AAAA for `edge.example.com` pointing to the edge's IP, and a
+CNAME `*.example.com` pointing to that name. The DNS wildcard lets you add subdomains
+without creating another record; **it is not a wildcard certificate**: HTTP-01 obtains one
+leaf per configured name. The apex and existing records need their own review; a wildcard
+does not replace them. For an app in another zone, its owner creates the matching
+A/AAAA/CNAME pointing to the same edge. Do not publish an AAAA record if IPv6 does not reach
+the server. DNS must resolve directly to the edge, with TCP 80/443 reachable and no other
+process occupying them; also check CAA if your zone restricts the authorized CAs.
 
-Instala siguiendo la guía de servicio y aplica la plantilla como configuración
-del host, con permisos y directorios del instalador. Inicializa una sola vez
-`runtime_file` con `ozal runtime init -config /etc/ozal/config.json`,
-migra SQLite y arranca con `-config /etc/ozal/config.json
--db /var/lib/ozal/state.db`. Completa el bootstrap administrativo por
-el transporte privado e invita al email permitido. Conserva el estado ACME y
-SQLite en backups. La consola continúa en loopback/socket; el ejemplo no la
-expone por HTTPS público.
+Install following the service guide and apply the template as host configuration, with
+the installer's permissions and directories. Initialize `runtime_file` once with
+`ozal runtime init -config /etc/ozal/config.json`, migrate SQLite, and start with
+`-config /etc/ozal/config.json -db /var/lib/ozal/state.db`. Complete the administrative
+bootstrap through the private transport and invite the permitted email. Keep the ACME and
+SQLite state in backups. The console stays on loopback or the socket; the example does not
+expose it over public HTTPS.
 
-Para una migración desde un proxy, prepara este perfil por separado: no retires
-la autenticación de origen del servicio activo como mecanismo de fallback.
-Antes del corte, verifica desde otra red DNS/TLS, acceso permitido y denegado,
-IP real, revocación y reinicio. Conserva el servicio anterior hasta esa aceptación;
-volver al perfil y DNS previos es el rollback. El ejemplo no cambia firewall ni
-DNS y no acredita los controles de [exposición directa](security.md#entrada-directa-o-detras-de-un-proxy).
+For a migration from a proxy, prepare this profile separately: do not remove the active
+service's origin authentication as a fallback mechanism. Before the cutover, verify from
+another DNS and TLS network: permitted and denied access, real IP, revocation and restart.
+Keep the previous service until that acceptance; returning to the previous profile and DNS
+is the rollback. The example does not change firewall or DNS and does not establish the
+controls of [direct exposure](security.md#direct-ingress-or-behind-a-proxy).
 
 ### DNS-01
 
-DNS-01 usa `tls.domains` y un bloque `tls.dns01`:
+DNS-01 uses `tls.domains` and a `tls.dns01` block:
 
 ```json
 "dns01": {
@@ -241,91 +236,85 @@ DNS-01 usa `tls.domains` y un bloque `tls.dns01`:
 }
 ```
 
-Va dentro de `tls`; sin `dns_provider` el adaptador es Cloudflare. `tls.domains`
-admite hasta 8 nombres, con wildcard de un nivel y apex adicional; sus bases
-son las zonas iniciales (ver [Zonas](#zonas-un-certificado-por-dominio)). TLS-ALPN/HTTP no
-son necesarios para esa emisión. El estado guarda cuenta, generaciones y cleanup;
-un segundo escritor se rechaza. Cambiar estas opciones requiere reinicio.
+It goes inside `tls`; without `dns_provider` the adapter is Cloudflare. `tls.domains`
+accepts up to 8 names, with one-level wildcards and an additional apex; their bases are the
+initial zones (see [Zones](#zones-one-certificate-per-domain)). TLS-ALPN and HTTP are not
+needed for that issuance. The state stores the account, generations and cleanup; a second
+writer is rejected. Changing these options requires a restart.
 
-#### Zonas: un certificado por dominio
+#### Zones: one certificate per domain
 
-Con `tls.dns01` el edge emite **un certificado por zona**, con la forma de un
-certificado universal: `example.com` y `*.example.com`. Cada zona tiene su
-almacenamiento (`_zone.<zona>` en `state_dir`), su backoff y su renovación:
-si el desafío de una zona falla, las demás siguen sirviendo y renovando. Las
-zonas se emiten de a una, porque comparten la cuenta ACME y el proveedor; esperar
-turno no cuenta para el límite de 5 minutos de cada intento.
+With `tls.dns01` the edge issues **one certificate per zone**, shaped like a universal
+certificate: `example.com` and `*.example.com`. Each zone has its own storage
+(`_zone.<zone>` in `state_dir`), its backoff and its renewal: if one zone's challenge fails,
+the others keep serving and renewing. Zones are issued one at a time, because they share the
+ACME account and the provider; waiting for a turn does not count against the five-minute
+limit of each attempt.
 
-Las zonas tienen dos orígenes:
+Zones have two origins:
 
-| Origen | Definición | Cambio |
+| Origin | Definition | Change |
 |---|---|---|
-| `config` | La base de cada nombre de `tls.domains` (`*.example.com` y `example.com` son la zona `example.com`) | Editando la configuración del host y reiniciando |
-| `runtime` | `zones` en el `runtime_file`, agregadas por la API o la consola | `POST /_/api/zones` y `DELETE /_/api/zones/{zona}`, sin reinicio |
+| `config` | The base of each `tls.domains` name (`*.example.com` and `example.com` are the zone `example.com`) | Edit the host configuration and restart |
+| `runtime` | `zones` in `runtime_file`, added through the API or the console | `POST /_/api/zones` and `DELETE /_/api/zones/{zone}`, no restart |
 
 ```sh
-# Herramienta applications (token, socket o sesión de operador).
+# applications tool (token, socket or operator session).
 curl -s --unix-socket /run/ozal/admin.sock http://localhost/_/api/zones
 curl -s --unix-socket /run/ozal/admin.sock -X POST http://localhost/_/api/zones \
-  -d '{"name": "example.org", "expected": "<config_sha256 del listado>"}'
+  -d '{"name": "example.org", "expected": "<config_sha256 from the listing>"}'
 ```
 
-El listado devuelve por zona su origen, estado (`pending`, `queued`,
-`issuing`, `active`, `renewing`, `renewal_failed`, `expiring`, `failed`),
-vencimiento, último error, las aplicaciones que cubre y el registro DNS a
-crear (`challenge`). Con `dns_provider: "builtin"` una zona sin entrada en
-`challenge_delegation` delega en `<zona>.<builtin.zone>`: crea el CNAME
-`_acme-challenge.<zona>` hacia ese nombre; el edge lo verifica antes de escribir
-nada. Con `hetzner` o `rfc2136` se rechaza una zona cuyo desafío quede fuera de
-la zona del proveedor. Quitar una zona `config` se rechaza, igual que una zona
-que todavía es el único certificado de alguna aplicación.
+The listing returns, per zone, its origin, state (`pending`, `queued`, `issuing`, `active`,
+`renewing`, `renewal_failed`, `expiring`, `failed`), expiry, last error, the applications it
+covers and the DNS record to create (`challenge`). With `dns_provider: "builtin"`, a zone
+without an entry in `challenge_delegation` delegates to `<zone>.<builtin.zone>`: create the
+CNAME `_acme-challenge.<zone>` pointing to that name; the edge verifies it before writing
+anything. With `hetzner` or `rfc2136`, a zone whose challenge falls outside the provider's
+zone is rejected. Removing a `config` zone is rejected, as is a zone that is still the only
+certificate of some application.
 
-`POST /_/api/zones/{zona}/check` consulta el CNAME `_acme-challenge` de una zona
-servida (nunca de otros nombres) y responde `ok` o `bad` con el registro exacto a
-crear. `POST /_/api/zones/{zona}/renew` pide un intento ya, sin esperar el
-backoff: responde 202, 409 si ya hay uno en curso o en cola, y 429 si el último
-fue hace menos de un minuto o la CA pidió esperar.
+`POST /_/api/zones/{zone}/check` looks up the `_acme-challenge` CNAME of a served zone (never
+of other names) and answers `ok` or `bad` with the exact record to create.
+`POST /_/api/zones/{zone}/renew` requests an attempt now, without waiting for the backoff:
+it answers 202, 409 if one is already running or queued, and 429 if the last one was less
+than a minute ago or the CA asked to wait.
 
-**Alta en el proveedor (EDGE-009).** `GET /_/api/zones/{zona}/setup` devuelve
-lo que le falta a la zona fuera del edge, como pasos `challenge` (el CNAME de
-arriba), `encryption` (modo SSL del proxy), `origin_pull` (certificado cliente
-que el proxy presenta) y `https_redirect` (*Always Use HTTPS*: el proxy redirige
-`http://` en vez de reenviarlo al puerto 80 del edge, que detrás de un proxy no
-suele escuchar y da error 522), cada uno `done`, `todo`, `blocked`, `unknown` o
-`not_needed`, con la acción posible y la instrucción manual.
-`POST /_/api/zones/{zona}/setup` hace por la API de Cloudflare los pasos `todo`:
-crea el CNAME si el nombre está vacío, pasa `off`/`flexible` a Full (strict),
-sube el certificado propio del edge a Authenticated Origin Pulls a nivel de zona
-y lo activa, y enciende *Always Use HTTPS* si está apagado. Nunca borra ni reemplaza un registro o certificado ajeno (un
-registro distinto queda `blocked`) y deja `full` como está. Responde el estado
-posterior; si un paso falla, 502 con `error` y `report`. Necesita
-`dns.cloudflare.token` con permisos *DNS · Edit*, *Zone Settings · Edit* y
-*SSL and Certificates · Edit* sobre la zona; sin token los pasos se leen de DNS
-público cuando se puede y el resto se describe a mano.
+**Provider setup.** `GET /_/api/zones/{zone}/setup` returns what the zone still needs outside
+the edge, as steps `challenge` (the CNAME above), `encryption` (the proxy's SSL mode),
+`origin_pull` (the client certificate the proxy presents) and `https_redirect` (*Always Use
+HTTPS*: the proxy redirects `http://` instead of forwarding it to the edge's port 80, which
+usually does not listen behind a proxy and yields error 522). Each is `done`, `todo`,
+`blocked`, `unknown` or `not_needed`, with the possible action and the manual instruction.
+`POST /_/api/zones/{zone}/setup` performs the `todo` steps through the Cloudflare API: it
+creates the CNAME if the name is empty, moves `off`/`flexible` to Full (strict), uploads the
+edge's own certificate to Authenticated Origin Pulls at zone level and enables it, and turns
+on *Always Use HTTPS* if it is off. It never deletes or replaces another party's record or
+certificate (a different record is marked `blocked`), and leaves `full` as it is. It returns
+the state afterwards; if a step fails, it answers 502 with `error` and `report`. It needs
+`dns.cloudflare.token` with *DNS · Edit*, *Zone Settings · Edit* and *SSL and Certificates ·
+Edit* over the zone; without a token, the steps are read from public DNS where possible and
+the rest is described manually.
 
-El certificado del proxy es una identidad propia del edge en
-`<dns01.state_dir>/origin-identity/`: una CA de un solo uso firma un único
-certificado cliente (RSA, 3 años) y su clave se descarta sin tocar disco, así que
-nada en el host puede emitir otro certificado aceptado. `ca.pem` se suma a
-`tls.origin_client_ca_file` en el listener público sin reiniciar; `client.pem` y
-`client.key` (0600) existen sólo para subirlos al proxy. Sólo se ofrece cuando
-el edge exige certificado cliente (`tls.origin_client_ca_file`); un certificado
-de zona que el edge no confía se informa como `todo`, porque Cloudflare respondería
-520.
+The proxy certificate is the edge's own identity in `<dns01.state_dir>/origin-identity/`: a
+one-use CA signs a single client certificate (RSA, 3 years), and its key is discarded without
+touching disk, so nothing on the host can issue another accepted certificate. `ca.pem` is
+added to `tls.origin_client_ca_file` on the public listener without a restart; `client.pem`
+and `client.key` (0600) exist only so they can be uploaded to the proxy. It is offered only
+when the edge requires a client certificate (`tls.origin_client_ca_file`); a zone certificate
+the edge does not trust is reported as `todo`, because Cloudflare would answer 520.
 
-Migración: el certificado combinado anterior (clave del primer nombre de
-`tls.domains`) se carga sólo como respaldo y ya no se renueva. Responde por sus
-nombres mientras la zona correspondiente no tenga certificado propio, también
-después de reiniciar; nunca se sobrescribe. Un nombre fuera de toda zona y del
-respaldo falla cerrado. `ozal dns01 try` y `dns01 check` siguen ensayando los
-nombres de `tls.domains` como un solo certificado.
+Migration: the earlier combined certificate (keyed by the first name of `tls.domains`) is
+loaded only as a fallback and is no longer renewed. It answers for its names while the
+corresponding zone has no certificate of its own, also after a restart; it is never
+overwritten. A name outside every zone and outside the fallback fails closed. `ozal dns01 try`
+and `dns01 check` still rehearse the `tls.domains` names as a single certificate.
 
-#### Otra CA: cuenta externa (EAB) y Google Trust Services
+#### Another CA: external account (EAB) and Google Trust Services
 
-`directory_url` admite cualquier CA ACME. Algunas (Google Trust Services,
-ZeroSSL) no abren cuentas anónimas: exigen *external account binding*
-(RFC 8555 §7.3.4), una clave e identificador emitidos antes en la cuenta del
-operador con esa CA.
+`directory_url` accepts any ACME CA. Some (Google Trust Services, ZeroSSL) do not open
+anonymous accounts: they require *external account binding* (RFC 8555 §7.3.4), a key and
+identifier issued beforehand on the operator's account with that CA.
 
 ```json
 "dns01": {
@@ -335,31 +324,29 @@ operador con esa CA.
 }
 ```
 
-`hmac_key` es siempre una referencia `file:` o `env:`, nunca el valor. Acepta
-la clave en base64url como la entrega Google (`b64MacKey`); también la forma
-estándar y con relleno. Solo se lee al registrar la cuenta: la cuenta queda en
-`state_dir` y las renovaciones no la vuelven a usar. Se admite con cualquier
-`dns_provider`.
+`hmac_key` is always a `file:` or `env:` reference, never the value. It accepts the key in
+base64url as Google delivers it (`b64MacKey`), and also the standard form with padding. It
+is read only when the account is registered: the account stays in `state_dir`, and renewals
+do not use it again. It is supported with any `dns_provider`.
 
-Google Trust Services: producción
-`https://dv.acme-v02.api.pki.goog/directory`, pruebas
-`https://dv.acme-v02.test-api.pki.goog/directory`. La clave se pide con
-`gcloud publicca external-account-keys create` (API `publicca.googleapis.com`,
-rol `roles/publicca.externalAccountKeyCreator`; `keyId` y `b64MacKey` en la
-salida). **Una clave sirve para registrar una sola cuenta y caduca a los 7 días
-sin usar.** Las de pruebas se piden contra el endpoint de preproducción
-(`gcloud config set api_endpoint_overrides/publicca https://preprod-publicca.googleapis.com/`).
-Como `ozal dns01 try` trabaja en un directorio temporal, **cada ensayo registra
-una cuenta nueva y consume una clave EAB**: pide una de pruebas por ensayo. Si
-la CA acepta el registro y falla el guardado local, la clave queda gastada y hay
-que pedir otra. Cambiar de CA es cambiar `directory_url` (y `state_dir` o dejar
-que el almacén separe cuentas por directorio); no hay otro estado compartido.
+Google Trust Services: production `https://dv.acme-v02.api.pki.goog/directory`, test
+`https://dv.acme-v02.test-api.pki.goog/directory`. The key is requested with
+`gcloud publicca external-account-keys create` (API `publicca.googleapis.com`, role
+`roles/publicca.externalAccountKeyCreator`; `keyId` and `b64MacKey` appear in the output).
+**One key registers only one account, and expires after 7 days unused.** Test keys are
+requested against the preproduction endpoint (`gcloud config set
+api_endpoint_overrides/publicca https://preprod-publicca.googleapis.com/`). Because
+`ozal dns01 try` works in a temporary directory, **each rehearsal registers a new account and
+consumes an EAB key**: request a test key per rehearsal. If the CA accepts the registration but
+the local save fails, the key is spent and another must be requested. Changing CA means
+changing `directory_url` (and `state_dir`, or letting the store separate accounts by
+directory); there is no other shared state.
 
-#### Proveedor DNS independiente (RFC 2136)
+#### Independent DNS provider (RFC 2136)
 
-Para no depender de la API de un proveedor, `dns_provider: "rfc2136"` crea y
-borra los TXT del desafío con UPDATE dinámico firmado (TSIG) contra un servidor
-autoritativo que acepte actualizaciones (BIND, PowerDNS, Knot):
+To avoid depending on a provider's API, `dns_provider: "rfc2136"` creates and deletes the
+challenge TXT records with TSIG-signed dynamic UPDATE against an authoritative server that
+accepts updates (BIND, PowerDNS, Knot):
 
 ```json
 "dns01": {
@@ -376,22 +363,20 @@ autoritativo que acepte actualizaciones (BIND, PowerDNS, Knot):
 }
 ```
 
-`secret` es una referencia `file:` o `env:` al secreto TSIG en base64 (un valor
-en línea se rechaza) y `dns_token` no se admite con este proveedor. La zona es
-explícita y debe contener cada nombre de `tls.domains`; el adaptador no envía
-actualizaciones para nombres fuera de ella. Solo se aceptan `hmac-sha256`
-(por defecto), `hmac-sha384` y `hmac-sha512`. La transacción va por TCP, una
-respuesta de éxito sin firma válida cuenta como resultado desconocido y el
-borrado retira únicamente el registro creado (nombre y valor exactos), nunca el
-conjunto. En el servidor, limita la clave a ese nombre con una regla
-`update-policy` equivalente a `grant ozal-acme name _acme-challenge.example.com. TXT;`.
-Este camino prueba la emisión sin Cloudflare; no cambia quién es el DNS
-autoritativo de tu zona ni sustituye su protección de red.
+`secret` is a `file:` or `env:` reference to the TSIG secret in base64 (an inline value is
+rejected), and `dns_token` is not supported with this provider. The zone is explicit and must
+contain every name in `tls.domains`; the adapter sends no updates for names outside it. Only
+`hmac-sha256` (default), `hmac-sha384` and `hmac-sha512` are accepted. The transaction goes
+over TCP; a success response without a valid signature counts as an unknown result, and
+deletion removes only the record it created (exact name and value), never the whole set. On
+the server, limit the key to that name with an `update-policy` rule equivalent to `grant
+ozal-acme name _acme-challenge.example.com. TXT;`. This path proves issuance without
+Cloudflare; it does not change who is authoritative for your zone or replace its network
+protection.
 
 #### Hetzner Cloud DNS
 
-`dns_provider: "hetzner"` usa la API de DNS de Hetzner Cloud para una zona
-explícita:
+`dns_provider: "hetzner"` uses the Hetzner Cloud DNS API for an explicit zone:
 
 ```json
 "dns01": {
@@ -402,22 +387,21 @@ explícita:
 }
 ```
 
-`token` es una referencia `file:` o `env:` (un valor en línea se rechaza) y
-`dns_token` no se admite. La zona debe contener cada nombre de `tls.domains` y
-el adaptador no actúa fuera de ella; no hace falta permiso para listar zonas.
-Cada cambio es una Action asíncrona: el adaptador espera su fin antes de dar el
-registro por creado o borrado, y una Action que no termina cuenta como
-resultado desconocido. El borrado retira solo el registro creado (la API los
-identifica por valor dentro del RRSet). El TTL se fija en 60 s, el mínimo.
-**Pendiente de comprobar con una zona real:** la spec oficial no indica cómo se
-escriben los TXT; se envían entre comillas y esa decisión vive en un solo
-lugar (`hetznerTXTValue`). Hasta esa prueba, usa el proveedor en staging.
+`token` is a `file:` or `env:` reference (an inline value is rejected), and `dns_token` is
+not supported. The zone must contain every name in `tls.domains`, and the adapter does not
+act outside it; no permission to list zones is needed. Each change is an asynchronous Action:
+the adapter waits for it to finish before treating the record as created or deleted, and an
+Action that never finishes counts as an unknown result. Deletion removes only the record it
+created (the API identifies them by value inside the RRSet). The TTL is fixed at 60 s, the
+minimum. **Pending verification in a real zone:** the official spec does not state how TXT
+records are written; they are sent quoted, and that decision lives in one place
+(`hetznerTXTValue`). Until that test, use the provider in staging.
 
-#### Delegar el desafío por CNAME (cualquier proveedor DNS)
+#### Delegating the challenge by CNAME (any DNS provider)
 
-Si tu dominio vive en un DNS sin adaptador (un registrador como DonDominio o
-Porkbun, o cualquier otro), no hace falta uno. Crea **una vez, a mano**, un
-CNAME y deja que Ozal escriba los TXT en una zona que sí controla:
+If your domain lives in a DNS without an adapter (a registrar such as DonDominio or Porkbun,
+or any other), you do not need one. Create **once, by hand**, a CNAME, and let Ozal write the
+TXT records in a zone you do control:
 
 ```
 _acme-challenge.example.com.   CNAME   example-com.acme.delegated.net.
@@ -433,26 +417,25 @@ _acme-challenge.example.com.   CNAME   example-com.acme.delegated.net.
 }
 ```
 
-Cada clave es el dominio base de un nombre de `tls.domains` (un wildcard y su
-ápice comparten base) y su valor el nombre donde se escribe el TXT. La zona del
-proveedor debe contener ese destino, no el dominio. Antes de crear ningún
-registro, Ozal comprueba que `_acme-challenge.<dominio>` sea un CNAME hacia el
-destino exacto; si no lo es, falla con un mensaje que nombra el CNAME que falta
-y no deja nada creado. La espera de propagación consulta el nombre que ve la CA,
-o sea a través del CNAME. Un solo salto: una cadena de CNAME no se acepta.
+Each key is the base domain of a `tls.domains` name (a wildcard and its apex share a base),
+and its value is the name where the TXT is written. The provider's zone must contain that
+target, not the domain. Before creating any record, Ozal checks that `_acme-challenge.<domain>`
+is a CNAME to the exact target; if not, it fails with a message naming the missing CNAME and
+creates nothing. Propagation waiting queries the name the CA sees, that is, through the CNAME.
+One hop only: a CNAME chain is not accepted.
 
-**Quien controle la zona de destino puede obtener certificados para el
-dominio.** Usa una zona dedicada y una credencial limitada a ella. Esto
-desacopla los certificados del proveedor; no cambia quién sirve el DNS de tu
-dominio ni quién te protege de DDoS. Sin wildcard no necesitas nada de esto:
-HTTP-01 del [perfil directo](#perfil-directo-sin-cloudflare) no usa DNS.
+**Whoever controls the target zone can obtain certificates for the domain.** Use a dedicated
+zone and a credential limited to it. This decouples the certificates from the provider; it
+does not change who serves your domain's DNS or who protects you from DDoS. Without a
+wildcard you need none of this: HTTP-01 of the [direct profile](#direct-profile-without-cloudflare)
+does not use DNS.
 
-#### Servidor DNS propio (`builtin`): sin cuenta ni API de nadie
+#### Own DNS server (`builtin`): no account or API from anyone
 
-Con `dns_provider: "builtin"`, Ozal responde él mismo, como servidor DNS
-autoritativo, por una zona que solo contiene los TXT del desafío. No hay token,
-cuenta ni API: el registro se publica en memoria y desaparece al terminar la
-emisión. Es el patrón de acme-dns, dentro del mismo proceso.
+With `dns_provider: "builtin"`, Ozal answers itself, as an authoritative DNS server, for a
+zone that contains only the challenge TXT records. There is no token, account or API: the
+record is published in memory and disappears when issuance ends. It is the acme-dns pattern,
+inside the same process.
 
 ```json
 "dns01": {
@@ -468,8 +451,8 @@ emisión. Es el patrón de acme-dns, dentro del mismo proceso.
 }
 ```
 
-Hacen falta **tres registros estáticos**, creados una vez a mano, en el DNS que
-sirva cada dominio (cualquier proveedor o registrador, sin API):
+**Three static records** are needed, created once by hand, in the DNS that serves each domain
+(any provider or registrar, without an API):
 
 ```
 ns1.example.net.                 A      203.0.113.7                      ; pegamento, sin proxy
@@ -477,12 +460,12 @@ acme.example.net.                NS     ns1.example.net.                 ; deleg
 _acme-challenge.example.com.     CNAME  example-com.acme.example.net.    ; un CNAME por dominio
 ```
 
-Sin wildcard, cada nombre de `tls.domains` necesita su propio CNAME
-`_acme-challenge.<nombre>` y su entrada en `challenge_delegation`; el wildcard y su
-ápice comparten uno. Con el servidor propio ese CNAME sigue siendo un paso manual
-una vez por nombre (o automatizable donde el proveedor tenga API).
+Without a wildcard, each `tls.domains` name needs its own `_acme-challenge.<name>` CNAME and
+its entry in `challenge_delegation`; a wildcard and its apex share one. With the own server,
+that CNAME remains a manual step once per name (or can be automated where the provider has an
+API).
 
-Comprueba la cadena antes de activar nada, con `dig`:
+Check the chain before activating anything, with `dig`:
 
 ```
 dig +short NS acme.example.net
@@ -490,22 +473,20 @@ dig @203.0.113.7 acme.example.net SOA +norecurse
 dig +short CNAME _acme-challenge.example.com
 ```
 
-`listen` es una IP:puerto explícita (no se admite `0.0.0.0` ni un nombre: en
-Linux un bind comodín choca con el stub local `127.0.0.53`). El puerto 53 exige
-`CAP_NET_BIND_SERVICE` o una redirección; abre **UDP y TCP** en el firewall del
-host y del proveedor. Si no puede abrir el puerto, Ozal falla al arrancar en
-lugar de quedar con un certificado que nunca valida.
+`listen` is an explicit IP:port (`0.0.0.0` and hostnames are not accepted: on Linux a wildcard
+bind conflicts with the local stub `127.0.0.53`). Port 53 requires `CAP_NET_BIND_SERVICE` or a
+redirect; open **UDP and TCP** in the host's and the provider's firewall. If the port cannot be
+opened, Ozal fails at startup rather than running with a certificate that never validates.
 
-Contrato del servidor: solo responde por su zona (TXT, SOA y NS) y contesta
-`REFUSED` a todo lo demás, sin recursión; `ANY` y los tipos no soportados
-devuelven "sin datos", para que un origen falsificado no obtenga amplificación;
-nunca responde a un mensaje que ya sea una respuesta; trunca por UDP lo que
-pase de 512 bytes; limita 20 consultas por segundo por origen y descarta el
-exceso sin contestar; sirve hasta 8 consultas por conexión TCP con plazo de 5 s
-y 64 conexiones a la vez. Un dominio de `tls.domains` sin entrada en
-`challenge_delegation` se rechaza al cargar la configuración, porque este
-servidor no puede escribir fuera de su zona. Mantén la zona dedicada: **quien la
-controle puede emitir certificados para los dominios que la delegan**.
+Server contract: it answers only for its zone (TXT, SOA and NS) and replies `REFUSED` to
+everything else, without recursion; `ANY` and unsupported types return "no data", so a forged
+origin gets no amplification; it never responds to a message that is itself a response;
+it truncates over UDP anything over 512 bytes; it limits 20 queries per second per source and
+drops the excess without answering; it serves up to 8 queries per TCP connection with a 5 s
+deadline and 64 simultaneous connections. A `tls.domains` domain without an entry in
+`challenge_delegation` is rejected when the configuration loads, because this server cannot
+write outside its zone. Keep the zone dedicated: **whoever controls it can issue certificates
+for the domains that delegate to it.**
 
 ##### Verificación previa: `ozal dns01 check`
 
@@ -513,69 +494,65 @@ controle puede emitir certificados para los dominios que la delegan**.
 ozal dns01 check -config config.json [-resolver 1.1.1.1:53]
 ```
 
-No emite nada ni escribe estado. Comprueba, antes de gastar un intento en la
-CA: que cada `_acme-challenge.<dominio>` sea un CNAME al destino de
-`challenge_delegation` (si falta, imprime el registro exacto a crear), que cada
-`builtin.nameservers` resuelva a la IP de `builtin.listen` (el pegamento del
-padre) y que UDP y TCP de `listen` se puedan abrir. Un puerto ocupado es un
-aviso, no un fallo: es lo normal con el edge corriendo. **No puede comprobar
-que el puerto 53 sea alcanzable desde Internet** (firewall del host o de la
-nube): lo dice en un aviso y sugiere el `dig` para probarlo desde afuera. Sale
-con error solo si hay un fallo. `-resolver` consulta un DNS concreto en lugar
-del del sistema, útil cuando el local guardó en caché una respuesta negativa.
+It issues nothing and writes no state. Before spending an attempt on the CA, it checks that each
+`_acme-challenge.<domain>` is a CNAME to the `challenge_delegation` target (if one is missing, it
+prints the exact record to create), that each `builtin.nameservers` entry resolves to the
+`builtin.listen` IP (the parent's glue), and that UDP and TCP on `listen` can be opened. A busy
+port is a warning, not a failure: it is normal while the edge is running. **It cannot check that
+port 53 is reachable from the Internet** (host or cloud firewall): it says so in a warning and
+suggests the `dig` to test it from outside. It exits with an error only if something fails.
+`-resolver` queries a specific DNS server instead of the system's, useful when the local one has
+cached a negative answer.
 
-##### Ensayo sin tocar producción: `ozal dns01 try`
+##### Rehearsal without touching production: `ozal dns01 try`
 
 ```
 ozal dns01 try -config dns01-try.json
 ```
 
-Emite **un** certificado con el proveedor configurado, por Internet real, y lo
-descarta. No abre el 443, no usa ni modifica `tls.dns01.state_dir` (trabaja en
-un directorio temporal que borra al terminar) y no imprime claves ni
-certificados. Rechaza un CA de producción (`directory_url` sin "staging") salvo
-`-allow-production`, para no gastar sus límites. Con `builtin` levanta el
-servidor DNS en `listen`, por lo que necesita permiso para ese puerto (`sudo`
-o `CAP_NET_BIND_SERVICE`) y que ese puerto no esté ocupado. Imprime el
-proveedor, los nombres, el emisor, el vencimiento y si la cadena se verificó:
-sin `certificate_roots_file` dice **"chain NOT verified"** en lugar de
-afirmarlo. Usa una copia de la configuración con otro `tls.dns01` apuntando al
-CA de staging; no sustituye la aceptación del certificado real en el edge.
+It issues **one** certificate with the configured provider, over the real Internet, and discards
+it. It does not open 443, does not use or modify `tls.dns01.state_dir` (it works in a temporary
+directory that it deletes afterwards), and prints no keys or certificates. It rejects a production
+CA (a `directory_url` without "staging") unless `-allow-production` is given, so as not to consume
+its limits. With `builtin` it starts the DNS server on `listen`, so it needs permission for that
+port (`sudo` or `CAP_NET_BIND_SERVICE`) and the port must not be busy. It prints the provider, the
+names, the issuer, the expiry and whether the chain was verified: without
+`certificate_roots_file` it says **"chain NOT verified"** instead of asserting it. Use a copy of
+the configuration with a different `tls.dns01` pointing to the staging CA; it does not replace
+acceptance of the real certificate on the edge.
 
-Esto independiza la emisión de certificados de cualquier proveedor DNS; no
-cambia quién sirve el DNS de tu dominio, ni quién es tu registrador, ni quién
-te protege de DDoS, y el pegamento y la delegación `NS` siguen viviendo en la
-zona padre.
+This decouples certificate issuance from any DNS provider; it does not change who serves
+your domain's DNS, who your registrar is, or who protects you from DDoS, and the glue and the
+`NS` delegation still live in the parent zone.
 
-Staging usa otra carpeta y roots explícitos por `certificate_roots_file`,
-que reemplazan los roots de validación de esa emisión; no usarlo para debilitar
-producción. La renovación conserva el certificado válido y sin él falla TLS.
+Staging uses a different folder and explicit roots through `certificate_roots_file`, which
+replace the validation roots for that issuance; do not use it to weaken production. Renewal
+keeps the valid certificate, and without one TLS fails.
 
-`tls.origin_client_ca_file` exige certificado cliente de la CA autorizada en el
-listener público: es confianza de proxy, separada de TLS servidor y del túnel.
-[Condiciones de despliegue](security.md#entrada-directa-o-detras-de-un-proxy).
+`tls.origin_client_ca_file` requires a client certificate from the authorized CA on the public
+listener: it is proxy trust, separate from server TLS and from the tunnel.
+[Deployment conditions](security.md#direct-ingress-or-behind-a-proxy).
 
-Para el asistente de conexión, `dns.target` indica IP o hostname público,
-`dns.proxied` el modo del registro y el opcional `dns.cloudflare.token` habilita
-creación automática y el alta de zonas en Cloudflare (ver arriba). Sin token se
-muestra el registro manual. Nunca reemplazar
-silenciosamente un registro que podría servir un sitio existente.
+For the connection wizard, `dns.target` indicates an IP or public hostname, `dns.proxied` the
+record's mode, and the optional `dns.cloudflare.token` enables automatic creation and zone setup
+in Cloudflare (see above). Without a token the manual record is shown. A record that might serve
+an existing site is never silently replaced.
 
-## IP de visitante
+## Visitor IP
 
-`trusted_proxies` contiene IPs/CIDRs literales de peers confiables. Vacío significa
-no confiar en headers. Solo se admite un `CF-Connecting-IP` válido de esos peers;
-valores repetidos, ambiguos, no unicast o con scope se descartan. Nunca agregar
-un rango de visitantes o catch-all por comodidad.
+`trusted_proxies` contains literal IPs/CIDRs of trusted peers. Empty means headers are not
+trusted. Only a valid `CF-Connecting-IP` from those peers is accepted; repeated, ambiguous,
+non-unicast or scoped values are discarded. Never add a visitor range or a catch-all for
+convenience.
 
-Trust limpia headers de IP/identidad y sus aliases; el proxy reconstruye un
-`X-Forwarded-For` a partir de la IP seleccionada y no reenvía la cookie de
-sesión. `RemoteAddr` sigue siendo el peer de transporte. Loopback confiable da
-esa autoridad a procesos locales, no autentica a cloudflared como proceso.
+Trust strips IP and identity headers and their aliases; the proxy rebuilds `X-Forwarded-For`
+from the selected IP and does not forward the session cookie. `RemoteAddr` remains the transport
+peer. A trusted loopback grants that authority to local processes; it does not authenticate
+cloudflared as a process.
 
-## Rate limiting y Telegram
+## Rate limiting and Telegram
 
-Sin `rate_limit` no hay buckets configurados. Ejemplo:
+Without `rate_limit` no buckets are configured. Example:
 
 ```json
 "rate_limit": {
@@ -586,31 +563,30 @@ Sin `rate_limit` no hay buckets configurados. Ejemplo:
 }
 ```
 
-Rate son requests/s; keys incluyen host e IP confiable. Identidad se cobra después
-del allow de política. Capacidad de keys acotada; al llenarse se rechazan keys
-nuevas. Respuesta 429 con Retry-After; buckets sobreviven reload si la configuración
-no cambia. No equivale a protección volumétrica de red.
+Rate is requests per second; keys include the host and the trusted IP. Identity is charged
+after the policy allows. Key capacity is bounded; when full, new keys are rejected. A 429 with
+`Retry-After` is returned; buckets survive a reload if the configuration does not change. This is
+not network-volumetric protection.
 
-`notify.telegram` acepta `token` referenciado, `chats_file` privado y opcional
-`api_base` HTTPS (HTTP solo loopback). Empareja desde el host con
-`ozal notify pair -config config.json` y envía `/pair CODE` al bot en el
-chat elegido. El proceso es el único lector de updates; código de uso único y
-expiración. Cola acotada, reintentos limitados, sin bloquear el request path;
-alertas pueden perderse. Aprobar accesos por Telegram sigue siendo otra función.
+`notify.telegram` accepts a referenced `token`, a private `chats_file` and an optional HTTPS
+`api_base` (HTTP only on loopback). Pair from the host with `ozal notify pair -config config.json`
+and send `/pair CODE` to the bot in the chosen chat. The process is the only reader of updates;
+the code is single-use and expires. The queue is bounded, retries are limited, and the request
+path is never blocked; alerts can be lost. Approving access through Telegram is a separate
+function.
 
 ## Pages
 
-`pages.dir` mantiene artefactos y `keep` controla retención. Una ruta `root`
-sirve archivos fijos; `site` usa el deployment activo de Pages. Subir tar.gz de
-archivos regulares de `dist` desde la consola, CLI o CI. Ozal no compila.
+`pages.dir` holds artifacts, and `keep` controls retention. A `root` route serves fixed files;
+`site` uses the active Pages deployment. Upload tar.gz archives of regular `dist` files from the
+console, the CLI or CI. Ozal does not build.
 
-Límites predeterminados del extractor: 100 MiB/archivo, 500 MiB total, 20.000
-entradas y 32 niveles. Rechaza enlaces, traversal, dispositivos y archivos de
-secretos/repositorio. La inspección de contenido secreto también corresponde al
-build; validar nombres no acredita ausencia de secretos en cualquier archivo.
+Default extractor limits: 100 MiB per file, 500 MiB total, 20,000 entries and 32 levels. It rejects
+links, traversal, devices and secret or repository files. Checking for secret content also belongs to
+the build; validating names does not prove the absence of secrets in any file.
 
-Se validan `_headers` y `_redirects` al publicar; nunca se sirven esos archivos.
-Ejemplo de sintaxis, en archivos distintos:
+`_headers` and `_redirects` are validated on publish and are never served. Syntax example, in separate
+files:
 
 ```text
 # _redirects
@@ -621,101 +597,89 @@ Ejemplo de sintaxis, en archivos distintos:
   Cache-Control: public, max-age=31536000, immutable
 ```
 
-Se admiten redirects 301/302/303/307/308; no rewrites 200 ni reglas 404/410.
-No se permite usar reglas de archivos para saltar políticas. Un rollback activa
-contenido retenido y no cambia DB, DNS o backend. CI necesita proyecto y hostname
-dedicado de deploy; [configuración y desconexión](operations/administration.md#github-y-publicacion).
+Redirects 301/302/303/307/308 are supported; 200 rewrites and 404/410 rules are not. File rules
+cannot be used to bypass policies. A rollback activates retained content and does not change the
+database, DNS or backend. CI needs a project and a dedicated deploy hostname;
+see [configuration and disconnection](operations/administration.md#github-y-publicacion).
 
-`POST /_/api/projects/{name}/workflow` requiere la herramienta `publishing`.
-Por defecto devuelve un plan sin escrituras: `directory` (p. ej. `.`), `output`
-(p. ej. `dist`), `hostname` (uno público del proyecto; vacío elige el primero)
-y `page` (página de repositorios de la instalación; default 1). La respuesta
-incluye `plan.content`, `plan.digest`, `plan.branch`, `plan.path` y `expected`
-(digest de configuración). Repite esos mismos campos con `apply: true`,
-`digest: plan.digest` y `expected` para proponer el PR. Un cambio de contenido
-o configuración exige revisar otra vez. Un 201 devuelve `pull_request` con
-`url`, `number` y `branch`; errores de escritura incluyen la rama de propuesta
-para reconciliar en GitHub. Nunca envíes claves o tokens de la App al navegador.
+`POST /_/api/projects/{name}/workflow` requires the `publishing` tool. By default it returns a plan
+with no writes: `directory` (e.g. `.`), `output` (e.g. `dist`), `hostname` (one public hostname of the
+project; empty picks the first) and `page` (installation repository page; default 1). The response
+includes `plan.content`, `plan.digest`, `plan.branch`, `plan.path` and `expected` (the configuration
+digest). Repeat the same fields with `apply: true`, `digest: plan.digest` and `expected` to propose the
+PR. A change in content or configuration requires a new review. A 201 returns `pull_request` with
+`url`, `number` and `branch`; write errors include the proposal branch so it can be reconciled on
+GitHub. Never send App keys or tokens to the browser.
 
-Conectar GitHub desde la consola (herramienta `publishing`, requiere `-db`):
-`POST /_/api/github/manifest` con `origin` (esquema y host de la consola, sin
-ruta) y `organization` opcional devuelve `url` y `manifest` para que el
-navegador los envíe a GitHub; el `state` queda ligado a esa sesión una hora.
-`POST /_/api/github/manifest/conversion` con `code`, `state` y `expected`
-canjea el código una sola vez, escribe `github-app-ID.pem` (0600, sin
-reemplazar) junto a la base y guarda `github` con `installation_id: 0`;
-responde `slug`, `owner` e `install_url`. `POST /_/api/github/installation`
-con `expected` lee de GitHub la única instalación de la App y la registra; no
-acepta un ID del cliente. `GET /_/api/github/repositories` informa además
-`installed`, `connect_available`, `workflow_available` e `install_url` cuando
-falta instalarla. `POST /_/api/github/workflow` previsualiza, sin guardar, el
-workflow de un sitio nuevo (`project`, `repository_id`, `page`, `ref`,
-`workflow`, `hostname`, `directory`, `output`) con el mismo generador que el
-PR posterior. La CSP de la consola permite `form-action https://github.com`
-solo para ese manifest.
+Connecting GitHub from the console (`publishing` tool, requires `-db`): `POST /_/api/github/manifest`
+with `origin` (scheme and host of the console, no path) and optional `organization` returns `url` and
+`manifest` for the browser to send to GitHub; the `state` is bound to that session for one hour.
+`POST /_/api/github/manifest/conversion` with `code`, `state` and `expected` exchanges the code once,
+writes `github-app-ID.pem` (0600, never overwriting) next to the database and saves `github` with
+`installation_id: 0`; it returns `slug`, `owner` and `install_url`. `POST /_/api/github/installation`
+with `expected` reads the App's single installation from GitHub and records it; it does not accept an
+ID from the client. `GET /_/api/github/repositories` also reports `installed`, `connect_available`,
+`workflow_available` and `install_url` when the App still needs installing. `POST /_/api/github/workflow`
+previews, without saving, the workflow of a new site (`project`, `repository_id`, `page`, `ref`,
+`workflow`, `hostname`, `directory`, `output`) with the same generator used for the later PR. The console's
+CSP allows `form-action https://github.com` only for that manifest.
 
-## Administración y auditoría
+## Administration and audit
 
-`/_/healthz` responde sin credencial y no describe rutas. Estado (`/_/status`,
-`/_/api/status`), actividad y APIs requieren autoridad. La consola es privada;
-mutaciones reciben bearer con herramienta o autoridad del socket. El CLI usa
-`admin.socket` por defecto; `-admin` puede elegir un transporte explícito.
-`-db` en comandos de identidad es emergencia offline, no la operación rutinaria.
+`/_/healthz` answers without a credential and does not describe routes. Status (`/_/status`,
+`/_/api/status`), activity and APIs require authority. The console is private; mutations receive a
+bearer with the tool or the socket's authority. The CLI uses `admin.socket` by default; `-admin` can
+choose an explicit transport. `-db` on identity commands is an offline emergency, not routine
+operation.
 
-SIGHUP recarga el estado válido; cambios de listener/identidad/TLS requieren
-reinicio. Un error conserva el snapshot previo. Las ediciones operativas
-comparan revisión/digest para no sobrescribir cambios concurrentes.
+SIGHUP reloads the valid state; listener, identity and TLS changes require a restart. An error keeps
+the previous snapshot. Operational edits compare revision and digest so they do not overwrite concurrent
+changes.
 
-`ozal project trust -project NAME -repository-id ID -owner-id ID -ref REF
--workflow-ref WORKFLOW` muestra el plan de migración del publicador GitHub de un
-proyecto existente. `-apply -backup FILE` conserva primero los metadatos de
-confianza anteriores (archivo nuevo, modo 0600) y confirma el estado activo.
-Requiere `admin.socket` o `-admin unix:/ruta`: TCP y los tokens web se rechazan.
-El endpoint `PUT /_/api/projects/{name}/github-trust` es exclusivo del socket;
-su cuerpo lleva `trust`, `expected` y `apply` (false por defecto). No usa ni
-reemplaza la exploración mediante GitHub App. La variante remota es
-`ozalctl project trust`; consulta [operación remota](operations/administration.md#operacion-remota-con-ozalctl).
+`ozal project trust -project NAME -repository-id ID -owner-id ID -ref REF -workflow-ref WORKFLOW` shows
+the migration plan of an existing project's GitHub publisher. `-apply -backup FILE` first keeps the
+previous trust metadata (a new file, mode 0600) and confirms the active state. It requires `admin.socket`
+or `-admin unix:/path`: TCP and web tokens are rejected. The endpoint `PUT /_/api/projects/{name}/github-trust`
+is socket-only; its body carries `trust`, `expected` and `apply` (false by default). It neither uses nor
+replaces GitHub App exploration. The remote variant is `ozalctl project trust`; see
+[remote operation](operations/administration.md#operacion-remota-con-ozalctl).
 
-`ozal project rename -project NAME -to NUEVO [-apply]` renombra un proyecto y su
-sitio juntos. El plan nombra el sitio anterior, el nuevo y las direcciones que se
-mueven; con `-apply` el edge copia primero la versión en vivo al sitio nuevo
-(pasa por la misma validación que una subida) y después cambia proyecto, sitio y
-rutas en un solo cambio con digest revisado, así ninguna dirección queda sin
-contenido. El nombre nuevo no puede estar usado por otro proyecto ni por una
-ruta. Las versiones del sitio anterior quedan retenidas: renombrar al revés lo
-deshace. Después, el CI debe publicar con `DEPLOY_PROJECT` igual al nombre nuevo.
-Es exclusivo del socket (`POST /_/api/projects/{name}/rename` con `to`,
-`expected` y `apply`); la variante remota es `ozalctl project rename`.
+`ozal project rename -project NAME -to NEW_NAME [-apply]` renames a project and its site together. The plan
+names the previous site, the new one and the addresses that move; with `-apply`, the edge first copies the
+live version to the new site (going through the same validation as an upload), then changes project, site
+and routes in a single change with the reviewed digest, so no address is left without content. The new name
+cannot be used by another project or by a route. The previous site's versions are retained: renaming back
+undoes it. Afterwards, CI must publish with `DEPLOY_PROJECT` equal to the new name. It is socket-only
+(`POST /_/api/projects/{name}/rename` with `to`, `expected` and `apply`); the remote variant is
+`ozalctl project rename`.
 
-`audit` tiene `dir`, `include` (`access`, `admin`), `admin_mode` y
-`max_segment_bytes`. Para `access`, privadas default required y públicas
-best_effort; `audit_mode` de ruta permite elección explícita. Para admin,
-required es el default cuando se incluye la familia. El intent durable no es
-prueba de commit. [Contrato de auditoría](engineering.md#auditoria).
+`audit` has `dir`, `include` (`access`, `admin`), `admin_mode` and `max_segment_bytes`. For `access`,
+private routes default to required and public ones to best_effort; a route's `audit_mode` allows an
+explicit choice. For admin, required is the default when the family is included. A durable intent is not
+proof of commit. [Audit contract](engineering.md#auditoria).
 
 ```sh
 ozal audit verify -config config.json
 ozal audit keygen -h
 ozal audit checkpoint -h
-ozal audit repair -dir /ruta/audit  # plan; -apply después de revisar
+ozal audit repair -dir /path/audit  # plan; -apply after review
 ```
 
-Detén el writer para verificar/checkpoint/repair. El journal no se repara al
-arrancar y no ofrece retención/pruning completos. Copia checkpoints y clave
-pública fijada a un lugar independiente; la herramienta no demuestra esa custodia.
+Stop the writer before verify, checkpoint or repair. The journal is not repaired at startup and offers
+no complete retention or pruning. Copy checkpoints and the pinned public key to an independent location;
+the tool does not prove that custody.
 
-## Migraciones y herramientas de desarrollo
+## Migrations and development tools
 
-Usa el binario de la versión correcta con DB migrada; no se aplican migraciones
-silenciosamente al iniciar:
+Use the binary of the right version with a migrated database; migrations are not applied silently at
+startup:
 
 ```sh
 ozal migrate -db ./state.db status
 ozal migrate up -db ./state.db -backup
-scripts/new-migration.sh nombre
+scripts/new-migration.sh name
 ```
 
-La carpeta padre debe existir. Migraciones aplicadas son inmutables, numeración
-continua y runner dueño de transacciones: no añadir BEGIN/COMMIT al SQL. No
-limitar la lista de tablas a la de una release antigua; el schema y sus archivos
-embebidos son la autoridad. [Verificación](engineering.md#verificacion).
+The parent folder must exist. Applied migrations are immutable, numbering is continuous, and the runner
+owns transactions: do not add BEGIN/COMMIT to the SQL. Do not limit the table list to an older release's;
+the schema and its embedded files are the authority. [Verification](engineering.md#verificacion).

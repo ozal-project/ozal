@@ -63,11 +63,12 @@ func (p Passkey) Synced() bool { return p.Credential.Flags.BackupEligible }
 // adapter itself, outside the request path.
 type Directory interface {
 	// InvitedUser returns the user a valid invitation belongs to, without
-	// using the invitation.
-	InvitedUser(ctx context.Context, tokenHash []byte) (User, error)
+	// using the invitation. Recovery is true only for a recovery link.
+	InvitedUser(ctx context.Context, tokenHash []byte) (User, bool, error)
 	// Enrol uses the invitation and stores the credential in one
-	// transaction, so a second enrolment with the same link fails.
-	Enrol(ctx context.Context, tokenHash []byte, userID string, credential webauthn.Credential) error
+	// transaction, so a second enrolment with the same link fails. It returns
+	// whether recovery committed; errors must never report recovery success.
+	Enrol(ctx context.Context, tokenHash []byte, userID string, credential webauthn.Credential) (recovered bool, err error)
 	// UserByHandle returns an enabled user and their active credentials.
 	UserByHandle(ctx context.Context, handle []byte) (User, []webauthn.Credential, error)
 	// ActiveUser returns an enabled user by ID.

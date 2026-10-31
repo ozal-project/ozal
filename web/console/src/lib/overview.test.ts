@@ -173,3 +173,13 @@ test("the access counts say which events they cover", () => {
   assert.equal(accessScope("lost", whole, null, 0), "The event stream is unavailable.");
   assert.equal(accessScope("locked", whole, null, 0), "Sign in to see access decisions.");
 });
+
+
+test("recovery names the person and the credentials replaced, never the login host", () => {
+  const people = new Map([["sb:850d", "ana@acme.dev"]]);
+  const [named] = changes([event("user.recovered", { host: "auth.example.com", actor: "sb:850d", code: "device_bound" })], people);
+  assert.equal(named.title, "ana@acme.dev recovered their account");
+  assert.match(named.detail, /Previous passkeys were replaced, previous sessions ended and other recovery links retired/);
+  const [unknown] = changes([event("user.recovered", { actor: "sb:other" })], people);
+  assert.equal(unknown.title, "Someone recovered their account");
+});

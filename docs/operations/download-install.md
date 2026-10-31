@@ -1,117 +1,123 @@
-# Descargar, instalar y actualizar
+# Download, install and update
 
-`REL-012`, implementación local 26/10/2026. La distribución pública sigue siendo
-una acción del mantenedor: este trabajo no cambia la visibilidad del repositorio
-ni publica una release. Un enlace público al sitio del proyecto no garantiza
-acceso a los assets de un repositorio privado.
+This guide covers verified installation and the Linux service. The public
+release channel is controlled by the maintainer: a public site does not
+guarantee access to the assets of a private repository.
 
-## Elegir una versión
+<a id="elegir-una-version"></a>
 
-GoReleaser prepara Linux, macOS y Windows, en amd64 y arm64, con checksums SHA-256
-y SBOM. Elige SO/arquitectura y lee las notas de **esa versión**. La alpha.1
-histórica no incluye las funciones posteriores de main. Una compilación local
-con cambios sin commit es candidata, no una release reproducible publicada.
+## Choose a version
 
-Los ejemplos `ozal_VERSION_*` corresponden a los paquetes del nombre nuevo;
-no afirman que ya exista una release Ozal publicada. Los tags anteriores
-conservan sus archivos y binarios `switchboard`: usa las instrucciones y el
-instalador de ese tag. Para actualizar una instalación anterior, sigue la
-[migración a Ozal](administration.md#migrar-de-switchboard-a-ozal).
+GoReleaser builds Linux, macOS and Windows artifacts for amd64 and arm64, with
+SHA-256 checksums and an SBOM. Pick your operating system and architecture, and
+read the notes for **that version**. The historical alpha.1 release does not
+include features added later to `main`. A local build with uncommitted changes
+is a candidate, not a published reproducible release.
 
-Descarga el archivo desde el canal autorizado de la release y obtén su checksum
-por una fuente confiable. Verificar un checksum contra un valor que vino de
-un origen comprometido no demuestra autenticidad; no se afirma firma de release.
+The `ozal_VERSION_*` examples name the Ozal packages; they do not claim that an
+Ozal release is already published. Earlier tags keep their `switchboard` files
+and binaries: use the instructions and installer of that tag. To update an
+existing installation, follow the [migration to Ozal](administration.md#migrar-de-switchboard-a-ozal).
 
-## Linux: instalar un binario nuevo sin privilegios
+Download the archive from the authorized release channel and obtain its checksum
+from a trusted source. A checksum that came from a compromised source does not
+prove authenticity, and this guide does not claim a release signature.
 
-La primera descarga se verifica antes de ejecutar código de la release. En un
-directorio propio nuevo, verifica el archivo completo y extrae solamente el
-binario regular `ozal`; inspecciona el listado si el canal no es confiable.
-No ejecutes un instalador extraído antes de verificar el checksum del archivo.
+## Linux: install a new binary without privileges
+
+Verify the download before running any release code. In a new directory, verify
+the full archive and extract only the regular `ozal` binary. If the channel is
+not trusted, inspect the listing first. Never run an extracted installer before
+checking the archive's checksum.
 
 ```sh
-sha256sum ./ozal_VERSION_linux_amd64.tar.gz  # comparar con SHA256_ESPERADO
+sha256sum ./ozal_VERSION_linux_amd64.tar.gz  # compare with EXPECTED_SHA256
 mkdir ./ozal-release
-# Después de verificar el archivo y su miembro regular:
+# After verifying the archive and its regular member:
 tar -xzf ./ozal_VERSION_linux_amd64.tar.gz -C ./ozal-release ozal
 ./ozal-release/ozal version
 ```
 
-Con un binario **actual ya confiable**, puedes instalar otra descarga local sin
-Bash, tar ni sha256sum en el flujo de instalación:
+With a **trusted, current** binary you can install another local download
+without Bash, tar or sha256sum in the install flow:
 
 ```sh
 mkdir -p "$HOME/.local/bin"
 ./ozal-release/ozal install binary -archive ./ozal_VERSION_linux_amd64.tar.gz \
-  -sha256 SHA256_ESPERADO -destination "$HOME/.local/bin/ozal"  # plan
-# Agregar -apply para verificar una copia privada e instalar.
+  -sha256 EXPECTED_SHA256 -destination "$HOME/.local/bin/ozal"  # plan
+# Add -apply to verify a private copy and install it.
 ```
 
-El comando Go exige checksum confiable, un destino nuevo y exactamente un
-miembro regular `ozal`; rechaza duplicados, enlaces, archivo corrupto y límites
-excedidos. No sobrescribe ni ejecuta el binario extraído. Para un servicio
-existente usa [upgrade](administration.md#servicio-y-propiedad-del-estado).
-`scripts/release/install.sh` sólo traduce argumentos; necesita `OZAL_BIN` con
-la ruta al binario confiable actual. No sirve como raíz de confianza.
+The Go command requires a trusted checksum, a new destination and exactly one
+regular `ozal` member. It rejects duplicates, links, corrupt archives and
+exceeded limits. It neither overwrites nor runs the extracted binary. For an
+existing service, use [upgrade](administration.md#servicio-y-propiedad-del-estado).
+`scripts/release/install.sh` only translates arguments; it needs `OZAL_BIN`
+pointing to the current trusted binary. It is not a root of trust.
 
-## Linux: instalar el servicio de una vez
+## Linux: install the service in one step
 
-`ozal install service` hace la instalación documentada en
-[systemd](administration.md#servicio-y-propiedad-del-estado) en un solo paso: crea la cuenta `ozal`, instala el
-binario y la config como `root`, genera un token de administración aleatorio
-(legible solo por root y la cuenta del servicio), migra el estado, inicializa
-el archivo operativo, habilita el servicio y espera a que la consola responda.
-Todo queda en loopback; no toca DNS, firewall ni TLS público, y se niega a
-sobrescribir una instalación existente (para eso está `upgrade`).
+`ozal install service` performs the installation described in the
+[systemd guide](administration.md#servicio-y-propiedad-del-estado) in one step:
+it creates the `ozal` account, installs the binary and configuration as `root`,
+generates a random administration token (readable only by root and the service
+account), migrates the state, initializes the operational file, enables the
+service and waits for the console to respond. Everything stays on loopback; it
+does not touch DNS, the firewall or public TLS, and it refuses to overwrite an
+existing installation (use `upgrade` for that).
 
 ```sh
-sudo ./ozal install service -binary ./ozal   # leer el plan
+sudo ./ozal install service -binary ./ozal   # review the plan
 sudo ./ozal install service -binary ./ozal -target http://127.0.0.1:3000 -apply
-# o, con una descarga y su checksum de un canal confiable:
-sudo ./ozal install service -archive ./ozal_VERSION_linux_amd64.tar.gz -sha256 SHA256_ESPERADO -apply
+# or, with a download and its checksum from a trusted channel:
+sudo ./ozal install service -archive ./ozal_VERSION_linux_amd64.tar.gz -sha256 EXPECTED_SHA256 -apply
 ```
 
-El instalador deja `/usr/local/bin/ozal` como enlace al binario instalado:
-`ozal` se ejecuta desde cualquier directorio y `ozal upgrade`
-sigue actualizándolo. Los comandos de administración usan
-`/etc/ozal/config.json` cuando no hay un `config.json` en el directorio actual.
+The installer creates `/usr/local/bin/ozal` as a link to the installed binary,
+so `ozal` runs from any directory and `ozal upgrade` keeps updating it.
+Administration commands use `/etc/ozal/config.json` when there is no
+`config.json` in the current directory.
 
-Al terminar imprime los pasos siguientes: túnel SSH a la consola, enlace de un
-solo uso (`sudo ozal console enrol`, que crea al primer administrador con su passkey) y alta de la primera aplicación en la consola.
-`scripts/release/test-install-service.sh` lo prueba con el binario real en un
-directorio de staging, sin root. El comando nativo equivalente es
-`ozal install service -binary ./ozal -root /tmp/ozal-stage -apply`: no crea
-cuentas ni llama a systemd. Una instalación real requiere root y systemd; no se
-ha ejecutado como parte de la aceptación local. Si falla después de crear
-archivos, conserva el estado para inspección y no permite sobrescribirlo.
+When it finishes, it prints the next steps: an SSH tunnel to the console, a
+one-time link (`sudo ozal console enrol`, which creates the first administrator
+with a passkey), and adding the first application in the console.
+`scripts/release/test-install-service.sh` tests it with the real binary in a
+staging directory, without root. The native equivalent is
+`ozal install service -binary ./ozal -root /tmp/ozal-stage -apply`: it creates
+no accounts and does not call systemd. A real installation requires root and
+systemd. If it fails after creating files, keep the state for inspection and do
+not allow it to be overwritten.
 
-## macOS y Windows
+## macOS and Windows
 
-En macOS, verifica el tar.gz con `shasum -a 256`, extrae el binario de la release
-en un directorio propio y comprueba `ozal version`. La instalación del servicio se
-niega a ejecutarse en otros sistemas. No hay instalador launchd aprobado.
+On macOS, verify the tar.gz with `shasum -a 256`, extract the release binary
+into its own directory and check `ozal version`. The service installer refuses
+to run on other systems, and there is no approved launchd installer.
 
-En Windows, verifica el ZIP con `Get-FileHash -Algorithm SHA256`, usa
-`Expand-Archive` en un destino nuevo y ejecuta `ozal.exe version`.
-Los comandos de configuración/validación y el proxy son portables; la gestión
-systemd y el socket Unix administrativo tienen un alcance distinto.
+On Windows, verify the ZIP with `Get-FileHash -Algorithm SHA256`, use
+`Expand-Archive` into a new destination and run `ozal.exe version`. Configuration,
+validation and the proxy are portable. Systemd management and the administrative
+Unix socket have a different scope there.
 
-## Instalar un servicio y conservar el estado
+## Install a service and keep the state
 
-La [guía systemd](administration.md#servicio-y-propiedad-del-estado) define binario/config root-owned, usuario de servicio,
-estado privado y socket administrativo. Decide el dominio permanente, HTTPS,
-proveedor o passkeys, transporte al origen y backup antes de mover un sitio real.
-Sigue el recorrido de [primera aplicación](first-application.md).
+The [systemd guide](administration.md#servicio-y-propiedad-del-estado) defines
+the root-owned binary and configuration, the service account, private state and
+the administrative socket. Decide the permanent domain, HTTPS, provider or
+passkeys, origin transport and backups before moving a real site. Then follow
+the [first application guide](first-application.md).
 
-`upgrade` recibe un hash que el operador ya verificó; valida, migra con backup,
-activa y comprueba el admin, con reversión si falla. No descubre ni autentica
-un canal por sí mismo. La migración 012 exige nuevo login OIDC; conserva datos
-y credenciales nativas. Una sesión antigua sin método también requiere login. Prueba el restore en un destino descartable.
+`upgrade` takes a hash that the operator has already verified. It validates,
+migrates with a backup, activates the new binary and checks the admin API, and
+rolls back on failure. It does not discover or authenticate a channel by itself.
+Migration 012 requires a new OIDC login: it keeps data and native credentials.
+An old session without a recorded method also requires a login. Rehearse the
+restore in a disposable location.
 
-## Cuándo está cerrado el canal
+## When the channel is ready
 
-Además de pruebas del instalador y paquetes locales, una persona sin acceso al
-repo debe poder obtener la versión anunciada, verificarla e instalarla siguiendo
-esta guía. Mientras el canal permanezca privado o no se haga ese ensayo, `REL-012`
-conserva esa aceptación pendiente. No se cambia DNS, una release o la visibilidad
-sin la autorización correspondiente.
+Beyond installer tests and local packages, a person without repository access
+must be able to obtain the announced version, verify it and install it by
+following this guide. Until the channel is private or that rehearsal is done,
+this installation path is not accepted. Do not change DNS, a release or the
+repository visibility without the corresponding authorization.

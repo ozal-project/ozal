@@ -1,100 +1,100 @@
-# Seguridad y límites de confianza
+# Security and trust boundaries
 
-Ozal controla el acceso en el gateway; cada aplicación conserva su
-autorización interna. Esta guía describe los límites del diseño y las
-condiciones de despliegue. No es una certificación ASVS ni una auditoría
-completa de una instalación.
+Ozal enforces access at the gateway; each application keeps its own internal
+authorization. This guide describes the design limits and the deployment
+conditions. It is not an ASVS certification or a complete audit of an installation.
 
-## Reglas para desplegar
+## Deployment rules
 
-- La consola y la API administrativa permanecen en loopback/socket privado.
-  Accede por un transporte privado; no las publiques como upstream de una ruta.
-- Mantén apps privadas en loopback o red controlada: una dirección alternativa
-  que evite el gateway puede evitar también sus políticas.
-- Usa TLS público válido; no desactives verificación para resolver problemas
-  de certificado, pruebas con staging o conexiones al origen.
-- Conserva claves privadas en su host. Configura secretos por referencias
-  `file:`/`env:` y permisos mínimos. No los pegues en chats, URLs ni repositorios.
-- Distingue visitantes, publicadores CI, conectores y administradores. Una
-  identidad válida en un ámbito no concede autoridad en los demás.
-- Respalda y ensaya recuperación de claves, configuración y datos; una copia
-  antigua puede reactivar autorizaciones revocadas. Sigue
-  [recuperación](operations/administration.md#backup-y-recuperacion).
+- The console and the administrative API stay on loopback or a private socket.
+  Reach them through a private transport; never publish them as the upstream of a route.
+- Keep private applications on loopback or a controlled network: an alternative
+  address that bypasses the gateway can also bypass its policies.
+- Use a valid public TLS certificate; do not disable verification to work
+  around certificate problems, staging tests or connections to the origin.
+- Keep private keys on their host. Configure secrets through `file:`/`env:`
+  references and minimal permissions. Never paste them into chats, URLs or repositories.
+- Distinguish visitors, CI publishers, connectors and administrators. A valid
+  identity in one scope grants no authority in the others.
+- Back up and rehearse recovery of keys, configuration and data. An old copy can
+  reactivate revoked authorizations. Follow [recovery](operations/administration.md#backup-y-recuperacion).
 
-## Fronteras del sistema
+## System boundaries
 
-| Frontera | Control | Condición externa |
+| Boundary | Control | External condition |
 |---|---|---|
-| Cliente → edge | Hosts configurados, headers de identidad/IP saneados, política y límites | DNS, firewall, capacidad y protección de red |
-| Navegador → login | Validación OIDC o WebAuthn, estado/challenges, sesiones y revocación | IdP configurado correctamente, dominio/RP y autenticadores |
-| Edge → aplicación | Identidad generada después de autorizar; cookie de sesión retirada | La app solo confía en el gateway autorizado y conserva sus permisos |
-| Edge → conector | mTLS, huella enrolada, recursos fijos y revocación | Distribución de CA, claves locales y transporte permitido |
-| Operador → administración | Host/socket o sesión con herramienta requerida | Permisos Unix, seguridad del navegador y acceso al host |
-| CI → publicación | Handler dedicado, repo/ref/workflow/audiencia/evento y replay | Proteger el workflow, las credenciales y los artefactos de build |
-| Proceso → estado | Validación, migraciones, snapshots y permisos privados | Backups, disco, ACL y host confiables |
-| Auditoría → evidencia externa | Cadena y checkpoints firmados | Copia y clave pública fijadas fuera del control del host |
+| Client → edge | Configured hosts, sanitized identity/IP headers, policy and limits | DNS, firewall, capacity and network protection |
+| Browser → login | OIDC or WebAuthn validation, state/challenges, sessions and revocation | Correctly configured IdP, RP/domain and authenticators |
+| Edge → application | Identity generated after authorization; session cookie removed | The app trusts only the authorized gateway and keeps its own permissions |
+| Edge → connector | mTLS, enrolled fingerprint, fixed resources and revocation | CA distribution, local keys and permitted transport |
+| Operator → administration | Host/socket, or a session with the required tool | Unix permissions, browser security and host access |
+| CI → publishing | Dedicated handler, repo/ref/workflow/audience/event and replay protection | Protecting the workflow, its credentials and build artifacts |
+| Process → state | Validation, migrations, snapshots and private permissions | Trusted backups, disk, ACLs and host |
+| Audit → external evidence | Signed chain and checkpoints | Copy and public key pinned outside host control |
 
-El cliente no puede crear identidad confiable con `X-Auth-Request-*`,
-`X-Ozal-Visitor-*` (ni la grafía anterior `X-Switchboard-Visitor-*`) ni variantes con guiones bajos. El túnel transporta
-afirmaciones autenticadas por mTLS; no son JWT verificables por cualquier app.
-Conservar un login propio de la app es coexistencia, no SSO automático.
-Ver [identidad](architecture/identity-login.md) y
-[sesiones por host](architecture/host-sessions.md).
+A client cannot create a trusted identity with `X-Auth-Request-*`,
+`X-Ozal-Visitor-*` (nor the former `X-Switchboard-Visitor-*`), or variants with
+underscores. The tunnel carries assertions authenticated by mTLS; they are not
+JWTs that any app can verify. Keeping an application's own login is coexistence,
+not automatic SSO.
+See [identity](architecture/identity-login.md) and
+[host sessions](architecture/host-sessions.md).
 
 <a id="entrada-directa-o-detras-de-un-proxy"></a>
+<a id="direct-ingress-or-behind-a-proxy"></a>
 
-## Entrada directa o detrás de un proxy
+## Direct ingress or behind a proxy
 
-Son perfiles de confianza distintos. En entrada directa, la IP procede del
-peer TCP. Detrás de Cloudflare, `trusted_proxies` permite `CF-Connecting-IP`
-solo desde peers configurados y con un valor no ambiguo. No confiar en rangos
-de visitantes ni en una cadena arbitraria de `X-Forwarded-For`.
+These are different trust profiles. With direct ingress, the IP comes from the
+TCP peer. Behind Cloudflare, `trusted_proxies` accepts `CF-Connecting-IP` only
+from configured peers and only when the value is unambiguous. Do not trust
+visitor ranges or an arbitrary `X-Forwarded-For` chain.
 
-La autenticación del origen con `tls.origin_client_ca_file` exige el certificado
-cliente de la ruta de proxy elegida. Limitar por IP no identifica por sí solo
-una zona concreta. Comprueba origen directo por IPv4/IPv6 y nombres alternativos.
-Al migrar a entrada directa, prepara un perfil explícito con firewall, TLS e IP
-propios; la caída del proxy nunca debe abrir el origen automáticamente.
+Origin authentication with `tls.origin_client_ca_file` requires the client
+certificate of the chosen proxy path. Limiting by IP does not by itself identify
+a specific zone. Check direct origin access over IPv4/IPv6 and alternative names.
+When migrating to direct ingress, prepare an explicit profile with its own
+firewall, TLS and IP; the proxy failing must never open the origin automatically.
 
-DNS y HTTP-01 no dependen intrínsecamente de Cloudflare. La automatización DNS-01
-actual usa su API. El túnel público genérico y la independencia completa tienen
-aceptación separada; un test local no las demuestra.
+DNS and HTTP-01 do not depend intrinsically on Cloudflare. The current DNS-01
+automation uses its API. The generic public tunnel and full provider independence
+have separate acceptance; a local test does not demonstrate them.
 
 <a id="auditoria-y-privacidad"></a>
+<a id="audit-and-privacy"></a>
 
-## Auditoría y privacidad
+## Audit and privacy
 
-Activity es un feed acotado en memoria y puede perder eventos; no sustituye
-el journal durable. Las rutas con auditoría requerida esperan persistencia
-antes de reenviar; un fallo debe negar la solicitud, no rebajar el modo.
-Un intent administrativo demuestra un intento autorizado, no un commit de
-la operación. Ver [contrato técnico](engineering.md#auditoria).
+Activity is a bounded in-memory feed and can lose events; it does not replace the
+durable journal. Routes with required audit wait for persistence before forwarding;
+a failure must deny the request, not downgrade the mode. An administrative intent
+shows an authorized attempt, not a commit of the operation.
+See the [technical contract](engineering.md#auditoria).
 
-Una cadena local detecta inconsistencias, pero quien controla todos los archivos
-puede reescribirla. Los checkpoints solo ayudan si sobreviven fuera de esa
-autoridad junto con la clave pública fijada. El verificador no puede demostrar
-por sí mismo dónde se conservó la copia. No se promete transparencia frente a
-root ni un log público independiente.
+A local chain detects inconsistencies, but whoever controls all the files can
+rewrite it. Checkpoints only help if they survive outside that authority, together
+with the pinned public key. The verifier cannot prove where the copy was kept.
+There is no promise of transparency against root or an independent public log.
 
-Email, IP, sujeto y decisiones pueden ser datos personales. Limita lectores,
-retención y copias; no registres cookies, tokens, cuerpos, claves ni errores
-crudos de proveedores. TLS y hash-chain no cifran los archivos en reposo.
+Email, IP, subject and decisions can be personal data. Limit readers, retention
+and copies. Do not log cookies, tokens, bodies, keys or raw provider errors.
+TLS and the hash chain do not encrypt files at rest.
 
 <a id="que-hay-que-comprobar-en-cada-instalacion"></a>
+<a id="what-to-verify-on-each-installation"></a>
 
-## Qué hay que comprobar en cada instalación
+## What to verify on each installation
 
-Prueba una persona permitida y otra denegada, headers falsificados, acceso
-directo al origen, revocación y reconexión, reinicio, renovación TLS y restore
-en host limpio. Un healthcheck o una prueba de integridad SQLite son parciales.
-La compatibilidad con navegadores, el proveedor real y la capacidad bajo carga
-necesitan sus propios ensayos.
+Test an allowed person and a denied one, forged headers, direct access to the
+origin, revocation and reconnection, restart, TLS renewal and restore on a clean
+host. A health check or a SQLite integrity check is partial. Browser compatibility,
+the real provider and capacity under load need their own rehearsals.
 
-Un VPS no equivale a una CDN global ni absorbe ataques que saturan su enlace.
-El host y root siguen siendo autoridad. No se prometen alta disponibilidad,
-aislamiento entre clientes independientes, protección DDoS volumétrica ni
-conformidad ASVS por la existencia de tests unitarios.
+A VPS is not a global CDN and does not absorb attacks that saturate its link.
+The host and root remain the authority. High availability, isolation between
+independent clients, volumetric DDoS protection and ASVS conformance are not
+promised, and unit tests do not establish them.
 
-Para desarrollo y reproducciones usa fixtures, credenciales ficticias y estado
-descartable. No pruebes abuso o disponibilidad contra producción. Los pendientes
-de seguridad y aceptación permanecen en [TO_IMPLEMENT.md](TO_IMPLEMENT.md).
+For development and reproductions, use fixtures, fictitious credentials and
+disposable state. Do not test abuse or availability against production. Pending
+security and acceptance items remain in [TO_IMPLEMENT.md](TO_IMPLEMENT.md).

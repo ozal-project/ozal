@@ -3,7 +3,7 @@
 Static site for `ozal.dev` (`ozal.octaviosantacruz.com` and the old `switchboard.`
 hostname stay as aliases), built with Astro and served by Ozal Pages. Its tokens (warm graphite, Marfil
 ivory and camel, Geist) are shared with the
-console (`UI-005`).
+console.
 
 Publishing is CI: a push to `main` that touches `site/` or
 `scripts/pages/` runs `.github/workflows/site.yml`, which builds, refuses secrets
@@ -21,7 +21,7 @@ npm run build   # astro check + static build into dist/
 
 Describe capabilities only at the level supported by the current alpha. Keep
 automated test coverage, observed single-host operation, experimental code and
-roadmap items distinct (`REL-008`); a passing build alone is not deployment
+roadmap items distinct; a passing build alone is not deployment
 evidence.
 
 The "Ask it a question" section runs `internal/auth` in the browser: `scripts/build-site-engine.sh`

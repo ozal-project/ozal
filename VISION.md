@@ -70,7 +70,7 @@ with cryptography instead of process.
 Feature-count races are a losing game; the thesis above is what makes the
 project worth existing.
 
-## Product and deployment direction — updated 2026-10-20
+## Product and deployment direction
 
 Initial offering: publish private applications on infrastructure the operator
 controls, with identity, access policies and owned tunnels, while allowing a
@@ -91,8 +91,8 @@ supersedes the 18/10 requirement to retain that hosting; migration and the
 operator's cutover remain pending, with no DNS or deployment action implied.
 The [positioning and portability contract](docs/engineering.md#publicacion-autonoma)
 and [coexistence decision](docs/security.md#entrada-directa-o-detras-de-un-proxy)
-define boundaries, demonstration and acceptance. Active work stays in
-EDGE-006/EDGE-001, the existing PAGES-* tasks and workspace CROSS-006.
+define boundaries, demonstration and acceptance. Active work is tracked in the
+maintainer's internal trackers.
 
 ## What exists today
 

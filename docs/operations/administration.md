@@ -1,169 +1,174 @@
-# Administrar una instalación
+# Administer an installation
 
-Para instalar o usar la consola, sigue [instalación](download-install.md) y
-[primera aplicación](first-application.md). Aquí se reúnen operación, backups,
-conectores y publicación. Las funciones disponibles dependen de la versión
-instalada; los pendientes de desarrollo están en [el tracker](../TO_IMPLEMENT.md).
+To install or use the console, follow [installation](download-install.md) and
+[first application](first-application.md). This guide covers operation, backups,
+connectors and publishing. Available features depend on the installed version.
 
-## Servicio y propiedad del estado
+<a id="servicio-y-propiedad-del-estado"></a>
 
-El servicio Linux se ejecuta con una cuenta propia. El binario y la
-configuración del host pertenecen a root; el estado al servicio.
+## Service and state ownership
 
-| Recurso | Ruta recomendada | Propiedad/permisos |
+The Linux service runs under its own account. The binary and host configuration
+belong to root; the state belongs to the service account.
+
+| Resource | Recommended path | Owner / permissions |
 |---|---|---|
-| Binario y versiones anteriores | `/usr/local/lib/ozal/` | root, 755 |
-| Configuración del host | `/etc/ozal/config.json` | root, 644 si solo contiene referencias |
-| Archivos de credenciales | `/etc/ozal/*.token` | root:ozal, 640 |
-| SQLite, Pages, runtime y ACME | `/var/lib/ozal/` | ozal, directorio 700 |
-| Socket administrativo | `/run/ozal/admin.sock` | ozal, 600 |
+| Binary and previous versions | `/usr/local/lib/ozal/` | root, 755 |
+| Host configuration | `/etc/ozal/config.json` | root, 644 if it only contains references |
+| Credential files | `/etc/ozal/*.token` | root:ozal, 640 |
+| SQLite, Pages, runtime and ACME | `/var/lib/ozal/` | ozal, directory 700 |
+| Administrative socket | `/run/ozal/admin.sock` | ozal, 600 |
 
-El [instalador](download-install.md#linux-instalar-el-servicio-de-una-vez)
-prepara el servicio. La [unidad de ejemplo](ozal.service) documenta
-sus permisos. No hagas que un usuario sin autoridad pueda reemplazar binario,
-configuración o estado para conseguir acceso al reiniciar.
+The [installer](download-install.md#linux-install-the-service-in-one-step)
+prepares the service. The [example unit](ozal.service) documents its
+permissions. Never let an unprivileged user replace the binary, configuration or
+state, because that would grant access at the next restart.
 
-Con `runtime_file`, la consola guarda rutas, proyectos y la referencia de la
-GitHub App en un archivo del servicio; listeners, TLS y autoridad permanecen
-en la configuración del host. Inicialízalo una vez antes de arrancar:
+With `runtime_file`, the console stores routes, projects and the GitHub App
+reference in a service file. Listeners, TLS and authority stay in the host
+configuration. Initialize it once before starting:
 
 ```sh
 sudo -u ozal /usr/local/lib/ozal/ozal runtime init \
   -config /etc/ozal/config.json
 ```
 
-El destino debe ser nuevo. Después, un runtime ausente o inválido provoca
-rechazo; no se recuperan silenciosamente políticas viejas del archivo raíz.
-Inclúyelo en backups. Una recarga fallida conserva el snapshot válido anterior;
-`config_sha256` en el estado autenticado identifica la configuración efectiva.
-Modificar listeners, identidad del túnel o `runtime_file` requiere reinicio.
+The destination must be new. A missing or invalid runtime is then rejected; old
+policies from the root file are not silently recovered. Include it in backups.
+A failed reload keeps the previous valid snapshot. `config_sha256` in the
+authenticated state identifies the effective configuration. Changing listeners,
+tunnel identity or `runtime_file` requires a restart.
 
-## Migrar de Switchboard a Ozal
+<a id="migrar-de-switchboard-a-ozal"></a>
 
-El nombre del producto y de los comandos pasa a ser **Ozal** (`ozal` y
-`ozalctl`). Una instalación existente conserva su cuenta, unidad, configuración,
-socket, SQLite, runtime, CA y estado TLS. No ejecutes el instalador de una
-instalación nueva sobre ella ni muevas el estado para cambiar la marca.
-El instalador rechaza el layout anterior para evitar crear dos servicios.
+## Migrate from Switchboard to Ozal
 
-Usa el procedimiento de actualización de la sección siguiente con el binario
-Ozal y los valores **reales anteriores** de `-unit`, `-binary`, `-config`,
-`-db` y `-user`. Esos flags no dependen del nombre del producto. Conserva los
-backups y la unidad anterior para revertir; cambiar sus nombres es otra operación.
-Los agentes de renovación del piloto conservan sus rutas y unidades anteriores.
+The product and command names are now **Ozal** (`ozal` and `ozalctl`). An
+existing installation keeps its account, unit, configuration, socket, SQLite
+database, runtime, CA and TLS state. Do not run the new-install installer over it,
+and do not move state just to change the name. The installer rejects the old
+layout to avoid creating two services.
 
-`OZAL_CONFIG` sustituye a `SWITCHBOARD_CONFIG` y `OZAL_ADMIN_TOKEN` a
-`SWITCHBOARD_ADMIN_TOKEN`; las variables anteriores siguen aceptadas como
-compatibilidad. El token nuevo, si está definido incluso vacío, tiene prioridad.
-Sin `-config`, se busca la variable nueva, la anterior, `./config.json`,
-`/etc/ozal/config.json` y por último `/etc/switchboard/config.json`.
-`migrate` usa `ozal.db` por defecto, pero reutiliza `switchboard.db` si existe
-y el nuevo no; en instalaciones usa siempre el `-db` real.
+Use the upgrade procedure in the next section with the Ozal binary and the
+**actual previous values** of `-unit`, `-binary`, `-config`, `-db` and `-user`.
+These flags do not depend on the product name. Keep the backups and the previous
+unit so you can roll back; renaming them is a separate operation. Renewal agents
+installed before the rename keep their original paths and units.
 
-La consola prefiere **`ozal.localhost`**. Las passkeys existentes siguen
-funcionando en `switchboard.localhost` o `localhost`, con el RP ID original.
-Entra por ese nombre, genera un enlace para agregar otro navegador y ábrelo
-en `ozal.localhost` para registrar una passkey nueva para la misma cuenta.
-El cambio de nombre no permite usar una credencial de un RP ID en otro.
-Las sesiones de consola en memoria terminan al reiniciar, como antes.
+`OZAL_CONFIG` replaces `SWITCHBOARD_CONFIG`, and `OZAL_ADMIN_TOKEN` replaces
+`SWITCHBOARD_ADMIN_TOKEN`. The old variables are still accepted for
+compatibility. A new token takes priority if it is set, even if empty. Without
+`-config`, Ozal looks for the new variable, then the old one, then
+`./config.json`, `/etc/ozal/config.json` and finally `/etc/switchboard/config.json`.
+`migrate` uses `ozal.db` by default, but reuses `switchboard.db` when it exists and
+the new file does not. On installations, always use the real `-db`.
 
-Los identificadores de protocolo también pasan a Ozal: cabeceras `X-Ozal-*`,
-ALPN del túnel (`ozal-tunnel-spike/1`), ruta del probe (`/.well-known/ozal-probe/`)
-y los dominios de las derivaciones criptográficas (cookie de login, callback de
-Telegram, replay de deploy y cadena del audit log). **No es retrocompatible**:
+The console prefers **`ozal.localhost`**. Existing passkeys still work on
+`switchboard.localhost` or `localhost`, with their original RP ID. Sign in through
+that name, generate a link to add another browser, and open it on
+`ozal.localhost` to register a new passkey for the same account. The rename does
+not allow a credential for one RP ID to be used on another. Console sessions kept
+in memory end on restart, as before.
 
-- Edge y conector deben actualizarse juntos; con versiones mezcladas el túnel
-  no negocia ALPN.
-- Las cookies de login OIDC emitidas antes del cambio dejan de validar: los
-  visitantes entran de nuevo.
-- Un log de auditoría escrito antes del cambio **no verifica** con el binario
-  nuevo (el dominio entra en cada hash). Archívalo con su binario anterior y
-  empieza un log nuevo; no lo reescribas.
-- Las cabeceras `X-Switchboard-Visitor-*` y sus variantes con `_` se siguen
-  eliminando como entrada de cliente, pero ya no significan nada para Ozal.
-- Se conservan: cookies `sb_*`, sujetos nativos `sb:`, migraciones SQL (con su
-  checksum) y las variables, rutas y nombres de host anteriores listados arriba.
+Protocol identifiers also move to Ozal: `X-Ozal-*` headers, the tunnel ALPN
+(`ozal-tunnel-spike/1`), the probe path (`/.well-known/ozal-probe/`), and the
+cryptographic derivation domains (login cookie, Telegram callback, deploy replay
+and the audit-log chain). **This is not backward compatible**:
 
-El código fuente y el módulo ya usan `github.com/ozal-project/ozal`; el sitio
-público es `ozal.octaviosantacruz.com`. La publicación del sitio y su trust OIDC
-se aceptaron por separado en `SITE-006`. Eso no actualiza el binario del edge
-ni del conector y no implica que exista un nuevo tag o descarga Ozal.
+- Edge and connector must be updated together; with mixed versions the tunnel
+  does not negotiate ALPN.
+- OIDC login cookies issued before the change stop validating: visitors sign in
+  again.
+- An audit log written before the change **does not verify** with the new binary,
+  because the domain is part of each hash. Archive it with its previous binary and
+  start a new log; do not rewrite it.
+- `X-Switchboard-Visitor-*` headers and their underscore variants are still
+  stripped as client input, but they no longer mean anything to Ozal.
+- Kept as they are: `sb_*` cookies, native `sb:` subjects, SQL migrations (with
+  their checksums) and the variables, paths and hostnames listed above.
 
-## Actualizar y revertir
+The source code and Go module already use `github.com/ozal-project/ozal`.
+Publishing the project website does not update the edge or connector binaries
+and does not imply that a new Ozal tag or download exists.
 
-`ozal upgrade` se ejecuta desde el **binario nuevo**, verificado y
-copiado a un directorio propiedad de root. Ejemplo: sustituye SHA y rutas por
-valores comprobados; no ejecutes como root un archivo modificable por otra cuenta.
+## Upgrade and roll back
+
+`ozal upgrade` runs from the **new binary**, verified and copied to a directory
+owned by root. Substitute the SHA and paths with checked values. Never run as root
+a file that another account can modify.
 
 ```sh
-sudo /ruta/root-owned/ozal-new upgrade -unit ozal \
-  -binary /usr/local/lib/ozal/ozal -sha256 SHA256_ESPERADO \
+sudo /root-owned/path/ozal-new upgrade -unit ozal \
+  -binary /usr/local/lib/ozal/ozal -sha256 EXPECTED_SHA256 \
   -config /etc/ozal/config.json \
   -db /var/lib/ozal/state.db -user ozal
 ```
 
-Valida, detiene la unidad, respalda/migra si hay migraciones, conserva el
-binario anterior y espera servicio activo más respuesta de administración.
-Ante fallo restaura binario y, si migró, base previa. Hay una interrupción
-durante el cambio; no se promete alta disponibilidad. El hash lo verifica
-contra el valor suministrado, no autentica por sí solo el canal de descarga.
+It validates, stops the unit, backs up and migrates if there are migrations,
+keeps the previous binary, and waits for the service to be active and the
+administration API to respond. On failure it restores the binary and, if it had
+migrated, the previous database. The change causes a brief interruption; high
+availability is not promised. The hash is checked against the value you supply.
+It does not by itself authenticate the download channel.
 
-| Salida | Resultado |
+| Exit code | Result |
 |---|---|
-| 0 | Nueva versión activa, o ya estaba instalada |
-| 2 | Rechazado antes de detener el servicio |
-| 3 | Falló y la versión anterior volvió a responder |
-| 4 | Se intentó restaurar la anterior, pero no responde: intervención necesaria |
+| 0 | New version active, or it was already installed |
+| 2 | Rejected before the service was stopped |
+| 3 | Failed, and the previous version responds again |
+| 4 | The previous version was restored but does not respond: intervention needed |
 
-Los backups no se borran automáticamente. Una versión anterior puede rechazar
-un esquema nuevo; revertir solo el ejecutable puede ser insuficiente.
+Backups are not deleted automatically. A previous version may reject a new
+schema, so reverting only the executable can be insufficient.
 
-### Actualización automática
+<a id="actualización-automática"></a>
 
-`ozal update` consulta la versión publicada más nueva. Con `-apply` instala
-en **un host**, usando `ozal upgrade` y su vuelta atrás. Solo acepta un release cuyo `checksums.txt`
-esté firmado (Ed25519) con la clave que el host fija en
-`/etc/ozal/release.pub`; comprueba el hash del archivo antes de extraer el
-binario y nunca instala una versión igual o más vieja que la instalada. Los
-borradores no cuentan, y los prereleases solo con `-prerelease`.
+### Automatic update
+
+`ozal update` checks for the newest published version. With `-apply` it installs
+on **one host**, using `ozal upgrade` and its rollback. It only accepts a release
+whose `checksums.txt` is signed (Ed25519) with the key the host pins in
+`/etc/ozal/release.pub`. It checks the archive hash before extracting the binary,
+and never installs a version equal to or older than the installed one. Drafts do
+not count; prereleases only with `-prerelease`.
 
 ```sh
 sudo install -m 0644 release.pub /etc/ozal/release.pub
 sudo /usr/local/lib/ozal/ozal update -public-key /etc/ozal/release.pub \
   -unit ozal -binary /usr/local/lib/ozal/ozal -config /etc/ozal/config.json \
   -db /var/lib/ozal/state.db -user ozal \
-  -status /var/lib/ozal/update-status.json           # informa; -apply instala
+  -status /var/lib/ozal/update-status.json           # reports; -apply installs
 sudo install -m 0644 docs/operations/ozal-update.service docs/operations/ozal-update.timer /etc/systemd/system/
-sudo systemctl enable --now ozal-update.timer         # comprueba disponibilidad, cada noche
+sudo systemctl enable --now ozal-update.timer         # checks availability nightly
 ```
 
-Este comando se ejecuta en la VM y descarga desde GitHub: no requiere el
-checkout ni SCP. La consulta sin `-apply` verifica el catálogo y los checksums
-firmados, pero ya no descarga el archivo completo. `-plan FILE` deja la
-revisión (versión, plataforma, tamaño, migraciones y hash) sin instalar;
-`-expect` y `-expect-sha256` atan una instalación al plan revisado y la
-rechazan si el catálogo cambió. Un lock compartido (`update.lock` junto al
-binario por defecto) impide que la CLI y el ejecutor manipulen a la vez
-`.next`, la migración o el rollback.
+This command runs on the host and downloads from GitHub: it needs neither the
+checkout nor SCP. Without `-apply`, it verifies the catalog and the signed
+checksums, but no longer downloads the full archive. `-plan FILE` records the
+review (version, platform, size, migrations and hash) without installing.
+`-expect` and `-expect-sha256` bind an installation to the reviewed plan and
+reject it if the catalog changed. A shared lock (`update.lock` next to the
+binary by default) prevents the CLI and the executor from manipulating `.next`,
+the migration or the rollback at the same time.
 
-La descarga se escribe a disco y se comprueba antes de extraer o ejecutar.
-El updater consulta espacio antes de cada fase: archivo comprimido (o hasta
-512 MiB si no se conoce el tamaño), binario extraído, copia nueva/anterior y
-margen para snapshot/migración/restauración de DB y WAL. Suma necesidades en
-el mismo filesystem y deja 64 MiB de reserva por dispositivo; no es una
-reserva de bloques frente a otros escritores. Si no puede consultar capacidad
-o falta espacio, se niega antes de esa fase. Después de iniciar exige que el
-`MainPID` ejecute la imagen verificada, además de responder salud; lo mismo
-para confirmar una reversión. No confundas esto con aceptación de una app o
-un login reales.
+The download is written to disk and checked before it is extracted or run. The
+updater checks free space before each phase: the compressed archive (or up to
+512 MiB if the size is unknown), the extracted binary, the new and previous
+copies, and a margin for the database and WAL snapshot, migration and restore.
+Needs are added per filesystem, and 64 MiB is kept in reserve per device. This is
+not a block reservation against other writers. If capacity cannot be checked, or
+space is short, the update refuses before that phase. After starting, it requires
+that the `MainPID` runs the verified image and answers health checks; the same
+applies to confirming a rollback. This is not acceptance of a real application or
+login.
 
-La clave pública debe proceder de un canal confiable y quedar protegida de
-cambios por la cuenta del servicio. Hacen falta un release firmado publicado y
-conectividad HTTPS; una compilación enviada por commit no crea ese canal.
+The public key must come from a trusted channel and be protected from changes by
+the service account. A published signed release and HTTPS connectivity are
+required. A build sent by commit does not create that channel.
 
-El canal propio usa un catálogo JSON firmado por plataforma. La URL incluye
-canal, OS y arquitectura; el cliente verifica la firma Ed25519 del documento,
-su vencimiento, plataforma, secuencia y los checksums antes de descargar:
+Ozal's own channel uses a signed JSON catalog per platform. The URL includes the
+channel, OS and architecture. The client verifies the document's Ed25519
+signature, expiry, platform, sequence and the checksums before downloading:
 
 ```sh
 sudo /usr/local/lib/ozal/ozal update -public-key /etc/ozal/release.pub \
@@ -174,26 +179,25 @@ sudo /usr/local/lib/ozal/ozal update -public-key /etc/ozal/release.pub \
   -db /var/lib/ozal/state.db -user ozal -status /var/lib/ozal/update-status.json
 ```
 
-La consulta guarda la **mayor secuencia verificada**, aunque no instale, y la
-compara con la siguiente; así un catálogo firmado anterior no puede reintroducir
-una versión más vieja. El plan vence a los diez minutos y se consume una sola
-vez. No cambies `-api` a `https://ozal.dev`: el adaptador de GitHub y el de
-catálogo tienen formatos distintos.
+The check stores the **highest verified sequence**, even if nothing is installed,
+and compares the next catalog against it. This way an older signed catalog cannot
+reintroduce an older version. A plan expires after ten minutes and is consumed
+once. Do not change `-api` to `https://ozal.dev`: the GitHub adapter and the
+catalog adapter use different formats.
 
-La consola puede instalar ese mismo plan si el host configura el ejecutor
-local. Sin `admin.update_socket` la consola solo consulta. Con el socket, la
-ruta de instalación exige una sesión de administrador con la herramienta
-separada `updates.install`, una passkey confirmada en los últimos cinco
-minutos, y rechaza el `admin.token` y el socket del host. El intento queda en
-la auditoría administrativa y se emite `update.started`; la contraseña de API
-no sustituye a la passkey porque reemplazar el binario como root es una acción
-personal.
+The console can install the same plan if the host configures the local executor.
+Without `admin.update_socket` the console only checks. With the socket, the
+install path requires an administrator session with the separate `updates.install`
+tool, a passkey confirmed within the last five minutes, and it rejects
+`admin.token` and the host socket. The attempt is recorded in the administrative
+audit and emits `update.started`. An API password does not replace the passkey,
+because replacing the binary as root is a personal action.
 
-El ejecutor es un servicio aparte, no un hijo de `ozal.service`. Corre como
-root, lee un perfil que solo root puede escribir y recibe únicamente revisar,
-instalar el plan revisado y leer el trabajo. El perfil fija todos los paths y
-la URL base; el ejecutor comprueba además que el binario, su directorio, la
-clave y el propio perfil no sean escribibles por grupo u otras cuentas.
+The executor is a separate service, not a child of `ozal.service`. It runs as
+root, reads a profile that only root can write, and only accepts requests to
+review, install the reviewed plan and read the job. The profile fixes all paths
+and the base URL. The executor also checks that the binary, its directory, the key
+and the profile itself are not writable by group or others.
 
 ```json
 {
@@ -222,311 +226,121 @@ sudo systemctl enable --now ozal-update-executor.service
 sudo systemctl restart ozal
 ```
 
-El grupo del socket debe incluir la cuenta del servicio (`Group=ozal` o
-`SupplementaryGroups`). El ejecutor espera a un trabajo en curso al recibir
-`SIGTERM`; no lo inicies desde `ozal.service` ni con `KillMode=control-group`.
-Un trabajo interrumpido por una caída queda como `intervention_required` salvo
-que otro actualizador siga con el lock; en ese caso no se toca.
+The group of the socket must include the service account (`Group=ozal` or
+`SupplementaryGroups`). On `SIGTERM` the executor waits for a job in progress; do
+not start it from `ozal.service` or with `KillMode=control-group`. A job
+interrupted by a crash is marked `intervention_required` unless another updater
+still holds the lock; in that case nothing is touched.
 
-El catálogo público, la clave de firma, el release ARM64 y la aceptación en
-navegador siguen pendientes. No hay un canal `ozal.dev` desplegado ni un botón
-probado contra una VM limpia; el código y las pruebas locales no sustituyen esa
-aceptación. La instalación desde consola no se ofrece en el edge de túnel:
-coordina ahí con `ozalctl edge pair-upgrade`.
+The public catalog, the signing key, the ARM64 release and browser acceptance are
+still pending. There is no deployed `ozal.dev` channel and no button tested
+against a clean VM. Local code and tests do not replace that acceptance. Installing
+from the console is not offered on the tunnel edge: coordinate that with
+`ozalctl edge pair-upgrade`.
 
-Un binario que no es un release (`ozal version` dice `dev`, compilado a
-mano) **no se reemplaza solo**: el release más nuevo podría ser más viejo que
-lo que corre. Pasa a releases una vez con `-apply -force` solo en un host
-independiente. El timer de ejemplo **solo consulta**: no instala nada por sí
-mismo. En el edge ALPN del túnel, actualízalo en coordinación con el conector;
-no uses ahí el `-apply` de una ejecución por host, porque una mezcla de
-versiones corta el túnel. `-status FILE` deja el resultado (`current`,
-`available`, `incompatible`, `updated`, `failed`) en JSON legible por la
-cuenta del servicio, sin claves ni tokens. La consola puede leer el estado
-autenticado en `GET /_/api/updates/status` con la herramienta de operador
-`updates`; si el host además configuró el ejecutor, `GET /_/api/updates/plan`
-y `POST /_/api/updates/jobs` revisan e inician un trabajo bajo las reglas de
-la sección anterior. El estado del trabajo (`updated`, `rolled_back`,
-`failed`, `intervention_required`) se lee por ID. La razón mostrada se reduce
-a un mensaje seguro; los detalles quedan en el host. Salida 3 de
-`ozal upgrade` confirma reversión; salida 4 requiere intervención.
+A binary that is not a release (`ozal version` says `dev`, built by hand) **is
+not replaced automatically**: the newest release could be older than what is
+running. Move it to releases once with `-apply -force`, and only on an independent
+host. The example timer **only checks**: it installs nothing by itself. On the
+tunnel's ALPN edge, update it in coordination with the connector. Do not use the
+per-host `-apply` there, because a mix of versions breaks the tunnel. `-status
+FILE` records the result (`current`, `available`, `incompatible`, `updated`,
+`failed`) as JSON readable by the service account, without keys or tokens. The
+console can read the authenticated state at `GET /_/api/updates/status` with the
+`updates` operator tool. If the host also configured the executor, `GET
+/_/api/updates/plan` and `POST /_/api/updates/jobs` review and start a job under
+the rules above. A job's state (`updated`, `rolled_back`, `failed`,
+`intervention_required`) is read by ID. The displayed reason is reduced to a safe
+message; details stay on the host. Exit code 3 of `ozal upgrade` confirms a
+rollback; exit code 4 requires intervention.
 
-Quien publica: `ozal release keygen -key release.key` crea la clave e imprime
-la pública. Guarda la privada como secreto `OZAL_RELEASE_KEY` del workflow
-`release` y borra el archivo; sin ese secreto el workflow falla en vez de dejar
-un release sin firma. El release sigue siendo un borrador hasta que alguien lo
-publica, y solo entonces lo ven los edges. **Quien tenga esa clave puede
-instalar código en todos los edges que la fijan**: rótala publicando la nueva
-pública en los edges antes de firmar con ella.
+Publishing: `ozal release keygen -key release.key` creates the key and prints the
+public part. Store the private key as the `OZAL_RELEASE_KEY` secret of the
+`release` workflow, then delete the file. Without that secret the workflow fails
+instead of producing an unsigned release. A release remains a draft until someone
+publishes it, and only then do edges see it. **Whoever holds that key can install
+code on every edge that pins it.** Rotate it by publishing the new public key to
+the edges before signing with it.
 
-### Actualización coordinada del edge y el conector
+<a id="actualización-coordinada-del-edge-y-el-conector"></a>
 
-Para `REL-013/017`, trata ambos extremos como **una pareja de versiones**.
-`ozalctl edge upgrade` actualiza solamente el edge: no instala ni revierte el
-conector, no pausa su renovación y no comprueba aplicaciones. Su salida 0
-prueba arranque y admin; todavía falta la aceptación del recorrido completo.
-No encadenes dos actualizaciones independientes suponiendo compatibilidad ALPN.
+### Coordinated update of the edge and the connector
 
-El target puede incluir `connector` con su host SSH, cuenta de servicio, unidad
-de usuario, ejecutable, staging y lock. Entonces `ozalctl edge upgrade` se
-rechaza para ese target; usa `ozalctl edge pair-upgrade`. El comando construye
-un release Linux/amd64 firmado indicado con `-ref TAG` y `-public-key FILE`,
-toma ambos locks, verifica hashes instalados y subidos, guarda el ejecutable
-anterior en cada host y una copia consistente
-SQLite en el edge, detiene conector y edge, instala el mismo binario, inicia
-edge y conector y comprueba el túnel mediante el socket local. El upgrade del
-edge migra SQLite como su cuenta de servicio, pero deja la unidad detenida
-hasta instalar el conector. Ante un fallo
-después de iniciar el corte, intenta restaurar ambos ejecutables y la base del
-edge; si no puede confirmar recuperación, devuelve intervención requerida.
-El estado se informa por el socket local y queda disponible en
-`GET /_/api/updates/status` para sesiones con la herramienta `updates`.
-`GET /_/api/connectors/{name}/ready` es una sonda host-only usada por el
-coordinador. El POST de progreso se tolera como 404 solo antes de que el
-candidato instale esa ruta; si el edge ya volvió y el endpoint no existe, se
-revierte el trabajo. Las fases finales se guardan al volver el edge.
-Un 503 o cualquier otro error detiene el trabajo antes del corte o activa su
-reversión. `ozalctl edge pair-upgrade` sin `-apply` solo descarga y verifica el
-artefacto: no contacta los hosts. Antes de aplicar, corre:
+For a tunnel, treat both ends as **one version pair**. `ozalctl edge upgrade`
+updates only the edge: it does not install or roll back the connector, does not
+pause its renewal, and does not check applications. Its exit code 0 proves
+startup and admin health; the full end-to-end acceptance is still pending. Do not
+chain two independent upgrades on the assumption that ALPN stays compatible.
+
+The target may include a `connector` with its SSH host, service account, user
+unit, executable, staging path and lock. In that case `ozalctl edge upgrade` is
+refused for that target; use `ozalctl edge pair-upgrade`. That command builds a
+signed Linux/amd64 release specified with `-ref TAG` and `-public-key FILE`, takes
+both locks, verifies installed and uploaded hashes, saves the previous executable
+on each host and a consistent SQLite copy on the edge, stops the connector and the
+edge, installs the same binary, starts the edge and the connector, and checks the
+tunnel through the local socket. The edge upgrade migrates SQLite as its service
+account, but leaves the unit stopped until the connector is installed. If a failure
+happens after the cutover has started, it tries to restore both executables and the
+edge database; if it cannot confirm recovery, it reports intervention required.
+Progress is reported through the local socket and is available at `GET
+/_/api/updates/status` for sessions with the `updates` tool. `GET
+/_/api/connectors/{name}/ready` is a host-only probe used by the coordinator. The
+progress POST is tolerated as a 404 only before the candidate installs that route;
+if the edge is back and the endpoint does not exist, the job is rolled back. The
+final phases are saved when the edge returns. A 503 or any other error stops the
+job before the cutover or triggers its rollback. `ozalctl edge pair-upgrade`
+without `-apply` only downloads and verifies the artifact: it does not contact the
+hosts. Before applying, run:
 
 ```sh
 ozalctl edge pair-preflight [-targets FILE] [-target NAME]
 ```
 
-Este comando sí conecta por SSH y verifica las versiones/hashes actuales, las
-unidades activas, usuario y grupo efectivos de systemd, acceso del servicio a
-configuración y SQLite, socket del admin, espacio de staging y locks libres.
-No crea archivos ni locks, no detiene servicios y requiere una terminal para
-las consultas `sudo` de solo lectura en Edge. El resultado es una observación,
-no una reserva: `pair-upgrade -apply` repite la inspección bajo ambos locks.
-`edge.service_group` en el target permite fijar el grupo esperado; si se omite,
-se descubre de la unidad y se usa al restaurar SQLite. No despliega ni migra
-una VPS por sí solo.
+This command does connect over SSH. It verifies the current versions and hashes,
+the active units, the effective systemd user and group, the service's access to
+configuration and SQLite, the admin socket, staging space and free locks. It
+creates no files or locks, stops no services, and requires a terminal for the
+read-only `sudo` queries on the edge. Its result is an observation, not a
+reservation: `pair-upgrade -apply` repeats the inspection under both locks.
+`edge.service_group` in the target fixes the expected group; if it is omitted, it
+is discovered from the unit and used when restoring SQLite. It does not deploy or
+migrate a VPS by itself.
 
-Antes de la ventana, completa esta ficha con datos observados, sin valores de
-secretos; conserva la evidencia operativa en un destino privado:
+Before the maintenance window, fill in this record with observed data, without
+secret values, and keep the operational evidence in a private location:
 
-| Dato | Edge | Conector |
+| Item | Edge | Connector |
 |---|---|---|
-| Versión anterior | Commit/build y SHA-256 del ejecutable instalado | Commit/build y SHA-256 instalado |
-| Candidato común | Ref comprometido, SO/arquitectura y SHA-256 del artefacto | Mismo ref, artefacto de su arquitectura y SHA-256 |
-| Servicio real | Host, unidad system/user, cuenta, ejecutable, config, DB, socket | Host, unidad system/user, cuenta, ejecutable, argumentos y rutas fijas |
-| Estado | Config raíz, runtime efectivo, SQLite, Pages, TLS y audit | Identidad local, CA pública, configuración y renovación |
-| Recuperación | Pareja anterior conservada, checkpoint privado y destino nuevo de restore | Ejecutable anterior conservado y configuración anterior |
+| Previous version | Commit/build and SHA-256 of the installed executable | Commit/build and installed SHA-256 |
+| Common candidate | Committed ref, OS/architecture and artifact SHA-256 | Same ref, artifact for its architecture and SHA-256 |
+| Real service | Host, system/user unit, account, executable, config, DB, socket | Host, system/user unit, account, executable, arguments and fixed paths |
+| State | Root config, effective runtime, SQLite, Pages, TLS and audit | Local identity, public CA, configuration and renewal |
+| Recovery | Previous pair kept, private checkpoint and a new restore destination | Previous executable kept and previous configuration |
 
-En el piloto hay unidades y agentes de renovación con nombres históricos.
-No los renombres durante este corte. Identifica también cualquier proceso
-`tunnel edge` separado: cada edge que reciba ese conector necesita una pareja
-compatible. No deduzcas la topología de una reserva de puertos ni de un nombre
-de servicio. Registra el `config_sha256` efectivo usando el socket autenticado;
-con `runtime_file`, la raíz no describe por sí sola las rutas/publicadores.
-
-#### Topología observada y checkpoint privado — 2026-10-29
-
-Inventario anterior a la instalación del 2026-10-29: la lectura encontró tres
-edges en la VPS y un conector en el homelab. Los binarios de la pareja en esta
-tabla son históricos; el resultado de la instalación figura más abajo. Los
-nombres históricos no describen una única función:
-
-| Extremo | Unidad / host | Ejecutable y SHA-256 | Estado observado |
-|---|---|---|---|
-| Preview público | `switchboard-preview.service`, VPS | commit `da3d0e6`, `0ca4c91d…` | activo; HTTPS público 443; admin `127.0.0.1:9091`; DB/Pages/runtime/TLS en `/var/lib/switchboard-preview` |
-| Tunnel edge (ALPN) | `switchboard-tunnel-edge.service`, VPS | `(devel)`, `b5cba887…` | activo; HTTP `127.0.0.1:18889`, admin `127.0.0.1:9092`, mTLS `10.8.0.1:9443`; DB/identidad en `/var/lib/switchboard-tunnel-edge` |
-| Conector | `switchboard-tunnel-connector.service`, homelab | `9701fa4`, `b2761ed3…` | estaba **inactivo desde 2026-10-26 01:25 UTC** al inventariar; activo y reiniciado el 2026-10-29 (ventana) |
-| Staging histórico | `switchboard-staging.service`, VPS (usuario) | `eb8b805`, `e7b973d8…` | activo sólo en loopback (8888/9090); no participa del par |
-| Preview staging | `switchboard-preview-staging.service`, VPS | mismo preview | inactivo/static |
-
-La ruta real es preview (443) → tunnel edge (`127.0.0.1:18889`) → conector
-(`10.8.0.1:9443`). `ozalctl edge upgrade` sólo tiene un target para
-`switchboard-preview`; **no actualiza el tunnel edge ni el conector**. No
-encadenes la actualización sin preparar esas dos unidades y su vuelta.
-
-El conector estaba inactivo al inventariar; su certificado
-`CN=connector.homelab.internal` vence el 2026-11-21 y la CA del piloto el
-2027-10-18. El timer de renovación sigue activo (próxima ejecución
-2026-10-30 00:09 UTC) y no se pausó. El checkpoint privado del conector
-(identidad, CA, CA de origin-pull, unidades, estado de renovación, binarios y
-journal) se creó en el homelab y se restauró en un directorio descartable:
-cadena, correspondencia clave/certificado, hashes, sintaxis de unidad y
-ejecución del binario pasan. No se conectó la identidad de producción a ningún
-edge.
-
-El checkpoint privado del edge requiere root en la VPS; `sudo -n` no está
-disponible. El procedimiento preparado crea un destino nuevo, toma un snapshot
-online de SQLite, copia Pages contra las filas del snapshot, runtime,
-TLS/ACME, identidad del túnel y tokens, y prueba la restauración en loopback
-con el binario anterior. No detiene unidades ni toca timers. En modo
-`--quiesced` no consulta los sockets admin (las unidades están detenidas por
-contrato).
-
-**Checkpoint completo del edge, 2026-10-29 (UTC).** Un primer intento terminó
-`incomplete` porque el capturador sondeaba esos sockets; se corrigió
-(`capture-edge.py` `db4a567e…`). El segundo produjo
-`/var/backups/ozal/REL-013-017-20261029T172304Z` (root, 0700; no se copió
-fuera del host): `manifest.json` `d78be43b…` con `status` complete,
-`coherent` true, sin fallos, `served_matches_live`, `identity_key_match` y
-`expected_match` true; `inventory.tsv` `1bfe6a6d…`, `SHA256SUMS` `112f4818…`.
-`ROLLBACK.md` (`868116b9…`) está en el directorio índice de octavio. Interrupción
-medida: conector 17:22:39→17:23:45 (66 s), tunnel edge 17:22:57→17:23:21 (24 s),
-preview 17:23:00→17:23:18 (18 s). Tras recuperar, healthz del preview 200,
-`config_sha256` del edge `4b3415c9…` y preview 200 por el túnel. Límites: sin
-copia fuera del host, sin `audit`, sin login ni app real verificados, y el
-registro no mostró al conector adjunto. No declara listo el corte real.
-
-**Instalación de la pareja `8f20fbe`, 2026-10-29 (UTC).** Un único artefacto
-para los tres roles: `14fde470bab6f666…` (31162239 bytes; `go build -trimpath
--buildvcs=false -ldflags "-X main.buildCommit=<commit corto>"`, el mismo que
-construye `ozalctl`; con el hash completo del commit el binario sale distinto).
-Antes de la ventana: `validate` de la config del tunnel edge con el binario
-nuevo OK y ensayo de `migrate up -backup` sobre una copia del checkpoint
-(008–015 aplicadas, copia borrada). Instalación: DB real migrada con el binario
-nuevo como `switchboard-tunnel` (el binario se instala primero como
-`switchboard.new` en `/usr/local/lib/switchboard-tunnel-edge/`, porque esa
-cuenta no entra a `/home/octavio`), ejecutable anterior conservado como
-`switchboard.bak-b5cba887`; preview con `ozalctl edge upgrade -ref 8f20fbe
--apply` (anterior en `switchboard.bak-0ca4c91d7277`); conector nuevo instalado
-el 18:12:14 (anterior `switchboard.bak-b2761ed3`). El conector anterior
-estuvo activo frente al edge nuevo hasta ese momento, contra lo indicado más
-arriba. Resultado: los tres ejecutables `14fde470…`; healthz del preview 200;
-preview y `sigea-api` (`/healthz`) 200 por el túnel; conector y timer activos.
-
-Cambio de comportamiento: `GET /_/api/status` por TCP en el admin del tunnel
-edge (9092) responde 503 `admin mutations are disabled until admin.token is
-configured`; antes devolvía 200. El estado se lee por el socket admin
-(`/run/switchboard-tunnel-edge/admin.sock`) o con token. Las sondas por TCP sin
-token dejan de servir.
-
-No verificado: login real, política permitida/denegada, ausencia de identidad
-falsificada y cookie de sesión en el origen, publicación de prueba y su
-rollback. Verificado por el socket admin del edge tras la actualización:
-`config_sha256` `4b3415c9…` (igual que antes) y "Connector connected" para
-`preview.octaviosantacruz.com` y `sigea-api.octaviosantacruz.com`. Sin copia
-fuera del host ni audit. No declara aceptado el corte.
-
-Interrupción medida de la instalación (journal, UTC): tunnel edge parado
-18:09:55→18:11:35 (100 s); preview reiniciado por `ozalctl` en 18:11:11 (la
-parada y el arranque caen en el mismo segundo); conector cambiado en 18:12:14
-(mismo segundo). El contenido público sale por el túnel: estuvo sin servicio
-desde 18:09:55 hasta que el conector se reenganchó, con cotas observadas de
-200 por el túnel a las 18:12:23 (≈2 min 30 s como máximo). Tras la
-actualización, `https://preview.octaviosantacruz.com/` responde 200 vía
-Cloudflare y `/_/healthz` y `/_/api/status` dan 404 desde fuera.
-
-Antes de la instalación, el esquema del tunnel edge tenía **ocho migraciones
-pendientes** (008–015) respecto del candidato `8f20fbe`; estas se aplicaron
-durante la instalación registrada arriba. La reversión a la versión anterior
-exige restaurar el snapshot previo a una ruta nueva. Entre `da3d0e6` y
-`8f20fbe` el preview no tenía migraciones pendientes. Ninguno de
-los dos edges tiene `audit` configurado: no hay cadena/checkpoint durable que
-archivar; si se habilita, archivá la cadena anterior con su binario por el
-cambio de dominio del hash.
-
-1. **Preparar sin cortar.** Ejecuta el gate del ref candidato, construye ambos
-   artefactos y verifica sus hashes. Revisa `ozalctl edge upgrade -ref REF`
-   sin `-apply`. Valida configuración, esquema, identidades y permisos con
-   el candidato en un entorno privado; no imprimas configuración ni claves.
-   Registra una línea base: túnel conectado, contenido de una app, visitante
-   permitido y denegado, login, publicación y versión actualmente publicada.
-2. **Comprobar recuperación antes de instalar.** Conserva los dos ejecutables
-   anteriores y un backup privado de todos los recursos de la tabla. SQLite
-   requiere snapshot consistente. Restaura en un destino nuevo, verifica con
-   el binario anterior y prueba la pareja anterior en aislamiento. El backup
-   automático de `upgrade` solo cubre DB cuando hay migraciones pendientes;
-   no sustituye este checkpoint ni incluye Pages/runtime/identidades.
-3. **Quiescer la pareja.** Bloquea nuevas publicaciones y cambios administrativos
-   durante la ventana y coordina los timers/agentes de renovación que puedan
-   reiniciar o rotar identidades. Detén primero el conector, después los edges
-   afectados, y toma el checkpoint final consistente. Conserva su estado previo
-   para reanudar solo lo que estaba activo. Hay una interrupción planificada;
-   no anuncies disponibilidad continua durante el cambio de protocolo.
-4. **Instalar ambos lados.** Usa los layouts existentes y los artefactos
-   verificados. Si hay audit persistente, con el edge detenido prepara en la
-   configuración un destino nuevo para la cadena Ozal y conserva la referencia
-   anterior en el checkpoint; nunca abras la cadena vieja con el candidato.
-   Para el edge administrado por `ozalctl`, aplica el plan revisado
-   desde una terminal; el paso root valida y migra con la cuenta del servicio.
-   Cambia el ejecutable del conector bajo la autoridad de su host, conservando
-   el anterior y sin mover ni regenerar su clave. Inicia primero el edge y luego
-   el conector. No arranques el conector anterior frente al edge candidato.
-   El `upgrade` puede restaurar únicamente el edge si falla: en ese caso deja
-   el conector detenido hasta elegir de nuevo una pareja completa.
-5. **Aceptar o volver.** Confirma hashes instalados y estado efectivo, túnel
-   conectado con la identidad enrolada, aplicación pública y protegida pasando
-   por el túnel, login real y política permitida/denegada, ausencia de identidad
-   falsificada/cookie de sesión en el origen y consola privada. Publica un
-   artefacto de prueba en un sitio de prueba, verifica bytes/assets y prueba su
-   rollback. Comprueba también los sitios ya publicados y el trust CI efectivo.
-   Si no pasa cualquier criterio, detén la pareja y ejecuta la reversión; no
-   debilites TLS, política ni enrolamiento para recuperar servicio.
-
-**Reversión coordinada:** detén conector y edges candidatos; conserva su estado
-para diagnóstico; restaura los dos ejecutables anteriores comprobando hashes.
-Si cambió el esquema, usa la DB del checkpoint restaurada a una ruta nueva y
-reconcilia revocaciones posteriores antes de servir. Restaura la configuración
-y el runtime del mismo checkpoint, junto con el contenido/metadata de Pages
-si cambió. No emparejes una DB antigua con un runtime de otra generación.
-Revisa propietarios, permisos y rutas de la unidad, y valida con el binario
-anterior. Arranca el edge anterior y después el conector anterior; repite todos
-los criterios de aceptación y reanuda los timers/publicadores que corresponda.
-Una reversión de artefacto de sitio no restaura DB, runtime ni protocolo.
-Registra tiempo de interrupción, checkpoint elegido y escrituras descartadas;
-sin checkpoint completo, no declares recuperación comprobada.
-
-Secuencia concreta de vuelta (con la ventana autorizada y `<CHECKPOINT>` ya
-verificado):
-
-```sh
-# Homelab: primero el conector.
-systemctl --user stop switchboard-tunnel-connector.service
-# VPS: después los edges; no dejes el conector anterior frente al candidato.
-sudo systemctl stop switchboard-tunnel-edge.service switchboard-preview.service
-# DB a rutas NUEVAS (nunca sobrescribir la del candidato).
-sudo -u switchboard /usr/local/lib/switchboard-preview/switchboard db restore \
-  -from <CHECKPOINT>/db/preview-state.db \
-  -to /var/lib/switchboard-preview/state.rollback-<TS>.db
-# El binario antiguo del tunnel edge no tiene db restore: usá el del preview
-# o copiá el snapshot ya verificado y comprobá PRAGMA integrity_check.
-sudo /usr/local/lib/switchboard-preview/switchboard db restore \
-  -from <CHECKPOINT>/db/tunnel-state.db \
-  -to /var/lib/switchboard-tunnel-edge/state.rollback-<TS>.db
-# Restaurar runtime/pages/tls/tunnel desde <CHECKPOINT>, apuntar las unidades
-# a la DB nueva con los mismos propietarios/permisos, y reinstalar los binarios
-# anteriores desde <CHECKPOINT>/bin; verificar cada sha256 antes de arrancar.
-sudo systemctl start switchboard-tunnel-edge.service switchboard-preview.service
-systemctl --user start switchboard-tunnel-connector.service
-```
-
-Después repetí túnel, login real, app permitida/denegada, ausencia de identidad
-falsificada/cookie en el origen y publicación. Reconciliá revocaciones
-posteriores al checkpoint antes de devolver servicio.
-
-La cadena de audit anterior se conserva intacta con su binario verificador;
-el candidato escribe en un destino nuevo. En la vuelta conserva ambas cadenas
-por separado y usa un destino compatible con el binario anterior. Reconciliar
-revocaciones también aplica a usuarios, passkeys y conectores, no solo sesiones.
-Las cookies OIDC antiguas requieren nuevo login tras el cambio; el reinicio
-termina las sesiones de consola en memoria. No cambies RP IDs de passkeys.
-
-El [ensayo local](../engineering.md#verificacion) ejercita ambos protocolos,
-backup/restore y publicación con fixtures. No sustituye el ensayo de systemd
-en VM limpia (`REL-012`) ni la aceptación de login y publicación en el servidor.
+Some installations have units and renewal agents with historical names. Do not
+rename them during the cutover. Also identify any separate `tunnel edge` process:
+each edge that receives a given connector needs a compatible pair. Do not infer
+the topology from a port reservation or a service name. Record the effective
+`config_sha256` through the authenticated socket. With `runtime_file`, the root
+config alone does not describe the routes and publishers.
 
 <a id="backup-y-recuperacion"></a>
 
-## Backup y recuperación
+## Backup and recovery
 
-Respalda **SQLite y sus archivos externos** mediante un mecanismo privado:
+Back up **SQLite and its external files** through a private mechanism:
 
-- Configuración del host y `runtime_file`.
-- SQLite consistente; no copies un archivo activo ignorando su WAL.
-- Contenido de `pages.dir`, o artefactos originales para republicar.
-- Caché/estado TLS, cuenta ACME y credenciales de DNS para reemitir si hace falta.
-- Identidad del túnel, bundles de confianza y claves CA administradas fuera del edge.
-- Archivos y fuentes externas de secretos `file:`/`env:`, chats emparejados si se usan.
-- Logs/checkpoints de auditoría y su clave pública fijada, con copia independiente.
+- Host configuration and `runtime_file`.
+- A consistent SQLite snapshot; do not copy an active file while ignoring its WAL.
+- The contents of `pages.dir`, or the original artifacts to republish.
+- TLS cache and state, the ACME account and DNS credentials, to reissue if needed.
+- Tunnel identity, trust bundles and CA keys, kept outside the edge.
+- External secret files and sources (`file:`/`env:`), and paired chats if used.
+- Audit logs and checkpoints, and their pinned public key, with an independent copy.
 
-El backup de DB usa `VACUUM INTO`, verifica integridad y publica en un archivo
-nuevo con permisos privados. Prueba sobre un directorio descartable:
+The database backup uses `VACUUM INTO`, verifies integrity and publishes to a new
+file with private permissions. Test it on a disposable directory:
 
 ```sh
 ozal db backup -db /var/lib/ozal/state.db -out ./state.backup.db
@@ -535,174 +349,173 @@ ozal doctor -config /etc/ozal/config.json -db ./state.restored.db
 ozal migrate -db ./state.restored.db status
 ```
 
-En el piloto 2026-10-29 el binario del tunnel edge (`9701fa4`) no tiene
-`db backup`: usá la API de backup de SQLite (Python) o el binario del preview
-(`da3d0e6`) sobre la DB anterior; ambos producen un archivo autocontenido y se
-probaron con el esquema previo. Verificá siempre la restauración en una ruta
-nueva con el binario que va a leerla. El backup de la DB no incluye Pages,
-runtime, TLS/ACME, identidad del túnel ni tokens: copiá esos recursos en el
-mismo checkpoint y comprobá que las filas de `deployments`/`site_live` del
-snapshot tengan sus directorios de Pages.
+Older builds may not include `db backup`. In that case, use SQLite's online
+backup API or a build that provides the command, and check the result with
+`PRAGMA integrity_check`. Always verify a restore at a new path with the binary
+that will read it. A database backup does not include Pages, runtime, TLS/ACME,
+tunnel identity or tokens: copy those in the same checkpoint and confirm that the
+`deployments` and `site_live` rows point to directories that exist.
 
-`restore` no sobrescribe destinos existentes e invalida sesiones por defecto.
-`-keep-sessions` puede reactivar cookies viejas. Una copia antigua también puede
-reactivar usuarios, passkeys, invitaciones o conectores revocados después:
-reconcilia esas revocaciones antes de devolver servicio.
+`restore` does not overwrite existing destinations and invalidates sessions by
+default. `-keep-sessions` can reactivate old cookies. An old copy can also
+reactivate users, passkeys, invitations or connectors revoked after it was taken:
+reconcile those revocations before returning the service to use.
 
-Para un host perdido: instala una versión verificada, restaura archivos y
-propietarios con el servicio detenido, restaura DB a una ruta nueva, ejecuta
-doctor y migraciones explícitas con backup, arranca y comprueba login, permisos,
-sitios y túneles. Un integrity check no prueba que claves, DNS o conectores
-estén disponibles. Mide pérdida de datos y tiempo de recuperación en ese ensayo.
+For a lost host: install a verified version, restore files and owners with the
+service stopped, restore the database to a new path, run doctor and explicit
+migrations with a backup, start the service, and check login, permissions, sites
+and tunnels. An integrity check does not prove that keys, DNS or connectors are
+available. Measure data loss and recovery time in that rehearsal.
 
-## Incorporar un conector
+<a id="incorporar-un-conector"></a>
 
-Usa una CA existente y distribuye su certificado público por un canal
-autenticado. Los placeholders son rutas elegidas por el operador.
+## Add a connector
+
+Use an existing CA and distribute its public certificate through an
+authenticated channel. The placeholders are paths chosen by the operator.
 
 ```sh
-# Máquina del conector: directorio nuevo, clave local y CSR público.
+# Connector machine: new directory, local key and public CSR.
 ozal connector prepare -dir ./connector-identity -name homelab
-# Host autorizado de la CA: solo recibe el CSR.
+# Authorized CA host: it only receives the CSR.
 ozal connector sign -csr ./connector.csr \
-  -ca-dir /ruta/ca-existente -out ./connector.crt
-# Devuelve el certificado público a su máquina; nunca transfieras la clave.
+  -ca-dir /path/to/existing-ca -out ./connector.crt
+# Return the public certificate to its machine; never transfer the key.
 ozal connector check -dir ./connector-identity -ca ./ca.crt
-# Edge: enrolamiento con autoridad del socket local.
+# Edge: enrollment through the local socket's authority.
 ozal connector enroll -config /etc/ozal/config.json \
   -name homelab -cert ./connector.crt
 ```
 
-Configura `tunnel` en el edge y una ruta con `connector: "homelab"`. El
-transporte actual permite loopback o una subred RFC1918/ULA explícita; no es
-un listener público genérico. El conector valida nombre/certificado del edge
-y solo sirve sus destinos fijos. Para las opciones exactas usa
-`ozal tunnel connect -h`; los contratos están en
-[desarrollo](../engineering.md#tuneles).
+Configure `tunnel` on the edge and a route with `connector: "homelab"`. The current
+transport allows loopback or an explicit RFC 1918/ULA subnet; it is not a generic
+public listener. The connector validates the edge's name and certificate and
+serves only its fixed destinations. For the exact options, use
+`ozal tunnel connect -h`; the contracts are in the [engineering guide](../engineering.md#tuneles).
 
-El certificado emitido por este flujo dura 30 días. Planifica y prueba rotación
-antes de vencer. La renovación del piloto mediante SSH/roles específicos no
-es renovación genérica para cualquier conector. Si no hay metadatos de
-vencimiento, la consola informa desconocido.
+The certificate issued by this flow lasts 30 days. Plan and test rotation
+before it expires. Ozal does not provide generic connector renewal; any
+SSH-based renewal you build yourself is outside this guide. If the expiry
+metadata is missing, the console reports it as unknown.
 
-Para retirar: revisa apps afectadas y usa
-`ozal connector revoke -config /etc/ozal/config.json -name homelab`
-en el edge, después detén el conector en su host. La revalidación periódica
-busca cerrar sesiones revocadas alrededor de cinco segundos; ante errores del
-registro las existentes pueden permanecer y las conexiones nuevas se rechazan.
-No elimines la CA compartida ni los datos de la app para revocar una identidad.
+To retire a connector, review the affected applications and run
+`ozal connector revoke -config /etc/ozal/config.json -name CONNECTOR_NAME`
+on the edge, then stop the connector on its host. Periodic revalidation closes
+revoked sessions within about five seconds; if the registry errors, existing
+sessions may remain and new connections are refused. Do not delete the shared CA
+or the application's data to revoke an identity.
 
 <a id="github-y-publicacion"></a>
 
-## GitHub y publicación
+## GitHub and publishing
 
-Son tres funciones distintas: login OIDC de personas, descubrimiento de
-repositorios con una GitHub App y autorización del workflow para publicar.
-Una no concede automáticamente las otras.
+These are three separate functions: OIDC login for people, repository discovery
+with a GitHub App, and workflow authorization to publish. One does not grant the
+others.
 
-La forma habitual es conectarla desde la consola, en **Integrations → GitHub →
-Connect GitHub** o dentro del asistente (**Applications → Add application → A
-website built from GitHub → Connect GitHub**); al volver de GitHub la consola
-regresa a la página desde la que empezaste. Ozal crea en tu
-cuenta (o en la organización que indiques) una App **privada** propia mediante
-un manifest: `Metadata: read` y `Contents`, `Workflows` y `Pull requests` en
-escritura, sin webhooks ni eventos. Apruébala en GitHub; GitHub vuelve a la
-consola, Ozal guarda la clave de la App en `github-app-ID.pem` (modo 0600,
-junto a la base de estado de `-db`) y te lleva a elegir los repositorios. Al
-volver, la instalación se lee de GitHub con la clave de la App; nunca se toma
-de la URL. Requiere la herramienta `publishing` y que Ozal arranque con `-db`.
-La configuración guarda solo la referencia `file:`; el secreto OAuth y el de
-webhook que GitHub devuelve se descartan.
+The usual way is to connect from the console, in **Integrations → GitHub →
+Connect GitHub**, or inside the wizard (**Applications → Add application → A
+website built from GitHub → Connect GitHub**). When you return from GitHub, the
+console brings you back to the page you started from. Ozal creates, in your
+account (or in the organization you name), its own **private** App through a
+manifest: `Metadata: read`, and `Contents`, `Workflows` and `Pull requests` with
+write access, without webhooks or events. Approve it on GitHub. GitHub returns to
+the console, Ozal stores the App key in `github-app-ID.pem` (mode 0600, next to
+the `-db` state database), and then asks you to choose repositories. On return,
+the installation is read from GitHub using the App key; it is never taken from the
+URL. This requires the `publishing` tool and that Ozal starts with `-db`. The
+configuration stores only the `file:` reference; the OAuth secret and the webhook
+secret that GitHub returns are discarded.
 
-Sin `-db`, o si prefieres crear la App a mano, guarda su clave como archivo
-privado y configura únicamente la referencia desde el socket del host:
+Without `-db`, or if you prefer to create the App by hand, store its key as a
+private file and configure only the reference from the host socket:
 
 ```sh
 ozal github connect -config /etc/ozal/config.json \
   -app-id 123 -installation-id 456 -key file:/etc/ozal/github-app-key
 ```
 
-Con GitHub conectado, el asistente lista los repositorios instalados, propone
-la rama por defecto y el build (`npm ci && npm run build`, salida `dist`). La
-revisión muestra el workflow generado. **Un solo guardado** crea la dirección,
-deja ese repositorio, rama y workflow (`ozal-pages.yml`) como único publicador
-del sitio y abre un PR que lo agrega; Ozal nunca lo fusiona. El último paso
-indica el PR y espera la primera publicación antes de mostrar el DNS. Si falla
-la confianza o el PR, la dirección queda guardada y el paso lo dice; termina en
-Sites. Un sitio privado o un edge sin `pages.deploy` guarda la confianza pero no
-abre PR: el workflow se escribe y revisa aparte. El asistente rechaza un nombre
-de sitio que ya publique desde GitHub en vez de reemplazar su publicador.
+With GitHub connected, the wizard lists the installed repositories, proposes the
+default branch and the build (`npm ci && npm run build`, output `dist`). The
+review shows the generated workflow. **One save** creates the address, makes that
+repository, branch and workflow (`ozal-pages.yml`) the only publisher of the
+site, and opens a PR that adds it; Ozal never merges it. The last step shows the
+PR and waits for the first publication before showing the DNS record. If trust or
+the PR fails, the address is kept and the step says so, and you finish in Sites.
+A private site, or an edge without `pages.deploy`, saves the trust but does not
+open a PR: the workflow is written and reviewed separately. The wizard rejects a
+site name that already publishes from GitHub instead of replacing its publisher.
 
-**Integrations** muestra la conexión: App y cuenta, qué repositorios ve, qué
-puede hacer, si el edge puede abrir PRs (`pages.deploy`) y qué sitios publican
-desde GitHub. Si la instalación cubre **todos** los repositorios de la cuenta
-lo advierte y enlaza a su página de GitHub para elegir sólo los que publican
-sitios: Ozal pide escritura a un repositorio por vez, pero la clave de la App
-alcanzaría a todos. La misma página explica que el login sigue siendo de Ozal
-(passkeys u OIDC configurado): conectar GitHub o un proveedor DNS nunca permite
-entrar con esa cuenta. Sin `pages.deploy` el asistente termina indicando que el
-workflow se agrega aparte, en vez de esperar una publicación.
+**Integrations** shows the connection: the App and account, which repositories it
+can see, what it can do, whether the edge can open PRs (`pages.deploy`), and which
+sites publish from GitHub. If the installation covers **all** repositories in the
+account, it warns you and links to GitHub's page so you can select only the
+repositories that publish sites. Ozal requests write access one repository at a
+time, but the App key would reach all of them. The same page explains that login
+is still Ozal's (passkeys or a configured OIDC provider): connecting GitHub or a
+DNS provider never allows signing in with that account. Without `pages.deploy`,
+the wizard ends by saying the workflow is added separately, instead of waiting for
+a publication.
 
-Desconectar sigue siendo una operación del host (`ozal github disconnect`);
-borra la App en GitHub si ya no la usas y elimina su archivo de clave.
+Disconnecting remains a host operation (`ozal github disconnect`). It deletes the
+App on GitHub if you no longer use it, and removes its key file.
 
-Para un sitio que ya existe, en Sites elige quién puede publicar: repo, sitio, proyecto, ref completa y
-workflow. El servidor vuelve a comprobar acceso e IDs de repo/propietario.
-El build corre en CI y el edge recibe el artefacto terminado; no compila código
-del repositorio. Una vez guardado el publicador, **Prepare publishing workflow**
-permite elegir el directorio de build, su salida y un hostname público del
-proyecto. **Preview workflow** muestra el archivo sin escribir en GitHub;
-**Review pull request** pide confirmar la rama y el archivo antes de crearlos.
-La App necesita además `Contents: write`, `Workflows: write` y
-`Pull requests: write`, solo en los repositorios elegidos. El token usado para
-proponer el PR queda limitado al repositorio seleccionado; explorar sigue
-pidiendo únicamente metadatos.
+For an existing site, choose in Sites who may publish: repository, site, project,
+full ref and workflow. The server rechecks access and the repository and owner
+IDs. The build runs in CI, and the edge receives the finished artifact; it never
+compiles the repository's code. Once the publisher is saved, **Prepare publishing
+workflow** lets you choose the build directory, its output and a public hostname
+for the project. **Preview workflow** shows the file without writing to GitHub.
+**Review pull request** asks you to confirm the branch and file before creating
+them. The App also needs `Contents: write`, `Workflows: write` and `Pull requests:
+write`, only on the selected repositories. The token used to propose the PR is
+limited to the selected repository; exploring still asks only for metadata.
 
-La plantilla inicial usa `npm ci` y `npm run build`; revisa el PR para otros
-builds. Soporta subdirectorios y ramas con `/`, pero requiere una ref de rama,
-un hostname público del proyecto y audiencia OIDC igual al origen HTTPS de
-deploy. Los sitios protegidos y las audiencias personalizadas requieren un
-workflow y una aceptación revisados por separado; no cambies su política para
-usar esta plantilla. El job de build no puede pedir OIDC; el de deploy no
-ejecuta código del repositorio. El checker/publicador y las acciones están
-fijados por commit. La aceptación pública restaura el último build aceptado
-en caché si existe; sin caché, el operador debe reconciliar la versión viva
-y restaurar una versión retenida desde Sites.
+The starter template uses `npm ci` and `npm run build`; review the PR for other
+builds. It supports subdirectories and branches containing `/`, but requires a
+branch ref, a public project hostname, and an OIDC audience equal to the HTTPS
+origin of the deploy endpoint. Protected sites and custom audiences require a
+separately reviewed workflow and acceptance; do not change their policy to use
+this template. The build job cannot request OIDC; the deploy job does not run
+repository code. The checker and publisher and the actions are pinned by commit.
+Public acceptance restores the last accepted build from cache if one exists.
+Without a cache, the operator must reconcile the live version and restore a
+retained version from Sites.
 
-Ozal agrega un archivo nuevo en una rama nueva, abre el PR y devuelve su
-enlace; no reemplaza workflows ni ramas existentes, no hace merge y no
-declara una publicación aceptada. Crear la rama puede activar otros workflows
-de push del repositorio. Si la respuesta se interrumpe o falla después de una
-escritura, inspecciona la rama `ozal/publish-…` y sus PRs antes de repetir:
-la rama se conserva para reconciliar y no se fuerza ni borra automáticamente.
-Fusionar el PR habilita la publicación en la rama elegida; verifica el primer
-build, la política OIDC activa, la aceptación y el rollback reales.
+Ozal adds a new file on a new branch, opens the PR and returns its link. It does
+not replace existing workflows or branches, does not merge, and does not declare a
+publication accepted. Creating the branch can trigger other push workflows in the
+repository. If the response is interrupted or fails after a write, inspect the
+`ozal/publish-…` branch and its PRs before retrying: the branch is kept so it can be
+reconciled, and it is never forced or deleted automatically. Merging the PR enables
+publishing on the chosen branch; verify the first build, the active OIDC policy,
+acceptance and the real rollback.
 
-El endpoint de deploy tiene hostname HTTPS dedicado y alcance reducido.
-El workflow pide OIDC con la audiencia del edge, y deben coincidir repo,
-propietario, ref, workflow y evento autorizados. Usa acciones fijadas y
-`id-token: write` solo donde se despliega. Usa `ozalctl site check|pack|deploy|accept` (Go nativo) y consulta
-[el contrato de publicación](../engineering.md#publicacion).
-Los secretos de build no deben terminar en `dist`; los de runtime siguen en
-el host de la aplicación.
+The deploy endpoint has a dedicated HTTPS hostname and a reduced scope. The
+workflow requests OIDC with the edge's audience, and the repository, owner, ref,
+workflow and authorized event must match. Use pinned actions and `id-token: write`
+only where you deploy. Use `ozalctl site check|pack|deploy|accept` (native Go) and
+see the [publishing contract](../engineering.md#publicacion).
+Build secrets must not end up in `dist`; runtime secrets stay on the application
+host.
 
-Desconectar el publicador elimina confianza futura, conserva contenido y
-rutas; una subida ya autenticada puede terminar con su snapshot capturado.
-`github disconnect` elimina exploración API, **no** reglas OIDC guardadas;
-retira los publicadores si quieres detener CI. Desinstalar la App tampoco
-revoca esas reglas del edge.
+Disconnecting the publisher removes future trust and keeps the content and
+routes; an upload that was already authenticated can finish with its captured
+snapshot. `github disconnect` removes API exploration, **not** the stored OIDC
+rules; remove the publishers if you want to stop CI. Uninstalling the App does
+not revoke those rules on the edge either.
 
 <a id="operacion-remota-con-ozalctl"></a>
 
-## Operación remota con ozalctl
+## Remote operation with ozalctl
 
-`ozalctl` se ejecuta en la máquina del operador, habla por SSH y muestra un plan
-antes de aplicar. Usa un archivo de targets privado —
-[ozalctl.example.json](../../ozalctl.example.json)— con destinos, rutas, unidad,
-cuenta, socket, lock y archivo del token de publicación limitado.
+`ozalctl` runs on the operator's machine, talks over SSH and shows a plan before
+applying. Use a private targets file — [ozalctl.example.json](../../ozalctl.example.json) —
+with destinations, paths, unit, account, socket, lock and the limited publishing
+token file.
 
 ```sh
-go build -o ./ozalctl ./cmd/ozalctl  # binario separado en la máquina operadora
+go build -o ./ozalctl ./cmd/ozalctl  # separate binary on the operator machine
 ozalctl edge upgrade [-ref REF] [-apply]
 ozalctl edge pair-upgrade -ref vX.Y.Z -public-key FILE [-force] [-apply]
 ozalctl edge config -base FILE [-cloudflare-ranges] [-apply]
@@ -710,31 +523,33 @@ ozalctl site publish -site NAME -dir DIST [-host HOST] [-apply]
 ozalctl app alias -from HOST -to HOST [-manual-dns] [-wait 90s] [-apply]
 ozalctl api [-d JSON|@FILE|@-] METHOD /_/api/PATH
 ozalctl project trust -project NAME -repository-id ID -owner-id ID -workflow-ref WORKFLOW [-ref refs/heads/main] [-apply]
-ozalctl project rename -project NAME -to NUEVO [-apply]
+ozalctl project rename -project NAME -to NEW_NAME [-apply]
 ozalctl site cutover -host HOST -to IP -cloudflare-token FILE [-dir DIST] [-apply]
 ozalctl site cutover -host HOST -back EVIDENCE -cloudflare-token FILE [-apply]
 ```
 
-`edge upgrade` valida primero, como tu usuario SSH, la parte de la config que
-puede leer. Si el directorio de config es sólo de root y la cuenta de servicio
-(`0750`), lo dice y deja la validación completa a `ozal upgrade`, que la hace
-como root antes de detener la unidad; no hace falta abrir el directorio.
+`edge upgrade` first validates, as your SSH user, the part of the configuration
+it can read. If the configuration directory is readable only by root and the
+service account (`0750`), it says so and leaves full validation to `ozal upgrade`,
+which runs it as root before stopping the unit. You do not need to open the directory.
 
-### Operar sin `sudo`: grupo del socket
+<a id="operar-sin-sudo-grupo-del-socket"></a>
 
-Por defecto `app alias` y `project trust` corren en el edge como la cuenta de
-servicio (`sudo -u`), así que piden tu contraseña y una terminal. Con
-`admin.socket_group` el socket admin queda en modo `0660` para un grupo
-dedicado: tu usuario SSH, si pertenece al grupo, abre el socket y los
-comandos corren sin `sudo` ni TTY (sirven también desde scripts). La
-auditoría registra `local:<usuario>` con el uid que informa el kernel; la
-cuenta de servicio sigue figurando como `local`. Pertenecer al grupo equivale
-a la autoridad del host (enrolar conectores, recuperar administradores):
-dáselo sólo a quien ya tendría `sudo` en el edge.
+### Operate without `sudo`: socket group
+
+By default `app alias` and `project trust` run on the edge as the service account
+(`sudo -u`), so they ask for your password and a terminal. With
+`admin.socket_group` the admin socket is set to mode `0660` for a dedicated group.
+If your SSH user belongs to that group, it opens the socket, and commands run
+without `sudo` or a TTY (they also work from scripts). The audit records
+`local:<user>` with the uid reported by the kernel; the service account still
+appears as `local`. Membership in the group is equivalent to host authority
+(enrolling connectors, recovering administrators). Give it only to someone who
+already has `sudo` on the edge.
 
 ```sh
 sudo groupadd --system ozal-admin
-sudo usermod -aG ozal-admin deploy        # tu usuario SSH; vuelve a iniciar sesión
+sudo usermod -aG ozal-admin deploy        # your SSH user; sign in again
 sudo systemctl edit ozal                  # drop-in:
 #   [Service]
 #   SupplementaryGroups=ozal-admin
@@ -743,23 +558,23 @@ sudo systemctl edit ozal                  # drop-in:
 sudo systemctl restart ozal
 ```
 
-`RuntimeDirectoryMode=0711` deja recorrer `/run/ozal` sin listarlo; el socket
-mismo sigue cerrado a quien no está en el grupo. El servicio no arranca si el
-grupo no existe, si su cuenta no pertenece a él o si el directorio del socket
-no es recorrible: nunca queda un socket que parece compartido y no lo está.
-En el archivo de targets agrega `"socket_group": "ozal-admin"` al `edge`;
-si tu usuario todavía no puede abrir el socket, `ozalctl` se detiene antes de
-ejecutar nada e indica el `usermod`. Instalar binarios, config y unidades
-(`edge upgrade`, `edge config`, `pair-upgrade`) sigue necesitando root.
+`RuntimeDirectoryMode=0711` lets users traverse `/run/ozal` without listing it;
+the socket itself stays closed to anyone outside the group. The service does not
+start if the group does not exist, if its account does not belong to it, or if the
+socket directory is not traversable. A socket that looks shared but is not never
+exists. In the targets file, add `"socket_group": "ozal-admin"` to the `edge`. If
+your user still cannot open the socket, `ozalctl` stops before running anything
+and shows the `usermod` command. Installing binaries, configuration and units
+(`edge upgrade`, `edge config`, `pair-upgrade`) still requires root.
 
-### La API como segundo camino: `ozalctl api`
+### The API as a second path: `ozalctl api`
 
-Todo lo que expone la API admin (`/_/api/...`: zonas, aplicaciones, personas,
-grupos, sitios, proyectos, conectores, política) se puede usar desde tu máquina
-con `ozalctl api`, además del CLI y la consola. Necesita `socket_group` en el
-target: el socket del edge se reenvía por SSH a un socket local dentro de un
-directorio `0700` (nunca a un puerto TCP, que cualquier usuario local podría
-usar) y la petición la hace tu usuario SSH, sin `sudo` ni token en tu máquina.
+Everything the admin API exposes (`/_/api/...`: zones, applications, people,
+groups, sites, projects, connectors, policy) can be used from your machine with
+`ozalctl api`, in addition to the CLI and the console. It needs `socket_group` in
+the target: the edge socket is forwarded over SSH to a local socket inside a `0700`
+directory (never to a TCP port, which any local user could use), and the request
+is made by your SSH user, without `sudo` or a token on your machine.
 
 ```sh
 ozalctl api GET /_/api/zones
@@ -768,84 +583,86 @@ ozalctl api POST /_/api/zones/example.org/check
 ozalctl api -d @people.json PUT /_/api/people/ana@example.org/groups
 ```
 
-Sólo acepta rutas `/_/api/`, cuerpos JSON de hasta 1 MB y los métodos GET,
-POST, PUT, PATCH y DELETE. Imprime la respuesta (JSON indentado); un HTTP 4xx o
-5xx termina con estado 1 después de mostrarla. Antes de enviar nada comprueba
-que el edge responde por el socket: si tu usuario no está en el grupo, se detiene
-sin enviar la petición. Un error de red después de enviar deja el resultado
-indeterminado: consulta el estado antes de repetir un cambio.
+It accepts only `/_/api/` paths, JSON bodies up to 1 MB, and the methods GET,
+POST, PUT, PATCH and DELETE. It prints the response (indented JSON); an HTTP 4xx
+or 5xx ends with status 1 after showing it. Before sending anything, it checks that
+the edge responds on the socket: if your user is not in the group, it stops without
+sending the request. A network error after sending leaves the result indeterminate:
+check the state before repeating a change.
 
-Upgrade construye un ref comprometido y usa el procedimiento anterior. Config
-requiere una base con `runtime_file` y sin rutas/proyectos/GitHub: conserva
-la proyección operativa existente, valida como el servicio y verifica el digest
-después del cambio. Si inicializa runtime, no reemplaza uno existente. Cambia
-las rutas desde la consola a partir de entonces.
+`upgrade` builds a committed ref and follows the procedure above. `config`
+requires a base with `runtime_file` and no routes, projects or GitHub settings: it
+keeps the existing operational projection, validates as the service, and checks the
+digest after the change. If it initializes the runtime, it does not replace an
+existing one. From then on, change routes from the console.
 
-Publish empaqueta archivos regulares, publica por el admin privado y comprueba
-el contenido cuando se pide `-host`; un fallo revierte al artefacto anterior.
+`publish` packages regular files, publishes through the private admin API, and
+checks the content when `-host` is given. A failure rolls back to the previous
+artifact.
 
-`project trust` migra el publicador GitHub de un proyecto existente cuando cambia
-el repositorio o su organización. Verifica los IDs numéricos en GitHub y fija la
-ref completa y el claim `owner/repo/.github/workflows/site.yml@refs/heads/main`.
-Por defecto muestra el cambio; `-apply` conserva los metadatos anteriores en un
-archivo privado `project-trust-NAME-FECHA.json` junto a la DB del servicio.
-El archivo contiene IDs/ref/workflow para volver a configurar la confianza,
-sin tokens, claves ni una copia completa del runtime. No se sobrescribe.
-El edge compara el digest revisado, guarda por su API y confirma la confianza
-activa; no necesita SIGHUP ni ediciones externas del runtime. Conserva sitios,
-rutas y otros publicadores. Requiere exactamente un publicador GitHub previo;
-si hay varios, revisa su configuración explícitamente. Esta autoridad pertenece
-al socket del host, nunca a un token web o de publicación. Un error de red puede
-dejar el resultado indeterminado: vuelve a consultar el plan antes de reintentar;
-para revertir usa los valores `before` del backup en un nuevo comando revisado.
-Como `app alias`, requiere primero un `edge upgrade` con un binario que incluya
-el subcomando; la guardia se niega ante binarios anteriores sin arrancarlos.
+`project trust` migrates the GitHub publisher of an existing project when its
+repository or organization changes. It verifies the numeric IDs on GitHub and pins
+the full ref and the claim `owner/repo/.github/workflows/site.yml@refs/heads/main`.
+By default it shows the change; `-apply` keeps the previous metadata in a private
+file `project-trust-NAME-DATE.json` next to the service database. The file holds the
+IDs, ref and workflow needed to reconfigure trust, without tokens, keys or a full
+copy of the runtime. It is never overwritten. The edge compares the reviewed digest,
+saves through its API and confirms the active trust; no SIGHUP or external edits to
+the runtime are needed. It keeps sites, routes and other publishers. It requires
+exactly one previous GitHub publisher; if there are several, review their
+configuration explicitly. This authority belongs to the host socket, never to a web
+or publishing token. A network error can leave the result indeterminate: check the
+plan again before retrying; to revert, use the `before` values from the backup in a
+new reviewed command. Like `app alias`, it first requires an `edge upgrade` to a
+binary that includes the subcommand; the guard refuses older binaries without
+starting them.
 
-`app alias` da a una aplicación pública existente (sitio estático o ruta a un
-upstream) un segundo hostname sin tocar el primero. Rechaza aplicaciones con
-política de acceso y rutas de redirect: el alias conserva exactamente la ruta
-pública del origen. `ozalctl` ejecuta `ozal app alias` en el edge contra el socket admin
-local (como la cuenta de servicio con `sudo`, o como tu usuario con
-`socket_group`), así que no hay token nuevo en tu máquina. El edge guarda la ruta con el digest revisado, crea
-el registro A proxied con su propia credencial (`dns.cloudflare.token`, un token
-de Zone DNS Edit; puede ser el archivo que ya usa `tls.dns01`) y espera a que
-`dns`, `certificate` y `reach` estén en `ok`. Nunca reemplaza un registro
-existente: si ya hay uno, espera a que coincida. Sin `dns.cloudflare` se niega
-antes de cambiar nada; con `-manual-dns` guarda la ruta y muestra el registro
-que falta. Se repite sin riesgo. Si el binario del edge es anterior, el comando
-se detiene antes de ejecutar nada y pide `edge upgrade`.
+`app alias` gives an existing public application (a static site or a route to an
+upstream) a second hostname without touching the first. It rejects applications
+with an access policy and redirect routes: the alias keeps exactly the origin's
+public path. `ozalctl` runs `ozal app alias` on the edge against the local admin
+socket (as the service account with `sudo`, or as your user with `socket_group`),
+so no new token exists on your machine. The edge saves the route with the reviewed
+digest, creates the proxied A record with its own credential (`dns.cloudflare.token`,
+a Zone DNS Edit token; it can be the file already used by `tls.dns01`), and waits
+until `dns`, `certificate` and `reach` are `ok`. It never replaces an existing
+record: if one exists, it waits for it to match. Without `dns.cloudflare` it refuses
+before changing anything; with `-manual-dns` it saves the route and shows the
+missing record. It can be repeated safely. If the edge binary is older, the command
+stops before running anything and asks for `edge upgrade`.
 
-Cloudflare es opcional y tiene dos operaciones explícitas, separadas de DNS:
+Cloudflare is optional and has two explicit operations, separate from DNS:
 
 ```sh
 ozalctl cloudflare origin-pull -host NEW.example.com -like OLD.example.com -token-file TOKEN_FILE
 ozalctl cloudflare deploy-rule -host deploy.example.com -token-file TOKEN_FILE
-# Revisar el plan; agregar -apply para escribir y comprobar por lectura.
+# Review the plan; add -apply to write and verify by reading back.
 ```
 
-El archivo de token debe ser privado; los permisos de Origin Pulls y de
-Configuration Rules son distintos de DNS Edit. `origin-pull` copia solamente la
-asociación habilitada de un certificado existente en la misma zona: no exporta
-claves, crea certificados ni sustituye asociaciones distintas. `deploy-rule`
-ajusta sólo la regla gestionada del hostname exacto; no reemplaza el ruleset,
-no altera reglas ajenas y se niega ante alcance ambiguo o parámetros adicionales.
-Antes de escribir guarda metadatos 0600 en `~/.local/state/ozalctl/` (o
-`-backup NEW_FILE`), vuelve a leer y verifica el resultado. Un fallo después de
-escribir requiere consultar de nuevo al proveedor antes de repetir o revertir;
-el backup no contiene credenciales ni toda la configuración de la zona.
-Las escrituras se probaron contra una API local. Los planes nativos también
-confirmaron por lectura el Origin Pulls del hostname Ozal y la regla de deploy
-existentes; no se hicieron cambios en Cloudflare.
+The token file must be private. Origin Pulls and Configuration Rules permissions
+are different from DNS Edit. `origin-pull` copies only the enabled association of
+an existing certificate in the same zone: it exports no keys, creates no
+certificates and does not replace different associations. `deploy-rule` adjusts
+only the managed rule for the exact hostname; it does not replace the ruleset, does
+not change others' rules, and refuses ambiguous scope or extra parameters. Before
+writing, it saves 0600 metadata in `~/.local/state/ozalctl/` (or `-backup
+NEW_FILE`), reads back and verifies the result. If it fails after writing, check the
+provider again before retrying or reverting; the backup contains no credentials and
+not the whole zone configuration. The writes were tested against a local API. The
+native plans also confirmed by reading back the Origin Pulls association of the
+Ozal hostname and the existing deploy rule; no changes were made in Cloudflare.
 
-Cutover es una integración **actualmente específica de Cloudflare**, con
-cambios de DNS y evidencia para restaurar. Un dominio asociado a Pages puede
-requerir retirada manual allí. Consulta el plan y conserva evidencia; rollback
-de contenido no revierte automáticamente DNS ni bases de datos.
+Cutover is an integration **currently specific to Cloudflare**, with DNS changes
+and evidence to restore. A domain associated with Pages may require manual removal
+there. Check the plan and keep the evidence; rolling back content does not revert
+DNS or databases automatically.
 
-## Ante un fallo
+<a id="ante-un-fallo"></a>
 
-Comprueba por separado proceso (`/_/healthz`), configuración efectiva, conexión
-del conector, funcionamiento de la app, DNS y HTTPS. Que responda el proceso
-no prueba el recorrido completo. Para probar límites o recuperación, usa una
-instancia descartable; no provoques disco lleno o caída de red en un host
-compartido. Los comandos de desarrollo están en [ingeniería](../engineering.md#verificacion).
+## When something fails
+
+Check separately: the process (`/_/healthz`), effective configuration, the
+connector link, the application itself, DNS and HTTPS. A responding process does
+not prove the full path works. To test limits or recovery, use a disposable
+instance; do not fill a disk or cut the network on a shared host. Development
+commands are in the [engineering guide](../engineering.md#verificacion).

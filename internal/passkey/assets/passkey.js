@@ -353,7 +353,28 @@ function setupEnrol(button) {
     show("This link has no invitation in it. Ask the operator for a new one.", "error");
     return;
   }
+  let ready = false;
+  async function checkLink() {
+    button.disabled = true;
+    show("Checking your invitation…");
+    try {
+      const info = await post("/_/auth/enrol/info", { token });
+      if (typeof info.recovery !== "boolean") throw new Error("The invitation could not be checked. Try again.");
+      document.getElementById("recovery-warning").hidden = !info.recovery;
+      button.textContent = info.recovery ? "Replace my passkeys" : "Create passkey";
+      ready = true;
+      show("");
+    } catch (error) {
+      button.textContent = "Check link again";
+      show(error.message, "error");
+    } finally {
+      button.disabled = false;
+    }
+  }
+  checkLink();
   button.addEventListener("click", async () => {
+    // A failed preflight never falls through to an authenticator prompt.
+    if (!ready) { await checkLink(); return; }
     button.disabled = true;
     show("Waiting for your device…");
     try {

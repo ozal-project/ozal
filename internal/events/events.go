@@ -49,6 +49,9 @@ const (
 	DNSRecordCreated Type = "dns.record_created"
 	// A user enrolled a passkey (ID-003). Code is "synced" or "device_bound".
 	PasskeyRegistered Type = "passkey.registered"
+	// Visitor recovery committed: old passkeys, sessions and other recovery
+	// links were retired. Actor is the subject; Code describes the new passkey.
+	UserRecovered Type = "user.recovered"
 	// A passkey was revoked, by its user from a session (ID-008) or by the
 	// operator; Reason says which.
 	PasskeyRevoked Type = "passkey.revoked"

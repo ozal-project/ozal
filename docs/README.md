@@ -1,24 +1,24 @@
-# Documentación
+# Documentation
 
-## Usar Ozal
+## Using Ozal
 
-1. [Instalar](operations/download-install.md): versión, integridad y servicio Linux.
-2. [Publicar una aplicación](operations/first-application.md): consola, dominio, personas y grupos.
-3. [Administrar](operations/administration.md): actualizar, recuperar, conectar hosts y publicar desde CI.
-4. [Seguridad](security.md): límites de confianza y responsabilidades del operador.
+1. [Install](operations/download-install.md): version, integrity and the Linux service.
+2. [Publish an application](operations/first-application.md): console, domains, people and groups.
+3. [Administer](operations/administration.md): upgrade, recover, connect hosts and publish from CI.
+4. [Security](security.md): trust boundaries and operator responsibilities.
 
-[Referencia de configuración y CLI](reference.md) para opciones avanzadas.
-Las [notas de alpha.1](releases/v0.1.0-alpha.1.md) describen esa versión;
-el checkout actual puede incluir funciones posteriores.
+[Configuration and CLI reference](reference.md) covers advanced options.
+The [alpha.1 notes](releases/v0.1.0-alpha.1.md) describe that version;
+the current checkout may include later features.
 
-## Contribuir
+## Contributing
 
-[Diseño](architecture/design.md) · [Stack](architecture/stack.md) ·
-[Contratos y verificación](engineering.md) ·
-[Identidad](architecture/identity-login.md) ·
-[Sesiones por host](architecture/host-sessions.md).
+[Design](architecture/design.md) · [Stack](architecture/stack.md) ·
+[Engineering contracts and verification](engineering.md) ·
+[Identity](architecture/identity-login.md) ·
+[Host sessions](architecture/host-sessions.md).
 
-El estado vive solo en [TO_IMPLEMENT](TO_IMPLEMENT.md) y
-[IMPLEMENTED](IMPLEMENTED.md). Las guías describen comportamiento; no repiten
-el historial de cada tarea. Revisiones antiguas y borradores locales van al
-archivo ignorado descrito en [mantenimiento](engineering.md#mantenimiento-de-documentacion).
+The status of work lives only in [TO_IMPLEMENT](TO_IMPLEMENT.md) and
+[IMPLEMENTED](IMPLEMENTED.md). The guides describe behavior; they do not repeat
+the history of each task. Old reviews and local drafts go to the ignored
+archive described in [documentation maintenance](engineering.md#mantenimiento-de-documentacion).

@@ -24,7 +24,8 @@
     <div id="choice-list"></div>
   </fieldset>
   <p class="hint"><a href="/_/auth/help">Not sure which? Compare the ways to sign in</a></p>
-  <button id="action" type="button">Create passkey</button>
+  <p id="recovery-warning" class="hint" role="note" hidden>This is an account recovery. Creating this passkey replaces all your previous passkeys, signs out your previous sessions and invalidates your other recovery links. Only continue if you asked the operator to recover your account.</p>
+  <button id="action" type="button" disabled>Create passkey</button>
   <p id="status" role="status" aria-live="polite"></p>
   <nav id="sites" class="sites" aria-label="Your sites" hidden></nav>
 </main>

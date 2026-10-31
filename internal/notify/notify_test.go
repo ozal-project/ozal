@@ -361,3 +361,10 @@ func TestPairingText(t *testing.T) {
 		t.Fatalf("PairingText = %q", got)
 	}
 }
+
+func TestRecoveryCompletionBecomesAnAlertWithoutLinkOrErrorDetails(t *testing.T) {
+	text, ok := alertText(events.Event{Type: events.UserRecovered, Actor: "sb:visitor", Host: "auth.example.test", Code: "device_bound", Reason: "private-reason", Error: "private-error"})
+	if !ok || text != "Ozal: user.recovered actor=sb:visitor host=auth.example.test code=device_bound" {
+		t.Fatalf("recovery alert = %q, %v", text, ok)
+	}
+}

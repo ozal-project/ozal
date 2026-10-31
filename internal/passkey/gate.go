@@ -316,6 +316,8 @@ func (g *Gate) ServeAuthEndpoint(w http.ResponseWriter, r *http.Request) bool {
 		g.api(w, r, g.loginBegin)
 	case "/_/auth/login/finish":
 		g.api(w, r, g.loginFinish)
+	case "/_/auth/enrol/info":
+		g.api(w, r, g.enrolInfo)
 	case "/_/auth/enrol/begin":
 		g.api(w, r, g.enrolBegin)
 	case "/_/auth/enrol/finish":
@@ -499,13 +501,30 @@ type enrolBeginRequest struct {
 	ReturnTo string `json:"return_to"`
 }
 
+// enrolInfo validates the bearer link without consuming it or creating a
+// ceremony. Only its purpose is disclosed; no identity or token is returned.
+func (g *Gate) enrolInfo(w http.ResponseWriter, r *http.Request) (any, *apiError) {
+	var req enrolBeginRequest
+	if !decodeJSON(r, &req) || req.Token == "" || len(req.Token) > 128 {
+		return nil, &errLinkInvalid
+	}
+	tokenHash := sha256.Sum256([]byte(req.Token))
+	_, recovered, err := g.dir.InvitedUser(r.Context(), tokenHash[:])
+	if err != nil {
+		return nil, &errLinkInvalid
+	}
+	return struct {
+		Recovery bool `json:"recovery"`
+	}{recovered}, nil
+}
+
 func (g *Gate) enrolBegin(w http.ResponseWriter, r *http.Request) (any, *apiError) {
 	var req enrolBeginRequest
 	if !decodeJSON(r, &req) || req.Token == "" || len(req.Token) > 128 {
 		return nil, &errLinkInvalid
 	}
 	tokenHash := sha256.Sum256([]byte(req.Token))
-	user, err := g.dir.InvitedUser(r.Context(), tokenHash[:])
+	user, _, err := g.dir.InvitedUser(r.Context(), tokenHash[:])
 	if err != nil {
 		g.emit(r, events.Event{Type: events.LoginFailed, Code: "invitation_invalid", Error: errorText(err)})
 		return nil, &errLinkInvalid
@@ -547,7 +566,8 @@ func (g *Gate) enrolFinish(w http.ResponseWriter, r *http.Request) (any, *apiErr
 		g.emit(r, events.Event{Type: events.LoginFailed, Actor: user.Subject(), Code: "enrol_invalid", Error: errorText(err)})
 		return nil, &errLoginFailed
 	}
-	if err := g.dir.Enrol(r.Context(), pending.tokenHash, user.ID, *credential); err != nil {
+	recovered, err := g.dir.Enrol(r.Context(), pending.tokenHash, user.ID, *credential)
+	if err != nil {
 		g.emit(r, events.Event{Type: events.LoginFailed, Actor: user.Subject(), Code: "enrol_store_failed", Error: err.Error()})
 		if errors.Is(err, ErrInvitationInvalid) {
 			return nil, &errLinkInvalid
@@ -560,7 +580,13 @@ func (g *Gate) enrolFinish(w http.ResponseWriter, r *http.Request) (any, *apiErr
 	}
 	// Alerted when notifications are configured: a passkey nobody expected
 	// is the sign that a link or a session was stolen.
-	g.emit(r, events.Event{Type: events.PasskeyRegistered, Actor: user.Subject(), Code: kind})
+	eventType := events.PasskeyRegistered
+	reason := ""
+	if recovered {
+		eventType = events.UserRecovered
+		reason = "previous passkeys revoked, previous sessions ended and other recovery links retired"
+	}
+	g.emit(r, events.Event{Type: eventType, Actor: user.Subject(), Code: kind, Reason: reason})
 	if apiErr := g.startSession(w, r, user, !credential.Flags.BackupEligible, credential.Flags.UserVerified, true); apiErr != nil {
 		return nil, apiErr
 	}

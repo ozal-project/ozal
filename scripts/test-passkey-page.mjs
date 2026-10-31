@@ -12,11 +12,11 @@ const src = readFileSync(new URL("../internal/passkey/assets/passkey.js", import
 function render(search, { oidc = "", webauthn = true, page = "login", fetch = () => new Promise(() => {}), assign = () => {}, caps, get = () => new Promise(() => {}), create = () => new Promise(() => {}), hash = "" } = {}) {
   const els = {};
   const el = (id) => (els[id] ??= {
-    id, textContent: "", hidden: id === "oidc", open: false, href: "", disabled: false, dataset: {}, children: [], on: {},
+    id, textContent: "", hidden: id === "oidc" || id === "recovery-warning", open: false, href: "", disabled: false, dataset: {}, children: [], on: {},
     addEventListener(ev, fn) { this.on[ev] = fn; }, focus() {}, setAttribute() {}, append(...c) { this.children.push(...c); }, replaceChildren(...c) { this.children = c; },
     querySelector(q) { return q === "a" ? this.children.find((c) => c.href) || null : null; },
   });
-  ["title", "intro", "action", "oidc", "status", "first-time", "username", "sites", "devices", "who", "email", "signout", "apps", "manage", "choices", "choice-list", "use-phone", "use-key"].forEach(el);
+  ["title", "intro", "action", "oidc", "status", "first-time", "username", "sites", "devices", "who", "email", "signout", "apps", "manage", "choices", "choice-list", "use-phone", "use-key", "recovery-warning"].forEach(el);
   const label = { hidden: false };
   const head = [];
   let ready;
@@ -52,6 +52,8 @@ function render(search, { oidc = "", webauthn = true, page = "login", fetch = ()
     get href() { return els.oidc.href; },
     get firstTime() { return !els["first-time"].hidden; },
     get status() { return els.status.textContent; },
+    get recoveryWarning() { return !els["recovery-warning"].hidden; },
+    get actionLabel() { return els.action.textContent; },
     get devices() { return els.devices.children; },
     get apps() { return els.apps.children.map((a) => [a.href, a.textContent, (a.children[0] || {}).textContent || ""]); },
     who: () => (els.who.hidden ? "" : els.email.textContent),
@@ -142,7 +144,7 @@ assert.equal(page.checked, "key", "a later answer never overrides what the perso
 
 // The choice reaches the browser as a hint; the password manager adds none
 // (its extension takes the prompt whatever the hint).
-const creationReply = async (url) => ({ ok: true, json: async () => (url.endsWith("/begin") ? { publicKey: { challenge: "AAAA", user: { id: "AAAA" } } } : { sites: [] }) });
+const creationReply = async (url) => ({ ok: true, json: async () => (url.endsWith("/info") ? { recovery: false } : url.endsWith("/begin") ? { publicKey: { challenge: "AAAA", user: { id: "AAAA" } } } : { sites: [] }) });
 const created = [];
 const credential = { id: "c", rawId: new Uint8Array([1]).buffer, type: "public-key", getClientExtensionResults: () => ({}), response: { clientDataJSON: new Uint8Array([1]).buffer, attestationObject: new Uint8Array([1]).buffer } };
 for (const [choice, hints] of [["phone", ["hybrid"]], ["key", ["security-key"]], ["device", ["client-device"]], ["manager", undefined]]) {
@@ -155,6 +157,46 @@ for (const [choice, hints] of [["phone", ["hybrid"]], ["key", ["security-key"]],
 }
 assert.deepEqual(page.siteLinks, ["Add a backup passkey somewhere else"], "a first passkey is followed by the suggestion of a backup");
 assert.match(page.status, /second one in another place/);
+
+// Recovery is disclosed from server metadata before the first authenticator
+// prompt. The explicit button acknowledges replacement, never a silent create.
+let promptCount = 0;
+let infoReply;
+page = enrol({
+  fetch: async (url) => url.endsWith("/info") ? new Promise((resolve) => { infoReply = resolve; }) : creationReply(url),
+  create: async () => { promptCount++; return credential; },
+});
+assert.equal(page.passkey, "disabled", "the invitation is checked before enabling creation");
+assert.equal(promptCount, 0);
+infoReply({ ok: true, json: async () => ({ recovery: true }) });
+await tick();
+assert.equal(page.recoveryWarning, true, "recovery consequences are visible before the prompt");
+assert.equal(page.actionLabel, "Replace my passkeys");
+assert.equal(promptCount, 0, "preflight never starts an authenticator");
+await page.click();
+assert.equal(promptCount, 1);
+
+page = enrol({ fetch: creationReply });
+await tick();
+assert.equal(page.recoveryWarning, false, "ordinary enrolment is not called recovery");
+assert.equal(page.actionLabel, "Create passkey");
+
+for (const broken of [async () => { throw new Error("offline"); }, async () => ({ ok: true, json: async () => ({}) })]) {
+  const calls = [];
+  let failInfo = true;
+  page = enrol({
+    fetch: async (url) => { calls.push(url); return failInfo ? broken() : { ok: true, json: async () => ({ recovery: true }) }; },
+    create: async () => { throw new Error("must not prompt"); },
+  });
+  await tick();
+  assert.equal(page.actionLabel, "Check link again");
+  assert.equal(page.recoveryWarning, false);
+  failInfo = false;
+  await page.click();
+  assert.equal(page.recoveryWarning, true);
+  assert.equal(page.actionLabel, "Replace my passkeys");
+  assert.ok(calls.every((url) => url.endsWith("/info")), "a retry checks metadata; the person must click again to replace");
+}
 
 page = render(rt + "&reauth=method&methods=oidc", { oidc: "Okta" });
 assert.equal(page.choices, "hidden", "no passkey guidance where only the provider is allowed");
@@ -242,4 +284,4 @@ shown = await portal({ ok: false, status: 401, json: async () => ({ error: "You 
 assert.deepEqual(shown.assigned, ["/_/auth/login?return_to=" + encodeURIComponent("https://auth.example.com/_/auth/me")], "a signed-out person logs in and comes back to the portal");
 assert.equal(shown.page.who(), "", "nothing about a person is shown without a session");
 
-console.log("passkey pages: 31 variants OK");
+console.log("passkey pages: login, enrolment, recovery preflight, choices and devices OK");

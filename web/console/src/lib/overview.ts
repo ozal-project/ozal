@@ -201,6 +201,11 @@ export function changes(events: AccessEvent[], subjects?: Map<string, string>): 
       case "user.invited": case "user.disabled": case "user.enabled":
         out.push({ ...base, title: `${host || "A person"} was ${e.type.slice(5)}`, detail: e.actor ? `By ${whoActed(e.actor, subjects)}.` : "", tone: "neutral" });
         break;
+      case "user.recovered": {
+        const who = whoActed(e.actor, subjects);
+        out.push({ ...base, title: `${who && !who.startsWith("sb:") ? who : "Someone"} recovered their account`, detail: "Previous passkeys were replaced, previous sessions ended and other recovery links retired.", tone: "neutral" });
+        break;
+      }
       case "passkey.registered": {
         // The event's host is the login page, not the person: only the actor says who.
         const who = whoActed(e.actor, subjects);

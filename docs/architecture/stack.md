@@ -1,80 +1,85 @@
 # Stack
 
-Decisiones de dependencias. Antes de añadir una, registra aquí motivo y costo
-operativo. Versiones exactas: [go.mod](../../go.mod), lockfiles de
-[consola](../../web/console/package.json) y [sitio](../../site/package.json).
-Versiones de herramientas: `.node-version` y workflows. No duplicar versiones
-ni mantener una tabla de estado de tareas en este archivo.
+Dependency decisions. Before adding one, record its reason and operational cost
+here. Exact versions live in [go.mod](../../go.mod) and the lockfiles of the
+[console](../../web/console/package.json) and [site](../../site/package.json).
+Tool versions live in `.node-version` and the workflows. Do not duplicate
+versions or keep a task status table in this file.
 
-## Decidido
+## Decided
 
-| Área | Elección | Motivo |
+| Area | Choice | Reason |
 |---|---|---|
-| Núcleo | Go; mínimo declarado en go.mod | Red, TLS, concurrencia y distribución binaria |
-| HTTP y proxy | stdlib net/http, crypto/tls, httputil.ReverseProxy | Sin framework HTTP adicional |
-| Certificados públicos | x/crypto/acme/autocert y gestor DNS-01 propio sobre x/crypto/acme | Reutilizar protocolo; mantener almacenamiento/renovación acotados |
-| DNS-01: Cloudflare | API Cloudflare con net/http | Adaptador por defecto; sin módulos nuevos |
-| DNS-01: `builtin` | Servidor DNS autoritativo mínimo propio (`internal/acmedns`) sobre `golang.org/x/net/dns/dnsmessage` y `net`; reutiliza `internal/ratelimit` | Emisión sin cuenta ni API de terceros (patrón acme-dns en el mismo proceso). Sin módulos nuevos. El formato en el cable se contrasta con `dig` en un test que se omite si no está instalado |
-| DNS-01: Hetzner | API Hetzner Cloud DNS (RRSets, `add_records`/`remove_records` por nombre y tipo, Actions) con net/http | Segundo proveedor administrado, sin módulos nuevos. Esquema tomado de la spec OpenAPI oficial; **el quoting de los TXT no figura en ella** y está aislado en `hetznerTXTValue` hasta una prueba real |
-| DNS-01: RFC 2136 | UPDATE firmado con TSIG (RFC 8945) sobre TCP; `golang.org/x/net/dns/dnsmessage` y `crypto/hmac` | Independencia del proveedor DNS (BIND, PowerDNS, Knot). `x/net` ya estaba en `go.mod` como indirecta y pasa a directa: **cero módulos nuevos**. El TSIG propio se contrasta con el `nsupdate` de BIND en un test que se omite si no está instalado; algoritmos SHA-2 solamente |
-| OIDC cliente | coreos/go-oidc y x/oauth2 | Verificación de issuer, tokens y flujo; reutilizado para CI |
-| JOSE | go-jose/v4 | Firmas y JWT con biblioteca existente |
-| Passkeys | go-webauthn/webauthn | No implementar WebAuthn ni sus primitivas desde cero |
-| Persistencia | modernc.org/sqlite, SQL explícito y migraciones embebidas | Estado local sin servicio externo ni cgo |
-| Túneles | hashicorp/yamux sobre mTLS | Multiplexación reutilizada; identidad y permisos propios |
-| Configuración | JSON estricto, referencias de secretos file:/env: | Validación y persistencia sin resolver secretos a disco |
-| Consola | Svelte 5, TypeScript, Vite, Tailwind y bits-ui | SPA estática embebida; Node solo en build |
-| Página pública | Astro estático, Tailwind y engine Go/WASM opcional | Contenido accesible sin servidor Node |
-| Tipografía | Geist Sans/Mono autoalojadas, OFL | Activos locales y CSP sin proveedores de fuentes |
-| CLI | flag estándar; ozalctl separado para operación SSH | Instalación/automatización; trabajo rutinario desde consola |
-| Telegram/GitHub App | Adaptadores net/http | Opcionales, referencias locales y permisos mínimos |
-| Auditoría | JSONL, SHA-256 y checkpoints Ed25519 | Contrato local con límites de evidencia explícitos |
-| Pruebas | testing, httptest, race y fuzz nativos | Regresiones en decisiones, adaptadores y fronteras |
-| Release | GoReleaser, SHA-256 y SBOM con syft | Herramientas de build; no dependencias del runtime |
+| Core | Go; minimum declared in go.mod | Networking, TLS, concurrency and single-binary distribution |
+| HTTP and proxy | stdlib net/http, crypto/tls, httputil.ReverseProxy | No additional HTTP framework |
+| Public certificates | x/crypto/acme/autocert and an in-house DNS-01 manager on x/crypto/acme | Reuse the protocol; keep storage and renewal bounded |
+| DNS-01: Cloudflare | Cloudflare API with net/http | Default adapter; no new modules |
+| DNS-01: `builtin` | Minimal in-house authoritative DNS server (`internal/acmedns`) on `golang.org/x/net/dns/dnsmessage` and `net`; reuses `internal/ratelimit` | Issuance without a third-party account or API (acme-dns pattern inside the same process). No new modules. The wire format is checked against `dig` in a test that is skipped when `dig` is not installed |
+| DNS-01: Hetzner | Hetzner Cloud DNS API (RRSets, `add_records`/`remove_records` by name and type, Actions) with net/http | Second managed provider, no new modules. Schema taken from the official OpenAPI spec; **the TXT quoting is not stated in it**, and it is isolated in `hetznerTXTValue` until tested against a real zone |
+| DNS-01: RFC 2136 | Dynamic UPDATE signed with TSIG (RFC 8945) over TCP; `golang.org/x/net/dns/dnsmessage` and `crypto/hmac` | Independence from the DNS provider (BIND, PowerDNS, Knot). `x/net` was already an indirect dependency in go.mod and becomes direct: **zero new modules**. The in-house TSIG is checked against BIND's `nsupdate` in a test that is skipped when it is not installed; SHA-2 algorithms only |
+| OIDC client | coreos/go-oidc and x/oauth2 | Issuer verification, tokens and flow; reused for CI |
+| JOSE | go-jose/v4 | Signatures and JWTs with an existing library |
+| Passkeys | go-webauthn/webauthn | Do not implement WebAuthn or its primitives from scratch |
+| Persistence | modernc.org/sqlite, explicit SQL and embedded migrations | Local state without an external service or cgo |
+| Tunnels | hashicorp/yamux over mTLS | Reused multiplexing; identity and permissions are Ozal's own |
+| Configuration | Strict JSON, `file:`/`env:` secret references | Validation and persistence without resolving secrets to disk |
+| Console | Svelte 5, TypeScript, Vite, Tailwind and bits-ui | Static SPA embedded in the binary; Node only at build time |
+| Public site | Static Astro, Tailwind and an optional Go/WASM engine | Accessible content without a Node server |
+| Typography | Self-hosted Geist Sans/Mono, OFL | Local assets and a CSP without font providers |
+| CLI | Standard `flag`; separate `ozalctl` for SSH operation | Installation and automation; routine work from the console |
+| Telegram / GitHub App | net/http adapters | Optional, referenced locally, minimal permissions |
+| Audit | JSONL, SHA-256 and Ed25519 checkpoints | Local contract with explicit evidence limits |
+| Tests | Native testing, httptest, race and fuzz | Regressions in decisions, adapters and boundaries |
+| Release | GoReleaser, SHA-256 and SBOM with syft | Build tools; not runtime dependencies |
 
-La consola se construye en `internal/admin/console` y se sirve con embed.FS.
-Vite genera scripts externos compatibles con la CSP del proyecto. El token
-administrativo vive en memoria de la pestaña; tras una recarga lo devuelve el
-edge desde una cookie `HttpOnly` limitada a su endpoint de reanudación. SvelteKit/SSR no son necesarios
-para esta consola; React con Vite sería técnicamente posible, pero no hay una
-necesidad demostrada que justifique migrar.
+The console is built in `internal/admin/console` and served with `embed.FS`.
+Vite generates external scripts compatible with the project's CSP. The
+administrative token lives in the tab's memory; after a reload, the edge returns
+it from an `HttpOnly` cookie limited to its resume endpoint. SvelteKit or SSR is
+not needed for this console. React with Vite would be technically possible, but
+no demonstrated need justifies the migration.
 
-CI Linux y release preparan dependencias con lockfiles y Node fijado, y usan
-`OZAL_REQUIRE_FRONTEND=1` para fallar si se omiten controles frontend
-(`REL-014`). La aceptación del runner se registra en el tracker; tener el job
-configurado no prueba que se haya ejecutado correctamente.
+The Linux CI and release jobs prepare dependencies with lockfiles and a pinned
+Node version, and use `OZAL_REQUIRE_FRONTEND=1` to fail when frontend checks
+are skipped. Having the job configured does not prove it ran successfully;
+runner acceptance is tracked separately.
 
 <a id="public-origin-certificate-contract"></a>
 
-## Contrato de certificados públicos
+## Public certificate contract
 
-El composition root conecta `GetCertificate` al listener. Cuenta ACME separada
-por directorio/entorno; generaciones completas de cert/clave validadas y
-persistidas antes de activar. Un escritor, renovación serial con timeouts/backoff,
-limpieza por ID de TXT propio y estado de limpieza recuperable. Conservar un
-certificado válido si renovar falla; sin él, fallar TLS cerrado.
+The composition root connects `GetCertificate` to the listener. The ACME account
+is separate per directory and environment. Complete cert/key generations are
+validated and persisted before activation. There is one writer; renewal is
+serial with timeouts and backoff; cleanup removes only our own TXT records by
+ID and recovers its state. A valid certificate is kept if renewal fails; without
+one, TLS fails closed.
 
-Wildcard cubre un nivel; apex exige nombre adicional. El gestor acepta el
-conjunto acotado de nombres soportado por config; no convertirlo en plataforma
-arbitraria sin nueva decisión. Los detalles están en
-[ingeniería](../engineering.md#certificados). CertMagic sigue siendo alternativa
-si mantener el gestor propio supera el beneficio; no es una dependencia actual.
+A wildcard covers one label level; the apex needs an additional name. The
+manager accepts the bounded set of names supported by the configuration. Do not
+turn it into an arbitrary platform without a new decision. Details are in the
+[engineering guide](../engineering.md#certificados). CertMagic remains an
+alternative if maintaining the in-house manager costs more than it saves; it is
+not a current dependency.
 
-## Renovación privada
+## Private renewal
 
-El piloto usa Go crypto/x509 y Ed25519, coordinación SSH y timer systemd.
-Claves por host, CSRs públicos y rollback respetando revocación. No requiere
-Python/OpenSSL como runtime ni ofrece todavía renovación de cualquier flota.
-La CA y su rollover son distintos de las hojas. [Contrato](../engineering.md#tuneles).
+The pilot uses Go crypto/x509 and Ed25519, SSH coordination and a systemd timer.
+Keys are per host, CSRs are public, and rollback respects revocation. It needs
+no Python or OpenSSL at runtime, and it does not yet provide renewal for any
+fleet. The CA and its rollover are separate from the leaf certificates. See the
+[contract](../engineering.md#tuneles).
 
-## Decidir cuando exista una necesidad
+## Decide when there is a need
 
-Postgres/estado multi-edge, QUIC, motor WAF, CA privada/SSH, proveedor de correo,
-metrics/tracing y primitivas de transparencia conservan sus tareas en el
-tracker/VISION. Ninguno se agrega por aparecer en una propuesta. PowerDNS y
-un servicio compartido de URLs están fuera del MVP autónomo elegido.
+Postgres or multi-edge state, QUIC, a WAF engine, a private CA or SSH, a mail
+provider, metrics and tracing, and transparency-log primitives keep their
+tracking in the internal trackers and the vision document. None is added merely
+because a proposal mentions it. PowerDNS and a shared URL service are outside
+the chosen standalone MVP.
 
-Se conserva la preferencia por stdlib, SQL explícito y dependencias sin cgo.
-No usar una DB alojada obligatoria en el camino de acceso del edge. La revisión
-consolidada recomienda mantener Go/Svelte/SQLite y priorizar medición,
-recuperación y aceptación externa; no demuestra ausencia de vulnerabilidades.
+We keep the preference for stdlib, explicit SQL and cgo-free dependencies. The
+edge's access path must not depend on a mandatory hosted database. The
+consolidated review recommends keeping Go, Svelte and SQLite, and prioritizing
+measurement, recovery and external acceptance. It does not prove the absence of
+vulnerabilities.

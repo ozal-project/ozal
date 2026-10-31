@@ -103,6 +103,7 @@ func alertText(e events.Event) (string, bool) {
 		events.ConfigReloaded,
 		events.ConfigReloadFailed,
 		events.PasskeyRegistered,
+		events.UserRecovered,
 		// Every chat already paired learns that another one now gets alerts.
 		events.NotifyChatPaired:
 	default:

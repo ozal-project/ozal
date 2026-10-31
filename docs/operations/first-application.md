@@ -1,295 +1,293 @@
-# Primera aplicación y web existente
+# First application and an existing website
 
-Guía del checkout actual: consola privada, aplicaciones y acceso. Las notas
-de cada release delimitan qué incluye un binario distribuido.
+This guide covers the current checkout: the private console, applications and
+access. Each release's notes state what a distributed binary includes.
 
-## Probar con una aplicación que ya corre
+## Try it with an application that is already running
 
-Con un binario construido de este checkout:
+With a binary built from this checkout:
 
 ```sh
 ozal setup -dir ./my-edge -target http://127.0.0.1:3000
 ```
 
-Crea una instalación **nueva**: configuración, token privado referenciado por
-archivo, SQLite migrado, directorio de Pages y `START-HERE.md`. Se niega a
-sobrescribir un directorio existente. El listener público de esta prueba está
-en `127.0.0.1:8888`; la ruta `localhost:8888` exige passkey y grupo `members`.
-No instala un servicio ni altera DNS o una web que ya esté funcionando.
+This creates a **new** installation: configuration, a private token referenced
+from a file, a migrated SQLite database, a Pages directory and `START-HERE.md`.
+It refuses to overwrite an existing directory. The public listener for this trial
+is `127.0.0.1:8888`; the route `localhost:8888` requires a passkey and the
+`members` group. It does not install a service and does not change DNS or a site
+that is already running.
 
-El comando imprime las rutas y los comandos exactos de arranque, invitación y
-login del operador. Usa esas rutas; no copies credenciales a un chat.
+The command prints the paths and the exact start, invitation and operator sign-in
+commands. Use those paths, and do not paste credentials into a chat.
 
 ```sh
-ozal -config /ruta/my-edge/config.json -db /ruta/my-edge/state.db
-# En otra terminal del mismo host:
-ozal console enrol -config /ruta/my-edge/config.json
-ozal user invite -config /ruta/my-edge/config.json \
+ozal -config /path/to/my-edge/config.json -db /path/to/my-edge/state.db
+# In another terminal on the same host:
+ozal console enrol -config /path/to/my-edge/config.json
+ozal user invite -config /path/to/my-edge/config.json \
   -email ana@example.com -group members -return-to http://localhost:8888/
 ```
 
-El primer enlace abre una sesión administrativa privada; el segundo es una
-invitación de visitante. Son credenciales diferentes. Envía la invitación a
-su destinataria por un canal confiable. Con un segundo perfil del navegador,
-prueba que una persona sin `members` recibe una negativa. Que haya login no
-implica que esa persona pueda administrar Ozal.
+The first link opens a private administrative session; the second is a visitor
+invitation. They are different credentials. Send the invitation to its recipient
+over a trusted channel. With a second browser profile, check that a person
+without `members` is refused. Being able to sign in does not mean that person can
+administer Ozal.
 
-Para un sitio estático, usa `setup -dir ./my-site -site portfolio`. La
-configuración ya tiene persistencia y Pages. La primera publicación aún falta:
-sube un tar.gz del contenido de `dist` con **Applications → Más → Publish a new version** (o al agregarla con **Add application**),
-o usa `site deploy` con el token mediante su referencia a archivo. La web del
-proyecto se construye fuera del edge.
+For a static site, use `setup -dir ./my-site -site portfolio`. The configuration
+already has persistence and Pages. The first publication is still missing: upload
+a tar.gz of the `dist` contents with **Applications → More → Publish a new version**
+(or when adding it with **Add application**), or use `site deploy` with the token
+through its file reference. The project website is built outside the edge.
 
-En Windows no hay socket Unix administrativo; las sesiones del operador
-emitidas por el host requieren Linux/macOS. Para la consola local Windows se
-conserva el token por archivo y la recuperación offline con el proceso detenido.
-La instalación de servicio descrita en este repositorio es Linux/systemd.
+On Windows there is no administrative Unix socket; operator sessions issued by the
+host require Linux or macOS. For the local Windows console, the token is kept in a
+file, and offline recovery is done with the process stopped. The service
+installation described in this repository is Linux/systemd only.
 
-## Primer administrador y acceso por persona
+## First administrator and per-person access
 
-El host abre la puerta una sola vez; después cada administrador entra con su
-propio passkey y no hace falta ningún comando en el host.
+The host opens the door once. After that, each administrator signs in with their
+own passkey, and no command on the host is needed.
 
 ```sh
-sudo ozal console enrol            # instalación con el servicio; por SSH imprime también el `ssh -N -L` para abrir el enlace
-OZAL_CONFIG=/ruta/config.json ozal console enrol   # config fuera de /etc/ozal
-ozal console enrol -config /ruta/my-edge/config.json   # arranque manual
+sudo ozal console enrol            # service installation; over SSH it also prints the `ssh -N -L` to open the link
+OZAL_CONFIG=/path/config.json ozal console enrol   # configuration outside /etc/ozal
+ozal console enrol -config /path/to/my-edge/config.json   # manual start
 ```
 
-Imprime un enlace que sirve una vez durante diez minutos. Ábrelo en el
-navegador que tiene el túnel; pide nombre completo y correo (no se envía
-ningún mensaje) y crea el passkey. Esa persona queda como la primera
-administradora, con todas las herramientas. Desde entonces la consola ofrece
-«Sign in with your passkey». Un passkey queda atado al nombre del sitio, y
-WebAuthn no admite direcciones IP: abre la consola como `http://ozal.localhost:PUERTO`
-(el extremo local del túnel), nunca como `127.0.0.1`.
+It prints a link that works once for ten minutes. Open it in the browser that has
+the tunnel. It asks for a full name and an email address (no message is sent) and
+creates the passkey. That person becomes the first administrator, with every tool.
+From then on the console offers "Sign in with your passkey". A passkey is bound to
+the site's name, and WebAuthn does not accept IP addresses: open the console as
+`http://ozal.localhost:PORT` (the local end of the tunnel), never as `127.0.0.1`.
 
-`ozal.localhost` resuelve al equipo desde el navegador; no necesita un
-registro DNS público ni cambiar el túnel SSH o el puerto del listener. Si otra
-herramienta usa el DNS del sistema y no resuelve el nombre, puedes añadir
-`127.0.0.1 ozal.localhost` al archivo `hosts` de tu equipo. El navegador
-permite las passkeys en este contexto local sin instalar un certificado TLS.
+`ozal.localhost` resolves to the machine from the browser; it needs no public DNS
+record and no change to the SSH tunnel or the listener port. If another tool uses
+the system DNS and does not resolve the name, you can add `127.0.0.1 ozal.localhost`
+to your machine's `hosts` file. The browser allows passkeys in this local context
+without installing a TLS certificate.
 
-**Dónde guardar la passkey.** Antes del diálogo del navegador, la consola y
-las páginas de login preguntan dónde quedará: este equipo, un gestor de
-contraseñas con extensión del navegador (por ejemplo Bitwarden o Vaultwarden
-autohospedado, 1Password, Proton Pass o KeePassXC; ninguno es requisito), el
-teléfono por QR o una llave FIDO2. Recomiendan una según lo que el navegador
-informa y pasan la elección como *hint*, que algunos navegadores ignoran.
-En un escritorio Linux sin autenticador, y en una VM sin Bluetooth, sirven el
-gestor de contraseñas o la llave. En la consola (`http://ozal.localhost`)
-muchos gestores, Bitwarden entre ellos, no ofrecen passkeys; KeePassXC sí, con
-*Settings → Browser Integration → Advanced → Allow using localhost with
-passkeys*. En las páginas de login por HTTPS esa limitación desaparece, aunque
-cada combinación de navegador, extensión y sistema puede variar. Comparte con las personas que invitas
-`https://<host de login>/_/auth/help`, que compara las opciones sin pedir
-sesión, y sugiéreles una segunda passkey en otro lugar. Si el túnel usa otro
-puerto local que `admin.listen`, añade `-url http://ozal.localhost:PUERTO` a
-`console enrol` y `console login` para que el enlace abra en ese navegador.
+**Where to store the passkey.** Before the browser dialog, the console and the
+login pages ask where it will be kept: this device, a password manager with a
+browser extension (for example Bitwarden or self-hosted Vaultwarden, 1Password,
+Proton Pass or KeePassXC; none is required), a phone by QR code, or a FIDO2 key.
+They recommend one based on what the browser reports, and pass the choice as a
+*hint*, which some browsers ignore. On a Linux desktop without an authenticator,
+and in a VM without Bluetooth, a password manager or a key works. In the console
+(`http://ozal.localhost`), many managers, Bitwarden among them, do not offer
+passkeys; KeePassXC does, with *Settings → Browser Integration → Advanced → Allow
+using localhost with passkeys*. On the HTTPS login pages this limitation does not
+apply, although each combination of browser, extension and operating system can
+differ. Share `https://<login host>/_/auth/help` with the people you invite: it
+compares the options without requiring a session, and suggest a second passkey in
+another place. If the tunnel uses a local port other than `admin.listen`, add
+`-url http://ozal.localhost:PORT` to `console enrol` and `console login` so the link
+opens in that browser.
 
-**Passkeys de consola en el dominio.** Con `admin.login_host: true` y un login
-de passkeys en HTTPS, «Create my passkey» y «Sign in with passkey» llevan a
-`https://<host de login>/_/auth/admin`, donde no rige la limitación de
-localhost para gestores, teléfono y llaves, y vuelven a la consola con la
-sesión abierta. La
-consola sigue privada; sin una transacción iniciada desde ella, esa dirección
-responde como una ruta desconocida. Sin dominio HTTPS, el primer acceso sigue
-en `ozal.localhost` o con el host login.
+**Console passkeys on the domain.** With `admin.login_host: true` and passkey login
+over HTTPS, "Create my passkey" and "Sign in with passkey" go to
+`https://<login host>/_/auth/admin`, where the localhost limitation for managers,
+phones and keys does not apply. They return to the console with the session open.
+The console stays private: without a transaction started from it, that address
+answers like an unknown route. Without an HTTPS domain, first access still uses
+`ozal.localhost` or the login host.
 
-**Pasar desde localhost:** las passkeys están vinculadas al nombre y no se
-copian al nuevo dominio. Inicia sesión en `http://localhost:PUERTO`, abre tu
-menú y elige **Sign in on another browser**. El enlace ya usa
-`ozal.localhost`: ábrelo y crea una passkey para la misma cuenta.
-Las passkeys anteriores siguen sirviendo en `localhost`. Si ya no puedes
-usarlas, recurre a la recuperación del host, que sí reemplaza las anteriores.
+**Moving from localhost:** passkeys are bound to their name and are not copied to
+the new domain. Sign in at `http://localhost:PORT`, open your menu and choose
+**Sign in on another browser**. The link already uses `ozal.localhost`: open it and
+create a passkey for the same account. Earlier passkeys keep working on
+`localhost`. If you can no longer use them, use the host recovery, which does
+replace the earlier ones.
 
-Si pierdes el dispositivo, el host emite una recuperación:
-`sudo ozal console recover -email tu@correo`. Revoca los passkeys
-anteriores de esa persona y crea uno nuevo con el enlace. Un segundo
-`console enrol` se rechaza mientras exista un administrador. Los administradores
-no son usuarios de aplicaciones: un passkey de visitante no abre la consola.
+If you lose your device, the host issues a recovery:
+`sudo ozal console recover -email you@example.com`. It revokes that person's
+earlier passkeys and creates a new one through the link. A second `console enrol`
+is refused while an administrator exists. Administrators are not application
+users: a visitor's passkey does not open the console.
 
-Desde la consola, **Administrators** permite invitar a otra persona por correo con
-una parte de tus herramientas (nunca más de las que tú tienes), y deshabilitarla;
-sus sesiones abiertas terminan al instante. La invitación sirve una vez durante
-24 horas y la persona la abre como `ozal.localhost` por su propio túnel SSH.
+From the console, **Administrators** lets you invite another person by email with a
+subset of your tools (never more than you have), and disable them; their open
+sessions end immediately. The invitation works once for 24 hours, and the person
+opens it as `ozal.localhost` through their own SSH tunnel.
 
-`console login` y el token de admin siguen disponibles como vía de emergencia
-y automatización.
+`console login` and the admin token remain available as an emergency path and for
+automation.
 
-## Sesión del operador
+## Operator session
 
-`console login` pide un nombre que el host afirma; no verifica una identidad
-civil ni crea una cuenta de visitante. La autoridad sigue siendo quien puede
-acceder al socket administrativo del host.
+`console login` takes a name that the host asserts; it does not verify a civil
+identity or create a visitor account. Authority still belongs to whoever can reach
+the host's administrative socket.
 
-**Permisos por herramienta.** El host decide qué puede cambiar cada sesión con
-`-tools` (lista separada por comas de `applications`, `people`, `sites`,
-`publishing`, `connectors`; sin `-tools` concede todas). Por ejemplo,
-`console login -name Ana -tools people` abre una sesión que invita y edita
-grupos pero recibe 403 al cambiar aplicaciones o sitios. Un nombre desconocido
-se rechaza. La consola muestra en **Admin** qué incluye la sesión y explica una
-página que no puede abrir. El token de admin y el socket del host siguen siendo
-la credencial completa del host y no se limitan.
+**Tool permissions.** The host decides what each session may change with `-tools`
+(a comma-separated list of `applications`, `people`, `sites`, `publishing`,
+`connectors`; without `-tools` it grants all of them). For example,
+`console login -name Ana -tools people` opens a session that can invite and edit
+groups but gets 403 when changing applications or sites. An unknown name is
+rejected. The console shows in **Admin** what the session includes and explains a
+page it cannot open. The admin token and the host socket remain the complete host
+credential and are not limited.
 
-- El enlace sirve una vez durante cinco minutos. Su fragmento se elimina de
-  la URL al abrirlo y se intercambia por una credencial de quince minutos.
-- La credencial activa vive en la memoria de esa pestaña. Recargar la página
-  no cierra la sesión: el navegador guarda la misma credencial en una cookie
-  `HttpOnly` y `SameSite=Strict` que solo recibe `POST /_/api/operators/resume`,
-  y ese endpoint exige el mismo origen de la consola y no alarga la sesión.
-  Cerrar sesión, revocarla, que venza o reiniciar el proceso la terminan.
-- `console list` muestra IDs, nombres y vencimientos; `console revoke -id ID`
-  revoca un enlace pendiente o su sesión activa, conservando el mismo ID.
-- Las mutaciones llevan actor `operator:<nombre>`. Se registran emisión,
-  acceso, salida y revocación. Cuando la auditoría administrativa es obligatoria,
-  sus intents deben persistirse antes de emitir o revocar.
-- Una sesión de navegador no recupera cuentas, no configura la clave de una
-  GitHub App y no enrola, rota o revoca conectores: esas acciones usan el socket.
-- El token global sigue disponible por compatibilidad; **Lock** elimina su copia
-  de esta pestaña, no revoca ese token en su archivo de origen.
+- The link works once for five minutes. Its fragment is removed from the URL when
+  it is opened and exchanged for a fifteen-minute credential.
+- The active credential lives in the memory of that tab. Reloading the page does
+  not end the session: the browser keeps the same credential in an `HttpOnly`,
+  `SameSite=Strict` cookie that only `POST /_/api/operators/resume` receives. That
+  endpoint requires the console's own origin and does not extend the session.
+  Signing out, revoking, expiry or restarting the process ends it.
+- `console list` shows IDs, names and expiry times; `console revoke -id ID` revokes
+  a pending link or its active session, keeping the same ID.
+- Mutations carry the actor `operator:<name>`. Issue, access, exit and revocation
+  are recorded. When administrative audit is mandatory, its intents must be
+  persisted before issuing or revoking.
+- A browser session does not recover accounts, does not configure the key of a
+  GitHub App, and does not enrol, rotate or revoke connectors: those actions use the
+  socket.
+- The global token remains available for compatibility; **Lock** removes its copy
+  from this tab, and does not revoke that token in its source file.
 
-Para una VPS, prepara un transporte privado, por ejemplo:
+For a VPS, prepare a private transport, for example:
 
 ```sh
-ssh -N -L 19090:127.0.0.1:9090 operador@tu-edge
-# En la terminal del edge, con autoridad sobre su socket:
+ssh -N -L 19090:127.0.0.1:9090 operator@your-edge
+# In the terminal on the edge, with authority over its socket:
 ozal console login -config /etc/ozal/config.json \
   -name Octavio -url http://127.0.0.1:19090
 ```
 
-Abre el enlace en el navegador del equipo que tiene el forward. No publiques
-el listener administrativo en Internet ni lo pongas como upstream de una
-ruta pública. El bootstrap no convierte al primer visitante en dueño.
+Open the link in the browser of the machine that has the forward. Do not publish
+the administrative listener on the Internet or make it the upstream of a public
+route. The bootstrap does not make the first visitor the owner.
 
-## Agregar una web desde Applications
+## Add a website from Applications
 
-**Add application** es un solo recorrido en la consola (`UI-006`; reescrito
-en lenguaje simple el 30/10/2026, `UI-011`):
+**Add application** is a single guided path in the console:
 
-1. **Qué la sirve.** Una app que ya corre (la URL privada que usa Ozal, por
-   ejemplo `http://127.0.0.1:3000`), un sitio estático (el `tar.gz` de `dist`,
-   con el comando para empaquetarlo a la vista), un sitio que publica desde
-   GitHub o una app en otra máquina detrás de un conector ya enrolado (se elige
-   de la lista). El nombre del sitio sale de la dirección y se puede cambiar.
-   Ozal no compila. Al editar una app existente este paso permite conservar el
-   destino; publicar una versión nueva no se hace aquí sino desde **Más**.
-2. **Dirección.** Con dominios gestionados (`tls.dns01`), se escribe el
-   subdominio y se elige el dominio; la consola dice si su certificado lo cubre.
-   Una dirección fuera de los dominios exige agregarlo antes en **Domains**.
-3. **Quién entra.** Un esquema explica la capa de acceso (visita → passkey →
-   regla → la app recibe a la persona con `X-Auth-Request-Email` y
-   `X-Auth-Request-User`). Se elige un grupo, cualquier persona con cuenta o
-   público. Varios grupos significan **todos**. Opcionalmente se invitan
-   correos: cada persona recibe un enlace de un solo uso para crear su passkey
-   y queda en esos grupos.
-4. **Revisión.** Muestra destino, acceso, invitaciones y HTTPS. Nada cambia
-   hasta guardar y confirmar; la confirmación vuelve a comprobar el digest.
+1. **What serves it.** An app that is already running (the private URL Ozal uses,
+   for example `http://127.0.0.1:3000`), a static site (the `dist` `tar.gz`, with
+   the packing command shown), a site that publishes from GitHub, or an app on
+   another machine behind an already enrolled connector (chosen from the list).
+   The site name comes from the address and can be changed. Ozal does not build
+   anything. When editing an existing application, this step lets you keep its
+   destination; publishing a new version is not done here but from **More**.
+2. **Address.** With managed domains (`tls.dns01`), you type the subdomain and pick
+   the domain; the console shows whether its certificate covers it. An address
+   outside the managed domains requires adding the domain first under **Domains**.
+3. **Who gets in.** A diagram explains the access layer (visit → passkey → rule →
+   the app receives the person as `X-Auth-Request-Email` and
+   `X-Auth-Request-User`). You choose a group, any person with an account, or
+   public access. Several groups mean **all**. Optionally, you invite email
+   addresses: each person receives a one-time link to create their passkey, and is
+   added to those groups.
+4. **Review.** It shows destination, access, invitations and HTTPS. Nothing changes
+   until you save and confirm; the confirmation rechecks the digest.
 
-Después de guardar se publica el build si se subió uno, se guarda la ruta, se
-crean las invitaciones (sus enlaces se copian ahí, solo esa vez) y el panel
-muestra el **único registro DNS** que falta y lo comprueba cada pocos segundos:
-DNS → certificado → una petición pública con un token de un solo uso que solo
-este edge responde (`/.well-known/ozal-probe/…`, antes del pipeline). Desde
-GitHub el panel muestra el PR para revisar y espera la primera publicación;
-si el edge no puede abrir PRs, dice que el workflow se agrega aparte y se
-continúa en Sites. La lista muestra de qué repositorio y rama publica cada
-sitio, y **Integrations** reúne la conexión con GitHub. Cada fila tiene **Edit** y un menú **Más**
-con *DNS & HTTPS*, *Publish a new version* y *Versions & rollback* (sitios),
-*Who opened it* y *Remove*.
+After saving, the build is published if one was uploaded, the route is stored, the
+invitations are created (their links are copied there, once only), and the panel
+shows the **single DNS record** still missing, checking it every few seconds: DNS
+→ certificate → a public request with a one-time token that only this edge answers
+(`/.well-known/ozal-probe/…`, before the pipeline). For GitHub, the panel shows the
+PR to review and waits for the first publication; if the edge cannot open PRs, it
+says the workflow is added separately and continues in Sites. The list shows which
+repository and branch publishes each site, and **Integrations** groups the GitHub
+connection. Each row has **Edit** and a **More** menu with *DNS & HTTPS*, *Publish a
+new version* and *Versions & rollback* (sites), *Who opened it* and *Remove*.
 
-Si la petición llega a otro servidor, el DNS todavía apunta al hosting anterior.
-Si el proxy de Cloudflare responde 52x, no pudo hablar con el origen: revisa
-Origin Pulls y el modo SSL. Prueba siempre una persona permitida y otra sin
-permiso antes de mover un dominio en uso, y bloquea el origen antiguo: mientras
-siga abierto, **todavía puede eludirse la nueva política**.
+If the request reaches another server, DNS still points to the previous host. If
+Cloudflare's proxy answers 52x, it could not reach the origin: check Origin Pulls
+and the SSL mode. Always test one permitted person and one unpermitted person before
+moving a domain in use, and block the old origin: while it stays open, **the new
+policy can still be bypassed**.
 
-### Qué hace falta en la configuración
+### What the configuration needs
 
-- **Certificados.** Con TLS por HTTP-01 (sin `tls.dns01`), cualquier ruta guardada
-  obtiene su certificado en la primera visita, sin editar `tls.domains` ni
-  reiniciar; el listener solo pide certificados para rutas configuradas. Con
-  `tls.dns01` cada dominio de **Domains** tiene su propio certificado (el
-  dominio y un nivel de subdominios); se agregan desde la consola sin reiniciar
-  y un hostname fuera de ellos se rechaza al guardar
-  ([zonas](../reference.md#zonas-un-certificado-por-dominio)).
-- **DNS.** `dns.target` es la dirección pública del edge: una IP (registro A o
-  AAAA) o un hostname (CNAME). Sin ella el panel igual verifica, pero no puede
-  escribir el registro exacto. `dns.proxied` marca el registro como proxied.
-- **Cloudflare (opcional).** `dns.cloudflare.token` (`file:` o `env:`) con permiso
-  *Zone · DNS · Edit* sobre las zonas servidas habilita **Create it in
-  Cloudflare**. Nunca reemplaza un registro existente (puede ser el hosting
-  vivo); si ya hay uno, hay que cambiarlo a mano. Sin token, el registro se
-  copia y se crea en cualquier proveedor.
+- **Certificates.** With HTTP-01 TLS (without `tls.dns01`), any saved route obtains
+  its certificate on the first visit, without editing `tls.domains` or restarting;
+  the listener only requests certificates for configured routes. With `tls.dns01`,
+  each domain under **Domains** has its own certificate (the domain and one level of
+  subdomains). They are added from the console without a restart, and a hostname
+  outside them is rejected on save ([zones](../reference.md#zones-one-certificate-per-domain)).
+- **DNS.** `dns.target` is the edge's public address: an IP (A or AAAA record) or a
+  hostname (CNAME). Without it the panel still verifies, but cannot write the exact
+  record. `dns.proxied` marks the record as proxied.
+- **Cloudflare (optional).** `dns.cloudflare.token` (`file:` or `env:`) with
+  *Zone · DNS · Edit* permission over the served zones enables **Create it in
+  Cloudflare**. It never replaces an existing record (it may be a live site); if one
+  exists, change it by hand. Without a token, the record is copied and created at any
+  provider.
 
 ```json
 "dns": { "target": "203.0.113.10", "proxied": true,
          "cloudflare": { "token": "file:/etc/ozal/cloudflare-dns.token" } }
 ```
 
-- **Un dominio nuevo detrás de Cloudflare.** En **Domains → Add domain** la
-  tarjeta muestra lo que falta en Cloudflare: el registro para certificados, el
-  modo SSL Full (strict) y el certificado que el proxy presenta al edge
-  (*Authenticated Origin Pulls*, si el edge usa `tls.origin_client_ca_file`; sin
-  él Cloudflare responde 520) y *Always Use HTTPS* (sin él, quien escribe
-  `http://` recibe 522). Con `dns.cloudflare.token` (permisos *DNS · Edit*,
-  *Zone Settings · Edit* y *SSL and Certificates · Edit*) el botón **Set up in
-  Cloudflare** hace los cuatro: sube un certificado propio del edge a nivel de
-  zona, así cada dirección futura del dominio funciona sin otra asociación. Sin
-  token, cada paso dice qué tocar en el panel de Cloudflare. Nada se borra ni se
-  reemplaza.
-- **Apps privadas en otro dominio.** Con el login de passkeys, una app privada
-  fuera de `auth.cookie_domain` recibe su propia sesión del host después del
-  login central (un código de un solo uso, ver
-  [sesiones por host](../architecture/host-sessions.md)). Con sólo OIDC
-  externo sigue rechazándose al revisar.
+- **A new domain behind Cloudflare.** Under **Domains → Add domain**, the card shows
+  what is missing in Cloudflare: the record for certificates, the Full (strict) SSL
+  mode, and the certificate the proxy presents to the edge (*Authenticated Origin
+  Pulls*, if the edge uses `tls.origin_client_ca_file`; without it Cloudflare answers
+  520), and *Always Use HTTPS* (without it, someone typing `http://` gets 522). With
+  `dns.cloudflare.token` (permissions *DNS · Edit*, *Zone Settings · Edit* and *SSL
+  and Certificates · Edit*), the **Set up in Cloudflare** button does all four: it
+  uploads the edge's own certificate at zone level, so every future address on the
+  domain works without another association. Without a token, each step says what to
+  change in the Cloudflare dashboard. Nothing is deleted or replaced.
+- **Private apps on another domain.** With passkey login, a private app outside
+  `auth.cookie_domain` receives its own host session after the central login (a
+  one-time code; see [host sessions](../architecture/host-sessions.md)). With external
+  OIDC only, it is still rejected on review.
 
-**Edit** conserva campos avanzados cuando se elige mantener el destino o la
-política. Cambiar expresamente la política
-básica la reemplaza: revisa antes qué acceso se está quitando o dando.
+**Edit** keeps advanced fields when you choose to keep the destination or the
+policy. Explicitly changing the basic policy replaces it: review first what access
+is being removed or granted.
 
-## Dominio, rollback y backend
+## Domain, rollback and backend
 
-Para un proyecto Pages ya configurado, agregar un hostname con el mismo `site`
-lo asocia al proyecto al guardar el snapshot. No requiere un token DNS de un
-proveedor. El sistema no deja cambiar el último hostname de un proyecto a otro
-destino y dejarlo huérfano. Los cambios permanecen tras reiniciar.
+For an already configured Pages project, adding a hostname with the same `site`
+associates it with the project when the snapshot is saved. It needs no DNS token
+from a provider. The system does not let you change a project's last hostname to a
+different destination and leave it orphaned. Changes persist across restarts.
 
-Si la nueva ruta era de prueba, puedes quitarla en Applications o restaurar la
-configuración anterior y recargar. Si era un dominio de proyecto, la asociación se retira de forma atómica al quitar la ruta; si es el último
-dominio, desconecta primero su publicador en CI projects. Las referencias se validan.
-Un rollback de Pages activa un artefacto retenido; **no** revierte DNS, una base
-de datos ni un cambio del backend.
+If the new route was a trial, you can remove it under Applications, or restore the
+previous configuration and reload. If it was a project domain, the association is
+removed atomically when the route is removed; if it is the last domain, first
+disconnect its publisher under CI projects. References are validated.
+A Pages rollback activates a retained artifact; it does **not** revert DNS, a
+database or a backend change.
 
-Ozal no inicia ni instala tu aplicación. Si ya tiene login, conserva
-ese login hasta elegir y probar un contrato de [integración](../engineering.md#identidad-y-aplicaciones).
-No deshabilites permisos internos para ahorrar una pantalla.
+Ozal does not start or install your application. If the application already has a
+login, keep that login until you choose and test an
+[integration](../engineering.md#identidad-y-aplicaciones) contract. Do not disable
+internal permissions to save a screen.
 
-## Personas, grupos y sesiones
+## People, groups and sessions
 
-People permite asignar grupos al invitar y editar la membresía nativa con
-revisión de consecuencias. Actualiza solo desde una lectura vigente; un cambio
-concurrente devuelve conflicto. Al cambiar grupos se borran sus sesiones nativas
-en la misma transacción, y cada petición consulta los grupos actuales para
-cubrir un login concurrente con la baja. Reinvitar no cambia membresías.
-El catálogo de grupos de la API (`GET /_/api/groups`) reúne membresías locales y
-requisitos de rutas; los grupos de OIDC se administran en su proveedor.
+People lets you assign groups when inviting and edit native membership, with a
+review of the consequences. It updates only from a current read; a concurrent change
+returns a conflict. When groups change, that person's native sessions are deleted in
+the same transaction, and each request checks the current groups to cover a
+concurrent sign-in with the removal. Re-inviting does not change memberships. The
+API group catalog (`GET /_/api/groups`) combines local memberships and route
+requirements; OIDC groups are managed by their provider.
 
-En `/_/auth/me`, el visitante ve las aplicaciones que puede abrir y sus propias
-sesiones, con fecha de uso/vencimiento y método. Puede cerrar una o todas; no ve
-ni revoca las de otra persona. Las fechas no son postura ni ubicación del equipo.
-La lista de dispositivos/passkeys sigue en `/_/auth/devices` y pide prueba reciente.
+At `/_/auth/me`, a visitor sees the applications they may open and their own
+sessions, with last-use and expiry dates and the method. They can sign out one or all
+of them; they cannot see or revoke another person's. The dates are not the device's
+posture or location. The device and passkey list stays at `/_/auth/devices` and asks
+for recent proof.
 
-## Actualizar una instalación anterior
+## Upgrade an earlier installation
 
-La migración **012** añade metadatos de caducidad de conectores y un índice de
-sesiones. También termina las sesiones OIDC anteriores: sus `sub` crudos no se
-pueden convertir con seguridad a sujetos calificados por emisor. Los nuevos
-sujetos OIDC codifican emisor y `sub`; no se vinculan cuentas por correo.
-Las cuentas y passkeys nativas se conservan. Las sesiones nativas con método
-`passkey` siguen vigentes; una sesión antigua sin método registrado requiere
-un nuevo login.
+Migration **012** adds connector expiry metadata and a session index. It also ends
+earlier OIDC sessions: their raw `sub` values cannot be safely converted into
+issuer-qualified subjects. New OIDC subjects encode the issuer and `sub`; accounts
+are not linked by email. Native accounts and passkeys are kept. Native sessions
+recorded with the `passkey` method remain valid; an older session with no recorded
+method requires a new login.
 
-Usa el procedimiento de [upgrade y backup](administration.md#servicio-y-propiedad-del-estado) y aplica migraciones de
-forma explícita. No uses una versión nueva contra una base sin migrar. Una
-reversión del binario tras migrar necesita además la copia previa de la base.
+Use the [upgrade and backup procedure](administration.md#servicio-y-propiedad-del-estado)
+and apply migrations explicitly. Do not run a new version against an unmigrated
+database. Reverting the binary after a migration also requires the earlier copy of
+the database.

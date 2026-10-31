@@ -694,8 +694,8 @@ lo que no está en el bloque MVP queda como propuesta.
   un mensaje propio.
 - **Alta separada del login.** Un enlace de alta o de recuperación vence, sirve
   una vez y autoriza registrar una passkey; no es un factor. Vencimiento y
-  alerta `passkey.registered` reducen el riesgo de un enlace robado, pero no
-  impiden que otra persona lo use primero.
+  alertas `passkey.registered` y `user.recovered` reducen el riesgo de un enlace
+  robado, pero no impiden que otra persona lo use primero.
 - **Dónde se verifican los factores.** Passkey con UV: Ozal comprueba la firma
   (posesión) y el bit UV que afirma el autenticador (PIN o biometría local).
   OIDC no implica MFA automáticamente: un proveedor puede autenticar con MFA,
@@ -715,6 +715,22 @@ lo que no está en el bloque MVP queda como propuesta.
   agregaba una passkey; desde `SEC-023` revoca las anteriores, cierra las
   sesiones (guardadas en la base) y retira otros enlaces de recuperación en
   la misma transacción que inserta la nueva.
+  Antes del prompt, `POST /_/auth/enrol/info` valida el enlace sin consumirlo
+  y devuelve únicamente `recovery` (sin identidad ni token), con Origin exacto,
+  POST JSON acotado y `no-store`. La página espera esa respuesta y, si es
+  recuperación, explica la sustitución de passkeys, el cierre de sesiones y
+  la invalidación de otros enlaces; el botón dice **Replace my passkeys**.
+  Un error permite volver a consultar, nunca abre automáticamente el prompt.
+  `Enrol` devuelve si se confirmó una recuperación desde la transacción que
+  consume el enlace: solo entonces se emite `user.recovered`, con el sujeto
+  en `actor` y `synced`/`device_bound` en `code`, en lugar de
+  `passkey.registered`. Un fallo de almacenamiento no emite éxito y conserva
+  el acceso anterior. La consola nombra la recuperación y sus consecuencias;
+  el puente de alertas existente la entrega si está configurado, sin incluir
+  enlaces ni errores internos. Es el stream estructurado existente, no una
+  escritura atómica con SQLite ni una garantía de entrega: un corte entre el
+  commit y la emisión puede perder el evento y la cola de alertas es acotada.
+  No se amplía aquí la cobertura del journal firmado (`AUD-001`/`AUD-002`).
 - **CLI, fuera de este bloque.** Si se aprueba, es una credencial delegada,
   nunca una sesión web ni MFA. Con navegador local, authorization code + PKCE
   con redirección a loopback ([RFC 8252](https://www.rfc-editor.org/rfc/rfc8252)):
