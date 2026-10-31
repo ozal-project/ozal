@@ -2,6 +2,7 @@
   import { admin, startSession, tools } from "$lib/adminToken.svelte";
   import { Button } from "$lib/components/ui/button";
   import CopyCommand from "$lib/CopyCommand.svelte";
+  import { hostLoginCommand } from "$lib/hostCommand";
 
   // Break-glass: a one-use link from `console login` on the host, or the
   // host's admin token. The host decides what a login may change.
@@ -11,7 +12,7 @@
   let draft = $state("");
   let checking = $state(false);
   let error = $state("");
-  const command = $derived(`sudo ozal console login -name YOUR_NAME${picked.length === allTools.length ? "" : ` -tools ${picked.join(",") || "TOOL"}`}`);
+  const command = $derived(hostLoginCommand(location.origin, picked.length === allTools.length ? undefined : picked));
 
   async function unlock(e: SubmitEvent) {
     e.preventDefault();

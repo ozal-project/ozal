@@ -52,6 +52,11 @@ button:disabled { opacity: 0.55; cursor: progress; }
 .first-time strong { display: block; margin-bottom: 4px; }
 .first-time p, .hint { margin: 0; font-size: 0.88rem; }
 .hint { margin-top: 14px; }
+.choices { margin-top: 16px; font-size: 0.88rem; }
+.choices[hidden] { display: none; }
+.choices summary { cursor: pointer; color: var(--muted); }
+.choices summary:hover, .choices[open] summary { color: var(--fg); }
+.choices ul { display: grid; gap: 4px; margin: 8px 0 0; padding-left: 1.2em; }
 .sites { display: grid; gap: 8px; margin-top: 16px; }
 .sites a { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--raised); color: var(--fg); font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
 .sites-title { margin: 8px 0 0; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }

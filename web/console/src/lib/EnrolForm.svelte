@@ -3,6 +3,9 @@
   import { Button } from "$lib/components/ui/button";
   import { onMount } from "svelte";
   import { enrolInfo, enrolWithPasskey, explainPasskeyError, type EnrolInfo } from "$lib/passkey";
+  import PasskeyChoices from "$lib/auth/PasskeyChoices.svelte";
+  import CopyCommand from "$lib/CopyCommand.svelte";
+  import { hostLoginCommand } from "$lib/hostCommand";
 
   // The host opened this door once. The person says who they are and creates
   // the passkey they will use from now on.
@@ -10,6 +13,9 @@
   let email = $state("");
   let busy = $state(false);
   let error = $state("");
+  // A prompt that ended without a passkey: show what else can hold one and,
+  // for the first administrator, the temporary way in from the host.
+  let stuck = $state(false);
   const uid = $props.id();
   // What the link already fixes. Null until known (or if it cannot be read: the
   // form then asks for everything and the host decides).
@@ -28,11 +34,11 @@
   async function submit(e: SubmitEvent) {
     e.preventDefault();
     if (busy || !admin.enrol) return;
-    busy = true; error = "";
+    busy = true; error = ""; stuck = false;
     try {
       const session = await enrolWithPasskey(admin.enrol, name.trim(), email.trim());
       startSession(session, true);
-    } catch (e) { error = explainPasskeyError(e); }
+    } catch (e) { error = explainPasskeyError(e); stuck = (e as Error)?.name === "NotAllowedError"; }
     finally { busy = false; }
   }
 </script>
@@ -61,4 +67,14 @@
     {/if}
   {/if}
   <Button type="submit" disabled={busy || (!recovery && !device && (!name.trim() || !email.trim()))}>{busy ? "Waiting for your device…" : "Create my passkey"}</Button>
+  <PasskeyChoices open={stuck} />
+  {#if !device && !recovery && info?.kind !== "invite"}
+    <!-- Offered before the prompt: while the browser waits for a security key
+         this form is hidden behind its dialog, so the way out must already be known. -->
+    <details class="text-muted-foreground -mt-2 text-xs" open={stuck}>
+      <summary class="hover:text-foreground cursor-pointer">This computer cannot create a passkey?</summary>
+      <p class="mt-2 mb-2 leading-relaxed">Close the browser's prompt, then run this on the server, replacing YOUR_NAME, and open the link it prints. It lets you in for a while without creating the administrator account, which still needs a passkey; this setup link stays valid until it expires.</p>
+      <CopyCommand command={hostLoginCommand(location.origin)} label="Copy host login command" />
+    </details>
+  {/if}
 </form>

@@ -7,6 +7,7 @@
   import EnrolForm from "$lib/EnrolForm.svelte";
   import HostLogin from "$lib/auth/HostLogin.svelte";
   import Logo from "$lib/brand/Logo.svelte";
+  import PasskeyChoices from "$lib/auth/PasskeyChoices.svelte";
 
   // The only thing a signed-out tab shows. It says what this is and how to get
   // in, and nothing about what is inside.
@@ -17,6 +18,7 @@
   let enrolCommand = $state("sudo ozal console enrol");
   let waiting = $state(false);
   let error = $state("");
+  let stuck = $state(false);
   const onLocalhost = ["ozal.localhost", "switchboard.localhost", "localhost"].includes(location.hostname);
   let pasted = $state("");
   let pasteError = $state("");
@@ -39,11 +41,11 @@
 
   async function passkey() {
     if (waiting) return;
-    waiting = true; error = "";
+    waiting = true; error = ""; stuck = false;
     try {
       const session = await signInWithPasskey();
       startSession(session, true);
-    } catch (e) { error = explainPasskeyError(e, "sign-in"); }
+    } catch (e) { error = explainPasskeyError(e, "sign-in"); stuck = (e as Error)?.name === "NotAllowedError"; }
     finally { waiting = false; }
   }
 
@@ -64,7 +66,7 @@
       <h1 id="auth-title" class="text-lg font-semibold">{heading}</h1>
 
       {#if admin.enrol}
-        <p class="text-muted-foreground mt-1 mb-5 text-sm">Create the passkey you will sign in with. It stays on this device.</p>
+        <p class="text-muted-foreground mt-1 mb-5 text-sm">Create the passkey you will sign in with.</p>
         <EnrolForm />
       {:else if mode === "host"}
         <p class="text-muted-foreground mt-1 mb-5 text-sm">Paste the one-time login printed on the server. It lasts 15 minutes.</p>
@@ -78,6 +80,7 @@
           <Button type="submit" size="sm" disabled={!pasted.trim()}>Continue</Button>
         </form>
         {#if pasteError}<p class="text-destructive mt-2 text-xs" role="alert">{pasteError}</p>{/if}
+        <p class="text-muted-foreground mt-4 text-xs leading-relaxed">The administrator account needs a passkey. If this computer cannot create one yet, a host login lets you in for a while without creating the account.</p>
         <details class="mt-5 text-sm">
           <summary class="text-muted-foreground hover:text-foreground cursor-pointer">Lost the link?</summary>
           <p class="text-muted-foreground mt-2 mb-2 text-xs">Run this on the server for a new one:</p>
@@ -88,6 +91,7 @@
         {:else}<p class="text-muted-foreground mt-1 text-sm">Welcome back.</p>{/if}
         {#if error}<p class="text-destructive mt-3 text-sm" role="alert">{error}</p>{/if}
         <Button class="mt-6 w-full" onclick={passkey} disabled={waiting || !onLocalhost}>{waiting ? "Waiting for your device…" : "Sign in with passkey"}</Button>
+        <PasskeyChoices open={stuck} />
       {:else}
         <p class="text-muted-foreground mt-2 text-sm" role="status">Checking…</p>
       {/if}

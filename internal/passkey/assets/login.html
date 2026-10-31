@@ -18,12 +18,16 @@
 </header>
 <main>
   <h1 id="title">Sign in</h1>
-  <p id="intro">Use Face ID, Touch ID, Windows Hello or a security key.</p>
+  <p id="intro">Use your passkey: on this device, in a password manager, on your phone or on a security key.</p>
   <label for="username">Account</label>
   <input id="username" name="username" autocomplete="username webauthn" placeholder="Pick your passkey">
   <button id="action" type="button">Sign in with a passkey</button>
   <a id="oidc" class="secondary" hidden>Sign in with single sign-on</a>
   <p id="status" role="status" aria-live="polite"></p>
+  <details id="choices" class="choices" hidden>
+    <summary>What can hold a passkey?</summary>
+    <ul id="choice-list"></ul>
+  </details>
   <div class="first-time" id="first-time">
     <strong>First time here?</strong>
     <p>You need an invitation link from the operator to create your passkey. Open it on the device that will keep it; the link works once and expires soon.</p>

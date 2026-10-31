@@ -82,7 +82,7 @@ function explain(error, page) {
   if (error.name === "NotAllowedError") {
     return page === "login"
       ? "The sign-in did not finish: the prompt was closed, it timed out, or this device has no passkey for this site. If you have not created one yet, you need the invitation link (see below)."
-      : "The passkey was not created: the prompt was closed or it timed out. Try again.";
+      : "The passkey was not created: the prompt was closed or it timed out. If it asked for a security key you do not have, see what else can hold a passkey below.";
   }
   if (error.name === "InvalidStateError") return "This device already has a passkey for this account.";
   // Other browser errors carry technical text meant for developers; say what
@@ -94,6 +94,75 @@ function explain(error, page) {
       : "This browser could not use a passkey here. Try again, or use another browser or device.";
   }
   return error.message || "Something went wrong.";
+}
+
+// What can hold a passkey (ID-017). A desktop without a built-in
+// authenticator (most Linux machines) jumps straight to "insert your
+// security key"; saying beforehand what else works keeps that from being a
+// dead end. It never promises that a given choice works in this browser.
+const choiceText = {
+  device: "This device: Windows Hello, Touch ID, or the screen lock of a phone or tablet.",
+  manager: "A password manager that saves passkeys, built into the browser or added as an extension.",
+  phone: "Your phone, if this browser offers a QR code to scan.",
+  key: "A security key (USB or NFC).",
+};
+
+// passkeyChoices orders the choices for this browser: what it confirms goes
+// first, what it denies goes last, and every choice stays. Its answer can be
+// missing or incomplete, and only the person knows what they have.
+function passkeyChoices(caps) {
+  const order = ["device", "manager", "phone", "key"];
+  const said = {
+    device: caps ? caps.userVerifyingPlatformAuthenticator ?? caps.passkeyPlatformAuthenticator : undefined,
+    phone: caps ? caps.hybridTransport : undefined,
+  };
+  const rank = (choice) => (said[choice] === true ? 0 : said[choice] === false ? 2 : 1);
+  return order.slice().sort((a, b) => rank(a) - rank(b) || order.indexOf(a) - order.indexOf(b));
+}
+
+// readCapabilities asks the browser what it supports, briefly. No answer,
+// an error or an old browser all mean "unknown", never "unsupported".
+async function readCapabilities(timeout = 1000) {
+  const credential = window.PublicKeyCredential;
+  const ask = async () => {
+    if (credential && typeof credential.getClientCapabilities === "function") return await credential.getClientCapabilities();
+    if (credential && typeof credential.isUserVerifyingPlatformAuthenticatorAvailable === "function") {
+      return { userVerifyingPlatformAuthenticator: await credential.isUserVerifyingPlatformAuthenticatorAvailable() };
+    }
+    return null;
+  };
+  try {
+    return await Promise.race([ask(), new Promise((resolve) => setTimeout(() => resolve(null), timeout))]);
+  } catch {
+    return null;
+  }
+}
+
+function renderChoices(caps) {
+  const list = document.getElementById("choice-list");
+  if (!list) return;
+  list.replaceChildren(...passkeyChoices(caps).map((choice) => {
+    const item = document.createElement("li");
+    item.dataset.choice = choice;
+    item.textContent = choiceText[choice];
+    return item;
+  }));
+}
+
+function setupChoices(visible) {
+  const box = document.getElementById("choices");
+  if (!box) return;
+  box.hidden = !visible;
+  if (!visible) return;
+  renderChoices(null);
+  readCapabilities().then(renderChoices);
+}
+
+// openChoices unfolds the list after a prompt that ended without a passkey:
+// the browser does not say why, so the page shows what else can work.
+function openChoices(error) {
+  const box = document.getElementById("choices");
+  if (box && !box.hidden && error && error.name === "NotAllowedError") box.open = true;
 }
 
 // A destination remembered from the login page, so an invitation opened in
@@ -214,6 +283,7 @@ function setupLogin(button, returnTo) {
   function fail(error) {
     button.disabled = false;
     if (error.name !== "AbortError") show(explain(error, "login"), "error");
+    openChoices(error);
   }
 
   button.addEventListener("click", () => login(false).catch(fail));
@@ -249,6 +319,7 @@ function setupEnrol(button) {
     } catch (error) {
       button.disabled = false;
       show(explain(error, "enrol"), "error");
+      openChoices(error);
     }
   });
 }
@@ -330,6 +401,7 @@ function setupDevices(button) {
     button.disabled = false;
     if (/Confirm it's you/.test(error.message)) return relogin();
     show(explain(error, "enrol"), "error");
+    openChoices(error);
   }
 
   document.getElementById("signout").addEventListener("click", async () => {
@@ -429,10 +501,23 @@ document.addEventListener("DOMContentLoaded", () => {
   const kind = document.body.dataset.page;
   if (kind === "me") return setupMe();
   const page = kind === "login" ? setupLoginPage(button) : null;
-  if (!window.PublicKeyCredential || !navigator.credentials) {
+  const webauthn = Boolean(window.PublicKeyCredential && navigator.credentials);
+  const passkeys = !page || page.passkeys;
+  setupChoices(passkeys);
+  if (!webauthn) {
+    // Not a dead end: say where a passkey can work instead, keep the
+    // provider if there is one, and leave the invitation in the address bar
+    // so it can be copied to another browser.
     button.disabled = true;
-    if (!page || page.passkeys) {
-      show("This browser does not support passkeys." + (page && page.provider ? " You can still sign in with " + page.provider + "." : ""), "error");
+    if (passkeys) {
+      const elsewhere = {
+        login: "Open this page in a browser or on a device that does, or ask the person who runs this site for help.",
+        enrol: "Copy this page's address and open it in a browser or on a device that does; the invitation still works there.",
+        devices: "Manage your passkeys from a browser or a device that supports them.",
+      }[kind] || "";
+      show("This browser does not support passkeys. " + elsewhere + (page && page.provider ? " You can still sign in with " + page.provider + "." : ""), "error");
+      const box = document.getElementById("choices");
+      if (box) box.open = true;
     }
     return;
   }

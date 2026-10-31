@@ -14,7 +14,9 @@ import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 export const PORT = 18888;
-export const ADMIN_PORT = 19090;
+// OZAL_DEMO_ADMIN_PORT moves the console when 19090 is taken, for example by
+// an SSH tunnel to a real console: requests would otherwise reach that one.
+export const ADMIN_PORT = Number(process.env.OZAL_DEMO_ADMIN_PORT) || 19090;
 // A parent domain of its own: Chrome treats bare "localhost" as a public suffix and
 // refuses both passkeys scoped to it and cookies shared under it.
 export const DOMAIN = "demo.localhost";
