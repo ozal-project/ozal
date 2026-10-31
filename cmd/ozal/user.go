@@ -48,7 +48,7 @@ func runUser(ctx context.Context, args []string, out io.Writer) error {
 	dbPath := fs.String("db", "", "offline break-glass: change this SQLite state database directly, bypassing the running process")
 	fs.StringVar(&a.email, "email", "", "the user's email address")
 	fs.StringVar(&a.name, "name", "", "display name shown by the authenticator (invite)")
-	fs.BoolVar(&a.recoverAccess, "recover", false, "invite a user who already has a passkey to add another (lost device; host only)")
+	fs.BoolVar(&a.recoverAccess, "recover", false, "replace the passkeys of a user who lost them: completing the link revokes the old ones and ends their sessions (host only)")
 	fs.DurationVar(&a.ttl, "ttl", defaultInviteTTL, "how long the enrolment link stays valid (at most 24h)")
 	fs.StringVar(&a.prefix, "passkey", "", "leading hex characters of the passkey ID (revoke)")
 	fs.StringVar(&a.returnTo, "return-to", "", "invite: protected URL to open after the passkey is created (must be a configured host)")
@@ -199,6 +199,9 @@ func runUserOffline(ctx context.Context, a userArgs, dbPath, configPath string, 
 		}
 		emitOffline(sink, events.Event{Type: events.UserInvited, Host: invitation.User.Email, Code: code})
 		printInvite(out, invitation.User.Email, link, invitation.ExpiresAt)
+		if a.recoverAccess {
+			fmt.Fprintln(out, "Completing it replaces every passkey of this user and ends their sessions.")
+		}
 	case "list":
 		users, err := identity.Users(ctx)
 		if err != nil {

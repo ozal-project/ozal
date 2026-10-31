@@ -119,8 +119,8 @@ func (h *Handler) invitePerson(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	// Recovery adds a passkey to an account that already exists: the path an
-	// account takeover would take. It stays with the host's shell, the root of
+	// Recovery replaces the passkeys of an account that already exists: the
+	// path an account takeover would take. It stays with the host's shell, the root of
 	// trust (identity-login.md): the admin unix socket, never the admin
 	// bearer, which also travels to the machines that publish sites.
 	if req.Recover && !isLocal(r) {

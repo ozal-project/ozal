@@ -638,6 +638,80 @@ métodos insuficientes y permitidos, proveedor OIDC real si se activa, reinicio,
 y acceso permitido/denegado sin registrar credenciales. Los autenticadores
 virtuales y una respuesta de salud no sustituyen esas pruebas.
 
+#### Alta, login, CLI y recuperación (revisión 2026-10-31)
+
+Contrato tras analizar la prueba en la VM y su revisión. No amplía el alcance:
+lo que no está en el bloque MVP queda como propuesta.
+
+- **Credencial residente y MFA son requisitos distintos.** Ozal exige ambos
+  ([gate](../internal/passkey/gate.go), [consola](../internal/admin/identities.go)).
+  La residente permite descubrir la cuenta sin escribir un identificador; la
+  verificación del usuario aporta el segundo factor. Un autenticador capaz de
+  MFA sin credenciales residentes no es débil: queda fuera por la elección de
+  login sin identificador.
+- **Salir del bloqueo no es completar el acceso.** La guía (`ID-017`) explica
+  las salidas; no autentica a nadie. `NotAllowedError` agrupa cancelación,
+  tiempo vencido y ausencia de autenticador a propósito, así que Ozal no puede
+  afirmar cuál ocurrió; otros errores (`SecurityError` por dominio o RP ID,
+  `InvalidStateError` por passkey ya registrada, `NotSupportedError`) sí admiten
+  un mensaje propio.
+- **Alta separada del login.** Un enlace de alta o de recuperación vence, sirve
+  una vez y autoriza registrar una passkey; no es un factor. Vencimiento y
+  alerta `passkey.registered` reducen el riesgo de un enlace robado, pero no
+  impiden que otra persona lo use primero.
+- **Dónde se verifican los factores.** Passkey con UV: Ozal comprueba la firma
+  (posesión) y el bit UV que afirma el autenticador (PIN o biometría local).
+  OIDC no implica MFA automáticamente: un proveedor puede autenticar con MFA,
+  pero Ozal solo lo reconoce con evidencia confiable bajo un contrato por
+  emisor (`ID-018`). `console login`, enlaces, TOTP, correo, cookies de
+  dispositivo y API keys son, como mucho, posesión.
+- **Recuperación es una autoridad alternativa.** Terminar con una passkey
+  nueva no demuestra que quien recupera sea el titular anterior: quien
+  controla el mecanismo puede sustituir las credenciales. La recuperación
+  confía explícitamente en quien la emite (el operador del host por el socket
+  y, para administradores, también otro administrador con las herramientas
+  del destino desde la consola), sustituye las credenciales e invalida las
+  sesiones anteriores. Sustitución y revocación se completan juntas. Estado
+  2026-10-31: la recuperación de administradores revoca passkeys y retira
+  otros enlaces de recuperación en la misma transacción y cierra las sesiones
+  en memoria tras el commit. La de visitantes (`user invite -recover`) solo
+  agregaba una passkey; desde `SEC-023` revoca las anteriores, cierra las
+  sesiones (guardadas en la base) y retira otros enlaces de recuperación en
+  la misma transacción que inserta la nueva.
+- **CLI, fuera de este bloque.** Si se aprueba, es una credencial delegada,
+  nunca una sesión web ni MFA. Con navegador local, authorization code + PKCE
+  con redirección a loopback ([RFC 8252](https://www.rfc-editor.org/rfc/rfc8252)):
+  PKCE liga el canje del código a quien lo pidió, no a la máquina; ligar el
+  token a una clave del cliente es una medida adicional (DPoP). Sin navegador,
+  Device Authorization Grant ([RFC 8628](https://www.rfc-editor.org/rfc/rfc8628)):
+  la aprobación exige passkey reciente, pero no elimina el phishing de
+  consentimiento (la víctima puede aprobar una solicitud iniciada por otro);
+  contexto, alcances mínimos y vigencia corta lo reducen. El nombre de equipo
+  que declara el cliente se muestra como no verificado. Se apoya en `ID-016`.
+
+**Límite que se conserva:** un cliente sin autenticador WebAuthn compatible y
+sin OIDC con contrato no tiene acceso cotidiano sin contraseña con MFA. Sin
+software de cliente ni contraseña, el servidor solo verifica posesión. Sus
+salidas son conseguir un autenticador, usar el proveedor de su organización
+bajo contrato, aceptar un factor en rutas concretas (`ID-019`, decisión
+pendiente, nunca en la consola) o un autenticador propio (`ID-020`, idea).
+
+**Bloque MVP:** aceptación real de `ID-021` con `admin.login_host` explícito;
+errores distinguidos y segunda passkey sugerida tras el primer alta en
+`ID-017`; recuperación documentada como autoridad del host con `SEC-023`
+resuelto. Fuera: CLI, agente propio, push y factores nuevos.
+
+**Aceptación del bloque:** binario en VM Linux limpia sin dominio
+(`ozal.localhost` por túnel) y con dominio HTTPS; reinicio entre pasos.
+Clientes reales: Firefox y Chromium en Linux sin autenticador (ven la guía,
+salen del diálogo y saben qué hacer, aunque no completen el acceso), Linux con
+KeePassXC, Bitwarden en HTTPS y en localhost (fallo explicado), macOS, Windows
+Hello, teléfono por QR y llave FIDO2 con PIN. Escenarios: primer
+administrador, cancelación, segundo autenticador, revocación que cierra
+sesiones, pérdida total con recuperación (las passkeys y sesiones anteriores
+dejan de servir), enlace vencido, reusado y de otro origen, y ningún secreto
+en URLs públicas, logs ni eventos.
+
 #### Passkeys de administrador en el host de login HTTPS (`ID-021`)
 
 **Hallazgo 2026-10-31 (prueba en la VM):** la consola privada vive en
@@ -645,9 +719,12 @@ virtuales y una respuesta de salud no sustituyen esas pruebas.
 muchos autenticadores no aceptan la excepción de localhost: la extensión de
 Bitwarden no ofrece passkeys en localhost, así que Firefox cayó a su diálogo de
 llave; KeePassXC lo acepta solo con *Allow using localhost with passkeys*. No
-se trata de adaptarse a un gestor: en HTTPS funcionan todos (gestores, iCloud,
-gestor de Google, teléfono, llaves). Una passkey ligada al dominio real tampoco
-depende del puerto ni del nombre local del túnel.
+se trata de adaptarse a un gestor: mover la ceremonia a HTTPS elimina esa
+limitación conocida de localhost, pero no garantiza que todo autenticador
+funcione; siguen influyendo navegador, extensión, sistema y transporte
+disponible, y las combinaciones se validan en la aceptación. Una passkey ligada
+al dominio real tampoco depende del puerto ni del nombre local del túnel.
+`admin.login_host` sigue explícito hasta completar esa aceptación.
 
 **Estado 2026-10-31:** implementado detrás de `admin.login_host` (rutas
 `/_/auth/admin`, `/_/api/admin/remote/start|finish`); falta la aceptación con un
@@ -736,6 +813,33 @@ config/admin aún concentran responsabilidades. Extraerlas al tocarlas, no
 reescribir todo el árbol. Esta evaluación no es una auditoría línea a línea.
 
 ## Verificacion
+
+### Revisión estática de seguridad, capacidad y código sin uso
+
+Observaciones de la revisión parcial iniciada el 31/10/2026 sobre `fe64140` y
+el árbol local. Se inspeccionaron rutas de identidad, proxy, archivos estáticos,
+publicación, sesiones, túneles, eventos y chequeos de salud. La inspección no
+modificó código, no probó servicios en ejecución ni reprodujo ataques; no es
+una auditoría exhaustiva, una medición de capacidad ni evidencia de explotación.
+Los candidatos de seguridad no tienen severidad confirmada y requieren una
+fixture aislada con datos ficticios. Las correcciones se siguen en
+[TO_IMPLEMENT](TO_IMPLEMENT.md), sin reabrir cierres históricos por analogía.
+
+| Observación y certeza | Evidencia de código y condición | Validación/corrección mínima propuesta |
+|---|---|---|
+| `SEC-021`: posible publicación de un archivo oculto por alias interno; pendiente de reproducción. | [static.Resolve](../internal/static/resolve.go) rechaza nombres ocultos solicitados; [static.open](../internal/static/handler.go) usa `os.OpenInRoot`, que permite enlaces internos. Una raíz estática local con un enlace visible hacia un archivo oculto dentro de la raíz podría servirlo. [Las pruebas](../internal/static/handler_test.go) cubren `.env` directo y enlaces fuera de la raíz, no ese alias. Pages [rechaza enlaces al extraer](../internal/pages/entry.go); no atribuirle el mismo camino. | Fixture con un archivo oculto de contenido ficticio y alias visible; pedir el alias y exigir 404 sin fuga. Si se confirma, decidir y aplicar una política de enlaces/rutas ocultas sin introducir una carrera de resolución; preservar archivos normales y `.well-known`. No buscar secretos reales ni afirmar que exista ese enlace en producción. |
+| `SEC-022`: posible secreto de una app en logs; depende de cómo esa app forma sus URLs y de quién puede leer los logs. | [proxy.forward](../internal/proxy/proxy.go) omite query pero registra `req.URL.Path` íntegro. Un enlace de recuperación/invitación con token en el path puede acabar en logs. No se observó un token real ni se comprobó acceso de terceros a logs. | Logger capturado con una ruta ficticia que lleva un token; definir logging mínimo, omisión o redacción por contrato de ruta. Nunca asumir que solo el query contiene credenciales. |
+| `BUG-015`: actividad visible puede describir una petición bloqueada como acceso permitido; confirmado por trazado estático, sin reproducción nueva. | [emitAccessEvent](../internal/proxy/proxy.go) publica el evento recibido al fallar un append obligatorio y devuelve 503 antes de upstream. Para `AccessAllowed`, [accessSummary](../web/console/src/lib/overview.ts) lo cuenta en “Who got in / let in”. La [prueba de bloqueo](../internal/proxy/proxy_test.go) no comprueba el sink. El acceso sigue fallando cerrado. | Capturar sink con appender que falla, comprobar 503 y cero envíos upstream; emitir resultado diferenciado de auditoría fallida y evitar que UI lo cuente como entrada. No confundir decisión de política con ejecución efectiva. |
+| `BUG-016`: posible expiración anticipada de una sesión por host activa; necesita revisar contrato y prueba temporal. | [CreateLinked en memoria](../internal/auth/session.go) y [SQLite](../internal/store/sqlite/sessions.go) fijan un límite con el vencimiento del padre al emitir. Actualizar actividad del padre no mueve ese límite. Los tests de [memoria](../internal/auth/host_sessions_test.go) y [SQLite](../internal/store/sqlite/host_sessions_test.go) mantienen vivo el padre pero no consultan al hijo después del límite inicial. | Reloj controlado: crear padre/hijo, usar hijo antes del idle, volver a usarlo después del vencimiento inicial y antes del absoluto. Determinar si es TTL deliberado o defecto del idle; documentar el contrato antes de cambiarlo. No ampliar nunca el límite absoluto ni permitir un padre revocado. |
+| Capacidad de túneles: límites comprobados en código, impacto sin medir. | [Edge.Serve](../internal/tunnel/tunnel.go) retiene una de 16 plazas durante toda la sesión aunque la etiqueta diga handshake. [connectorTransport](../internal/tunnel/transport.go) comparte 32 solicitudes entre conectores y conserva la plaza hasta cerrar body/upgrade; conexiones largas pueden ocuparlas todas. El tracker ya registra separar presupuestos bajo `TUN-002`/`ARCH-010`. | Medir solicitudes cortas y largas entre dos conectores antes de decidir cuotas por sesión/conector/ruta. Preservar límites globales y no hacer pruebas de saturación contra servicios compartidos. |
+| Arranque/recarga: primera ronda de salud síncrona; sin benchmark. | [Checker.Start](../internal/healthcheck/checker.go) espera la ronda inicial con hasta 16 workers y timeout HTTP de 3 s; [construir el snapshot](../internal/routemanager/manager.go) la espera. Muchas URLs lentas aumentan el tiempo de preparación. | Laboratorio con upstreams ficticios lentos y varios tamaños de catálogo; medir arranque/recarga y tráfico del snapshot anterior antes de cambiar el contrato de disponibilidad inicial. `LAB-001`. |
+| Broker: asignaciones/contención candidatas a optimización, no cuello medido. | [Broker.Emit](../internal/events/broker.go) copia 200 eventos bajo mutex por cada evento tras llenar el historial. La memoria está acotada, pero el coste se repite en el request path. | Benchmark de asignaciones y concurrencia; evaluar un buffer circular con igualdad del replay, secuencias y cancelación. `LAB-001`. |
+| Código productivo solo referenciado por pruebas; candidatos a limpieza, no lista completa de dead code. | [stripCookie](../internal/proxy/proxy.go) es usado por tests/fuzz, mientras producción usa `stripAccessCookies`. [Checker.probe](../internal/healthcheck/checker.go) solo tiene llamadas de tests; producción usa `probeAll`/`probeTarget`. | Trasladar pruebas al recorrido real preservando invariantes y luego decidir eliminación o helper de test. No borrar compatibilidad legacy ni APIs por aparecer poco en búsquedas. No se ejecutó un analizador completo de símbolos inalcanzables. |
+
+Orden recomendado de validación: alias oculto, exactitud del evento de acceso y
+contrato de expiración por host; después presupuesto de túneles y mediciones de
+recarga/broker. Logs se revisan con el contrato de cada aplicación. Ni este
+orden ni una prueba local implican despliegue o exposición pública autorizados.
 
 ```sh
 scripts/verify.sh

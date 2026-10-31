@@ -80,7 +80,8 @@ En un escritorio Linux sin autenticador, y en una VM sin Bluetooth, sirven el
 gestor de contraseñas o la llave. En la consola (`http://ozal.localhost`)
 muchos gestores, Bitwarden entre ellos, no ofrecen passkeys; KeePassXC sí, con
 *Settings → Browser Integration → Advanced → Allow using localhost with
-passkeys*. En las páginas de login por HTTPS funcionan todos. Comparte con las personas que invitas
+passkeys*. En las páginas de login por HTTPS esa limitación desaparece, aunque
+cada combinación de navegador, extensión y sistema puede variar. Comparte con las personas que invitas
 `https://<host de login>/_/auth/help`, que compara las opciones sin pedir
 sesión, y sugiéreles una segunda passkey en otro lugar. Si el túnel usa otro
 puerto local que `admin.listen`, añade `-url http://ozal.localhost:PUERTO` a
@@ -88,8 +89,9 @@ puerto local que `admin.listen`, añade `-url http://ozal.localhost:PUERTO` a
 
 **Passkeys de consola en el dominio.** Con `admin.login_host: true` y un login
 de passkeys en HTTPS, «Create my passkey» y «Sign in with passkey» llevan a
-`https://<host de login>/_/auth/admin`, donde funcionan todos los gestores,
-el teléfono y las llaves, y vuelven a la consola con la sesión abierta. La
+`https://<host de login>/_/auth/admin`, donde no rige la limitación de
+localhost para gestores, teléfono y llaves, y vuelven a la consola con la
+sesión abierta. La
 consola sigue privada; sin una transacción iniciada desde ella, esa dirección
 responde como una ruta desconocida. Sin dominio HTTPS, el primer acceso sigue
 en `ozal.localhost` o con el host login.

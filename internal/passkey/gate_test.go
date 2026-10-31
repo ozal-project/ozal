@@ -269,6 +269,38 @@ func TestInvitationIsSingleUseAndExpires(t *testing.T) {
 	}
 }
 
+// Recovery assumes the old passkeys are lost or exposed (SEC-023): finishing
+// it replaces them, ends every session and retires other recovery links.
+func TestRecoveryReplacesPasskeysAndEndsSessions(t *testing.T) {
+	h := newHarness(t)
+	lost := newAuthenticator(t)
+	old := h.browser()
+	if code := old.enrol(t, lost, h.invite(t, "ana@example.com", false)); code != http.StatusOK {
+		t.Fatalf("enrol = %d", code)
+	}
+	if _, ok := old.signedIn(); !ok {
+		t.Fatal("not signed in after enrolment")
+	}
+	leaked := h.invite(t, "ana@example.com", true)
+	recovered := newAuthenticator(t)
+	if code := h.browser().enrol(t, recovered, h.invite(t, "ana@example.com", true)); code != http.StatusOK {
+		t.Fatalf("recovery enrol = %d", code)
+	}
+
+	if _, ok := old.signedIn(); ok {
+		t.Fatal("a session from before the recovery still works")
+	}
+	if code, _ := h.browser().login(t, lost, "", loginOrigin); code != http.StatusUnauthorized {
+		t.Fatalf("login with the replaced passkey = %d, want 401", code)
+	}
+	if code := h.browser().enrol(t, newAuthenticator(t), leaked); code != http.StatusBadRequest {
+		t.Fatalf("other recovery link after recovery = %d, want 400", code)
+	}
+	if code, _ := h.browser().login(t, recovered, "", loginOrigin); code != http.StatusOK {
+		t.Fatalf("login with the recovered passkey = %d", code)
+	}
+}
+
 func TestLoginRefusals(t *testing.T) {
 	setup := func(t *testing.T) (*harness, *virtualAuthenticator) {
 		h := newHarness(t)

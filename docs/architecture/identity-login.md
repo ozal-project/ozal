@@ -125,9 +125,11 @@ Operator (host shell)          Ozal                           Visitor's browser
   link preview (WhatsApp, Slack) that fetches the URL cannot consume it.
 - Registration options: discoverable credential required, user verification
   required, attestation `none` (synced passkeys are not attested anyway).
-- **Recovery** is the same flow with `--recover`: a new passkey is added; old
-  ones stay until the operator revokes them (`ozal user passkeys`,
-  `… revoke`).
+- **Recovery** is the same flow with `-recover`: completing it replaces the
+  passkeys, in one transaction with the new one the old ones are revoked,
+  every session ends and other recovery links are retired (`SEC-023`). It is
+  an explicit alternative authority: whoever runs it on the host can replace
+  the user's credentials. A second device without losing the first is Flow 3.
 - **More passkeys** (a second device, a YubiKey) can be added from an
   existing session after a fresh step-up (Flow 3), never from an old session.
 - Every new passkey sends an alert. A passkey you did not add is the one

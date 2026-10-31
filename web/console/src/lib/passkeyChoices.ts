@@ -32,7 +32,7 @@ export const choices: Record<Choice, { label: string; detail: string; hints: str
 };
 
 // managerOnLoginHost replaces the manager's detail when the ceremony runs on
-// the HTTPS login host (ID-021), where every manager works.
+// the HTTPS login host (ID-021), where the localhost limit does not apply.
 export const managerOnLoginHost = "Its browser extension takes the prompt: for example Bitwarden (or self-hosted Vaultwarden), 1Password, Proton Pass or KeePassXC, or any other that saves passkeys.";
 
 const order: Choice[] = ["device", "manager", "phone", "key"];

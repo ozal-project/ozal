@@ -164,6 +164,28 @@ func (s *Identity) Enrol(ctx context.Context, tokenHash []byte, userID string, c
 	if n, err := result.RowsAffected(); err != nil || n != 1 {
 		return passkey.ErrInvitationInvalid
 	}
+	var purpose string
+	if err := tx.QueryRowContext(ctx, `SELECT purpose FROM invitations WHERE token_hash = ?`, tokenHash).Scan(&purpose); err != nil {
+		return fmt.Errorf("read invitation: %w", err)
+	}
+	if purpose == "recover" {
+		// Recovery assumes the old passkeys are lost or exposed (SEC-023): they
+		// stop working, every session ends and no other recovery link outlives
+		// this one, all with the new passkey or not at all.
+		user, err := scanUser(tx.QueryRowContext(ctx, userColumns+` WHERE id = ?`, userID))
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE passkeys SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`, now, userID); err != nil {
+			return fmt.Errorf("revoke replaced passkeys: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE invitations SET used_at = ? WHERE user_id = ? AND purpose = 'recover' AND used_at IS NULL`, now, userID); err != nil {
+			return fmt.Errorf("retire recovery links: %w", err)
+		}
+		if err := deleteSessions(ctx, tx, user); err != nil {
+			return err
+		}
+	}
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO passkeys (credential_id, user_id, credential_json, backup_eligible, created_at, first_seen_pending) VALUES (?, ?, ?, ?, ?, 0)`,
 		credential.ID, userID, string(encoded), credential.Flags.BackupEligible, now,
