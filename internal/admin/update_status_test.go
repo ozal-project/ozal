@@ -16,7 +16,9 @@ import (
 
 func TestUpdateStatusAPIRequiresTheUpdatesToolAndReturnsOnlyTheProjection(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "update-status.json")
-	if err := os.WriteFile(path, []byte(`{"checked_at":"2026-10-30T04:00:00Z","installed":"0.1.0","latest":"0.2.0","result":"available","reason":"private failure detail: token=DO_NOT_EXPOSE"}`), 0o600); err != nil {
+	// A fresh check: a fixed date would turn stale and fail as the calendar moves.
+	checked := time.Now().UTC().Format(time.RFC3339)
+	if err := os.WriteFile(path, []byte(`{"checked_at":"`+checked+`","installed":"0.1.0","latest":"0.2.0","result":"available","reason":"private failure detail: token=DO_NOT_EXPOSE"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	h := New(&fakeManager{cfg: config.Config{Admin: config.Admin{Token: readToken}}}, nil, WithUpdateStatusFile(path))
