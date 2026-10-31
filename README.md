@@ -1,70 +1,96 @@
-# Ozal
+<p align="center">
+  <img src="site/public/favicon.svg" width="72" alt="Ozal logo">
+</p>
 
-Previously named Switchboard. This checkout builds `ozal` and `ozalctl`;
-existing installations follow the [rename upgrade guide](docs/operations/administration.md#migrar-de-switchboard-a-ozal).
-Source and Go module: [`github.com/ozal-project/ozal`](https://github.com/ozal-project/ozal).
-The public site address stays unchanged until DNS/HTTPS cutover is verified.
-Historical Switchboard releases keep their original names; Ozal release artifacts are not published yet.
+<h1 align="center">Ozal</h1>
 
-Self-hosted application access in one Go binary: give an application a hostname,
-serve it over HTTPS, and decide who may enter with passkeys or an external OIDC
-provider. Built static sites can also be published with deployment history and
-rollback. The administrative console is a Svelte app embedded in the binary;
-Node is needed to build the UI, not to run the installed gateway.
+<p align="center">
+  <strong>One front door for your self-hosted apps.</strong><br>
+  Give an app a hostname, serve it over HTTPS, and decide who gets in with passkeys or your own identity provider. One Go binary.
+</p>
 
-Ozal is an alpha project. Features in this checkout can be newer than
-those in a tagged release. Owned tunnels, provider independence and external
-operator acceptance have explicit remaining gates; consult the version you
-install rather than treating future plans as available features.
+<p align="center">
+  <a href="docs/operations/first-application.md">First application</a> ·
+  <a href="docs/operations/download-install.md">Install</a> ·
+  <a href="docs/reference.md">Reference</a> ·
+  <a href="docs/security.md">Security</a> ·
+  <a href="VISION.md">Vision</a>
+</p>
 
-## Start here
+> Formerly Switchboard. Existing installations follow the [rename guide](docs/operations/administration.md#migrate-from-switchboard-to-ozal).
+> **Alpha:** interfaces and config keys may change. Not production-ready yet.
 
-- [Install](docs/operations/download-install.md): choose a version, verify it and install locally or as a Linux service.
-- [First application](docs/operations/first-application.md): private console, passkeys, applications, domains and groups.
-- [Administration](docs/operations/administration.md): upgrades, backups, recovery, connectors, GitHub and ozalctl.
-- [Security](docs/security.md): trust boundaries and deployment responsibilities.
-- [Configuration and CLI reference](docs/reference.md): advanced options and examples.
+![Ozal console: visitors, the apps Ozal serves, and what needs attention](site/public/shots/overview.jpg)
 
-For a local trial with a binary built from this checkout, start an application
-on port 3000, then:
+*The console running on demo data: who reaches each app, and which route needs attention.*
 
-```sh
-ozal setup -dir ./my-edge -target http://127.0.0.1:3000
+## How it works
+
+```mermaid
+flowchart LR
+  V([Visitor]) --> O{{Ozal<br/>HTTPS · identity · policy}}
+  O -- allowed --> A[Your app]
+  O -- allowed --> S[Static site]
+  O -. not signed in or not allowed .-> R[Sign-in or refusal]
 ```
 
-This creates a new private installation and prints its start and bootstrap
-instructions. It does not overwrite an installation, publish DNS or open the
-application to the Internet. Use the printed paths and keep credentials local.
-For a minimal HTTP routing example, see [QUICKSTART.md](QUICKSTART.md).
+Ozal sits in front of your applications. It terminates HTTPS, checks who the visitor is, applies the route's rules, and only then forwards the request. For traffic that passes through Ozal, applications receive identity from the gateway, never from the client: client-supplied identity headers are stripped. Applications keep their own permissions; Ozal decides who reaches them, not what they do once inside. Protect the origin too: keep applications on loopback or a private network, so nothing can bypass the gateway.
 
-## Operating model
+## What it does
 
-The edge owns identity, access decisions, routing and authenticated tunnels.
-The host operator owns processes, networking, backups and upstream application
-security. Applications retain their internal permissions. The console stays on
-loopback/a private socket; remote operators use a private transport.
+- **Publish an app in minutes.** Point a hostname at a local port or a static folder. Certificates are issued and renewed automatically.
+- **Decide who gets in, per route.** Allow specific people, groups, or anyone signed in. Require a recent sign-in or a device-bound passkey for sensitive routes.
+- **Passwordless by default.** Native passkeys, or an external OIDC provider. Ozal never stores passwords.
+- **Ship static sites.** Upload a build or publish from GitHub Actions, with version history and one-click rollback.
+- **See what happened.** Policy explanations and a live activity feed. A durable audit trail for access and admin changes is available when configured; the feed alone is not a tamper-evident record.
+- **Operate from a console or the CLI.** The console is embedded in the binary and stays private on loopback or a local socket.
 
-A public URL needs reachable edge infrastructure, authority over a DNS name and
-valid HTTPS. Cloudflare is an optional exterior integration; its API is currently
-used for automated DNS-01. The autonomous-publication MVP is documented under
-[development](docs/engineering.md#publicacion-autonoma); it is not a promise of
-free domains, a hosted service, a global CDN or volumetric DDoS mitigation.
+## Get started
 
-## Development
+Try it locally with an application already running on port 3000, using a binary built from this checkout:
+
+```sh
+go build ./cmd/ozal
+./ozal setup -dir ./my-edge -target http://127.0.0.1:3000
+```
+
+This creates a new private installation and prints the start, invitation and sign-in commands. It does not overwrite anything, change DNS or expose the app to the Internet.
+
+For a minimal routing example with no TLS and no identity provider, see [QUICKSTART.md](QUICKSTART.md). For a Linux service, follow [installation](docs/operations/download-install.md).
+
+## Documentation
+
+| I want to… | Read |
+|---|---|
+| Install Ozal and run it as a service | [Install](docs/operations/download-install.md) |
+| Publish my first application or website | [First application](docs/operations/first-application.md) |
+| Upgrade, back up, connect hosts, publish from CI | [Administration](docs/operations/administration.md) |
+| Look up a config field or CLI command | [Configuration and CLI](docs/reference.md) |
+| Understand the trust boundaries | [Security](docs/security.md) |
+| Know where the project is going | [VISION.md](VISION.md) |
+
+## Status
+
+Capabilities below describe this checkout; tagged releases may include less.
+
+| Area | State |
+|---|---|
+| Reverse proxy, HTTPS, per-route policy | Available |
+| Passkeys and OIDC login | Available |
+| Static sites with history and rollback | Available |
+| Owned tunnels to private connectors | Experimental, off by default |
+| Signed release updates | Partly built; not yet published |
+| High availability, DDoS protection, CDN | Not offered |
+
+See the [alpha.1 release notes](docs/releases/v0.1.0-alpha.1.md) for what that release includes and its known limits.
+
+## Contributing
 
 ```sh
 go build ./cmd/ozal
 scripts/verify.sh
 ```
 
-Start with [AGENTS.md](AGENTS.md), [design](docs/architecture/design.md),
-[stack](docs/architecture/stack.md) and the [engineering guide](docs/engineering.md).
-The console source is in `web/console`, the public site in `site`, and Go owns
-the security decisions. Frontend builds use the pinned Node version and lockfiles;
-the committed console output is embedded into the Go binary.
+Start with [AGENTS.md](AGENTS.md), then the [design](docs/architecture/design.md) and [engineering guide](docs/engineering.md). The console source is in `web/console`, the public site in `site`, and the security decisions live in Go.
 
-Active work: [TO_IMPLEMENT.md](docs/TO_IMPLEMENT.md). Closed work and evidence:
-[IMPLEMENTED.md](docs/IMPLEMENTED.md). Long-range direction: [VISION.md](VISION.md).
-The [alpha.1 notes](docs/releases/v0.1.0-alpha.1.md) describe that historical
-release, not every capability now present on main. Access to release artifacts
-depends on the configured distribution channel; this README does not change it.
+Report vulnerabilities privately, as described in [SECURITY.md](SECURITY.md).

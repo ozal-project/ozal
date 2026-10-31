@@ -39,6 +39,7 @@ A failed reload keeps the previous valid snapshot. `config_sha256` in the
 authenticated state identifies the effective configuration. Changing listeners,
 tunnel identity or `runtime_file` requires a restart.
 
+<a id="migrate-from-switchboard-to-ozal"></a>
 <a id="migrar-de-switchboard-a-ozal"></a>
 
 ## Migrate from Switchboard to Ozal
