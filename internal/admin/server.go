@@ -38,6 +38,8 @@ type Handler struct {
 	devices                *deviceBook
 	enrolCommand           string
 	github                 repositoryReader
+	githubKeyDir           string
+	githubStates           manifestStates
 	operators              *operatorSessions
 	manager                routeManager
 	sink                   events.Sink
@@ -84,6 +86,10 @@ func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 	h.mux.HandleFunc("POST /_/api/apps/{host}/dns", h.requireTool("applications", h.createApplicationRecord))
 	h.mux.HandleFunc("PUT /_/api/github", h.requireLocal(h.configureGitHub))
 	h.mux.HandleFunc("GET /_/api/github/repositories", h.requireTool("publishing", h.githubRepositories))
+	h.mux.HandleFunc("POST /_/api/github/manifest", h.requireTool("publishing", h.githubManifest))
+	h.mux.HandleFunc("POST /_/api/github/manifest/conversion", h.requireTool("publishing", h.githubManifestConversion))
+	h.mux.HandleFunc("POST /_/api/github/installation", h.requireTool("publishing", h.githubInstallation))
+	h.mux.HandleFunc("POST /_/api/github/workflow", h.requireTool("publishing", h.githubWorkflowPreview))
 	h.mux.HandleFunc("POST /_/api/projects", h.requireTool("publishing", h.saveGitHubProject))
 	h.mux.HandleFunc("POST /_/api/projects/{name}/workflow", h.requireTool("publishing", h.projectWorkflow))
 	h.mux.HandleFunc("DELETE /_/api/projects/{name}", h.requireTool("publishing", h.removeProject))

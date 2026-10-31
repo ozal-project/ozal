@@ -47,7 +47,7 @@ func (h *Handler) projectWorkflow(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 409, "configuration changed; review the workflow again")
 		return
 	}
-	if cfg.GitHub == nil || cfg.Pages == nil || cfg.Pages.Deploy == nil {
+	if !cfg.GitHub.Installed() || cfg.Pages == nil || cfg.Pages.Deploy == nil {
 		writeError(w, 422, "configure the GitHub App and dedicated HTTPS deploy endpoint on the host first")
 		return
 	}
@@ -123,14 +123,9 @@ func (h *Handler) projectWorkflow(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 422, "public acceptance requires a public hostname of this project; protected sites need a separately reviewed acceptance workflow")
 		return
 	}
-	endpoint := "https://" + cfg.Pages.Deploy.Host
-	if cfg.Pages.Deploy.Audience != endpoint {
-		writeError(w, 422, "the generated publisher requires an OIDC audience equal to its HTTPS deploy origin; use a manually reviewed workflow for a custom audience")
-		return
-	}
-	plan, err := workflow.Build(workflow.Request{Project: project.Name, Repository: selected.FullName, Ref: trust.Ref, Filename: filename, Endpoint: endpoint, SiteURL: "https://" + host, Directory: req.Directory, Output: req.Output})
-	if err != nil {
-		writeError(w, 422, err.Error())
+	plan, status, message := publishingPlan(cfg, project.Name, selected, trust.Ref, filename, host, req.Directory, req.Output)
+	if status != 0 {
+		writeError(w, status, message)
 		return
 	}
 	if h.manager.ConfigDigest() != expected {
@@ -163,4 +158,22 @@ func (h *Handler) projectWorkflow(w http.ResponseWriter, r *http.Request) {
 		h.emit(events.Event{Type: events.GitHubWorkflowProposed, Actor: actor(r), Host: project.Name, Code: "github.workflow_proposed", Reason: "GitHub accepted a publishing workflow pull request; review before merging"})
 		writeJSON(w, 201, map[string]any{"pull_request": result, "applied": true})
 	})(w, r)
+}
+
+// publishingPlan generates the workflow for one repository, branch and public
+// hostname. The wizard's preview and the pull request both use it, so the
+// digest an operator reviewed is the one later applied.
+func publishingPlan(cfg config.Config, project string, selected githubapp.Repository, ref, filename, host, directory, output string) (workflow.Plan, int, string) {
+	if cfg.Pages == nil || cfg.Pages.Deploy == nil {
+		return workflow.Plan{}, 422, "configure the dedicated HTTPS deploy endpoint on the host first"
+	}
+	endpoint := "https://" + cfg.Pages.Deploy.Host
+	if cfg.Pages.Deploy.Audience != endpoint {
+		return workflow.Plan{}, 422, "the generated publisher requires an OIDC audience equal to its HTTPS deploy origin; use a manually reviewed workflow for a custom audience"
+	}
+	plan, err := workflow.Build(workflow.Request{Project: project, Repository: selected.FullName, Ref: ref, Filename: filename, Endpoint: endpoint, SiteURL: "https://" + host, Directory: directory, Output: output})
+	if err != nil {
+		return workflow.Plan{}, 422, err.Error()
+	}
+	return plan, 0, ""
 }

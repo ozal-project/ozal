@@ -75,9 +75,12 @@ func (c *Client) Repositories(ctx context.Context, cfg config.GitHubApp, page in
 	return listing, nil
 }
 
-// installationToken requests only the permissions needed for the operation. A
-// write token is restricted to the one repository selected by the operator.
-func (c *Client) installationToken(ctx context.Context, cfg config.GitHubApp, repositoryID int64) (string, error) {
+// appJWT authenticates as the App itself: enough to read its own metadata and
+// installations, never repository contents.
+func (c *Client) appJWT(cfg config.GitHubApp) (string, error) {
+	if cfg.AppID < 1 {
+		return "", ErrUnavailable
+	}
 	secret, err := config.ResolveSecret(cfg.PrivateKey)
 	if err != nil {
 		return "", ErrUnavailable
@@ -92,6 +95,19 @@ func (c *Client) installationToken(ctx context.Context, cfg config.GitHubApp, re
 	}
 	now := c.Now()
 	token, err := jwt.Signed(signer).Claims(jwt.Claims{Issuer: strconv.FormatInt(cfg.AppID, 10), IssuedAt: jwt.NewNumericDate(now.Add(-time.Minute)), Expiry: jwt.NewNumericDate(now.Add(5 * time.Minute))}).Serialize()
+	if err != nil {
+		return "", ErrUnavailable
+	}
+	return token, nil
+}
+
+// installationToken requests only the permissions needed for the operation. A
+// write token is restricted to the one repository selected by the operator.
+func (c *Client) installationToken(ctx context.Context, cfg config.GitHubApp, repositoryID int64) (string, error) {
+	if !cfg.Installed() {
+		return "", ErrUnavailable
+	}
+	token, err := c.appJWT(cfg)
 	if err != nil {
 		return "", ErrUnavailable
 	}
@@ -164,7 +180,9 @@ func (c *Client) callStatus(ctx context.Context, method, path, token string, bod
 	if err != nil {
 		return 0, ErrUnavailable
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	req.Header.Set("User-Agent", "ozal")

@@ -33,6 +33,9 @@ func runGitHub(ctx context.Context, args []string, out io.Writer) error {
 		if err := app.Validate(); err != nil {
 			return err
 		}
+		if !app.Installed() {
+			return errors.New("-installation-id is required: install the App on the chosen repositories first")
+		}
 	}
 	client, err := af.client()
 	if err != nil {

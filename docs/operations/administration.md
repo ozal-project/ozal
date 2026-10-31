@@ -499,23 +499,41 @@ Son tres funciones distintas: login OIDC de personas, descubrimiento de
 repositorios con una GitHub App y autorización del workflow para publicar.
 Una no concede automáticamente las otras.
 
-El descubrimiento actual usa una App **propia** con `Metadata: read`, instalada
-solo en los repositorios elegidos. Guarda su clave como archivo privado y
-configura únicamente la referencia desde el socket del host:
+La forma habitual es conectarla desde la consola: **Applications → Add
+application → A website built from GitHub → Connect GitHub**. Ozal crea en tu
+cuenta (o en la organización que indiques) una App **privada** propia mediante
+un manifest: `Metadata: read` y `Contents`, `Workflows` y `Pull requests` en
+escritura, sin webhooks ni eventos. Apruébala en GitHub; GitHub vuelve a la
+consola, Ozal guarda la clave de la App en `github-app-ID.pem` (modo 0600,
+junto a la base de estado de `-db`) y te lleva a elegir los repositorios. Al
+volver, la instalación se lee de GitHub con la clave de la App; nunca se toma
+de la URL. Requiere la herramienta `publishing` y que Ozal arranque con `-db`.
+La configuración guarda solo la referencia `file:`; el secreto OAuth y el de
+webhook que GitHub devuelve se descartan.
+
+Sin `-db`, o si prefieres crear la App a mano, guarda su clave como archivo
+privado y configura únicamente la referencia desde el socket del host:
 
 ```sh
 ozal github connect -config /etc/ozal/config.json \
   -app-id 123 -installation-id 456 -key file:/etc/ozal/github-app-key
 ```
 
-Para una web nueva también puedes empezar en **Applications → Add application →
-A website built from GitHub**. Guarda la ruta revisada y continúa en Sites; la ruta puede
-servir un build retenido con ese nombre inmediatamente y, si todavía no hay
-ninguno, no tiene contenido hasta publicar. Verifica la primera publicación
-antes de mover DNS. Esta opción necesita las herramientas de aplicaciones y
-publicación; no selecciona un repo ni crea un PR al guardar la ruta.
+Con GitHub conectado, el asistente lista los repositorios instalados, propone
+la rama por defecto y el build (`npm ci && npm run build`, salida `dist`). La
+revisión muestra el workflow generado. **Un solo guardado** crea la dirección,
+deja ese repositorio, rama y workflow (`ozal-pages.yml`) como único publicador
+del sitio y abre un PR que lo agrega; Ozal nunca lo fusiona. El último paso
+indica el PR y espera la primera publicación antes de mostrar el DNS. Si falla
+la confianza o el PR, la dirección queda guardada y el paso lo dice; termina en
+Sites. Un sitio privado o un edge sin `pages.deploy` guarda la confianza pero no
+abre PR: el workflow se escribe y revisa aparte. El asistente rechaza un nombre
+de sitio que ya publique desde GitHub en vez de reemplazar su publicador.
 
-En Sites, elige quién puede publicar: repo, sitio, proyecto, ref completa y
+Desconectar sigue siendo una operación del host (`ozal github disconnect`);
+borra la App en GitHub si ya no la usas y elimina su archivo de clave.
+
+Para un sitio que ya existe, en Sites elige quién puede publicar: repo, sitio, proyecto, ref completa y
 workflow. El servidor vuelve a comprobar acceso e IDs de repo/propietario.
 El build corre en CI y el edge recibe el artefacto terminado; no compila código
 del repositorio. Una vez guardado el publicador, **Prepare publishing workflow**
@@ -665,8 +683,10 @@ para revertir usa los valores `before` del backup en un nuevo comando revisado.
 Como `app alias`, requiere primero un `edge upgrade` con un binario que incluya
 el subcomando; la guardia se niega ante binarios anteriores sin arrancarlos.
 
-`app alias` da a un sitio público existente un segundo hostname sin tocar el
-primero. `ozalctl` ejecuta `ozal app alias` en el edge contra el socket admin
+`app alias` da a una aplicación pública existente (sitio estático o ruta a un
+upstream) un segundo hostname sin tocar el primero. Rechaza aplicaciones con
+política de acceso y rutas de redirect: el alias conserva exactamente la ruta
+pública del origen. `ozalctl` ejecuta `ozal app alias` en el edge contra el socket admin
 local (como la cuenta de servicio con `sudo`, o como tu usuario con
 `socket_group`), así que no hay token nuevo en tu máquina. El edge guarda la ruta con el digest revisado, crea
 el registro A proxied con su propia credencial (`dns.cloudflare.token`, un token

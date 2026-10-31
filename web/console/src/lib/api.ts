@@ -287,13 +287,22 @@ export async function deploySite(token: string, site: string, file: File): Promi
 }
 
 export type Repository = { id: number; owner: { id: number }; full_name: string; default_branch: string; private: boolean };
-export type Repositories = { configured: boolean; repositories: Repository[]; page?: number; more?: boolean };
+// How far GitHub is connected: not at all, an App created but installed
+// nowhere yet (install_url says where to choose its repositories), or installed.
+export type Repositories = { configured: boolean; installed?: boolean; connect_available?: boolean; workflow_available?: boolean; app?: string; owner?: string; install_url?: string; repositories: Repository[]; page?: number; more?: boolean };
 export async function githubRepositories(token: string, page = 1, signal?: AbortSignal): Promise<Repositories> {
   const res = await fetch(`/_/api/github/repositories?page=${page}`, { cache: "no-store", headers: { Authorization: `Bearer ${token}` }, signal: boundedSignal(signal) });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error ?? `GitHub unavailable (HTTP ${res.status}).`);
   return body;
 }
+// Connecting GitHub from the console: the server returns a manifest form for
+// the browser to submit to GitHub, then exchanges the code GitHub sends back.
+export const startGitHubConnection = (token: string, origin: string, organization: string) => adminPost<{ url: string; manifest: string }>(token, "/_/api/github/manifest", { origin, organization });
+export const finishGitHubConnection = (token: string, code: string, state: string, expected: string) => adminPost<{ slug: string; owner: string; install_url: string }>(token, "/_/api/github/manifest/conversion", { code, state, expected }, undefined, 30_000);
+export const recordGitHubInstallation = (token: string, expected: string) => adminPost<{ installed: boolean }>(token, "/_/api/github/installation", { expected });
+export type WorkflowDraft = { project: string; repository_id: number; page: number; ref: string; workflow: string; hostname: string; directory: string; output: string };
+export const previewGitHubWorkflow = (token: string, draft: WorkflowDraft) => adminPost<{ plan: WorkflowPlan }>(token, "/_/api/github/workflow", draft, undefined, 35_000);
 export const bindGitHubProject = (token: string, project: { name: string; site: string; repository_id: number; page: number; ref: string; workflow: string; expected: string }) => adminPost<{ workflow_ref: string; deploy_host_configured: boolean }>(token, "/_/api/projects", project);
 export type WorkflowInput = { directory: string; output: string; hostname: string; page: number };
 export type WorkflowPlan = { project: string; repository: string; ref: string; filename: string; endpoint: string; site_url: string; directory: string; output: string; base: string; branch: string; path: string; content: string; digest: string };

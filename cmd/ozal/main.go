@@ -191,6 +191,9 @@ func main() {
 	}
 	if *dbPath != "" {
 		adminOpts = append(adminOpts, admin.WithUpdateStatusFile(filepath.Join(filepath.Dir(*dbPath), "update-status.json")))
+		// PAGES-010: a GitHub App connected from the console keeps its key
+		// beside the state database, readable by this service only.
+		adminOpts = append(adminOpts, admin.WithGitHubKeyDir(filepath.Dir(*dbPath)))
 		// Sessions survive a restart through the migrated state database.
 		// Migrations stay an explicit operator step: a stale schema stops
 		// startup instead of being applied silently.

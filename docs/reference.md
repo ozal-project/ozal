@@ -626,6 +626,23 @@ o configuración exige revisar otra vez. Un 201 devuelve `pull_request` con
 `url`, `number` y `branch`; errores de escritura incluyen la rama de propuesta
 para reconciliar en GitHub. Nunca envíes claves o tokens de la App al navegador.
 
+Conectar GitHub desde la consola (herramienta `publishing`, requiere `-db`):
+`POST /_/api/github/manifest` con `origin` (esquema y host de la consola, sin
+ruta) y `organization` opcional devuelve `url` y `manifest` para que el
+navegador los envíe a GitHub; el `state` queda ligado a esa sesión una hora.
+`POST /_/api/github/manifest/conversion` con `code`, `state` y `expected`
+canjea el código una sola vez, escribe `github-app-ID.pem` (0600, sin
+reemplazar) junto a la base y guarda `github` con `installation_id: 0`;
+responde `slug`, `owner` e `install_url`. `POST /_/api/github/installation`
+con `expected` lee de GitHub la única instalación de la App y la registra; no
+acepta un ID del cliente. `GET /_/api/github/repositories` informa además
+`installed`, `connect_available`, `workflow_available` e `install_url` cuando
+falta instalarla. `POST /_/api/github/workflow` previsualiza, sin guardar, el
+workflow de un sitio nuevo (`project`, `repository_id`, `page`, `ref`,
+`workflow`, `hostname`, `directory`, `output`) con el mismo generador que el
+PR posterior. La CSP de la consola permite `form-action https://github.com`
+solo para ese manifest.
+
 ## Administración y auditoría
 
 `/_/healthz` responde sin credencial y no describe rutas. Estado (`/_/status`,

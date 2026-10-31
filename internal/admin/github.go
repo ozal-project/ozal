@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/ozal-project/ozal/internal/config"
 	"github.com/ozal-project/ozal/internal/events"
@@ -23,10 +22,35 @@ type projectWriter interface {
 	PutProject(config.Project, string, bool) error
 }
 
+// githubRepositories says how far GitHub is connected, then lists the
+// installation's repositories. It never returns the key or its reference.
 func (h *Handler) githubRepositories(w http.ResponseWriter, r *http.Request) {
-	cfg := h.manager.Config().GitHub
-	if cfg == nil {
-		writeJSON(w, 200, map[string]any{"configured": false, "repositories": []any{}})
+	cfg := h.manager.Config()
+	_, canSetup := h.setupGitHub()
+	state := map[string]any{
+		"configured": cfg.GitHub != nil, "installed": cfg.GitHub.Installed(), "repositories": []any{},
+		// The console can connect GitHub itself only with somewhere to keep the key.
+		"connect_available": canSetup && h.githubKeyDir != "",
+		// Ozal can write the publishing workflow only with an OIDC deploy endpoint.
+		"workflow_available": cfg.Pages != nil && cfg.Pages.Deploy != nil && cfg.Pages.Deploy.Audience == "https://"+cfg.Pages.Deploy.Host,
+	}
+	if cfg.GitHub == nil {
+		writeJSON(w, 200, state)
+		return
+	}
+	if !cfg.GitHub.Installed() {
+		setup, ok := h.setupGitHub()
+		if !ok {
+			writeError(w, 503, "GitHub discovery is unavailable")
+			return
+		}
+		app, err := setup.AppStatus(r.Context(), *cfg.GitHub)
+		if err != nil {
+			writeError(w, 503, "GitHub could not be asked about the App; check its key and try again")
+			return
+		}
+		state["app"], state["owner"], state["install_url"] = app.Slug, app.Owner, app.InstallURL()
+		writeJSON(w, 200, state)
 		return
 	}
 	if h.github == nil {
@@ -42,12 +66,13 @@ func (h *Handler) githubRepositories(w http.ResponseWriter, r *http.Request) {
 		}
 		page = p
 	}
-	listing, err := h.github.Repositories(r.Context(), *cfg, page)
+	listing, err := h.github.Repositories(r.Context(), *cfg.GitHub, page)
 	if err != nil {
 		writeError(w, 503, err.Error())
 		return
 	}
-	writeJSON(w, 200, map[string]any{"configured": true, "repositories": listing.Repositories, "page": listing.Page, "more": listing.More})
+	state["repositories"], state["page"], state["more"] = listing.Repositories, listing.Page, listing.More
+	writeJSON(w, 200, state)
 }
 func (h *Handler) saveGitHubProject(w http.ResponseWriter, r *http.Request) {
 	var req struct {
@@ -68,8 +93,8 @@ func (h *Handler) saveGitHubProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 409, "configuration changed; refresh before binding publisher trust")
 		return
 	}
-	if cfg.GitHub == nil || h.github == nil {
-		writeError(w, 422, "configure the optional GitHub App on the host first")
+	if !cfg.GitHub.Installed() || h.github == nil {
+		writeError(w, 422, "connect GitHub and choose its repositories first")
 		return
 	}
 	listing, err := h.github.Repositories(r.Context(), *cfg.GitHub, req.Page)
@@ -88,7 +113,7 @@ func (h *Handler) saveGitHubProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 403, "repository is no longer available to this installation")
 		return
 	}
-	if strings.ContainsAny(req.Workflow, "/\\@") || (!strings.HasSuffix(req.Workflow, ".yml") && !strings.HasSuffix(req.Workflow, ".yaml")) {
+	if !validWorkflowFile(req.Workflow) {
 		writeError(w, 400, "workflow must be a .yml or .yaml filename")
 		return
 	}

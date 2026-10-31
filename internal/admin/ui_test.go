@@ -91,7 +91,9 @@ func TestConsoleHomeAndAssets(t *testing.T) {
 		rec := request(handler, http.MethodGet, path, "", "")
 		csp := rec.Header().Get("Content-Security-Policy")
 		if rec.Code != 200 || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/html") ||
-			!strings.Contains(csp, "script-src 'self'") || strings.Contains(csp, "unsafe") {
+			!strings.Contains(csp, "script-src 'self'") || strings.Contains(csp, "unsafe") ||
+			// Forms may only reach GitHub, for the App manifest.
+			!strings.Contains(csp, "form-action https://github.com;") {
 			t.Fatalf("console %s: %d %v", path, rec.Code, rec.Header())
 		}
 		if strings.Contains(rec.Body.String(), "<script>") {

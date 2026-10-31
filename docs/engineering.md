@@ -186,6 +186,22 @@ reales en loopback, con I/O GitHub y datos de deployments simulados. Requiere
 permite configurar sus argumentos locales. `OZAL_WORKFLOW_ARTIFACTS` guarda
 capturas privadas. No acredita una instalación de App ni un PR/build real.
 
+Conexión desde la consola: `githubapp.Manifest` es puro (origen sin ruta,
+cuenta validada, App privada sin webhooks ni eventos y solo los cuatro
+permisos). El `state` del manifest es aleatorio, de un solo uso, ligado al
+actor de la sesión y vence en una hora; un código con otro `state` no llega a
+GitHub. La conversión vuelve a exigir `publishing` tras la llamada de red,
+escribe la clave con `O_EXCL` y 0600, guarda solo la referencia `file:` y
+descarta los secretos OAuth/webhook. `installation_id: 0` significa App creada
+sin instalar: `installationToken` la rechaza. La instalación se obtiene con el
+JWT de la App (`GET /app`, `/app/installations`, exactamente una); el cliente
+no puede nombrarla. La vista previa del asistente y el PR usan
+`publishingPlan`, así el digest revisado es el aplicado.
+`OZAL_WORKFLOW_BROWSER=1 go test ./internal/admin -run
+TestGitHubWizardBrowserAcceptance -count=1 -v` recorre panel de conexión,
+regreso de la instalación, elección de repo, revisión del workflow y un único
+guardado con confianza y PR, con GitHub simulado y axe en cuatro anchos.
+
 La migración explícita de un publicador existente usa
 `config.PlanProjectTrust` (núcleo puro) y un endpoint exclusivo del socket
 administrativo. No amplía la autoridad de los tokens web ni el flujo de

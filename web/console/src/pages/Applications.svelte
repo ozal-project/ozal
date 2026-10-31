@@ -10,7 +10,8 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { admin, askForToken, can } from "$lib/adminToken.svelte";
-  import { setupStatus, planApplication, saveApplication, fetchGroups, fetchZones, fetchConnectors, deploySite, invitePerson, type SetupStatus, type ApplicationRoute, type ApplicationPlan, type ApplicationDraft } from "$lib/api";
+  import { setupStatus, planApplication, saveApplication, fetchGroups, fetchZones, fetchConnectors, deploySite, invitePerson, fetchPublishing, bindGitHubProject, previewGitHubWorkflow, proposeWorkflow, fetchSites, type SetupStatus, type ApplicationRoute, type ApplicationPlan, type ApplicationDraft, type Repositories, type WorkflowPlan, type Deployment } from "$lib/api";
+  import GitHubSource, { returningFromGitHub, type GitHubSelection } from "$lib/GitHubSource.svelte";
   import { servedBy, whoMayEnter } from "$lib/wording";
   import { navigate } from "$lib/router.svelte";
   import ApplicationRemove from "$lib/ApplicationRemove.svelte";
@@ -56,7 +57,13 @@
     catch (e) { error = (e as Error).message; }
     finally { loading = false; }
   };
-  onMount(() => { if (admin.token.trim()) void load(); });
+  // Back from GitHub (creating or installing the App): reopen the wizard
+  // where the operator left it, so the repository can be chosen next.
+  onMount(() => {
+    if (!admin.token.trim()) return;
+    const back = returningFromGitHub(location.search);
+    void load().then(() => { if (back) { edit(null); kind = "github"; } });
+  });
 
   // Adding an application (UI-006): 1 what serves it, 2 its address, 3 who
   // may open it, 4 review; after saving, 5 connect its DNS. Editing skips the
@@ -89,6 +96,14 @@
   let connectOpen = $state(false);
   let removeAsk = $state<Record<string, boolean>>({});
   let publishAsk = $state<Record<string, boolean>>({});
+  // From GitHub (PAGES-010): the repository chosen in step 1, the workflow
+  // previewed for review, and what saving did on GitHub.
+  const workflowFile = "ozal-pages.yml";
+  let github = $state<GitHubSelection | null>(null);
+  let githubState = $state<Repositories | null>(null);
+  let workflowPlan = $state<WorkflowPlan | null>(null);
+  let githubResult = $state<{ trusted: boolean; pr?: { url: string; number: number }; error?: string } | null>(null);
+  let published = $state<Deployment | null>(null);
 
   function edit(route: ApplicationRoute | null) {
     base = route; host = route?.host ?? ""; target = route?.target ?? ""; site = route?.site ?? ""; siteEdited = !!route?.site;
@@ -96,6 +111,7 @@
     sub = ""; zone = zones[0] ?? "";
     privacy = route ? route.access || route.auth_required ? "keep" : "public" : "groups";
     groups = ""; inviteText = ""; files = null; invitations = [];
+    github = null; workflowPlan = null; githubResult = null; published = null;
     step = 1; plan = null; draft = null; formError = ""; waiting = ""; editing = true;
   }
 
@@ -118,6 +134,8 @@
   function whatNext(e: SubmitEvent) {
     e.preventDefault(); formError = "";
     if (kind === "static" && !files) { formError = "Choose the .tar.gz with your site's files, or pick “An app that is already running” if something else serves it."; return; }
+    if (kind === "github" && !github) { formError = githubState?.installed ? "Choose the repository that builds this website." : "Connect GitHub first, or pick “A static website” to upload the files yourself."; return; }
+    if (kind === "github" && !github!.branch.trim()) { formError = "Write the branch that publishes, such as main."; return; }
     if (kind === "redirect" && !/^https?:\/\/[^/?#\s]+(\/[^?#\s]*)?$/i.test(redirectTo.trim())) { formError = "Write the full new address, such as https://example.com."; return; }
     // A redirect is public by nature: nobody signs in to be sent elsewhere.
     if (kind === "redirect" || (kind === "keep" && base?.redirect)) privacy = "public";
@@ -146,7 +164,21 @@
     else route.access = base?.access ?? {};
     draft = { route, expected: status.config_sha256, access_mode: privacy === "public" ? "public" : "private" };
     waiting = "Checking…";
-    try { plan = await planApplication(admin.token.trim(), draft); step = 4; }
+    workflowPlan = null;
+    try {
+      const checked = await planApplication(admin.token.trim(), draft);
+      if (kind === "github" && github) {
+        // Saving binds a project named after the website; never replace
+        // another website's publisher without the operator seeing it.
+        const publishing = await fetchPublishing(admin.token.trim());
+        if (publishing.projects.some((p) => p.name === draft!.route.site)) throw new Error(`A website named ${draft!.route.site} already publishes from GitHub. Go back and choose another website name.`);
+        if (draft!.access_mode === "public" && githubState?.workflow_available) {
+          waiting = "Preparing the workflow…";
+          workflowPlan = (await previewGitHubWorkflow(admin.token.trim(), { project: draft!.route.site!, repository_id: github.repository.id, page: github.page, ref: `refs/heads/${github.branch.trim()}`, workflow: workflowFile, hostname: checked.route.host, directory: github.directory.trim(), output: github.output.trim() })).plan;
+        }
+      }
+      plan = checked; step = 4;
+    }
     catch (e) { formError = (e as Error).message; }
     finally { waiting = ""; }
   }
@@ -166,6 +198,7 @@
       waiting = ""; return;
     }
     const saved = plan.route.host;
+    if (kind === "github" && github) await connectRepository(token, saved);
     const returnTo = `${scheme}://${saved}/`;
     invitations = [];
     if (canInvite) {
@@ -179,6 +212,36 @@
     await load();
   }
 
+  // The address is saved; now the repository becomes its only publisher and,
+  // for a public website, a pull request adds the reviewed workflow. A
+  // failure here leaves the address saved and says what is left to do.
+  async function connectRepository(token: string, hostname: string) {
+    if (!github || !draft) return;
+    const name = draft.route.site!;
+    githubResult = { trusted: false };
+    try {
+      waiting = `Trusting ${github.repository.full_name}…`;
+      await bindGitHubProject(token, { name, site: name, repository_id: github.repository.id, page: github.page, ref: `refs/heads/${github.branch.trim()}`, workflow: workflowFile, expected: (await fetchPublishing(token)).config_sha256 });
+      githubResult = { trusted: true };
+      if (!workflowPlan) return;
+      waiting = "Opening the pull request…";
+      const opened = await proposeWorkflow(token, name, { directory: github.directory.trim(), output: github.output.trim(), hostname, page: github.page, expected: (await fetchPublishing(token)).config_sha256, digest: workflowPlan.digest, apply: true }, AbortSignal.timeout(65_000));
+      if (opened.applied) githubResult = { trusted: true, pr: opened.pull_request };
+    } catch (e) {
+      githubResult = { ...githubResult, error: (e as Error).message };
+    }
+  }
+
+  // After saving a website from GitHub, watch for its first publication.
+  $effect(() => {
+    if (!editing || step !== 5 || kind !== "github" || !githubResult?.trusted || published) return;
+    const name = site;
+    const look = () => fetchSites().then((all) => { published = all.find((s) => s.name === name)?.deployments.find((d) => d.live) ?? null; }).catch(() => {});
+    void look();
+    const timer = setInterval(look, 10_000);
+    return () => clearInterval(timer);
+  });
+
   async function copyLink(link: string) {
     await navigator.clipboard.writeText(link).then(() => { copiedLink = link; setTimeout(() => (copiedLink = ""), 2000); }).catch(() => {});
   }
@@ -188,7 +251,7 @@
     ...(base ? [{ value: "keep", label: `Keep: ${servedBy(base)}`, hint: "Change only who may open it.", icon: CheckIcon }] : []),
     { value: "backend", label: "An app that is already running", hint: "A dashboard, an API or any web app this server can reach, such as http://127.0.0.1:3000.", icon: ServerIcon },
     { value: "static", label: "A static website", hint: status?.pages_enabled ? "HTML, CSS and JavaScript files, like the folder a build produces. Ozal stores and serves them." : "Needs Pages enabled in this server's configuration.", icon: LayersIcon, disabled: !status?.pages_enabled },
-    ...(!base ? [{ value: "github", label: "A website built from GitHub", hint: !status?.pages_enabled ? "Needs Pages enabled in this server's configuration." : !can("publishing") ? "Your session does not include CI publishing." : "Every push builds in GitHub Actions and publishes here.", icon: GitIcon, disabled: !status?.pages_enabled || !can("publishing") }] : []),
+    ...(!base ? [{ value: "github", label: "A website built from GitHub", hint: !status?.pages_enabled ? "Needs Pages enabled in this server's configuration." : !can("publishing") ? "Your session does not include CI publishing." : "Pick a repository. Every push builds in GitHub Actions and publishes here.", icon: GitIcon, disabled: !status?.pages_enabled || !can("publishing") }] : []),
     { value: "connector", label: "An app on another machine", hint: "A computer at home or in an office that cannot receive connections. It connects out to Ozal.", icon: PlugIcon },
     { value: "redirect", label: "A redirect to another address", hint: "For an old or extra domain: every visit is sent to the new address, on the same page. Permanent (301).", icon: RedirectIcon },
   ]);
@@ -210,14 +273,14 @@
     2: "Its address",
     3: "Who can open it?",
     4: "Review",
-    5: kind === "github" ? `Next: publish ${site}` : `Connect ${host}`,
+    5: kind === "github" ? (published ? `${site} is published` : "Next: merge and publish") : `Connect ${host}`,
   }[step]);
   const intros = $derived({
     1: base ? "What serves this address. Nothing changes until you review and save." : "Pick what serves the address. You can change it later.",
     2: "The web address people will type. Nothing changes for them until its DNS points at this server.",
     3: "Ozal checks this before anything reaches the app.",
     4: "Nothing changes until you save.",
-    5: kind === "github" ? "Saved. Connect its repository before moving DNS." : "Saved. Point its DNS here; this panel checks until a visitor's request arrives.",
+    5: kind === "github" ? "Saved. The first build after merging publishes it here; check it before moving DNS." : "Saved. Point its DNS here; this panel checks until a visitor's request arrives.",
   }[step]);
 </script>
 
@@ -336,11 +399,12 @@
           </details>
         </div>
       {:else if kind === "github"}
-        <div class="grid gap-2">
-          <Label for="app-github-site">Website name</Label>
-          <Input id="app-github-site" bind:value={site} placeholder="taken from its address" oninput={() => (siteEdited = true)} pattern="[a-z0-9]+(-[a-z0-9]+)*" class="font-mono" />
-          <p class="text-muted-foreground text-xs">After saving you choose the repository in Sites and review the workflow it adds. The address shows nothing until the first publication.</p>
-        </div>
+        <GitHubSource bind:selection={github} bind:connection={githubState} changed={load} />
+        <details class="text-muted-foreground text-xs">
+          <summary class="cursor-pointer">Website name: <span class="text-foreground font-mono">{site || "taken from its address"}</span></summary>
+          <Input id="app-github-site" bind:value={site} oninput={() => (siteEdited = true)} pattern="[a-z0-9]+(-[a-z0-9]+)*" class="mt-2 font-mono" aria-label="Website name" />
+          <p class="mt-1">The name its versions are kept under in Sites.</p>
+        </details>
       {:else if kind === "redirect"}
         <div class="grid gap-2">
           <Label for="app-redirect">Send visitors to</Label>
@@ -424,7 +488,8 @@
     <dl class="divide-y rounded-lg border text-sm">
       {#each [
         ["Address", plan.route.host],
-        ["Served by", draft ? servedBy(draft.route) + (kind === "static" && files ? ` · uploads ${files.name}` : kind === "github" ? " · repository chosen after saving" : "") : ""],
+        ["Served by", draft ? servedBy(draft.route) + (kind === "static" && files ? ` · uploads ${files.name}` : kind === "github" && github ? ` · built from ${github.repository.full_name} (${github.branch.trim()})` : "") : ""],
+        ...(kind === "github" ? [["On GitHub", workflowPlan ? `Opens a pull request that adds ${workflowPlan.path} to ${workflowPlan.base}. Ozal never merges it.` : draft?.access_mode !== "public" ? "No pull request: a private website needs a workflow you write and review yourself. The repository is trusted to publish." : "No pull request: this server has no deploy endpoint for GitHub Actions. The repository is trusted to publish."]] : []),
         ["Who can open it", draft?.route.redirect ? "Everyone: they are sent to the new address" : draft?.access_mode === "public" ? "Everyone, without signing in" : privacy === "groups" && chosen.length ? `People in ${chosen.join(" and ")}, after signing in` : privacy === "signed-in" ? "Anyone with an account, after signing in" : whoMayEnter(base ?? {}).text],
         ...(canInvite && emails.length ? [["Invitations", emails.join(", ")]] : []),
         ["HTTPS", certificate(plan.tls)],
@@ -436,6 +501,13 @@
         </div>
       {/each}
     </dl>
+    {#if workflowPlan}
+      <details class="mt-3 text-sm">
+        <summary class="text-muted-foreground cursor-pointer">Read the workflow it adds</summary>
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex (keyboard users need to scroll the generated file) -->
+        <pre class="bg-background mt-2 max-h-72 overflow-auto rounded-md border p-3 text-xs" tabindex="0" aria-label="Generated workflow"><code>{workflowPlan.content}</code></pre>
+      </details>
+    {/if}
     {#if plan.checks.length}
       <p class="mt-5 mb-2 text-sm font-medium">Before moving a live address</p>
       <ul class="text-muted-foreground space-y-1.5 text-sm">{#each plan.checks as item (item)}<li class="flex gap-2"><CheckIcon class="text-muted-foreground mt-0.5 size-3.5 shrink-0" />{item}</li>{/each}</ul>
@@ -449,10 +521,20 @@
     </div>
   {:else if step === 5}
     {#if kind === "github"}
-      <div class="grid gap-3 text-sm">
-        <p>In <strong>Sites</strong>, choose the repository for <strong>{site}</strong> and review the workflow Ozal proposes as a pull request.</p>
-        <p class="text-muted-foreground">Nothing has been built or published yet. Check the first publication before moving DNS.</p>
-      </div>
+      <ol class="grid gap-3 text-sm">
+        <li class="flex gap-2"><CheckIcon class="text-signal mt-0.5 size-4 shrink-0" /><span><strong>{host}</strong> is saved as the website <span class="font-mono text-xs">{site}</span>.</span></li>
+        <li class="flex gap-2">{#if githubResult?.trusted}<CheckIcon class="text-signal mt-0.5 size-4 shrink-0" />{:else}<span class="lamp lamp-warn mt-1.5 shrink-0" aria-hidden="true"></span>{/if}
+          <span>{githubResult?.trusted ? `Only ${github?.repository.full_name}, branch ${github?.branch.trim()}, can publish it.` : "The repository is not trusted yet. Choose it in Sites."}</span></li>
+        {#if githubResult?.pr}
+          <li class="flex gap-2"><span class="lamp lamp-on mt-1.5 shrink-0" aria-hidden="true"></span><span>Review and merge <a class="underline underline-offset-4" href={githubResult.pr.url} target="_blank" rel="noopener noreferrer">pull request #{githubResult.pr.number}</a> on GitHub. Ozal does not merge it.</span></li>
+        {:else if githubResult?.trusted}
+          <li class="flex gap-2"><span class="lamp lamp-warn mt-1.5 shrink-0" aria-hidden="true"></span><span>Add the publishing workflow to the repository{githubResult.error ? "" : " yourself"}; Sites shows what it must contain.</span></li>
+        {/if}
+        <li class="flex gap-2">{#if published}<CheckIcon class="text-signal mt-0.5 size-4 shrink-0" /><span>Published version <span class="font-mono text-xs">{published.id.slice(0, 12)}</span>. Open <a class="underline underline-offset-4" href={`${scheme}://${host}/`} target="_blank" rel="noreferrer">{host}</a> to check it.</span>
+          {:else}<span class="lamp mt-1.5 shrink-0 animate-pulse" aria-hidden="true"></span><span class="text-muted-foreground" role="status">Waiting for the first build to publish. This panel checks every few seconds.</span>{/if}</li>
+      </ol>
+      {#if githubResult?.error}<p class="text-destructive mt-3 text-sm" role="alert">The address is saved, but GitHub did not finish: {githubResult.error} Continue in Sites.</p>{/if}
+      {#if published}<div class="mt-6 border-t pt-5"><DomainConnect {host} https={!!status?.tls_enabled} /></div>{/if}
     {:else}
       <DomainConnect {host} https={!!status?.tls_enabled} />
     {/if}
@@ -471,7 +553,7 @@
         </ul>
       </section>
     {/if}
-    <div class="mt-5 flex flex-wrap justify-end gap-2"><Button variant={kind === "github" ? "outline" : "default"} onclick={() => (editing = false)}>Done</Button>{#if kind === "github"}<Button onclick={() => { editing = false; navigate("/sites"); }}>Continue in Sites</Button>{/if}</div>
+    <div class="mt-5 flex flex-wrap justify-end gap-2"><Button variant={kind === "github" ? "outline" : "default"} onclick={() => (editing = false)}>Done</Button>{#if kind === "github"}<Button onclick={() => { editing = false; navigate("/sites"); }}>Open Sites</Button>{/if}</div>
   {/if}
 </Modal>
 
@@ -481,4 +563,4 @@
   {/if}
 </Modal>
 
-<ConfirmAction bind:open={review} title="Save this application?" target={draft?.route.host ?? ""} current={base ? "Existing application" : "Not configured"} requested={draft?.access_mode === "public" ? "Public application" : "Private application"} consequence={kind === "static" && files ? "The files are published, then the address starts serving them. DNS and any previous hosting are not changed." : kind === "github" ? "The address is saved now and shows content after the first publication. DNS is not changed." : "The address starts serving right away. DNS and any previous hosting are not changed."} detail="Try it signed in and signed out before moving a live address. To undo, remove it from Applications." confirmLabel="Confirm and save" onConfirm={() => void save()} />
+<ConfirmAction bind:open={review} title="Save this application?" target={draft?.route.host ?? ""} current={base ? "Existing application" : "Not configured"} requested={draft?.access_mode === "public" ? "Public application" : "Private application"} consequence={kind === "static" && files ? "The files are published, then the address starts serving them. DNS and any previous hosting are not changed." : kind === "github" ? (workflowPlan ? "The address is saved, the repository becomes the only one that can publish it, and a pull request adding its workflow is opened. Nothing is built until you merge it. DNS is not changed." : "The address is saved and the repository becomes the only one that can publish it. It shows content after the first publication. DNS is not changed.") : "The address starts serving right away. DNS and any previous hosting are not changed."} detail="Try it signed in and signed out before moving a live address. To undo, remove it from Applications." confirmLabel="Confirm and save" onConfirm={() => void save()} />
