@@ -171,8 +171,16 @@ func TestOperatorSessionsAreLimitedToTheirTools(t *testing.T) {
 	}
 
 	all, g, err := handler.operators.issue("Bea", false)
-	if err != nil || len(g.Tools) != len(operatorTools) {
-		t.Fatalf("an unnamed login must grant every tool: %v %v", g.Tools, err)
+	if err != nil || len(g.Tools) != len(defaultOperatorTools) {
+		t.Fatalf("an unnamed login must grant the default tools: %v %v", g.Tools, err)
+	}
+	for _, tool := range defaultOperatorTools {
+		if !g.allows(tool) {
+			t.Fatalf("an unnamed login lacks %s", tool)
+		}
+	}
+	if g.allows("updates.install") {
+		t.Fatal("an unnamed login silently gained update installation")
 	}
 	if rec := request(handler, http.MethodGet, "/_/api/connectors", all, ""); rec.Code == http.StatusForbidden {
 		t.Errorf("a full session was refused for scope: %s", rec.Body)

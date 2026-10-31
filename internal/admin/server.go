@@ -60,6 +60,7 @@ type Handler struct {
 	people                 people
 	connectors             connectors
 	pairing                pairing
+	updatesExecutor        updateExecutor
 	domains                domainService
 	mux                    *http.ServeMux
 }
@@ -79,6 +80,12 @@ func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 	h.mux.HandleFunc("GET /_/api/status", h.requireBearer(h.apiStatus))
 	h.mux.HandleFunc("GET /_/api/updates/status", h.requireTool("updates", h.updateStatus))
 	h.mux.HandleFunc("POST /_/api/updates/status", h.requireLocal(h.reportUpdateStatus))
+	h.mux.HandleFunc("GET /_/api/updates/plan", h.requireTool("updates", h.updatePlan))
+	h.mux.HandleFunc("POST /_/api/updates/jobs", h.requireOperatorTool("updates.install", h.startUpdateJob))
+	h.mux.HandleFunc("GET /_/api/updates/jobs/latest", h.requireTool("updates", h.latestUpdateJob))
+	h.mux.HandleFunc("GET /_/api/updates/jobs/{id}", h.requireTool("updates", h.updateJob))
+	h.mux.HandleFunc("POST /_/api/admin/step-up/begin", h.requireOperatorAccount(h.stepUpBegin))
+	h.mux.HandleFunc("POST /_/api/admin/step-up/finish", h.requireOperatorAccount(h.stepUpFinish))
 	h.mux.HandleFunc("GET /_/api/setup", h.requireTool("applications", h.setupStatus))
 	h.mux.HandleFunc("POST /_/api/apps/plan", h.requireTool("applications", h.planApplication))
 	h.mux.HandleFunc("DELETE /_/api/apps/{host}", h.requireTool("applications", h.removeApplication))
@@ -481,6 +488,45 @@ func (h *Handler) requireTool(tool string, next http.HandlerFunc) http.HandlerFu
 	return h.bearer(next, false, tool)
 }
 
+// requireOperatorTool admits only a signed-in administrator session with the
+// tool and a passkey-backed account. It deliberately rejects the admin token
+// and the host socket: installing a release as root is not a generic API
+// credential operation.
+func (h *Handler) requireOperatorTool(tool string, next http.HandlerFunc) http.HandlerFunc {
+	return h.operatorOnly(tool, next)
+}
+
+// requireOperatorAccount is used by the step-up ceremony: the session must
+// belong to a passkey account, even without a particular tool.
+func (h *Handler) requireOperatorAccount(next http.HandlerFunc) http.HandlerFunc {
+	return h.operatorOnly("", next)
+}
+
+func (h *Handler) operatorOnly(tool string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		if isLocal(r) {
+			writeErrorCode(w, http.StatusForbidden, "this operation needs a signed-in administrator, not the host socket", "operator_required")
+			return
+		}
+		operatorRequest, ok := h.withOperator(r)
+		if !ok {
+			writeErrorCode(w, http.StatusForbidden, "sign in with an administrator passkey to use this operation", "operator_required")
+			return
+		}
+		grant, _ := operatorRequest.Context().Value(operatorKey{}).(operatorGrant)
+		if h.operators.account(grant.ID) == "" {
+			writeErrorCode(w, http.StatusForbidden, "sign in with an administrator passkey to use this operation", "operator_required")
+			return
+		}
+		if tool != "" && !grant.allows(tool) {
+			writeErrorCode(w, http.StatusForbidden, "this operator session does not include the "+tool+" tool; ask the host for a login that does", "tool_required")
+			return
+		}
+		next(w, operatorRequest)
+	}
+}
+
 // requireSitesBearer admits the admin token or admin.sites_token. The sites
 // token lives on the machines that publish sites; it can deploy and roll
 // back a site and nothing else, so losing one of those machines does not
@@ -576,6 +622,12 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
+}
+
+// writeErrorCode adds a stable machine-readable reason for the console to
+// distinguish a passkey step-up from an ordinary refusal.
+func writeErrorCode(w http.ResponseWriter, status int, message, code string) {
+	writeJSON(w, status, map[string]string{"error": message, "code": code})
 }
 
 func actor(r *http.Request) string {

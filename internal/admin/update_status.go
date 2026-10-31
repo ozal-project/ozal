@@ -103,7 +103,7 @@ func (h *Handler) updateStatus(w http.ResponseWriter, _ *http.Request) {
 func expireUpdateStatus(status updateStatusView, now time.Time) updateStatusView {
 	maxAge := time.Duration(0)
 	switch status.Result {
-	case "current", "available", "unversioned":
+	case "current", "available", "unversioned", "incompatible":
 		maxAge = updateCheckFreshness
 	case "updating":
 		maxAge = activeUpdateFreshness
@@ -252,6 +252,8 @@ func publicUpdateReason(result string) string {
 		return "the installed build is not a versioned release"
 	case "available":
 		return "a signed release is available"
+	case "incompatible":
+		return "the available release needs an intermediate update first"
 	case "updating":
 		return "the coordinated update is in progress"
 	case "updated":
@@ -269,7 +271,7 @@ func publicUpdateReason(result string) string {
 
 func validUpdateResult(result string) bool {
 	switch result {
-	case "", "unknown", "current", "unversioned", "available", "updating", "updated", "rolled_back", "intervention_required", "failed":
+	case "", "unknown", "current", "unversioned", "available", "incompatible", "updating", "updated", "rolled_back", "intervention_required", "failed":
 		return true
 	default:
 		return false

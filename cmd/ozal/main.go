@@ -43,6 +43,7 @@ import (
 	"github.com/ozal-project/ozal/internal/routemanager"
 	"github.com/ozal-project/ozal/internal/store/sqlite"
 	"github.com/ozal-project/ozal/internal/tunnel"
+	"github.com/ozal-project/ozal/internal/updateexec"
 	zoneprovider "github.com/ozal-project/ozal/internal/zonesetup/provider"
 )
 
@@ -53,33 +54,34 @@ const auditStartupFailure = "durable audit journal unavailable; verify with 'oza
 // gets a context that SIGINT/SIGTERM cancel, so none can outlive a stop signal.
 func subcommands() map[string]func(context.Context, []string, io.Writer) error {
 	return map[string]func(context.Context, []string, io.Writer) error{
-		"app":          runApp,
-		"project":      runProject,
-		"audit":        runAudit,
-		"completion":   runCompletion,
-		"console":      runConsole,
-		"db":           runDB,
-		"doctor":       runDoctor,
-		"dns01":        runDNS01,
-		"init":         runInit,
-		"install":      runInstall,
-		"github":       runGitHub,
-		"tunnel":       runTunnel,
-		"tunnel-spike": runTunnelSpike,
-		"upgrade":      runUpgrade,
-		"update":       runUpdate,
-		"release":      runRelease,
-		"connector":    runConnector,
-		"migrate":      runMigrate,
-		"notify":       runNotify,
-		"policy":       runPolicy,
-		"site":         runSite,
-		"schema":       runSchema,
-		"setup":        runSetup,
-		"runtime":      runRuntime,
-		"user":         runUser,
-		"validate":     runValidate,
-		"version":      runVersion,
+		"app":             runApp,
+		"project":         runProject,
+		"audit":           runAudit,
+		"completion":      runCompletion,
+		"console":         runConsole,
+		"db":              runDB,
+		"doctor":          runDoctor,
+		"dns01":           runDNS01,
+		"init":            runInit,
+		"install":         runInstall,
+		"github":          runGitHub,
+		"tunnel":          runTunnel,
+		"tunnel-spike":    runTunnelSpike,
+		"upgrade":         runUpgrade,
+		"update":          runUpdate,
+		"update-executor": runUpdateExecutor,
+		"release":         runRelease,
+		"connector":       runConnector,
+		"migrate":         runMigrate,
+		"notify":          runNotify,
+		"policy":          runPolicy,
+		"site":            runSite,
+		"schema":          runSchema,
+		"setup":           runSetup,
+		"runtime":         runRuntime,
+		"user":            runUser,
+		"validate":        runValidate,
+		"version":         runVersion,
 	}
 }
 
@@ -178,6 +180,12 @@ func main() {
 		log.Fatal("pages configuration requires -db pointing at migrated state")
 	}
 	adminOpts := []admin.Option{admin.WithGitHubRepositories(githubapp.New())}
+	// REL-019/REL-020: the console may ask the separately supervised local
+	// executor to review and install a signed release. Without this socket it
+	// stays consultation-only.
+	if loaded.Admin.UpdateSocket != "" {
+		adminOpts = append(adminOpts, admin.WithUpdateExecutor(updateexec.NewClient(loaded.Admin.UpdateSocket)))
+	}
 	if loaded.Audit != nil && loaded.Audit.Includes("admin") {
 		adminOpts = append(adminOpts, admin.WithAdminMutationAudit(auditAppender, loaded.Audit.AdminRequired()))
 	}

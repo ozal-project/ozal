@@ -131,10 +131,97 @@ borradores no cuentan, y los prereleases solo con `-prerelease`.
 sudo install -m 0644 release.pub /etc/ozal/release.pub
 sudo /usr/local/lib/ozal/ozal update -public-key /etc/ozal/release.pub \
   -unit ozal -binary /usr/local/lib/ozal/ozal -config /etc/ozal/config.json \
-  -db /var/lib/ozal/state.db -user ozal              # informa; -apply instala
+  -db /var/lib/ozal/state.db -user ozal \
+  -status /var/lib/ozal/update-status.json           # informa; -apply instala
 sudo install -m 0644 docs/operations/ozal-update.service docs/operations/ozal-update.timer /etc/systemd/system/
 sudo systemctl enable --now ozal-update.timer         # comprueba disponibilidad, cada noche
 ```
+
+Este comando se ejecuta en la VM y descarga desde GitHub: no requiere el
+checkout ni SCP. La consulta sin `-apply` verifica el catálogo y los checksums
+firmados, pero ya no descarga el archivo completo. `-plan FILE` deja la
+revisión (versión, plataforma, tamaño, migraciones y hash) sin instalar;
+`-expect` y `-expect-sha256` atan una instalación al plan revisado y la
+rechazan si el catálogo cambió. Un lock compartido (`update.lock` junto al
+binario por defecto) impide que la CLI y el ejecutor manipulen a la vez
+`.next`, la migración o el rollback.
+
+La clave pública debe proceder de un canal confiable y quedar protegida de
+cambios por la cuenta del servicio. Hacen falta un release firmado publicado y
+conectividad HTTPS; una compilación enviada por commit no crea ese canal.
+
+El canal propio usa un catálogo JSON firmado por plataforma. La URL incluye
+canal, OS y arquitectura; el cliente verifica la firma Ed25519 del documento,
+su vencimiento, plataforma, secuencia y los checksums antes de descargar:
+
+```sh
+sudo /usr/local/lib/ozal/ozal update -public-key /etc/ozal/release.pub \
+  -catalog https://ozal.dev/api/v1/releases/stable/linux/arm64 -channel stable \
+  -state /var/lib/ozal/update-catalog-state.json \
+  -plan /var/lib/ozal/update-plan.json \
+  -unit ozal -binary /usr/local/lib/ozal/ozal -config /etc/ozal/config.json \
+  -db /var/lib/ozal/state.db -user ozal -status /var/lib/ozal/update-status.json
+```
+
+La consulta guarda la **mayor secuencia verificada**, aunque no instale, y la
+compara con la siguiente; así un catálogo firmado anterior no puede reintroducir
+una versión más vieja. El plan vence a los diez minutos y se consume una sola
+vez. No cambies `-api` a `https://ozal.dev`: el adaptador de GitHub y el de
+catálogo tienen formatos distintos.
+
+La consola puede instalar ese mismo plan si el host configura el ejecutor
+local. Sin `admin.update_socket` la consola solo consulta. Con el socket, la
+ruta de instalación exige una sesión de administrador con la herramienta
+separada `updates.install`, una passkey confirmada en los últimos cinco
+minutos, y rechaza el `admin.token` y el socket del host. El intento queda en
+la auditoría administrativa y se emite `update.started`; la contraseña de API
+no sustituye a la passkey porque reemplazar el binario como root es una acción
+personal.
+
+El ejecutor es un servicio aparte, no un hijo de `ozal.service`. Corre como
+root, lee un perfil que solo root puede escribir y recibe únicamente revisar,
+instalar el plan revisado y leer el trabajo. El perfil fija todos los paths y
+la URL base; el ejecutor comprueba además que el binario, su directorio, la
+clave y el propio perfil no sean escribibles por grupo u otras cuentas.
+
+```json
+{
+  "socket": "/run/ozal-update/executor.sock",
+  "socket_group": "ozal",
+  "unit": "ozal",
+  "binary": "/usr/local/lib/ozal/ozal",
+  "config": "/etc/ozal/config.json",
+  "db": "/var/lib/ozal/state.db",
+  "user": "ozal",
+  "public_key": "/etc/ozal/release.pub",
+  "catalog_base": "https://ozal.dev/api/v1/releases",
+  "channel": "stable",
+  "status": "/var/lib/ozal/update-status.json",
+  "state": "/var/lib/ozal/update-catalog-state.json",
+  "jobs": "/var/lib/ozal/update-jobs",
+  "lock": "/usr/local/lib/ozal/update.lock"
+}
+```
+
+```sh
+sudo install -m 0600 -o root -g root update-executor.json /etc/ozal/update-executor.json
+sudo install -m 0644 docs/operations/ozal-update-executor.service /etc/systemd/system/
+sudo systemctl enable --now ozal-update-executor.service
+# En /etc/ozal/config.json: "admin": {"update_socket": "/run/ozal-update/executor.sock"}
+sudo systemctl restart ozal
+```
+
+El grupo del socket debe incluir la cuenta del servicio (`Group=ozal` o
+`SupplementaryGroups`). El ejecutor espera a un trabajo en curso al recibir
+`SIGTERM`; no lo inicies desde `ozal.service` ni con `KillMode=control-group`.
+Un trabajo interrumpido por una caída queda como `intervention_required` salvo
+que otro actualizador siga con el lock; en ese caso no se toca.
+
+El catálogo público, la clave de firma, el release ARM64 y la aceptación en
+navegador siguen pendientes. No hay un canal `ozal.dev` desplegado ni un botón
+probado contra una VM limpia; el código y las pruebas locales no sustituyen esa
+aceptación. La instalación desde consola no se ofrece en el edge de túnel:
+coordina ahí con `ozalctl edge pair-upgrade`.
 
 Un binario que no es un release (`ozal version` dice `dev`, compilado a
 mano) **no se reemplaza solo**: el release más nuevo podría ser más viejo que
@@ -143,12 +230,15 @@ independiente. El timer de ejemplo **solo consulta**: no instala nada por sí
 mismo. En el edge ALPN del túnel, actualízalo en coordinación con el conector;
 no uses ahí el `-apply` de una ejecución por host, porque una mezcla de
 versiones corta el túnel. `-status FILE` deja el resultado (`current`,
-`available`, `updated`, `failed`, `unversioned`) en JSON legible por la cuenta
-del servicio, sin claves ni tokens. La consola puede leer el estado autenticado
-en `GET /_/api/updates/status` con la herramienta de operador `updates`; la API
-solo informa, no inicia procesos. La razón mostrada se reduce a un mensaje
-seguro; los detalles quedan en el host. Salida 3 de `ozal upgrade` confirma
-reversión; salida 4 requiere intervención.
+`available`, `incompatible`, `updated`, `failed`) en JSON legible por la
+cuenta del servicio, sin claves ni tokens. La consola puede leer el estado
+autenticado en `GET /_/api/updates/status` con la herramienta de operador
+`updates`; si el host además configuró el ejecutor, `GET /_/api/updates/plan`
+y `POST /_/api/updates/jobs` revisan e inician un trabajo bajo las reglas de
+la sección anterior. El estado del trabajo (`updated`, `rolled_back`,
+`failed`, `intervention_required`) se lee por ID. La razón mostrada se reduce
+a un mensaje seguro; los detalles quedan en el host. Salida 3 de
+`ozal upgrade` confirma reversión; salida 4 requiere intervención.
 
 Quien publica: `ozal release keygen -key release.key` crea la clave e imprime
 la pública. Guarda la privada como secreto `OZAL_RELEASE_KEY` del workflow

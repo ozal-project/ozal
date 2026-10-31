@@ -3,10 +3,13 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ozal-project/ozal/internal/updatelock"
 )
 
 func TestUpgradeRefusesIncompletePlansBeforeTouchingAnything(t *testing.T) {
@@ -34,5 +37,20 @@ func TestUpgradeRefusesIncompletePlansBeforeTouchingAnything(t *testing.T) {
 				t.Fatalf("incomplete plan touched the installation directory: %v, %v", entries, err)
 			}
 		})
+	}
+}
+
+func TestUpgradeRefusesToRunWhileAnotherUpdateHoldsTheLock(t *testing.T) {
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, "update.lock")
+	lock, err := updatelock.Acquire(lockPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Release()
+	args := []string{"-unit", "ozal", "-binary", filepath.Join(dir, "ozal"), "-sha256", strings.Repeat("a", 64), "-config", filepath.Join(dir, "config.json"), "-lock", lockPath}
+	err = runUpgrade(context.Background(), args, &bytes.Buffer{})
+	if !errors.Is(err, updatelock.ErrBusy) {
+		t.Fatalf("err = %v, want ErrBusy", err)
 	}
 }

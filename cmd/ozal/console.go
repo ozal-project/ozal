@@ -22,7 +22,7 @@ func runConsole(ctx context.Context, args []string, out io.Writer) error {
 	fs.SetOutput(out)
 	af := addAdminFlags(fs)
 	name := fs.String("name", "", "operator name asserted by host authority")
-	tools := fs.String("tools", "", "comma-separated tools this login may change (default: all): applications, connectors, people, publishing, sites")
+	tools := fs.String("tools", "", "comma-separated tools this login may change (default: all except updates.install): administrators, applications, connectors, people, publishing, sites, updates, updates.install")
 	email := fs.String("email", "", "recover: email of the administrator who lost their passkeys")
 	id := fs.String("id", "", "session id to revoke")
 	origin := fs.String("url", "", "private browser URL (default: the admin.listen port of the config; use the locally forwarded port when it differs)")

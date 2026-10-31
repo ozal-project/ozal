@@ -720,3 +720,25 @@ func TestValidateAdminSocketGroup(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateAdminUpdateSocketNeedsAnAbsoluteCleanPath(t *testing.T) {
+	base := Config{
+		Listen: ":8888",
+		Routes: []Route{{Host: "app.localhost", Target: "http://localhost:9000"}},
+	}
+	for _, c := range []struct {
+		path string
+		ok   bool
+	}{
+		{"", true},
+		{"/run/ozal-update/executor.sock", true},
+		{"run/ozal-update/executor.sock", false},
+		{"/run/ozal-update/../executor.sock", false},
+	} {
+		cfg := base
+		cfg.Admin.UpdateSocket = c.path
+		if _, err := Validate(cfg); (err == nil) != c.ok {
+			t.Errorf("admin.update_socket %q: err = %v, want ok=%v", c.path, err, c.ok)
+		}
+	}
+}

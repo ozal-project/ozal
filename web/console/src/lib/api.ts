@@ -117,17 +117,40 @@ const boundedSignal = (signal?: AbortSignal, ms = 15_000) => {
 
 // authedGet sends this tab's credential. Reads of the edge's state need one,
 // even on loopback; a 401 means it was revoked or the host changed the token.
-async function authedGet(url: string, signal?: AbortSignal): Promise<Response> {
+async function authedGet(url: string, signal?: AbortSignal, ms = 15_000): Promise<Response> {
   const token = admin.token.trim();
-  const res = await fetch(url, { cache: "no-store", headers: token ? { Authorization: `Bearer ${token}` } : {}, signal: boundedSignal(signal) });
+  const res = await fetch(url, { cache: "no-store", headers: token ? { Authorization: `Bearer ${token}` } : {}, signal: boundedSignal(signal, ms) });
   if (res.status === 401 && token && admin.token.trim() === token) endSession();
   return res;
 }
 
-async function getJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
-  const res = await authedGet(url, signal);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json() as Promise<T>;
+async function getJSON<T>(url: string, signal?: AbortSignal, ms = 15_000): Promise<T> {
+  const res = await authedGet(url, signal, ms);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(typeof data?.error === "string" ? data.error : `HTTP ${res.status}`, res.status, typeof data?.code === "string" ? data.code : undefined);
+  return data as T;
+}
+
+async function postJSON<T>(url: string, body: unknown, signal?: AbortSignal, ms = 15_000): Promise<T> {
+  const token = admin.token.trim();
+  const res = await fetch(url, {
+    method: "POST",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify(body),
+    signal: boundedSignal(signal, ms),
+  });
+  if (res.status === 401 && token && admin.token.trim() === token) endSession();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(typeof data?.error === "string" ? data.error : `HTTP ${res.status}`, res.status, typeof data?.code === "string" ? data.code : undefined);
+  return data as T;
+}
+
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number, readonly code?: string) {
+    super(message);
+    this.name = "ApiError";
+  }
 }
 
 export const fetchOverview = (signal?: AbortSignal) => getJSON<{ routes: RouteOverview[] }>("/_/overview", signal).then((r) => r.routes ?? []);
@@ -136,6 +159,37 @@ export const fetchStatus = (signal?: AbortSignal) => getJSON<StatusResponse>("/_
 export type UpdateNodeStatus = { role: "edge" | "connector"; name: string; installed?: string; latest?: string; sha256?: string; result: string };
 export type UpdateStatus = { checked_at?: string; installed?: string; latest?: string; result: string; reason?: string; job_id?: string; phase?: string; nodes?: UpdateNodeStatus[] };
 export const fetchUpdateStatus = (signal?: AbortSignal) => getJSON<UpdateStatus>("/_/api/updates/status", signal);
+
+export type UpdatePlan = {
+  id: string;
+  checked_at: string;
+  installed: string;
+  latest?: string;
+  channel: "stable" | "preview";
+  platform: string;
+  result: "current" | "available" | "unversioned" | "incompatible" | "failed";
+  reason?: string;
+  archive_sha256?: string;
+  size?: number;
+  migrations?: boolean;
+  notes_url?: string;
+};
+export type UpdateJob = {
+  id: string;
+  channel: string;
+  from: string;
+  to?: string;
+  phase: "reviewing" | "staging" | "verifying" | "installing" | "starting" | "complete";
+  result: "pending" | "updated" | "rolled_back" | "failed" | "intervention_required";
+  reason?: string;
+  started_at: string;
+  updated_at: string;
+  finished_at?: string;
+};
+export const fetchUpdatePlan = (signal?: AbortSignal) => getJSON<UpdatePlan>("/_/api/updates/plan", signal, 180_000);
+export const startUpdateJob = (planID: string, signal?: AbortSignal) => postJSON<UpdateJob>("/_/api/updates/jobs", { plan_id: planID }, signal);
+export const fetchUpdateJob = (id: string, signal?: AbortSignal) => getJSON<UpdateJob>(`/_/api/updates/jobs/${encodeURIComponent(id)}`, signal);
+export const fetchLatestUpdateJob = (signal?: AbortSignal) => getJSON<UpdateJob>("/_/api/updates/jobs/latest", signal);
 
 export class ExplainError extends Error {
   constructor(message: string, readonly status: number) {

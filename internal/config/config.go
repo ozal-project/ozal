@@ -326,6 +326,11 @@ type Admin struct {
 	// many authenticators refuse to work (ID-021). The console stays on
 	// loopback and receives its session through a one-use code.
 	LoginHost bool `json:"login_host,omitempty"`
+	// UpdateSocket is the local executor's Unix socket (REL-019/REL-020).
+	// Setting it lets the console review and install a signed release; leaving
+	// it empty keeps the console consultation-only. The executor profile, not
+	// this file, owns the unit, binary, catalog and key paths.
+	UpdateSocket string `json:"update_socket,omitempty"`
 }
 
 // Notify configures outbound notifications (NTF-001). Channels are opt-in:
@@ -532,6 +537,9 @@ func Validate(cfg Config) (*Config, error) {
 	}
 	if cfg.Admin.LoginHost && cfg.Auth.Passkeys == nil {
 		return nil, fmt.Errorf("config: admin.login_host needs auth.passkeys: the administrator ceremony runs on its login_url")
+	}
+	if cfg.Admin.UpdateSocket != "" && (!filepath.IsAbs(cfg.Admin.UpdateSocket) || filepath.Clean(cfg.Admin.UpdateSocket) != cfg.Admin.UpdateSocket) {
+		return nil, fmt.Errorf("config: admin.update_socket must be an absolute clean path")
 	}
 	if len(cfg.Routes) == 0 {
 		return nil, fmt.Errorf("config: at least one route is required")

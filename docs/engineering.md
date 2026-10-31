@@ -248,43 +248,219 @@ estado; la aplicación vuelve a inspeccionarlos bajo los locks de ambos nodos.
 ### Servicio de releases y configuración — contrato objetivo 2026-10-30
 
 La consola ya usa la API privada del edge para aplicaciones, identidades y
-estado. El cliente de releases consulta GitHub y restringe los hosts de descarga;
-no existe todavía una API de releases de `ozal.dev` implementada o validada.
-`GET /_/api/updates/status` informa un resultado anterior, no consulta releases
-ni instala una versión. No confundir ese estado con una comprobación en vivo.
+estado. El cliente de releases consulta GitHub o un catálogo firmado por
+plataforma y restringe los hosts de descarga. El cliente y el ejecutor local
+están implementados en el árbol; el servicio público de `ozal.dev`, sus claves
+y su publicación no están desplegados ni aceptados. `GET /_/api/updates/status`
+informa un resultado anterior; `GET /_/api/updates/plan` y
+`POST /_/api/updates/jobs` sí consultan/inician un trabajo, pero solo si el
+host configuró el ejecutor. No confundir el reporte histórico con una
+comprobación en vivo.
 
 Contrato objetivo para un servicio público de metadatos bajo `ozal.dev`:
 
 - `GET /api/v1/releases/{channel}/{os}/{arch}` devuelve JSON con `schema`,
-  `channel`, `version`, `published_at`, `archive_url`, `checksums_url` y
-  `signature_url`. No incluye secretos, identificadores de instalación ni
+  `channel`, `sequence`, `generated_at`, `expires_at`, `version`, `commit`,
+  `published_at`, `prerelease`, `notes_url`, `migrations`, `min_version`, `os`,
+  `arch`, `archive_url`, `archive_sha256`, `archive_size`, `checksums_url` y
+  `signature_url`. La firma desprendida del documento se sirve en la misma URL
+  con sufijo `.sig`. No incluye secretos, identificadores de instalación ni
   instrucciones ejecutables; las URLs usan HTTPS y hosts de descarga
   explícitamente permitidos.
 - `GET /api/v1/announcements?lang={locale}` devuelve avisos públicos con
   `id`, `published_at`, `title`, `body`, `severity` y `url`. Los avisos son
   informativos: no cambian configuración ni se ejecutan como comandos.
-- Los checksums siguen firmados con Ed25519. Cada instalación conserva una
-  clave pública fijada localmente y verifica firma, hash, plataforma y versión
-  antes de instalar; TLS o una respuesta de `ozal.dev` no reemplazan esa prueba.
+- El documento del catálogo y los checksums se firman con Ed25519. Cada
+  instalación conserva una clave pública fijada localmente y verifica firma,
+  hash, plataforma, secuencia, vencimiento y versión antes de instalar; TLS o
+  una respuesta de `ozal.dev` no reemplazan esa prueba.
 - Las consultas son anónimas, de solo lectura y sin telemetría. No se mandan
   versión instalada, host, IP reenviada, usuario ni configuración. Cachear el
   catálogo público es aceptable; el estado privado local continúa `no-store`.
 - Si `ozal.dev` no responde, login, políticas, rutas y tráfico ya configurados
-  continúan. Cuando la consola consuma el catálogo, distinguirá un fallo remoto
-  de un fallo al leer el reporte local. No se instala automáticamente.
+  continúan. La consola distingue un fallo remoto de un fallo al leer el
+  reporte local. No se instala automáticamente.
 
 Este contrato no es una API desplegada: dominio operativo, publicación,
 claves y automatización de anuncios aún no están implementados ni aceptados.
-El edge no recibe credenciales del servicio ni capacidad de ejecutar comandos.
+El edge web no recibe credenciales del servicio ni capacidad de ejecutar
+comandos; solo el ejecutor root-owned separado descarga e instala un plan que
+un operador revisó.
 
 La experiencia de consola usa un toast breve, no una página de configuración:
 cuando el reporte local confirma una versión disponible y tiene menos de 24
 horas, muestra su número y permite cerrar el aviso por el resto de la sesión.
-La consola consulta solo el reporte local (al abrirse y cada cinco minutos); no
-llama a `ozal.dev` ni instala. El permiso `updates` controla esta notificación
-opcional.
-El corte coordinado y los permisos del host siguen en `REL-019`; el contrato
-remoto, el updater que lo consuma y la entrega de avisos quedan pendientes.
+La consola consulta solo el reporte local (al abrirse y cada cinco minutos) y
+pide el plan al ejecutor local; el navegador no llama a `ozal.dev` ni descarga
+el binario. El permiso `updates` controla esta notificación; `updates.install`,
+una prueba de passkey reciente y el perfil del ejecutor controlan la
+instalación.
+El corte coordinado y los permisos del host siguen en `REL-019`; el servicio
+remoto, su clave y la entrega de avisos quedan pendientes. La instalación
+individual no se aplica al edge de túnel.
+
+#### Actualizar desde la consola o la CLI sin SCP
+
+**Requisito del mantenedor, 2026-10-31:** poder gestionar una actualización
+visualmente y por comando; la VM de prueba descarga la versión por HTTPS desde
+el canal publicado. No debe necesitar el checkout, Go, Node ni una copia SCP
+desde la máquina de desarrollo. `REL-020` posee catálogo y experiencia;
+`REL-019` conserva verificación, ejecución privilegiada y compatibilidad de
+parejas. Lo siguiente describe lo implementado en el árbol y lo que sigue sin
+aceptación; no es una API desplegada ni un botón probado contra una VM limpia.
+
+**Punto de partida comprobado en el código:**
+
+| Parte | Disponible hoy | Falta para este recorrido |
+|---|---|---|
+| Descubrimiento | `cmd/ozal/update.go` consulta GitHub o un catálogo firmado por plataforma; `internal/release` decide por semver, verifica la firma del catálogo, vencimiento, secuencia, OS/arquitectura y checksums Ed25519. La consulta ya no descarga el archivo completo. `ozal.dev` está en los hosts permitidos. | Desplegar el servicio y el catálogo bajo `ozal.dev`, con claves y publicación automatizada; aceptar una descarga real. |
+| Binario por plataforma | El catálogo y el updater usan `runtime.GOOS/GOARCH`; el formato incluye hash y tamaño por artefacto. | Publicar y aceptar un release ARM64 firmado en la VM. El coordinador de parejas actual solo admite Linux/amd64; no trasladar esa suposición al host independiente. |
+| Reemplazo | `internal/upgrade` prepara `.next`, comprueba hash, valida config, detiene la unidad, respalda/migra DB, conserva `.bak-*`, reemplaza, inicia y comprueba salud; el ejecutor separado, el journal y el lock compartido están implementados. | Presupuesto de espacio y descarga por streaming; comprobar la versión del proceso activo y una aplicación real, no solo salud de admin; reconciliación tras `SIGKILL`/corte de energía. |
+| Consola | Toast, plan revisable, diálogo de fases/resultado, step-up de passkey, permiso `updates.install`, auditoría y endpoints del ejecutor. | Aceptación en navegador y VM limpia; no hay canal público ni clave desplegada. |
+
+**Publicación y confianza.** Un commit es la fuente de una candidata, no una
+orden de actualizar cada instalación. CI construye desde un ref fijo, aplica el
+gate, genera archivos por plataforma y firma antes de anunciarlos. Proponer
+canales `stable` y `preview` elegidos por el operador, con versiones semver
+únicas y ascendentes dentro del canal, commit completo y artefactos inmutables.
+No usar solo `+<commit>` para ordenar: los metadatos de build no cambian la
+precedencia semver. Nunca anunciar `preview` como estable ni reemplazar un
+artefacto bajo la misma versión. Cambiar canal o retroceder de versión requiere
+una decisión explícita, distinta del rollback automático del trabajo actual.
+
+El catálogo de `ozal.dev` puede ser JSON estático generado por CI, sin una base
+de datos ni servicio de ejecución remota. Los archivos pueden estar en GitHub
+Releases o en almacenamiento administrado bajo el dominio; descargar siempre
+con límites de tamaño, tiempo y redirecciones a hosts exactos permitidos. El
+runtime público sirve únicamente metadatos/archivos y nunca recibe la clave de
+firma. El nombre del dominio aporta una dirección estable; la autenticidad la
+prueba la clave pública fijada en cada instalación por un canal confiable.
+No aceptar una clave nueva solo porque la entrega el catálogo consultado.
+
+El formato implementado añade OS/arquitectura explícitos, commit,
+hash/tamaño de artefacto, secuencia y expiración del catálogo, notas del
+release, migraciones y restricciones de compatibilidad. El documento del
+catálogo va firmado con la misma clave Ed25519 fijada en cada instalación, y
+sus checksums se verifican otra vez; la firma de checksums por sí sola no
+acredita que un canal esté actualizado ni sus reglas de compatibilidad. Definir
+la rotación de claves, la versión mínima del cliente y el estado local contra
+retrocesos forma parte de ese formato. Fecha o versión vieja, firma inválida,
+plataforma errónea y reloj no confiable tienen resultados explícitos. [TUF](https://theupdateframework.io/docs/metadata/) es referencia
+para expiración, roles y confianza; esta implementación no es TUF ni declara
+resistencia completa al compromiso de claves. `ozal.dev` ve la IP de origen de
+la conexión; no necesita identificador de instalación ni configuración en la
+consulta, y se debe definir minimización/retención de logs del servicio.
+
+**Una operación compartida por UI y comando.** `ozal update` implementa el
+contrato en el árbol actual. `-catalog URL -channel stable|preview` verifica un
+catálogo JSON firmado por plataforma (firma Ed25519 desprendida, vencimiento,
+canal, OS/arquitectura, secuencia, commit, hash y tamaño del archivo) y
+`-state FILE` guarda la **mayor secuencia y versión verificadas**, aunque la
+consulta no instale. `-plan FILE` escribe la revisión con versión instalada y
+candidata, plataforma, tamaño, migraciones, notas y hash; `-expect` y
+`-expect-sha256` se niegan a instalar si el catálogo cambió, y una versión
+revisada que ya está instalada termina sin tocar nada. Una consulta sin
+`-apply` no descarga el archivo completo.
+
+`-lock FILE` toma un flock no bloqueante compartido por la CLI, el ejecutor y
+`ozal upgrade`. El hijo recibe el descriptor por `ExtraFiles`, comprueba que
+corresponde al mismo archivo regular y conserva la misma descripción de archivo
+abierta: si el padre muere durante la instalación, el hijo mantiene el flock.
+Cada proceso cierra su descriptor sin `LOCK_UN`; la exclusión termina cuando
+cierra el último. El descriptor no se hereda accidentalmente a migraciones ni
+a `systemctl`. Descriptores inválidos o de otro archivo se rechazan antes de
+leer la configuración. La prueba de regresión mata al padre, comprueba que un
+segundo proceso sigue bloqueado y verifica la liberación al terminar el hijo. La
+segunda actualización concurrente falla explícitamente en vez de competir por
+`.next`, la migración o el rollback. El lock no es una frontera de seguridad
+frente a root: es exclusión para no corromper una instalación.
+
+El ejecutor implementado (`ozal update-executor`) es un subcomando del mismo
+binario iniciado por `ozal-update-executor.service`, separado de
+`ozal.service`. Corre como root, lee un perfil root-owned y ofrece solo tres
+operaciones por un socket Unix privado: revisar el catálogo firmado, instalar
+el plan revisado y leer el trabajo durable. El perfil fija socket, grupo,
+unidad, binario, configuración, DB, cuenta, clave, URL base del catálogo, canal,
+estado, plan, trabajos y lock. Rechaza un perfil, clave, binario o directorio
+del binario escribibles por grupo u otras cuentas y, al correr como root, exige
+que esos archivos y directorios sean de root; un `ozal` comprometido no debe
+poder convertirse en root reemplazando el ejecutable.
+
+Las rutas del ejecutor no son un despachador genérico: no aceptan paths,
+comandos, unidades, argumentos de shell ni URLs del cliente. Un plan vence a
+los diez minutos, se consume una sola vez y el updater vuelve a comprobar
+catálogo, versión y hash bajo el lock antes de detener el servicio. Los
+trabajos quedan en un journal JSON por ID con fases (`reviewing`, `staging`,
+`verifying`, `installing`, `complete`) y resultados (`updated`, `rolled_back`,
+`failed`, `intervention_required`). Un reinicio del ejecutor marca el trabajo
+como intervención necesaria, salvo que otro updater todavía tenga el lock; en
+ese caso no lo pisa. El servicio web sigue sin root.
+
+**Permisos de la consola.** El permiso `updates` sigue siendo de consulta.
+Instalar exige una herramienta separada `updates.install` que las sesiones
+existentes no heredan: un host login sin lista de herramientas recibe el
+conjunto por defecto sin ella, y el primer administrador (bootstrap del host)
+sí recibe todas. Además, `POST /_/api/updates/jobs` acepta únicamente una
+sesión de administrador abierta con passkey y con una prueba de passkey de
+menos de cinco minutos; rechaza el `admin.token`, el socket del host y los
+logins sin cuenta de passkey. Si la prueba caducó, la consola pide
+`POST /_/api/admin/step-up/begin|finish`, que verifica una aserción del mismo
+administrador y no abre una sesión nueva. Cada intento aceptado pasa por
+`recordMutationIntent` con el actor y emite `update.started`; los errores del
+host no se reenvían a la consola.
+
+Secuencia implementada, tanto para el botón como para la CLI:
+
+```text
+Comprobar catálogo → revisar versión y consecuencias → confirmar plan
+  → lock de instalación → descargar a staging privado → verificar firma/hash
+  → validar config y compatibilidad → preparar recuperación → detener Ozal
+  → migrar si corresponde → reemplazar binario → iniciar
+  → comprobar salud de admin → actualizado
+                             fallo → restaurar binario y DB previa si migró
+                                   → comprobar restauración
+                                   → revertido o intervención necesaria
+```
+
+La descarga a staging todavía es en memoria antes de extraer (`download` con
+límite de 512 MiB); no hay presupuesto de espacio previo ni descarga por
+streaming a disco. Esa y la comprobación de la versión realmente ejecutada
+(no solo el hash y la salud de admin) siguen pendientes. Mantener el enlace
+`/usr/local/bin/ozal` hacia la ruta instalada; el reemplazo ocurre en el destino
+verificado, con rename en el mismo filesystem, preservando propietario y
+permisos. Configuración, runtime, claves, certificados y datos de Pages no se
+regeneran ni se sustituyen por defaults del release. Registrar el checkpoint y
+la política de compatibilidad de DB; revertir solo el binario no es seguro si
+hubo migraciones. No prometer rollback manual posterior sobre una DB que ya
+recibió nuevas escrituras: necesita su propia política de pérdida de datos y
+restauración. Fallos de disco, rollback y falta de espacio se reportan como
+tales, conservando evidencia para recuperación.
+
+**Experiencia visual implementada en el árbol:** el toast existente abre
+“Revisar actualización”, un diálogo con versión instalada y candidata, canal,
+plataforma, tamaño, notas, aviso de migración y el botón “Actualizar”. Si falta
+la prueba de passkey, la pide y reintenta una vez. Muestra fase e ID, un texto
+estable por fase y un resultado inequívoco: actualizado, restaurado, fallido o
+intervención necesaria; no hay porcentajes inventados ni éxito por enviar una
+solicitud. Durante el reinicio muestra “Esperando que Ozal vuelva” y sigue
+consultando el journal por ID; cerrar el diálogo no cancela el trabajo. Si la
+sesión se perdió, pide volver a entrar. Sin conexión se distingue “no pude
+consultar” de “ya está actualizado”; el tráfico normal sigue.
+
+El journal separa el estado del trabajo de la versión instalada en vivo. La
+prueba de que el proceso activo ejecuta la versión nueva, la aceptación en
+navegador y la reconciliación tras `SIGKILL` o corte de energía siguen siendo
+aceptación pendiente. El flujo individual no se aplica al edge de túnel.
+
+**Aceptación:** dos versiones publicadas desde commits fijos y firmadas para
+Linux/arm64, instalación A en VM limpia y actualización a B por la consola;
+repetir desde A mediante CLI sin checkout ni SCP. Probar firma/hash alterados,
+plataforma errónea, catálogo viejo/vencido, red cortada, doble confirmación,
+config incompatible, permisos/espacio insuficientes, fallo al iniciar B,
+restauración y reconciliación tras interrupción. Verificar estado persistente,
+binario realmente ejecutado, login y app permitida/denegada. Parejas mantienen
+el coordinador `REL-019`: no aplicar el flujo individual al edge de túnel;
+ampliar y aceptar plataformas por nodo antes de ofrecerlo allí.
 
 Autenticar/limitar/registrar intent requerido **antes de consumir el body**.
 Archivos regulares, límites de cantidad/tamaño, no enlaces/traversal, rutas
@@ -566,6 +742,7 @@ scripts/verify.sh
 go test -race ./internal/auth ./internal/proxy ./internal/tunnel
 node scripts/demo/product-acceptance.mjs
 node scripts/demo/passkey-acceptance.mjs
+OZAL_BIN=/ruta/binario node scripts/demo/update-acceptance.mjs  # requiere agent-browser; mockea las respuestas de update, no prueba procedencia ni MFA real
 node scripts/demo/host-sessions-acceptance.mjs
 CHROME=/ruta/chrome node scripts/demo/https-host-sessions-acceptance.mjs
 node scripts/demo/site-check.mjs
@@ -573,6 +750,12 @@ python3 scripts/smoke-tunnel-configured.py --binary /ruta/binario-de-prueba
 python3 scripts/rehearse-coordinated-upgrade.py \
   --previous /ruta/binario-anterior --candidate /ruta/binario-candidato
 ```
+
+`update-acceptance.mjs` comprueba el diálogo en escritorio y móvil, Escape y
+retorno del foco, axe y la reanudación del polling al volver a abrir un trabajo
+pendiente. Usa un edge desechable y respuestas HTTP de updates simuladas;
+no instala artefactos ni acredita MFA o actualización real en la VM. La
+autorización y el ejecutor se verifican en los tests Go correspondientes.
 
 El ensayo `REL-013/017` requiere dos binarios confiables a ambos lados del
 cambio ALPN `bd06c29`; por ejemplo, `e762012` como anterior y el ref candidato

@@ -21,6 +21,7 @@
   import XIcon from "@lucide/svelte/icons/x";
   import { fetchUpdateStatus } from "$lib/api";
   import { availableUpdateNotice, type AvailableUpdateNotice } from "$lib/updateStatus";
+  import UpdateDialog from "$lib/UpdateDialog.svelte";
 
   // Few entries, grouped by what the product does. Related views of one thing
   // (an application and its routing table; people, their groups and who runs
@@ -99,6 +100,7 @@
   const blocked = $derived(route.path !== "/routes" && !!currentItem.tool && !can(currentItem.tool));
 
   let updateNotice = $state<AvailableUpdateNotice | null>(null);
+  let updateDialogOpen = $state(false);
   let dismissedVersion = "";
   let updatePoll: ReturnType<typeof setInterval> | undefined;
   let updateRequest: AbortController | undefined;
@@ -221,5 +223,10 @@
       </div>
       <button type="button" class="text-muted-foreground hover:text-foreground shrink-0 text-xs underline" onclick={() => { dismissedVersion = updateNotice?.version ?? ""; updateNotice = null; }}>Dismiss</button>
     </div>
+    <div class="mt-3 flex justify-end">
+      <button type="button" class="bg-primary text-primary-foreground rounded-md px-3 py-1.5 text-xs font-medium" onclick={() => { updateDialogOpen = true; }}>Review update</button>
+    </div>
   </aside>
 {/if}
+
+<UpdateDialog bind:open={updateDialogOpen} onDone={() => { dismissedVersion = updateNotice?.version ?? ""; updateNotice = null; }} />

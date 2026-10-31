@@ -8,8 +8,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/updatelock"
 	"github.com/ozal-project/ozal/internal/upgrade"
 )
 
@@ -35,6 +37,7 @@ func runUpgrade(ctx context.Context, args []string, out io.Writer) error {
 	account := fs.String("user", "", "service account that owns the state (required with -db)")
 	keep := fs.Int("keep", 3, "previous binaries to keep beside -binary")
 	deferStart := fs.Bool("defer-start", false, "leave the installed unit stopped for a coordinated peer update")
+	lockPath := fs.String("lock", "", "file serializing every update (default: beside -binary)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -42,7 +45,7 @@ func runUpgrade(ctx context.Context, args []string, out io.Writer) error {
 		return errors.New("unexpected positional arguments")
 	}
 	if *unit == "" || *binary == "" || *sum == "" || *configPath == "" {
-		return errors.New("usage: ozal upgrade -unit UNIT -binary PATH -sha256 HEX -config PATH [-db PATH -user ACCOUNT] [-keep 3]")
+		return errors.New("usage: ozal upgrade -unit UNIT -binary PATH -sha256 HEX -config PATH [-db PATH -user ACCOUNT] [-keep 3] [-lock FILE]")
 	}
 	if !filepath.IsAbs(*binary) || (*dbPath != "" && !filepath.IsAbs(*dbPath)) {
 		return errors.New("-binary and -db must be absolute paths")
@@ -53,6 +56,27 @@ func runUpgrade(ctx context.Context, args []string, out io.Writer) error {
 	if *keep < 1 {
 		return errors.New("-keep must be at least 1")
 	}
+	if *lockPath == "" {
+		*lockPath = filepath.Join(filepath.Dir(*binary), "update.lock")
+	}
+	if !filepath.IsAbs(*lockPath) || filepath.Clean(*lockPath) != *lockPath {
+		return errors.New("-lock must be an absolute clean path")
+	}
+	var lock *updatelock.Lock
+	var err error
+	if inherited, present := os.LookupEnv(updatelock.EnvFD); present {
+		fd, parseErr := strconv.ParseUint(inherited, 10, 32)
+		if parseErr != nil {
+			return errors.New("upgrade: invalid inherited update lock descriptor")
+		}
+		lock, err = updatelock.Inherit(*lockPath, uintptr(fd))
+	} else {
+		lock, err = updatelock.Acquire(*lockPath)
+	}
+	if err != nil {
+		return fmt.Errorf("upgrade: %w", err)
+	}
+	defer lock.Release()
 	cfg, err := config.Load(*configPath)
 	if err != nil {
 		return err

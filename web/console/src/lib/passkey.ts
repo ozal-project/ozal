@@ -121,6 +121,19 @@ export async function addPasskey(session: string): Promise<void> {
   await api<{ added: boolean }>("/_/api/admin/passkeys/finish", credentialJSON(credential), begun.ceremony, session);
 }
 
+// confirmWithPasskey proves the signed-in administrator is still present
+// before a sensitive operation such as installing a release. It never opens
+// a new session; the edge marks this one as recently confirmed.
+export async function confirmWithPasskey(session: string): Promise<void> {
+  const begun = await api<Begun>("/_/api/admin/step-up/begin", {}, undefined, session);
+  const pk = begun.options.publicKey;
+  pk.challenge = decode(pk.challenge);
+  for (const c of pk.allowCredentials ?? []) c.id = decode(c.id);
+  const credential = (await navigator.credentials.get({ publicKey: pk as PublicKeyCredentialRequestOptions })) as PublicKeyCredential | null;
+  if (!credential) throw new Error("No passkey was used.");
+  await api<{ verified: boolean }>("/_/api/admin/step-up/finish", credentialJSON(credential), begun.ceremony, session);
+}
+
 export type OwnPasskey = { id: string; label?: string; created_at: string; last_used_at?: string; current?: boolean };
 
 async function bearerRequest<T>(method: string, path: string, session: string, signal?: AbortSignal): Promise<T> {

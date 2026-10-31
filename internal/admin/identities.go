@@ -74,7 +74,9 @@ func WithIdentities(store identities) Option {
 type pendingCeremony struct {
 	// tx is the login-host transaction this ceremony runs for (ID-021);
 	// empty on the console itself.
-	tx        string
+	tx string
+	// stepUp is the operator session being confirmed by a fresh passkey.
+	stepUp    string
 	enrol     bool
 	kind      string
 	origin    string
@@ -616,7 +618,7 @@ func (h *Handler) adminLoginFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pending, ok := h.ceremonies.take(r.Header.Get(adminCeremony), false, r.Header.Get("Origin"))
-	if !ok || pending.tx != "" {
+	if !ok || pending.tx != "" || pending.stepUp != "" {
 		h.failedSignIn(r, "ceremony_unknown", nil)
 		writeError(w, http.StatusUnauthorized, "this step expired; start again")
 		return

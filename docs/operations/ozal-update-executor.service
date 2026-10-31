@@ -1,0 +1,39 @@
+[Unit]
+Description=Ozal local update executor
+Documentation=https://github.com/ozal-project/ozal/blob/main/docs/operations/administration.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+# The executor replaces the installed binary and may run migrations as root.
+# It is deliberately separate from ozal.service: restarting the web edge must
+# not kill an update that is already installing. The root-owned profile fixes
+# the socket, unit, binary, config, catalog, key and job directory; no console
+# request can choose any of them.
+User=root
+Group=root
+ExecStart=/usr/local/lib/ozal/ozal update-executor -profile /etc/ozal/update-executor.json
+# /run/ozal-update is outside the edge's RuntimeDirectory, so removing the
+# edge's socket does not remove the executor's. The profile opens the socket
+# to the service account's group (0660) for the console API to read.
+RuntimeDirectory=ozal-update
+RuntimeDirectoryMode=0755
+UMask=0077
+# A running job owns the stop sequence. Serve waits for it; this timeout
+# bounds a wedged download before systemd kills the remaining cgroup.
+KillMode=process
+TimeoutStopSec=15min
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/usr/local/lib/ozal /var/lib/ozal
+# systemctl talks to PID 1; the updater can still stop and start its unit.
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

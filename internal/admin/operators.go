@@ -22,9 +22,18 @@ import (
 type operatorKey struct{}
 
 // operatorTools are the console's areas of authority. A host login names the
-// tools its session may change; an unnamed login grants all of them. Reading
-// what the console shows is not a tool: it needs any operator session.
-var operatorTools = []string{"administrators", "applications", "connectors", "people", "publishing", "sites", "updates"}
+// tools its session may change; an unnamed login grants the default set,
+// which deliberately excludes installing updates. A bootstrapped first
+// administrator gets every tool because the host itself opened the door.
+var operatorTools = []string{"administrators", "applications", "connectors", "people", "publishing", "sites", "updates", "updates.install"}
+
+// defaultOperatorTools is what an unnamed host login receives. Installing a
+// release as root is never implicit: it needs updates.install, a fresh
+// passkey proof and the host's executor profile.
+var defaultOperatorTools = []string{"administrators", "applications", "connectors", "people", "publishing", "sites", "updates"}
+
+// passkeyStepUpMaxAge is how old a passkey proof may be before installing.
+const passkeyStepUpMaxAge = 5 * time.Minute
 
 type operatorGrant struct {
 	ID        string    `json:"id"`
@@ -32,6 +41,9 @@ type operatorGrant struct {
 	Expires   time.Time `json:"expires"`
 	Tools     []string  `json:"tools"`
 	bootstrap bool
+	// passkeyAt is the last passkey assertion that opened or confirmed this
+	// session. It is zero for host logins and the admin token.
+	passkeyAt time.Time
 	// idle > 0 makes the session sliding: each use pushes Expires to now+idle,
 	// never past limit. Passkey sessions slide; host logins do not.
 	idle  time.Duration
@@ -48,10 +60,10 @@ const (
 func (g operatorGrant) allows(tool string) bool { return slices.Contains(g.Tools, tool) }
 
 // normalizeTools validates requested tools against the known set. No request
-// means every tool; an unknown name is an error, never silently dropped.
+// means the default set, which never includes installing an update.
 func normalizeTools(requested []string) ([]string, error) {
 	if len(requested) == 0 {
-		return slices.Clone(operatorTools), nil
+		return slices.Clone(defaultOperatorTools), nil
 	}
 	out := make([]string, 0, len(requested))
 	for _, t := range requested {
@@ -62,6 +74,11 @@ func normalizeTools(requested []string) ([]string, error) {
 		if !slices.Contains(out, t) {
 			out = append(out, t)
 		}
+	}
+	// Installing includes reviewing: a session that may apply a plan must be
+	// able to read the same plan. The reverse is not true.
+	if slices.Contains(out, "updates.install") && !slices.Contains(out, "updates") {
+		out = append(out, "updates")
 	}
 	slices.Sort(out)
 	return out, nil
@@ -167,6 +184,7 @@ func (s *operatorSessions) renew(token string) (operatorGrant, bool) {
 }
 
 // issueSliding opens a passkey session: idle timeout with an absolute limit.
+// It records the assertion time, which is the first passkey proof.
 func (s *operatorSessions) issueSliding(name string, tools ...string) (string, operatorGrant, error) {
 	token, g, err := s.issue(name, false, tools...)
 	if err != nil {
@@ -177,8 +195,42 @@ func (s *operatorSessions) issueSliding(name string, tools ...string) (string, o
 	hash := sha256.Sum256([]byte(token))
 	now := s.now()
 	g.idle, g.limit, g.Expires = passkeyIdle, now.Add(passkeyLimit), now.Add(passkeyIdle)
+	g.passkeyAt = now
 	s.grants[hash] = g
 	return token, g, nil
+}
+
+// markPasskey records a successful step-up assertion for one session.
+func (s *operatorSessions) markPasskey(sessionID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for hash, g := range s.grants {
+		if g.ID != sessionID {
+			continue
+		}
+		g.passkeyAt = s.now()
+		s.grants[hash] = g
+		return true
+	}
+	return false
+}
+
+// passkeyFresh reports whether the session has a passkey proof no older than
+// maxAge. A future timestamp beyond a minute is not trusted either.
+func (s *operatorSessions) passkeyFresh(sessionID string, maxAge time.Duration) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, g := range s.grants {
+		if g.ID != sessionID {
+			continue
+		}
+		if g.passkeyAt.IsZero() {
+			return false
+		}
+		age := s.now().Sub(g.passkeyAt)
+		return age >= -time.Minute && age <= maxAge
+	}
+	return false
 }
 func (s *operatorSessions) bind(sessionID, accountID string, credentialID []byte) {
 	s.mu.Lock()
