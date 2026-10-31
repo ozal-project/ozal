@@ -25,7 +25,7 @@ import (
 const (
 	// ceremonyCookie holds the ID of the pending ceremony. Path and
 	// SameSite=Strict keep it on the login endpoints of this site only.
-	ceremonyCookie = "sb_passkey"
+	ceremonyCookie = auth.PasskeyCeremonyCookieName
 	// maxJSONBody bounds every API request body; a WebAuthn response is a
 	// few kilobytes.
 	maxJSONBody = 64 << 10

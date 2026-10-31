@@ -32,10 +32,15 @@ const (
 	// LoginCookieName carries a signed, short-lived login attempt (state,
 	// PKCE verifier, return_to). The server keeps no pending-login store:
 	// the cookie is the state, signed and bound to the browser.
-	LoginCookieName    = "sb_login"
-	defaultSessionTTL  = 7 * 24 * time.Hour
-	defaultSessionIdle = 12 * time.Hour
-	loginCookieTTL     = 5 * time.Minute
+	LoginCookieName = "sb_login"
+	// PasskeyCeremonyCookieName holds the ID of a pending passkey ceremony
+	// on the login host. The proxy strips it too: without cookie_domain the
+	// login host also serves protected apps, and an unknown /_/auth/ path
+	// falls through to them.
+	PasskeyCeremonyCookieName = "sb_passkey"
+	defaultSessionTTL         = 7 * 24 * time.Hour
+	defaultSessionIdle        = 12 * time.Hour
+	loginCookieTTL            = 5 * time.Minute
 )
 
 // SessionLifetime is the configured session lifetime: session_ttl_minutes
