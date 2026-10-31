@@ -315,7 +315,7 @@ aceptación; no es una API desplegada ni un botón probado contra una VM limpia.
 |---|---|---|
 | Descubrimiento | `cmd/ozal/update.go` consulta GitHub o un catálogo firmado por plataforma; `internal/release` decide por semver, verifica la firma del catálogo, vencimiento, secuencia, OS/arquitectura y checksums Ed25519. La consulta ya no descarga el archivo completo. `ozal.dev` está en los hosts permitidos. | Desplegar el servicio y el catálogo bajo `ozal.dev`, con claves y publicación automatizada; aceptar una descarga real. |
 | Binario por plataforma | El catálogo y el updater usan `runtime.GOOS/GOARCH`; el formato incluye hash y tamaño por artefacto. | Publicar y aceptar un release ARM64 firmado en la VM. El coordinador de parejas actual solo admite Linux/amd64; no trasladar esa suposición al host independiente. |
-| Reemplazo | `internal/upgrade` prepara `.next`, comprueba hash, valida config, detiene la unidad, respalda/migra DB, conserva `.bak-*`, reemplaza, inicia y comprueba salud; el ejecutor separado, el journal y el lock compartido están implementados. | Presupuesto de espacio y descarga por streaming; comprobar la versión del proceso activo y una aplicación real, no solo salud de admin; reconciliación tras `SIGKILL`/corte de energía. |
+| Reemplazo | `internal/upgrade` prepara `.next`, comprueba hash, valida config, detiene la unidad, respalda/migra DB, conserva `.bak-*`, reemplaza, inicia y comprueba salud; el ejecutor separado, el journal y el lock compartido están implementados. | Streaming a staging, presupuesto de espacio y prueba del ejecutable de `MainPID` implementados localmente; falta aceptar una aplicación/login reales y reconciliación tras `SIGKILL`/corte de energía. |
 | Consola | Toast, plan revisable, diálogo de fases/resultado, step-up de passkey, permiso `updates.install`, auditoría y endpoints del ejecutor. | Aceptación en navegador y VM limpia; no hay canal público ni clave desplegada. |
 
 **Publicación y confianza.** Un commit es la fuente de una candidata, no una
@@ -416,16 +416,53 @@ Comprobar catálogo → revisar versión y consecuencias → confirmar plan
   → lock de instalación → descargar a staging privado → verificar firma/hash
   → validar config y compatibilidad → preparar recuperación → detener Ozal
   → migrar si corresponde → reemplazar binario → iniciar
-  → comprobar salud de admin → actualizado
+  → comprobar salud de admin y hash del ejecutable de MainPID → actualizado
                              fallo → restaurar binario y DB previa si migró
                                    → comprobar restauración
                                    → revertido o intervención necesaria
 ```
 
-La descarga a staging todavía es en memoria antes de extraer (`download` con
-límite de 512 MiB); no hay presupuesto de espacio previo ni descarga por
-streaming a disco. Esa y la comprobación de la versión realmente ejecutada
-(no solo el hash y la salud de admin) siguen pendientes. Mantener el enlace
+La descarga a staging escribe por bloques de 32 KiB y calcula SHA-256 durante
+la transferencia; no acumula el archivo completo en el heap de Go. Solo extrae después
+de comprobar tamaño y hash autenticados; los fallos ordinarios eliminan el
+archivo parcial y el binario incompleto. Límites: 512 MiB para el archivo y
+el binario; descompresión acotada a 512 MiB más 16 MiB de cabeceras/otros
+archivos. Los metadatos pequeños conservan límites propios en memoria. El staging usa el
+temporal privado (`TMPDIR` o `/tmp`); puede estar en tmpfs, y el presupuesto
+contabiliza su filesystem, no la memoria total del host. Antes
+de instalar también se exige que `version -json` del candidato verificado
+identifique a Ozal y coincida con la versión revisada (se tolera el prefijo
+`v`; los metadatos de build deben coincidir).
+
+El presupuesto comprueba espacio disponible (`statfs`, bloques disponibles al
+usuario) antes de descargar, antes de extraer y antes de crear `.next` o detener
+el servicio. Descarga: tamaño anunciado, o el límite de 512 MiB si GitHub no
+informa tamaño. Extracción: tamaño del binario indicado por la cabecera tar.
+Instalación: tamaño nuevo más tamaño anterior en el filesystem del binario;
+tres veces la suma de DB y WAL en el de la base, para snapshot, migración y restauración.
+Las necesidades que comparten dispositivo se suman y se deja una reserva de
+64 MiB por filesystem, no por archivo. Un fallo al consultar capacidad o un
+presupuesto insuficiente se rechaza explícitamente. Esto no reserva bloques:
+cuotas, otros escritores y crecimiento de una migración pueden causar ENOSPC
+más tarde; no equivale a una prueba de disco lleno o corte de energía.
+
+Tras iniciar, la salud de admin y el estado activo no bastan: se obtiene el
+`MainPID` de systemd y se compara SHA-256 de `/proc/<pid>/exe` con el candidato.
+Se comprueba que PID e inode no cambien durante la lectura. Así se prueba la
+imagen exacta de la versión revisada, incluso con builds del mismo número.
+El rollback verifica igualmente el hash anterior; si solo vuelve la salud
+pero no se acredita la imagen, queda como intervención necesaria. Un `-apply`
+ya corriente también verifica el proceso antes de dar éxito sin cambios; una
+consulta sin `-apply` sigue siendo solo metadatos. No hay endpoint nuevo de
+versión ni exposición de información del proceso en el listener público.
+El updater que inicia la operación aplica también el presupuesto antes de
+invocar al candidato, captura el hash anterior y verifica por su cuenta las
+imágenes instaladas/en ejecución tras éxito o rollback. No confía solamente
+en el código de salida de un `upgrade` de una versión anterior: si el
+candidato afirma éxito o reversión pero esa prueba falla, el resultado durable
+es `intervention_required`, sin afirmar una restauración que no se comprobó.
+La aplicación protegida y el login reales siguen pendientes de aceptación.
+Mantener el enlace
 `/usr/local/bin/ozal` hacia la ruta instalada; el reemplazo ocurre en el destino
 verificado, con rename en el mismo filesystem, preservando propietario y
 permisos. Configuración, runtime, claves, certificados y datos de Pages no se
@@ -448,9 +485,9 @@ sesión se perdió, pide volver a entrar. Sin conexión se distingue “no pude
 consultar” de “ya está actualizado”; el tráfico normal sigue.
 
 El journal separa el estado del trabajo de la versión instalada en vivo. La
-prueba de que el proceso activo ejecuta la versión nueva, la aceptación en
-navegador y la reconciliación tras `SIGKILL` o corte de energía siguen siendo
-aceptación pendiente. El flujo individual no se aplica al edge de túnel.
+prueba de imagen del proceso está implementada localmente; la aceptación real
+en navegador/VM y la reconciliación tras `SIGKILL` o corte de energía siguen
+pendientes. El flujo individual no se aplica al edge de túnel.
 
 **Aceptación:** dos versiones publicadas desde commits fijos y firmadas para
 Linux/arm64, instalación A en VM limpia y actualización a B por la consola;

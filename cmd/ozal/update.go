@@ -2,7 +2,6 @@ package main
 
 import (
 	"archive/tar"
-	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/ed25519"
@@ -24,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ozal-project/ozal/internal/diskspace"
 	"github.com/ozal-project/ozal/internal/release"
 	"github.com/ozal-project/ozal/internal/updatejob"
 	"github.com/ozal-project/ozal/internal/updatelock"
@@ -68,10 +68,14 @@ type updateCandidate struct {
 // updateEnv is the outside world an update run touches, so tests run it
 // against a fake release host and a fake upgrade.
 type updateEnv struct {
-	client    *http.Client
-	installed func(ctx context.Context, binary string) (string, error)
-	upgrade   func(ctx context.Context, binary string, args []string, lock *updatelock.Lock, out io.Writer) error
-	now       func() time.Time
+	client       *http.Client
+	installed    func(ctx context.Context, binary string) (string, error)
+	upgrade      func(ctx context.Context, binary string, args []string, lock *updatelock.Lock, out io.Writer) error
+	space        func(context.Context, ...diskspace.Need) error
+	checkVersion func(context.Context, string, string) error
+	checkCurrent func(context.Context, string, string, string, string) error
+	prepare      func(context.Context, string, string, string) (string, error)
+	now          func() time.Time
 }
 
 func systemUpdateEnv() updateEnv {
@@ -99,7 +103,11 @@ func systemUpdateEnv() updateEnv {
 			cmd.Env = append(os.Environ(), updatelock.EnvFD+"=3")
 			return cmd.Run()
 		},
-		now: time.Now,
+		now:          time.Now,
+		space:        diskspace.Check,
+		checkVersion: checkCandidateVersion,
+		checkCurrent: checkRunningInstalled,
+		prepare:      prepareUpdateStorage,
 	}
 }
 
@@ -108,6 +116,18 @@ func runUpdate(ctx context.Context, args []string, out io.Writer) error {
 }
 
 func update(ctx context.Context, args []string, out io.Writer, env updateEnv) error {
+	if env.space == nil {
+		env.space = diskspace.Check
+	}
+	if env.checkVersion == nil {
+		env.checkVersion = checkCandidateVersion
+	}
+	if env.checkCurrent == nil {
+		env.checkCurrent = checkRunningInstalled
+	}
+	if env.prepare == nil {
+		env.prepare = prepareUpdateStorage
+	}
 	fs := flag.NewFlagSet("update", flag.ContinueOnError)
 	fs.SetOutput(out)
 	pubPath := fs.String("public-key", "", "file holding the pinned release public key (required)")
@@ -228,6 +248,14 @@ func update(ctx context.Context, args []string, out io.Writer, env updateEnv) er
 		return finish("failed", err.Error(), err)
 	}
 	status.Installed = installed
+	current := func(reason string) error {
+		if *apply {
+			if err := env.checkCurrent(ctx, *binary, *unit, *configPath, ""); err != nil {
+				return finish("failed", err.Error(), err)
+			}
+		}
+		return finish("current", reason, nil)
+	}
 
 	var (
 		decision  release.Decision
@@ -287,7 +315,7 @@ func update(ctx context.Context, args []string, out io.Writer, env updateEnv) er
 		// The reviewed version is already running: changing to whatever the
 		// catalog offers now would install a release the operator never saw.
 		if installed == *expectVersion {
-			return finish("current", fmt.Sprintf("%s is already installed; nothing to do", installed), nil)
+			return current(fmt.Sprintf("%s is already installed; nothing to do", installed))
 		}
 		if decision.Code != release.CodeUpdate || decision.Target != *expectVersion || candidate.ArchiveSHA256 != *expectSHA {
 			reason := fmt.Sprintf("the release changed since it was reviewed: expected %s (sha256 %.16s), the signed catalog now offers %s (sha256 %.16s); review again", *expectVersion, *expectSHA, decision.Target, candidate.ArchiveSHA256)
@@ -296,7 +324,7 @@ func update(ctx context.Context, args []string, out io.Writer, env updateEnv) er
 	}
 	switch decision.Code {
 	case release.CodeCurrent:
-		return finish("current", decision.Reason, nil)
+		return current(decision.Reason)
 	case release.CodeUnversioned:
 		return finish("unversioned", decision.Reason, nil)
 	case release.CodeIncompatible:
@@ -324,11 +352,18 @@ func update(ctx context.Context, args []string, out io.Writer, env updateEnv) er
 		return finish("failed", err.Error(), err)
 	}
 	defer os.RemoveAll(work)
-	binaryPath, sum, err := materialize(ctx, env.client, candidate, work)
+	binaryPath, sum, err := materialize(ctx, env.client, candidate, work, env.space)
 	if err != nil {
 		return finish("failed", fmt.Sprintf("%s: %v", decision.Target, err), err)
 	}
 	if err := track(updatejob.PhaseVerifying); err != nil {
+		return finish("failed", err.Error(), err)
+	}
+	previousHash, err := env.prepare(ctx, binaryPath, *binary, *dbPath)
+	if err != nil {
+		return finish("failed", err.Error(), err)
+	}
+	if err := env.checkVersion(ctx, binaryPath, candidate.Tag); err != nil {
 		return finish("failed", err.Error(), err)
 	}
 	if err := track(updatejob.PhaseInstalling); err != nil {
@@ -339,9 +374,40 @@ func update(ctx context.Context, args []string, out io.Writer, env updateEnv) er
 		upgradeArgs = append(upgradeArgs, "-db", *dbPath, "-user", *account)
 	}
 	if err := env.upgrade(ctx, binaryPath, upgradeArgs, lock, out); err != nil {
+		var exited interface{ ExitCode() int }
+		if errors.As(err, &exited) && exited.ExitCode() == 3 {
+			if verifyErr := env.checkCurrent(ctx, *binary, *unit, *configPath, previousHash); verifyErr != nil {
+				return finish("intervention_required", "the candidate reported rollback but the previous process image could not be verified", errors.Join(err, verifyErr))
+			}
+		}
 		return finish("failed", describeUpgradeFailure(decision.Target, installed, err), err)
 	}
+	if err := env.checkCurrent(ctx, *binary, *unit, *configPath, sum); err != nil {
+		return finish("intervention_required", "the candidate reported success but its installed and running image could not be verified", err)
+	}
 	return finish("updated", fmt.Sprintf("%s -> %s", installed, decision.Target), nil)
+}
+
+// checkCandidateVersion runs only after archive authentication and extraction.
+// A correctly signed archive mislabeled as another release is still refused.
+func checkCandidateVersion(ctx context.Context, binary, want string) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	raw, err := exec.CommandContext(ctx, binary, "version", "-json").Output()
+	if err != nil {
+		return fmt.Errorf("read the verified candidate version: %w", err)
+	}
+	var info versionInfo
+	if err := json.Unmarshal(raw, &info); err != nil {
+		return fmt.Errorf("read the verified candidate version: %w", err)
+	}
+	if info.Name != "ozal" {
+		return errors.New("the verified candidate does not identify itself as ozal")
+	}
+	if strings.TrimPrefix(info.Version, "v") != strings.TrimPrefix(want, "v") {
+		return fmt.Errorf("the verified binary reports version %q, but the reviewed release is %q", info.Version, want)
+	}
+	return nil
 }
 
 // checkGitHub lists releases and verifies the signed checksums metadata only.
@@ -485,24 +551,68 @@ func verifyChecksumsAssets(ctx context.Context, client *http.Client, checksumsUR
 // materialize downloads the chosen archive, checks its signed hash and size,
 // and extracts the binary only after both checks pass. It returns the
 // binary's path and SHA-256 for `ozal upgrade`.
-func materialize(ctx context.Context, client *http.Client, candidate updateCandidate, work string) (string, string, error) {
-	archive, err := download(ctx, client, candidate.ArchiveURL, maxArchive)
+func materialize(ctx context.Context, client *http.Client, candidate updateCandidate, work string, space func(context.Context, ...diskspace.Need) error) (string, string, error) {
+	limit := candidate.Size
+	if limit < 0 || limit > maxArchive {
+		return "", "", errors.New("the release archive size exceeds the update limit")
+	}
+	if limit == 0 {
+		limit = maxArchive
+	}
+	if err := space(ctx, diskspace.Need{Dir: work, Bytes: limit}); err != nil {
+		return "", "", err
+	}
+	archivePath := filepath.Join(work, "archive.tar.gz")
+	archive, err := os.OpenFile(archivePath, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o600)
 	if err != nil {
 		return "", "", err
 	}
-	if candidate.Size > 0 && int64(len(archive)) != candidate.Size {
-		return "", "", fmt.Errorf("the archive is %d bytes, the signed catalog says %d", len(archive), candidate.Size)
+	defer archive.Close()
+	defer os.Remove(archivePath)
+	response, err := releaseResponse(ctx, client, candidate.ArchiveURL)
+	if err != nil {
+		return "", "", err
 	}
-	got := sha256.Sum256(archive)
-	if hex.EncodeToString(got[:]) != candidate.ArchiveSHA256 {
+	defer response.Body.Close()
+	got, n, err := copyArchive(archive, response.Body, limit)
+	if err != nil {
+		return "", "", err
+	}
+	if candidate.Size > 0 && n != candidate.Size {
+		return "", "", fmt.Errorf("the archive is %d bytes, the catalog says %d", n, candidate.Size)
+	}
+	if got != candidate.ArchiveSHA256 {
 		return "", "", fmt.Errorf("%s does not match its signed checksum", filepath.Base(candidate.ArchiveURL))
 	}
+	if err := archive.Sync(); err != nil {
+		return "", "", err
+	}
+	if _, err := archive.Seek(0, io.SeekStart); err != nil {
+		return "", "", err
+	}
 	path := filepath.Join(work, "ozal")
-	sum, err := extractBinary(archive, path)
+	sum, err := extractBinary(archive, path, func(size int64) error {
+		return space(ctx, diskspace.Need{Dir: work, Bytes: size})
+	})
 	if err != nil {
 		return "", "", fmt.Errorf("%s: %w", filepath.Base(candidate.ArchiveURL), err)
 	}
 	return path, sum, nil
+}
+
+// copyArchive never buffers the archive in memory and stops at the signed
+// size (or the hard archive limit for older GitHub metadata), plus one byte
+// to distinguish a full file from an oversized response.
+func copyArchive(dst io.Writer, src io.Reader, limit int64) (string, int64, error) {
+	hash := sha256.New()
+	n, err := io.CopyBuffer(io.MultiWriter(dst, hash), io.LimitReader(src, limit+1), make([]byte, 32<<10))
+	if err != nil {
+		return "", n, err
+	}
+	if n > limit {
+		return "", n, errors.New("the archive exceeds its download size limit")
+	}
+	return hex.EncodeToString(hash.Sum(nil)), n, nil
 }
 
 // describeUpgradeFailure uses the stable exit codes from `ozal upgrade`.
@@ -527,6 +637,8 @@ func describeUpgradeFailure(target, installed string, err error) string {
 func updateJobOutcome(result, reason string, err error) (string, string) {
 	reason = updateJobReason(reason)
 	switch result {
+	case "intervention_required":
+		return updatejob.ResultInterventionRequired, reason
 	case "updated", "current":
 		return updatejob.ResultUpdated, reason
 	case "failed":
@@ -602,12 +714,14 @@ func listReleases(ctx context.Context, client *http.Client, api string) ([]githu
 // extractBinary writes the archive's top-level `ozal` file, executable, and
 // returns its SHA-256. The archive is already verified; this still refuses
 // anything but one regular file of that name.
-func extractBinary(archive []byte, dest string) (string, error) {
-	gz, err := gzip.NewReader(bytes.NewReader(archive))
+func extractBinary(archive io.Reader, dest string, space func(int64) error) (sum string, err error) {
+	gz, err := gzip.NewReader(archive)
 	if err != nil {
 		return "", err
 	}
-	tr := tar.NewReader(gz)
+	defer gz.Close()
+	// Bound decompression even when preceding unrelated entries are enormous.
+	tr := tar.NewReader(io.LimitReader(gz, maxBinary+(16<<20)))
 	for {
 		h, err := tr.Next()
 		if errors.Is(err, io.EOF) {
@@ -622,12 +736,24 @@ func extractBinary(archive []byte, dest string) (string, error) {
 		if h.Typeflag != tar.TypeReg || h.Size <= 0 || h.Size > maxBinary {
 			return "", errors.New("the ozal entry is not a regular file of a sane size")
 		}
+		if err := space(h.Size); err != nil {
+			return "", err
+		}
 		f, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o755)
 		if err != nil {
 			return "", err
 		}
+		defer func() {
+			if err != nil {
+				os.Remove(dest)
+			}
+		}()
 		hash := sha256.New()
-		if _, err := io.Copy(io.MultiWriter(f, hash), io.LimitReader(tr, maxBinary)); err != nil {
+		if _, err := io.CopyBuffer(io.MultiWriter(f, hash), tr, make([]byte, 32<<10)); err != nil {
+			f.Close()
+			return "", err
+		}
+		if err := f.Sync(); err != nil {
 			f.Close()
 			return "", err
 		}
@@ -639,6 +765,22 @@ func extractBinary(archive []byte, dest string) (string, error) {
 }
 
 func download(ctx context.Context, client *http.Client, rawURL string, limit int64) ([]byte, error) {
+	res, err := releaseResponse(ctx, client, rawURL)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(res.Body, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(body)) > limit {
+		return nil, fmt.Errorf("release metadata larger than %d bytes", limit)
+	}
+	return body, nil
+}
+
+func releaseResponse(ctx context.Context, client *http.Client, rawURL string) (*http.Response, error) {
 	parsed, err := url.Parse(rawURL)
 	if err != nil || !safeReleaseURL(parsed) {
 		return nil, errors.New("release asset URL is not an approved HTTPS release host")
@@ -669,18 +811,11 @@ func download(ctx context.Context, client *http.Client, rawURL string, limit int
 	if err != nil {
 		return nil, err
 	}
-	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
+		res.Body.Close()
 		return nil, fmt.Errorf("GET %s: %s", parsed.Redacted(), res.Status)
 	}
-	body, err := io.ReadAll(io.LimitReader(res.Body, limit+1))
-	if err != nil {
-		return nil, err
-	}
-	if int64(len(body)) > limit {
-		return nil, fmt.Errorf("GET %s: larger than %d bytes", parsed.Redacted(), limit)
-	}
-	return body, nil
+	return res, nil
 }
 
 // safeReleaseURL limits root-owned update downloads to the project's release

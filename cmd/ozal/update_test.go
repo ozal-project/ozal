@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ozal-project/ozal/internal/diskspace"
 	"github.com/ozal-project/ozal/internal/release"
 	"github.com/ozal-project/ozal/internal/updatejob"
 	"github.com/ozal-project/ozal/internal/updatelock"
@@ -116,6 +117,11 @@ type updateRig struct {
 	failWith      error
 	version       string
 	beforeUpgrade func()
+	spaceCheck    func(context.Context, ...diskspace.Need) error
+	versionErr    error
+	currentErr    error
+	prepareErr    error
+	checkedImages []string
 }
 
 type exitStatusError int
@@ -131,6 +137,9 @@ func newUpdateRig(t *testing.T, installed string) *updateRig {
 	}
 	dir := t.TempDir()
 	rig := &updateRig{host: &fakeHost{files: map[string][]byte{}}, key: priv, pubFile: filepath.Join(dir, "release.pub"), status: filepath.Join(dir, "update-status.json"), lock: filepath.Join(dir, "update.lock"), version: installed}
+	// The fake host has no real installation or storage volume. Capacity is
+	// injected separately; native filesystem probing has its own adapter tests.
+	rig.spaceCheck = func(context.Context, ...diskspace.Need) error { return nil }
 	if err := os.WriteFile(rig.pubFile, []byte(base64.StdEncoding.EncodeToString(pub)+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -141,6 +150,15 @@ func newUpdateRig(t *testing.T, installed string) *updateRig {
 func (r *updateRig) run(t *testing.T, extra ...string) (string, error) {
 	t.Helper()
 	env := updateEnv{
+		space:        r.spaceCheck,
+		checkVersion: func(context.Context, string, string) error { return r.versionErr },
+		checkCurrent: func(_ context.Context, _, _, _, hash string) error {
+			r.checkedImages = append(r.checkedImages, hash)
+			return r.currentErr
+		},
+		prepare: func(context.Context, string, string, string) (string, error) {
+			return strings.Repeat("a", 64), r.prepareErr
+		},
 		client:    r.srv.Client(),
 		installed: func(context.Context, string) (string, error) { return r.version, nil },
 		upgrade: func(_ context.Context, binary string, args []string, _ *updatelock.Lock, _ io.Writer) error {
@@ -325,7 +343,7 @@ func TestDownloadRejectsUnapprovedHostsAndRedirects(t *testing.T) {
 
 func TestExtractBinaryTakesOnlyTheRegularOzalFile(t *testing.T) {
 	dir := t.TempDir()
-	if _, err := extractBinary(tarGz(t, "ozal-helper", []byte("x")), filepath.Join(dir, "a")); err == nil {
+	if _, err := extractBinary(bytes.NewReader(tarGz(t, "ozal-helper", []byte("x"))), filepath.Join(dir, "a"), func(int64) error { return nil }); err == nil {
 		t.Fatal("an archive without ozal was accepted")
 	}
 	var buf bytes.Buffer
@@ -334,10 +352,10 @@ func TestExtractBinaryTakesOnlyTheRegularOzalFile(t *testing.T) {
 	_ = tw.WriteHeader(&tar.Header{Name: "ozal", Typeflag: tar.TypeSymlink, Linkname: "/etc/shadow"})
 	_ = tw.Close()
 	_ = gz.Close()
-	if _, err := extractBinary(buf.Bytes(), filepath.Join(dir, "b")); err == nil {
+	if _, err := extractBinary(bytes.NewReader(buf.Bytes()), filepath.Join(dir, "b"), func(int64) error { return nil }); err == nil {
 		t.Fatal("a symlink named ozal was accepted")
 	}
-	sum, err := extractBinary(tarGz(t, "./ozal", []byte("bin")), filepath.Join(dir, "c"))
+	sum, err := extractBinary(bytes.NewReader(tarGz(t, "./ozal", []byte("bin"))), filepath.Join(dir, "c"), func(int64) error { return nil })
 	want := sha256.Sum256([]byte("bin"))
 	if err != nil || sum != hex.EncodeToString(want[:]) {
 		t.Fatalf("sum=%s err=%v", sum, err)

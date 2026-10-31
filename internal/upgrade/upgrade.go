@@ -19,21 +19,25 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
 	"time"
+
+	"github.com/ozal-project/ozal/internal/diskspace"
 )
 
 // Plan names what to replace and how to check it.
 type Plan struct {
-	Unit   string // systemd unit running Binary
-	Binary string // installed binary, replaced in place
-	Source string // the new binary: normally the running executable
-	SHA256 string // expected SHA-256 of Source, from where it was built
-	Config string // routing config the unit runs with
-	DB     string // state database; empty when the unit runs without -db
-	Keep   int    // previous binaries kept beside Binary
+	Unit    string // systemd unit running Binary
+	Binary  string // installed binary, replaced in place
+	Source  string // the new binary: normally the running executable
+	SHA256  string // expected SHA-256 of Source, from where it was built
+	Version string // build version for the verified source (for host diagnostics)
+	Config  string // routing config the unit runs with
+	DB      string // state database; empty when the unit runs without -db
+	Keep    int    // previous binaries kept beside Binary
 	// DeferStart installs but leaves the unit stopped for a pair coordinator
 	// to start only after its peer has also been installed.
 	DeferStart bool
@@ -49,6 +53,10 @@ type System interface {
 	Systemctl(ctx context.Context, args ...string) error
 	// Healthy reports whether the unit is active and its admin answers.
 	Healthy(ctx context.Context) bool
+	// Running verifies the actual unit process image, rather than the file
+	// installed on disk or an unrelated server answering the health URL.
+	Running(ctx context.Context, sha256 string) bool
+	CheckSpace(ctx context.Context, needs ...diskspace.Need) error
 	// Run executes a command, as the service account when asService.
 	Run(ctx context.Context, asService bool, name string, args ...string) error
 	// Chown gives a file root created to the service account.
@@ -71,6 +79,9 @@ func (r Result) ExitCode() int { return [...]int{0, 2, 3, 4}[r] }
 // stopped; from then on it always finishes, rolling back if needed.
 func Run(ctx context.Context, p Plan, sys System, out io.Writer) (Result, error) {
 	p.defaults()
+	if err := CheckSpace(ctx, p, sys.CheckSpace); err != nil {
+		return Refused, err
+	}
 	next := p.Binary + ".next"
 	step := func(format string, a ...any) { fmt.Fprintf(out, "==> "+format+"\n", a...) }
 
@@ -90,7 +101,10 @@ func Run(ctx context.Context, p Plan, sys System, out io.Writer) (Result, error)
 	}
 	if current == got {
 		os.Remove(next)
-		step("%s already runs this binary: nothing to do", p.Unit)
+		if !p.healthy(ctx, sys, got) {
+			return Refused, errors.New("the installed file matches but the unit is not running the verified binary")
+		}
+		step("%s already runs this verified binary: nothing to do", p.Unit)
 		return Upgraded, nil
 	}
 	if err := sys.Run(ctx, false, next, "validate", "-config", p.Config); err != nil {
@@ -104,7 +118,7 @@ func Run(ctx context.Context, p Plan, sys System, out io.Writer) (Result, error)
 
 	// From the stop on, finish whatever happens to the caller or its session.
 	ctx = context.WithoutCancel(ctx)
-	r := rollback{p: p, sys: sys, out: out, next: next, previous: p.Binary + ".bak-" + current[:12]}
+	r := rollback{p: p, sys: sys, out: out, next: next, previous: p.Binary + ".bak-" + current[:12], originalHash: current}
 
 	step("stop %s (down until it starts again)", p.Unit)
 	if err := sys.Systemctl(ctx, "stop", p.Unit); err != nil {
@@ -139,25 +153,26 @@ func Run(ctx context.Context, p Plan, sys System, out io.Writer) (Result, error)
 	if err := sys.Systemctl(ctx, "start", p.Unit); err != nil {
 		return r.run(ctx, fmt.Errorf("start: %w", err))
 	}
-	if !p.healthy(ctx, sys) {
-		return r.run(ctx, errors.New("health check: the unit is not active or its admin does not answer"))
+	if !p.healthy(ctx, sys, got) {
+		return r.run(ctx, errors.New("process verification: the unit is unhealthy or is not running the verified binary"))
 	}
 	if r.dbBackup != "" {
 		step("database before the migrations kept as %s", r.dbBackup)
 	}
 	prune(p.Binary, p.Keep, out)
-	step("%s runs the new binary", p.Unit)
+	step("%s runs version %s, process image verified (sha256 %.16s)", p.Unit, p.Version, got)
 	return Upgraded, nil
 }
 
 type rollback struct {
-	p        Plan
-	sys      System
-	out      io.Writer
-	next     string
-	previous string
-	dbBackup string
-	swapped  bool
+	p            Plan
+	sys          System
+	out          io.Writer
+	next         string
+	previous     string
+	dbBackup     string
+	swapped      bool
+	originalHash string
 }
 
 func (r rollback) run(ctx context.Context, cause error) (Result, error) {
@@ -178,7 +193,7 @@ func (r rollback) run(ctx context.Context, cause error) (Result, error) {
 	}
 	r.sys.Systemctl(ctx, "reset-failed", r.p.Unit)
 	r.sys.Systemctl(ctx, "start", r.p.Unit)
-	if r.p.healthy(ctx, r.sys) {
+	if r.p.healthy(ctx, r.sys, r.originalHash) {
 		return RolledBack, cause
 	}
 	return Down, cause
@@ -212,14 +227,67 @@ func (p *Plan) defaults() {
 	}
 }
 
-func (p Plan) healthy(ctx context.Context, sys System) bool {
+func (p Plan) healthy(ctx context.Context, sys System, hash string) bool {
 	for i := 0; i < p.Attempts; i++ {
-		if sys.Healthy(ctx) {
+		if sys.Healthy(ctx) && sys.Running(ctx, hash) {
 			return true
 		}
-		time.Sleep(p.Poll)
+		timer := time.NewTimer(p.Poll)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return false
+		case <-timer.C:
+		}
 	}
 	return false
+}
+
+// CheckSpace budgets the next binary, retained previous binary, database
+// snapshot and migration/restore headroom before creating .next or stopping.
+// Stat sizes are an estimate, not a reservation or a bound on arbitrary schema
+// growth. The host adapter aggregates budgets sharing the same filesystem.
+func CheckSpace(ctx context.Context, p Plan, check func(context.Context, ...diskspace.Need) error) error {
+	size := func(path string, optional bool) (int64, error) {
+		info, err := os.Stat(path)
+		if optional && errors.Is(err, os.ErrNotExist) {
+			return 0, nil
+		}
+		if err != nil {
+			return 0, err
+		}
+		if !info.Mode().IsRegular() {
+			return 0, fmt.Errorf("update input %s is not a regular file", path)
+		}
+		return info.Size(), nil
+	}
+	newSize, err := size(p.Source, false)
+	if err != nil {
+		return err
+	}
+	oldSize, err := size(p.Binary, false)
+	if err != nil {
+		return err
+	}
+	if newSize > math.MaxInt64-oldSize {
+		return errors.New("binary storage budget overflows")
+	}
+	needs := []diskspace.Need{{Dir: filepath.Dir(p.Binary), Bytes: newSize + oldSize}}
+	if p.DB != "" {
+		dbSize, err := size(p.DB, false)
+		if err != nil {
+			return err
+		}
+		walSize, err := size(p.DB+"-wal", true)
+		if err != nil {
+			return err
+		}
+		if dbSize > math.MaxInt64-walSize || dbSize+walSize > math.MaxInt64/3 {
+			return errors.New("database storage budget overflows")
+		}
+		needs = append(needs, diskspace.Need{Dir: filepath.Dir(p.DB), Bytes: 3 * (dbSize + walSize)})
+	}
+	return check(ctx, needs...)
 }
 
 // prune keeps the newest keep previous binaries; database backups are

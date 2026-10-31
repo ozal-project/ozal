@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ozal-project/ozal/internal/diskspace"
 )
 
 // fakeHost stands in for systemd, the service account and the admin
@@ -27,9 +29,13 @@ type fakeHost struct {
 	chowned  []string
 	failStop bool
 	// What the new binary does.
-	badConfig   bool
-	failMigrate bool // migrates halfway, then fails
-	pending     bool
+	badConfig     bool
+	failMigrate   bool // migrates halfway, then fails
+	pending       bool
+	spaceErr      error
+	needs         []diskspace.Need
+	wrongImage    bool
+	wrongRollback bool
 }
 
 func (h *fakeHost) Systemctl(_ context.Context, args ...string) error {
@@ -59,6 +65,19 @@ func (h *fakeHost) running() string {
 
 func (h *fakeHost) Healthy(context.Context) bool {
 	return h.active && h.running() != "no-admin"
+}
+
+func (h *fakeHost) Running(_ context.Context, want string) bool {
+	if h.wrongRollback || (h.wrongImage && h.running() != "old") {
+		return false
+	}
+	got := sha256.Sum256([]byte(h.running()))
+	return h.active && hex.EncodeToString(got[:]) == want
+}
+
+func (h *fakeHost) CheckSpace(_ context.Context, needs ...diskspace.Need) error {
+	h.needs = needs
+	return h.spaceErr
 }
 
 func (h *fakeHost) Run(_ context.Context, asService bool, name string, args ...string) error {
@@ -259,6 +278,60 @@ func TestAlreadyRunningThisBinaryDoesNothing(t *testing.T) {
 	s := newScene(t, "old")
 	if res, err := s.run(t); res != Upgraded || err != nil || len(s.host.calls) != 0 {
 		t.Fatalf("result %v %v calls %v", res, err, s.host.calls)
+	}
+}
+
+func TestInsufficientSpaceRefusesBeforeStagingOrStopping(t *testing.T) {
+	s := newScene(t, "new")
+	s.host.spaceErr = diskspace.ErrInsufficient
+	res, err := s.run(t)
+	if res != Refused || !errors.Is(err, diskspace.ErrInsufficient) || len(s.host.calls) != 0 {
+		t.Fatalf("result=%v err=%v calls=%v", res, err, s.host.calls)
+	}
+	if _, err := os.Stat(s.plan.Binary + ".next"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf(".next was written before space check: %v", err)
+	}
+	if s.host.running() != "old" || s.read("state.db") != "v5" {
+		t.Fatal("refusal changed installed state")
+	}
+}
+
+func TestSpaceBudgetIncludesPreviousBinaryDatabaseAndWAL(t *testing.T) {
+	s := newScene(t, "new candidate")
+	if err := os.WriteFile(s.plan.DB+"-wal", []byte("uncheckpointed"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	s.host.spaceErr = diskspace.ErrInsufficient
+	_, _ = s.run(t)
+	if len(s.host.needs) != 2 || s.host.needs[0].Bytes != int64(len("new candidate")+len("old")) || s.host.needs[1].Bytes != 3*int64(len("v5")+len("uncheckpointed")) {
+		t.Fatalf("storage needs=%+v", s.host.needs)
+	}
+}
+
+func TestHealthyOldProcessCannotConfirmTheNewVersion(t *testing.T) {
+	s := newScene(t, "new")
+	s.host.wrongImage = true
+	res, err := s.run(t)
+	if res != RolledBack || err == nil || s.host.running() != "old" {
+		t.Fatalf("result=%v err=%v running=%s", res, err, s.host.running())
+	}
+}
+
+func TestHealthyUnverifiedRollbackRequiresIntervention(t *testing.T) {
+	s := newScene(t, "new")
+	s.host.wrongRollback = true
+	res, err := s.run(t)
+	if res != Down || err == nil {
+		t.Fatalf("result=%v err=%v", res, err)
+	}
+}
+
+func TestMatchingInstalledFileDoesNotProveTheProcessIsCurrent(t *testing.T) {
+	s := newScene(t, "old")
+	s.host.wrongRollback = true
+	res, err := s.run(t)
+	if res != Refused || err == nil || s.stopped() {
+		t.Fatalf("result=%v err=%v stopped=%v", res, err, s.stopped())
 	}
 }
 

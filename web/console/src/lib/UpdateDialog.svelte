@@ -49,7 +49,7 @@
       case "rolled_back":
         return `The update failed and Ozal ${j.from} was restored.`;
       case "intervention_required":
-        return "The update failed and the previous version did not answer. Use the host console to verify the service.";
+        return "Ozal could not verify the running version. Use the host console to check the service before retrying.";
       case "failed":
         return "The update failed before it could be verified. Ozal should still be answering; the host log has the detail.";
       default:

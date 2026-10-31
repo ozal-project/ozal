@@ -35,6 +35,13 @@ ozalctl cloudflare deploy-rule -host HOST -token-file FILE [-backup NEW_FILE] [-
 
 `install` y `site deploy` muestran plan por defecto. El instalador de servicio
 usa el propio ejecutable si se omite `-binary`; es exclusivo de Linux/systemd.
+`ozal update` descarga por streaming y exige tamaño/hash y versión de candidato
+coincidentes con la revisión. Comprueba presupuesto de espacio por filesystem
+con 64 MiB de margen; un `-apply` solo tiene éxito si la unidad ejecuta la
+imagen verificada y responde salud. Una consulta sin `-apply` sigue siendo
+solo metadatos. Detalles de presupuesto, permisos y operación en
+[administración](operations/administration.md#actualización-automática).
+
 El escáner reconoce nombres privados y patrones conocidos; no demuestra ausencia
 de cualquier secreto. `site check/pack/accept` no usan targets ni credenciales; pack crea un archivo
 nuevo 0600. Deploy usa las variables de Actions `ACTIONS_ID_TOKEN_REQUEST_URL`

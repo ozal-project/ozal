@@ -33,6 +33,10 @@ func TestMain(m *testing.M) {
 }
 
 func runLockProcess(mode string) error {
+	if mode == "image" {
+		_, err := io.Copy(io.Discard, os.Stdin)
+		return err
+	}
 	path := os.Getenv("OZAL_TEST_LOCK_PATH")
 	if mode == "parent" {
 		lock, err := updatelock.Acquire(path)

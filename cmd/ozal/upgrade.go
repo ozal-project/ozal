@@ -104,7 +104,8 @@ func runUpgrade(ctx context.Context, args []string, out io.Writer) error {
 
 	plan := upgrade.Plan{
 		Unit: *unit, Binary: *binary, Source: source, SHA256: *sum,
-		Config: *configPath, DB: *dbPath, Keep: *keep,
+		Version: currentVersionInfo().Version,
+		Config:  *configPath, DB: *dbPath, Keep: *keep,
 		DeferStart: *deferStart,
 	}
 	res, err := upgrade.Run(ctx, plan, sys, w)

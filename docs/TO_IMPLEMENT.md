@@ -325,6 +325,18 @@ frontend/site builds and installer fixtures. The update dialog browser fixture
 passed desktop/mobile, Escape/focus, axe and pending-job resume. This does not
 establish power-loss recovery or a real VM upgrade.
 
+`REL-019/020`, storage and process proof (working tree): archive streaming to
+private staging with bounded buffers and authenticated size/hash before
+extraction; incremental space budgets grouped by filesystem plus a 64 MiB
+reserve; candidate version matched to the reviewed release. Success after
+start and rollback requires admin health plus a stable systemd MainPID whose
+process image matches the verified SHA-256; an already-current apply must
+also prove that image. Local seam/native regressions and the mandatory-frontend full gate pass,
+including race tests. Mutation checks catch buffering the entire response,
+forgetting shared-filesystem totals and trusting health without the process
+image. Linux/arm64 cross-compilation passes (not native execution). Real ARM64 publication, protected-app/login acceptance and
+power-loss recovery remain open.
+
 | ID | Task | State | Done when |
 |---|---|---|---|
 | `REL-020` | Ozal-owned release metadata and release-availability toast. | In progress (working tree, 2026-10-31): the console shows a short dismissible toast only when the local `GET /_/api/updates/status` report says a version is available and was checked within 24 hours; it polls every five minutes and requires the `updates` tool. The browser does not contact `ozal.dev`. The toast now opens a reviewed dialog (`GET /_/api/updates/plan`, `POST /_/api/updates/jobs`) showing installed/candidate, channel, platform, size, notes and migration warning, then phases and a final result. The signed per-platform catalog client is implemented in `internal/release` and `ozal update` (detached signature, expiry, sequence, OS/arch, commit, hash/size, minimum version); the observed sequence is persisted even when only checked. Real service deployment, signing keys, announcements and browser/clean-VM acceptance remain. | New signed release becomes a visible, dismissible toast with the latest version; current, unknown, stale and unavailable status do not claim an update. Implement and test the versioned release and announcement APIs with signature verification, offline behavior, privacy and key rotation before claiming a real service. No remote command execution or implicit installation. The console install path needs `updates.install`, a fresh passkey, the host executor and its audit; no admin token or host socket may install. |

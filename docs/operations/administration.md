@@ -146,6 +146,17 @@ rechazan si el catálogo cambió. Un lock compartido (`update.lock` junto al
 binario por defecto) impide que la CLI y el ejecutor manipulen a la vez
 `.next`, la migración o el rollback.
 
+La descarga se escribe a disco y se comprueba antes de extraer o ejecutar.
+El updater consulta espacio antes de cada fase: archivo comprimido (o hasta
+512 MiB si no se conoce el tamaño), binario extraído, copia nueva/anterior y
+margen para snapshot/migración/restauración de DB y WAL. Suma necesidades en
+el mismo filesystem y deja 64 MiB de reserva por dispositivo; no es una
+reserva de bloques frente a otros escritores. Si no puede consultar capacidad
+o falta espacio, se niega antes de esa fase. Después de iniciar exige que el
+`MainPID` ejecute la imagen verificada, además de responder salud; lo mismo
+para confirmar una reversión. No confundas esto con aceptación de una app o
+un login reales.
+
 La clave pública debe proceder de un canal confiable y quedar protegida de
 cambios por la cuenta del servicio. Hacen falta un release firmado publicado y
 conectividad HTTPS; una compilación enviada por commit no crea ese canal.
