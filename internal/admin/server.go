@@ -56,6 +56,7 @@ type Handler struct {
 	identities             identities
 	identityMu             sync.Mutex
 	ceremonies             *ceremonyBook
+	remote                 *RemoteLogin
 	people                 people
 	connectors             connectors
 	pairing                pairing

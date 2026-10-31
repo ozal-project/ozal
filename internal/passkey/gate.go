@@ -61,6 +61,8 @@ type Gate struct {
 	oidcName string
 	// apps returns the current routes for the portal (ID-012).
 	apps func() []config.Route
+	// admin runs administrator ceremonies for the loopback console (ID-021).
+	admin AdminLogin
 }
 
 // NewGate builds the gate from a validated auth config. protectedHosts are
@@ -244,11 +246,28 @@ func (g *Gate) WithOIDC(login OIDCLogin, name string) *Gate {
 	return g
 }
 
+// AdminLogin runs the console's administrator ceremonies on the login host
+// (ID-021). It reports false, and the request continues as an unknown path,
+// unless a transaction started over loopback names it.
+type AdminLogin interface {
+	ServeAdminLogin(w http.ResponseWriter, r *http.Request) bool
+}
+
+// WithAdminLogin serves /_/auth/admin on the login host through admin.
+func (g *Gate) WithAdminLogin(admin AdminLogin) *Gate {
+	g.admin = admin
+	return g
+}
+
 // ServeAuthEndpoint handles the passkey pages and API under /_/auth/. It
 // reports false for any other path, which then belongs to the route.
 func (g *Gate) ServeAuthEndpoint(w http.ResponseWriter, r *http.Request) bool {
 	if host, ok := g.handoffHost(r); ok {
 		return g.serveHandoffHost(w, r, host)
+	}
+	if g.admin != nil && strings.HasPrefix(r.URL.Path, "/_/auth/admin") {
+		host, err := config.NormalizeHost(r.Host)
+		return err == nil && host == g.loginHost && g.admin.ServeAdminLogin(w, r)
 	}
 	switch r.URL.Path {
 	case continuePath:

@@ -31,6 +31,10 @@ export const choices: Record<Choice, { label: string; detail: string; hints: str
   key: { label: "A security key", detail: "Plugged in by USB or held to NFC.", hints: ["security-key"] },
 };
 
+// managerOnLoginHost replaces the manager's detail when the ceremony runs on
+// the HTTPS login host (ID-021), where every manager works.
+export const managerOnLoginHost = "Its browser extension takes the prompt: for example Bitwarden (or self-hosted Vaultwarden), 1Password, Proton Pass or KeePassXC, or any other that saves passkeys.";
+
 const order: Choice[] = ["device", "manager", "phone", "key"];
 
 const deviceSaid = (caps: Capabilities) => (caps ? caps.userVerifyingPlatformAuthenticator ?? caps.passkeyPlatformAuthenticator : undefined);

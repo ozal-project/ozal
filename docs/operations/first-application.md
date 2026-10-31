@@ -86,6 +86,14 @@ sesión, y sugiéreles una segunda passkey en otro lugar. Si el túnel usa otro
 puerto local que `admin.listen`, añade `-url http://ozal.localhost:PUERTO` a
 `console enrol` y `console login` para que el enlace abra en ese navegador.
 
+**Passkeys de consola en el dominio.** Con `admin.login_host: true` y un login
+de passkeys en HTTPS, «Create my passkey» y «Sign in with passkey» llevan a
+`https://<host de login>/_/auth/admin`, donde funcionan todos los gestores,
+el teléfono y las llaves, y vuelven a la consola con la sesión abierta. La
+consola sigue privada; sin una transacción iniciada desde ella, esa dirección
+responde como una ruta desconocida. Sin dominio HTTPS, el primer acceso sigue
+en `ozal.localhost` o con el host login.
+
 **Pasar desde localhost:** las passkeys están vinculadas al nombre y no se
 copian al nuevo dominio. Inicia sesión en `http://localhost:PUERTO`, abre tu
 menú y elige **Sign in on another browser**. El enlace ya usa

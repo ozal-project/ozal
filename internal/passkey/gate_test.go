@@ -886,3 +886,38 @@ func TestNativeSessionRefreshesAuthoritativeGroupsAndRejectsMethodConfusion(t *t
 		}
 	}
 }
+
+type fakeAdminLogin struct {
+	answer bool
+	calls  int
+}
+
+func (f *fakeAdminLogin) ServeAdminLogin(w http.ResponseWriter, _ *http.Request) bool {
+	f.calls++
+	if f.answer {
+		w.WriteHeader(http.StatusTeapot)
+	}
+	return f.answer
+}
+
+// ID-021: the login host hands /_/auth/admin to the console's administrator
+// ceremony, and only there; what that handler does not answer continues as an
+// unknown path would.
+func TestGateDelegatesAdminCeremoniesOnTheLoginHostOnly(t *testing.T) {
+	h := newHarness(t)
+	admin := &fakeAdminLogin{answer: true}
+	h.gate.WithAdminLogin(admin)
+
+	rec := httptest.NewRecorder()
+	if !h.gate.ServeAuthEndpoint(rec, httptest.NewRequest(http.MethodGet, loginOrigin+"/_/auth/admin?tx=x", nil)) || rec.Code != http.StatusTeapot {
+		t.Fatalf("login host: %d", rec.Code)
+	}
+	calls := admin.calls
+	if h.gate.ServeAuthEndpoint(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "https://"+appHost+"/_/auth/admin?tx=x", nil)) || admin.calls != calls {
+		t.Fatal("an app host reached the administrator ceremony")
+	}
+	admin.answer = false
+	if h.gate.ServeAuthEndpoint(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, loginOrigin+"/_/auth/admin", nil)) {
+		t.Fatal("an unanswered admin path was claimed by the gate")
+	}
+}

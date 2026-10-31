@@ -8,6 +8,7 @@
   import HostLogin from "$lib/auth/HostLogin.svelte";
   import Logo from "$lib/brand/Logo.svelte";
   import OtherPlaces from "$lib/auth/OtherPlaces.svelte";
+  import { startLoginHost } from "$lib/loginHost";
 
   // The only thing a signed-out tab shows. It says what this is and how to get
   // in, and nothing about what is inside.
@@ -16,6 +17,9 @@
   // false: nobody enrolled yet; true: sign in with a passkey.
   let enrolled = $state<boolean | null | undefined>(undefined);
   let enrolCommand = $state("sudo ozal console enrol");
+  // ID-021: the edge's HTTPS login host, where administrator passkeys work
+  // with every authenticator; empty when ceremonies stay on this origin.
+  let loginHost = $state("");
   let waiting = $state(false);
   let error = $state("");
   let stuck = $state(false);
@@ -35,14 +39,19 @@
     void adminState(AbortSignal.timeout(10_000)).then((state) => {
       enrolled = state ? state.enrolled : null;
       if (state?.enrol_command) enrolCommand = state.enrol_command;
+      if (state?.login_host) loginHost = state.login_host;
       if (enrolled === null) mode = "host";
     }).catch(() => { enrolled = null; mode = "host"; });
   });
 
-  async function passkey(hints?: string[]) {
+  async function passkey(hints?: string[], here = false) {
     if (waiting) return;
     waiting = true; error = ""; stuck = false;
     try {
+      if (loginHost && !here) {
+        location.assign(await startLoginHost({ hints }));
+        return;
+      }
       const session = await signInWithPasskey(hints);
       startSession(session, true);
     } catch (e) { error = explainPasskeyError(e, "sign-in"); stuck = (e as Error)?.name === "NotAllowedError"; }
@@ -67,7 +76,7 @@
 
       {#if admin.enrol}
         <p class="text-muted-foreground mt-1 mb-5 text-sm">Create the passkey you will sign in with.</p>
-        <EnrolForm />
+        <EnrolForm {loginHost} />
       {:else if mode === "host"}
         <p class="text-muted-foreground mt-1 mb-5 text-sm">Paste the one-time login printed on the server. It lasts 15 minutes.</p>
         <HostLogin />
@@ -92,6 +101,10 @@
         {#if error}<p class="text-destructive mt-3 text-sm" role="alert">{error}</p>{/if}
         <Button class="mt-6 w-full" onclick={() => passkey()} disabled={waiting || !onLocalhost}>{waiting ? "Waiting for your device…" : "Sign in with passkey"}</Button>
         <OtherPlaces open={stuck} disabled={waiting || !onLocalhost} onuse={(hints) => void passkey(hints)} />
+        {#if loginHost}
+          <p class="text-muted-foreground mt-3 text-xs leading-relaxed">You confirm it's you on <span class="text-foreground">{new URL(loginHost).host}</span>, this edge's sign-in address, where every kind of passkey works, and come back here.
+            <button type="button" class="hover:text-foreground underline underline-offset-4" disabled={waiting || !onLocalhost} onclick={() => passkey(undefined, true)}>Use a passkey made for this console's own address</button></p>
+        {/if}
       {:else}
         <p class="text-muted-foreground mt-2 text-sm" role="status">Checking…</p>
       {/if}

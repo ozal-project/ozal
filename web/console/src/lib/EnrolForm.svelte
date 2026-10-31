@@ -7,6 +7,10 @@
   import { choices, type Choice } from "$lib/passkeyChoices";
   import CopyCommand from "$lib/CopyCommand.svelte";
   import { hostLoginCommand } from "$lib/hostCommand";
+  import { startLoginHost } from "$lib/loginHost";
+
+  // loginHost: the edge runs this ceremony on its HTTPS login host (ID-021).
+  let { loginHost = "" }: { loginHost?: string } = $props();
 
   // The host opened this door once. The person says who they are and creates
   // the passkey they will use from now on.
@@ -39,6 +43,11 @@
     if (busy || !admin.enrol) return;
     busy = true; error = ""; stuck = false;
     try {
+      if (loginHost) {
+        // The link travels inside the transaction; the login host never sees it in a URL.
+        location.assign(await startLoginHost({ token: admin.enrol, name: name.trim(), email: email.trim(), hints: choices[keep].hints }));
+        return;
+      }
       const session = await enrolWithPasskey(admin.enrol, name.trim(), email.trim(), choices[keep].hints);
       startSession(session, true);
     } catch (e) { error = explainPasskeyError(e); stuck = (e as Error)?.name === "NotAllowedError"; }
@@ -69,7 +78,8 @@
       </div>
     {/if}
   {/if}
-  <KeepChoice bind:choice={keep} />
+  <KeepChoice bind:choice={keep} onLoginHost={!!loginHost} />
+  {#if loginHost}<p class="text-muted-foreground -mt-2 text-xs">You will create it on <span class="text-foreground">{new URL(loginHost).host}</span>, this edge's sign-in address, and come back here.</p>{/if}
   {#if stuck}<p class="text-muted-foreground -mt-2 text-xs" role="status">If the prompt asked for something you do not have, choose another place above and try again.</p>{/if}
   <Button type="submit" disabled={busy || (!recovery && !device && (!name.trim() || !email.trim()))}>{busy ? "Waiting for your device…" : "Create my passkey"}</Button>
   {#if !device && !recovery && info?.kind !== "invite"}

@@ -1,13 +1,15 @@
 // Host-issued one-use links arrive in the URL fragment. Consume them at once;
 // they are never put in storage, cookies, a query string or outbound
 // navigation.
-export type HostLink = { kind: "operator" | "enrol"; token: string };
+// `login_host` is the one-use code the HTTPS login host sends back (ID-021).
+export type HostLink = { kind: "operator" | "enrol" | "login_host"; token: string };
 
 export function takeHostLink(): HostLink | null {
   const fragment = new URLSearchParams(location.hash.slice(1));
   const operator = fragment.get("operator");
   const enrol = fragment.get("enrol");
-  const link: HostLink | null = enrol ? { kind: "enrol", token: enrol } : operator ? { kind: "operator", token: operator } : null;
+  const code = fragment.get("admin_code");
+  const link: HostLink | null = enrol ? { kind: "enrol", token: enrol } : operator ? { kind: "operator", token: operator } : code ? { kind: "login_host", token: code } : null;
   if (link) history.replaceState(null, "", location.pathname + location.search);
   return link;
 }

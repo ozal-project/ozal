@@ -214,6 +214,11 @@ func main() {
 		// UI-007: administrators have their own passkeys, apart from users.
 		administrators := sqlite.NewAdmins(db)
 		adminOpts = append(adminOpts, admin.WithIdentities(administrators))
+		// ID-021: with admin.login_host the same administrators sign in on
+		// the HTTPS login host; the book is shared by the console and the gate.
+		remoteLogin := admin.NewRemoteLogin()
+		adminOpts = append(adminOpts, admin.WithRemoteLogin(remoteLogin))
+		managerOpts = append(managerOpts, routemanager.WithAdminLogin(remoteLogin))
 		// A fresh install needs no command: until the first administrator
 		// exists, a one-use setup link is kept in a file only root and the
 		// service account can read. It is never written to the log: logs are

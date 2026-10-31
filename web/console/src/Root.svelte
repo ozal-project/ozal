@@ -3,6 +3,7 @@
   import { admin, signOut, startSession } from "$lib/adminToken.svelte";
   import { exchangeHostLogin, resumeSession, takeHostLink } from "$lib/operatorLogin";
   import { renewSession } from "$lib/passkey";
+  import { finishLoginHost } from "$lib/loginHost";
   import AuthScreen from "$lib/auth/AuthScreen.svelte";
 
   // The console is behind the sign-in, not beside it: without a session the
@@ -15,7 +16,11 @@
   function consumeLink() {
     const link = takeHostLink();
     if (link?.kind === "enrol") { if (!admin.token) admin.enrol = link.token; admin.ready = true; }
-    else if (link) {
+    else if (link?.kind === "login_host") {
+      void finishLoginHost(link.token).then((session) => {
+        startSession(session, true);
+      }).catch((e) => { admin.notice = (e as Error).message; }).finally(() => { admin.ready = true; });
+    } else if (link) {
       void exchangeHostLogin(link.token).then((session) => {
         startSession(session, false);
       }).catch((e) => { admin.notice = (e as Error).message; }).finally(() => { admin.ready = true; });

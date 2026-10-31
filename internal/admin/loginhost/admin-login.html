@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e0e0d">
+<meta name="robots" content="noindex">
+<link rel="icon" href="/_/auth/icons/ozal.svg" type="image/svg+xml">
+<title>Console passkey · Ozal</title>
+<link rel="stylesheet" href="/_/auth/passkey.css">
+<script src="/_/auth/admin.js?tx={{tx}}" defer></script>
+</head>
+<body data-page="admin" data-tx="{{tx}}" data-kind="{{kind}}" data-hints="{{hints}}">
+<header>
+  <span class="brand">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><path class="arch" d="M5 30V14.5A11 11 0 0 1 27 14.5V30H21.6V14.8A5.6 5.6 0 0 0 10.4 14.8V30Z"/><path class="leaf" d="M10.4 30V14.8A5.6 5.6 0 0 1 16 9.2V30Z"/><path class="light" d="M16 9.2A5.6 5.6 0 0 1 21.6 14.8V30H16Z"/></svg>
+    <span><span class="name">ozal</span><span class="sub">private console</span></span>
+  </span>
+</header>
+<main>
+  <h1 id="title">Sign in to the console</h1>
+  <p id="intro">Your private console asked to confirm it's you here, on this site's own address, where every passkey option works: this device, a password manager, your phone or a security key. You return to the console afterwards.</p>
+  <button id="action" type="button">Continue with a passkey</button>
+  <p id="status" role="status" aria-live="polite"></p>
+  <p class="hint">Not sure where to keep a passkey? <a href="/_/auth/help">Compare the ways to sign in</a>.</p>
+</main>
+<footer>Self-hosted access · Ozal keeps only your passkey’s public key</footer>
+</body>
+</html>

@@ -72,6 +72,12 @@ func WithConnectorRoutes(routes ConnectorRoutes) Option {
 	return func(m *Manager) { m.connectorRoutes = routes }
 }
 
+// WithAdminLogin lets the passkey login host run the console's administrator
+// ceremonies (ID-021); the admin handler decides whether the feature is on.
+func WithAdminLogin(admin passkey.AdminLogin) Option {
+	return func(m *Manager) { m.adminLogin = admin }
+}
+
 // WithPasskeyDirectory supplies the user and passkey store that
 // auth.passkeys needs (ID-003). Without it a config with passkeys fails.
 func WithPasskeyDirectory(dir passkey.Directory) Option {
@@ -147,6 +153,7 @@ type Manager struct {
 	connectorRoutes     ConnectorRoutes
 	sites               proxy.SiteDirs
 	passkeys            passkey.Directory
+	adminLogin          passkey.AdminLogin
 	onInstall           func(config.Config)
 }
 
@@ -481,6 +488,9 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 				passkeyGate.WithOIDC(oidcGate, cfg.Auth.ProviderName)
 			}
 			passkeyGate.WithApps(m.protectedRoutes)
+			if m.adminLogin != nil {
+				passkeyGate.WithAdminLogin(m.adminLogin)
+			}
 			builtGate = passkeyGate
 		} else {
 			oidcGate, cancelGate, err := m.buildOIDCGate(cfg.Auth, protectedHosts, sessions)

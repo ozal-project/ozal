@@ -158,3 +158,17 @@ func TestPasskeysWithOIDCAndMethods(t *testing.T) {
 		t.Fatalf("methods [passkey] refused: %v", err)
 	}
 }
+
+// ID-021: administrator passkeys on the login host need that login host.
+func TestAdminLoginHostNeedsPasskeys(t *testing.T) {
+	cfg := passkeyConfig()
+	cfg.Admin.LoginHost = true
+	if _, err := Validate(cfg); err != nil {
+		t.Fatalf("admin.login_host with passkeys refused: %v", err)
+	}
+	cfg.Auth = Auth{}
+	cfg.Routes[0].Access = nil
+	if _, err := Validate(cfg); err == nil || !strings.Contains(err.Error(), "admin.login_host") {
+		t.Fatalf("admin.login_host without auth.passkeys accepted: %v", err)
+	}
+}

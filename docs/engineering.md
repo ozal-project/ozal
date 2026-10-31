@@ -473,6 +473,13 @@ se trata de adaptarse a un gestor: en HTTPS funcionan todos (gestores, iCloud,
 gestor de Google, teléfono, llaves). Una passkey ligada al dominio real tampoco
 depende del puerto ni del nombre local del túnel.
 
+**Estado 2026-10-31:** implementado detrás de `admin.login_host` (rutas
+`/_/auth/admin`, `/_/api/admin/remote/start|finish`); falta la aceptación con un
+dominio real. Diferencias con el boceto: el `tx` va en la query (sirve para
+responder como ruta desconocida sin él y es inútil sin el verificador) y la
+página pide un clic, porque algunos navegadores exigen un gesto para la
+ceremonia.
+
 **Propuesta aceptada para diseño:** con `auth.passkeys.login_url` en HTTPS, la
 ceremonia del administrador ocurre en el host de login y la consola recibe la
 sesión por un código de un solo uso, como en `ID-015`. La consola y su listener

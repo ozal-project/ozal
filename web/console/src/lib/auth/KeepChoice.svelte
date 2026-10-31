@@ -1,11 +1,14 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { choices, goodFor, passkeyChoices, readCapabilities, recommendedChoice, type Capabilities, type Choice } from "$lib/passkeyChoices";
+  import { choices, goodFor, managerOnLoginHost, passkeyChoices, readCapabilities, recommendedChoice, type Capabilities, type Choice } from "$lib/passkeyChoices";
 
   // Where the new passkey will live, asked before the prompt and passed to the
   // browser as a hint. Until the person picks, a better-informed answer from
   // the browser may move the default; after that it never does.
-  let { choice = $bindable<Choice>("device") }: { choice?: Choice } = $props();
+  // onLoginHost: the ceremony runs on the HTTPS login host (ID-021), where
+  // every password manager works, so the localhost caveat does not apply.
+  let { choice = $bindable<Choice>("device"), onLoginHost = false }: { choice?: Choice; onLoginHost?: boolean } = $props();
+  const detail = (option: Choice) => (option === "manager" && onLoginHost ? managerOnLoginHost : choices[option].detail);
   let caps = $state<Capabilities>(null);
   let picked = false;
   const order = $derived(passkeyChoices(caps));
@@ -24,7 +27,7 @@
     <label class="border-input has-[:checked]:border-foreground grid cursor-pointer grid-cols-[auto_1fr] gap-x-2.5 rounded-md border px-3 py-2 text-xs">
       <input type="radio" name="keep" value={option} bind:group={choice} onchange={() => { picked = true; }} class="row-span-2 mt-0.5 accent-[var(--primary)]" />
       <span class="text-foreground text-sm font-medium">{choices[option].label}{#if option === recommended}<span class="text-muted-foreground ml-1 font-normal">· recommended here</span>{/if}</span>
-      <span class="text-muted-foreground leading-relaxed">{choices[option].detail}</span>
+      <span class="text-muted-foreground leading-relaxed">{detail(option)}</span>
     </label>
   {/each}
   <details class="text-muted-foreground text-xs">

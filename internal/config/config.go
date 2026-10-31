@@ -321,6 +321,11 @@ type Admin struct {
 	// names each one by the uid the kernel reports. The service account
 	// must belong to the group (systemd SupplementaryGroups).
 	SocketGroup string `json:"socket_group,omitempty"`
+	// LoginHost runs administrator passkey ceremonies on the HTTPS login
+	// host (auth.passkeys.login_url) instead of http://ozal.localhost, where
+	// many authenticators refuse to work (ID-021). The console stays on
+	// loopback and receives its session through a one-use code.
+	LoginHost bool `json:"login_host,omitempty"`
 }
 
 // Notify configures outbound notifications (NTF-001). Channels are opt-in:
@@ -524,6 +529,9 @@ func Validate(cfg Config) (*Config, error) {
 	}
 	if err := validateAdminSocketGroup(cfg.Admin.Socket, cfg.Admin.SocketGroup); err != nil {
 		return nil, fmt.Errorf("config: %w", err)
+	}
+	if cfg.Admin.LoginHost && cfg.Auth.Passkeys == nil {
+		return nil, fmt.Errorf("config: admin.login_host needs auth.passkeys: the administrator ceremony runs on its login_url")
 	}
 	if len(cfg.Routes) == 0 {
 		return nil, fmt.Errorf("config: at least one route is required")

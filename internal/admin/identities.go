@@ -72,6 +72,9 @@ func WithIdentities(store identities) Option {
 }
 
 type pendingCeremony struct {
+	// tx is the login-host transaction this ceremony runs for (ID-021);
+	// empty on the console itself.
+	tx        string
 	enrol     bool
 	kind      string
 	origin    string
@@ -223,6 +226,8 @@ func (h *Handler) registerIdentities() {
 	h.mux.HandleFunc("POST /_/api/admin/enrol/finish", h.enrolFinish)
 	h.mux.HandleFunc("POST /_/api/admin/login/begin", h.adminLoginBegin)
 	h.mux.HandleFunc("POST /_/api/admin/login/finish", h.adminLoginFinish)
+	h.mux.HandleFunc("POST /_/api/admin/remote/start", h.remoteStart)
+	h.mux.HandleFunc("POST /_/api/admin/remote/finish", h.remoteFinish)
 	h.mux.HandleFunc("GET /_/api/admins", h.requireTool("administrators", h.listAdmins))
 	h.mux.HandleFunc("POST /_/api/admins/invite", h.requireTool("administrators", h.inviteAdmin))
 	h.mux.HandleFunc("POST /_/api/admins/{id}/recover", h.requireTool("administrators", h.recoverAdmin))
@@ -282,6 +287,10 @@ func (h *Handler) adminState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	state := map[string]any{"enrolled": enrolled}
+	if _, origin, ok := h.loginSite(); ok {
+		// ID-021: ceremonies run there, where every authenticator works.
+		state["login_host"] = origin
+	}
 	if !enrolled && h.enrolCommand != "" {
 		state["enrol_command"] = h.enrolCommand
 	}
@@ -424,6 +433,18 @@ func (h *Handler) enrolInfo(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, info)
 }
 
+// enrolRequest is what an enrolment ceremony starts from: the host's link and,
+// for a new account, who the person says they are.
+type enrolRequest struct {
+	Token string `json:"token"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
+// signIn ends a verified ceremony: on the console it opens a session; on the
+// login host it hands the console a one-use code (ID-021).
+type ceremonyDone func(w http.ResponseWriter, r *http.Request, account adminid.Account, credentialID []byte)
+
 func (h *Handler) enrolBegin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	rp, err := h.relyingParty(r)
@@ -431,15 +452,16 @@ func (h *Handler) enrolBegin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	var req struct {
-		Token string `json:"token"`
-		Name  string `json:"name"`
-		Email string `json:"email"`
-	}
+	var req enrolRequest
 	if err := decodeJSON(w, r, &req); err != nil || req.Token == "" || len(req.Token) > 128 {
 		writeError(w, http.StatusBadRequest, "this enrolment link is not valid")
 		return
 	}
+	h.beginEnrol(w, r, rp, req, "")
+}
+
+// beginEnrol starts a registration for a device link or a host enrolment.
+func (h *Handler) beginEnrol(w http.ResponseWriter, r *http.Request, rp *webauthn.WebAuthn, req enrolRequest, tx string) {
 	hash := sha256.Sum256([]byte(req.Token))
 	if id, ok := h.devices.peek(req.Token); ok {
 		account, credentials, found := h.accountWithCredentials(r.Context(), id)
@@ -453,7 +475,7 @@ func (h *Handler) enrolBegin(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "adding a passkey could not start")
 			return
 		}
-		ceremony, err := h.ceremonies.put(pendingCeremony{origin: r.Header.Get("Origin"), enrol: true, kind: "device", session: *session, tokenHash: hash[:], account: account})
+		ceremony, err := h.ceremonies.put(pendingCeremony{tx: tx, origin: r.Header.Get("Origin"), enrol: true, kind: "device", session: *session, tokenHash: hash[:], account: account})
 		if err != nil {
 			writeError(w, http.StatusTooManyRequests, "too many sign-ins in progress; try again shortly")
 			return
@@ -501,7 +523,7 @@ func (h *Handler) enrolBegin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "enrolment could not start")
 		return
 	}
-	id, err := h.ceremonies.put(pendingCeremony{origin: r.Header.Get("Origin"), enrol: true, kind: enrolment.Kind, session: *session, tokenHash: hash[:], account: account})
+	id, err := h.ceremonies.put(pendingCeremony{tx: tx, origin: r.Header.Get("Origin"), enrol: true, kind: enrolment.Kind, session: *session, tokenHash: hash[:], account: account})
 	if err != nil {
 		writeError(w, http.StatusTooManyRequests, "too many sign-ins in progress; try again shortly")
 		return
@@ -517,13 +539,18 @@ func (h *Handler) enrolFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pending, ok := h.ceremonies.take(r.Header.Get(adminCeremony), true, r.Header.Get("Origin"))
-	if !ok {
+	if !ok || pending.tx != "" {
 		h.failedSignIn(r, "ceremony_unknown", nil)
 		writeError(w, http.StatusUnauthorized, "this step expired; start again")
 		return
 	}
+	h.finishEnrol(w, r, rp, pending, h.startAdminSession)
+}
+
+// finishEnrol verifies a registration, stores it and hands the account to done.
+func (h *Handler) finishEnrol(w http.ResponseWriter, r *http.Request, rp *webauthn.WebAuthn, pending pendingCeremony, done ceremonyDone) {
 	if pending.kind == "device" {
-		h.finishDevice(w, r, rp, pending)
+		h.finishDevice(w, r, rp, pending, done)
 		return
 	}
 	if pending.kind == "add" {
@@ -553,7 +580,7 @@ func (h *Handler) enrolFinish(w http.ResponseWriter, r *http.Request) {
 		h.devices.revokeAccount(account.ID)
 	}
 	h.emit(events.Event{Type: events.Type("admin.passkey_registered"), Actor: "admin:" + account.Email, Code: account.ID})
-	h.startAdminSession(w, r, account, credential.ID)
+	done(w, r, account, credential.ID)
 }
 
 func (h *Handler) adminLoginBegin(w http.ResponseWriter, r *http.Request) {
@@ -563,13 +590,17 @@ func (h *Handler) adminLoginBegin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	h.beginLogin(w, r, rp, "")
+}
+
+func (h *Handler) beginLogin(w http.ResponseWriter, r *http.Request, rp *webauthn.WebAuthn, tx string) {
 	assertion, session, err := rp.BeginDiscoverableLogin(webauthn.WithUserVerification(protocol.VerificationRequired))
 	if err != nil {
 		h.failedSignIn(r, "begin_failed", err)
 		writeError(w, http.StatusInternalServerError, "sign-in could not start")
 		return
 	}
-	id, err := h.ceremonies.put(pendingCeremony{origin: r.Header.Get("Origin"), session: *session})
+	id, err := h.ceremonies.put(pendingCeremony{tx: tx, origin: r.Header.Get("Origin"), session: *session})
 	if err != nil {
 		writeError(w, http.StatusTooManyRequests, "too many sign-ins in progress; try again shortly")
 		return
@@ -585,11 +616,17 @@ func (h *Handler) adminLoginFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pending, ok := h.ceremonies.take(r.Header.Get(adminCeremony), false, r.Header.Get("Origin"))
-	if !ok {
+	if !ok || pending.tx != "" {
 		h.failedSignIn(r, "ceremony_unknown", nil)
 		writeError(w, http.StatusUnauthorized, "this step expired; start again")
 		return
 	}
+	h.finishLogin(w, r, rp, pending, h.startAdminSession)
+}
+
+// finishLogin verifies an assertion against the administrator directory and
+// hands the account to done.
+func (h *Handler) finishLogin(w http.ResponseWriter, r *http.Request, rp *webauthn.WebAuthn, pending pendingCeremony, done ceremonyDone) {
 	var found adminid.Account
 	lookup := func(_, handle []byte) (webauthn.User, error) {
 		account, credentials, err := h.identities.AccountByHandle(r.Context(), handle)
@@ -622,7 +659,7 @@ func (h *Handler) adminLoginFinish(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "that passkey is no longer active")
 		return
 	}
-	h.startAdminSession(w, r, found, credential.ID)
+	done(w, r, found, credential.ID)
 }
 
 // startAdminSession turns a verified administrator into the same short
@@ -890,7 +927,7 @@ func (h *Handler) issueDeviceLink(w http.ResponseWriter, r *http.Request) {
 // finishDevice completes a passkey created through a device link and signs
 // that browser in. The link is used up under the identity lock, so a recovery
 // or a disable that ended it meanwhile wins.
-func (h *Handler) finishDevice(w http.ResponseWriter, r *http.Request, rp *webauthn.WebAuthn, pending pendingCeremony) {
+func (h *Handler) finishDevice(w http.ResponseWriter, r *http.Request, rp *webauthn.WebAuthn, pending pendingCeremony, done ceremonyDone) {
 	credential, err := rp.FinishRegistration(&webUser{account: pending.account}, pending.session, r)
 	if err != nil {
 		h.failedSignIn(r, "device_passkey_invalid", err)
@@ -913,7 +950,7 @@ func (h *Handler) finishDevice(w http.ResponseWriter, r *http.Request, rp *webau
 		return
 	}
 	h.emit(events.Event{Type: events.Type("admin.passkey_added"), Actor: "admin:" + account.Email, Reason: "another browser"})
-	h.startAdminSession(w, r, account, credential.ID)
+	done(w, r, account, credential.ID)
 }
 
 type passkeyView struct {
