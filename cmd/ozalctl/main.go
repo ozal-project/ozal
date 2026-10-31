@@ -63,7 +63,7 @@ const usage = `usage:
       on failure. Add the address itself once in the console (Add website).
 
   ozalctl app alias -from HOST -to HOST [-manual-dns] [-wait 90s] [-targets FILE] [-target NAME] [-apply]
-      Serve an existing public site at a second hostname: the edge saves the
+      Serve an existing public application at a second hostname: the edge saves the
       route with the reviewed digest, creates the proxied DNS record with its
       own provider credential (dns.cloudflare) and waits until dns,
       certificate and reach are ok. The previous hostname is never changed and

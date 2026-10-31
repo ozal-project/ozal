@@ -81,7 +81,7 @@ func (r connectionReport) summary() string {
 }
 
 // aliasApplication copies from's route to a new hostname. It refuses any
-// source that is not a plain public site, and a destination that already
+// source that is not a public application, and a destination that already
 // has a different route, before changing anything.
 func aliasApplication(ctx context.Context, out io.Writer, api *adminClient, req aliasRequest) error {
 	step := func(format string, a ...any) { fmt.Fprintf(out, "==> "+format+"\n", a...) }
@@ -116,8 +116,8 @@ func aliasApplication(ctx context.Context, out io.Writer, api *adminClient, req 
 	if err := api.do(ctx, http.MethodPost, "/_/api/apps/plan", payload, &plan); err != nil {
 		return err
 	}
-	step("plan: %s serves the same site as %s", to, from)
-	note("route %s (site %q); already saved: %v", to, route.Site, exists)
+	step("plan: %s serves the same application as %s", to, from)
+	note("route destination: %s; already saved: %v", route.Destination(), exists)
 	note("certificate: %s; dns provider: %s", plan.TLS, orNone(setup.DNS.Provider))
 	if !req.Apply {
 		note("re-run with -apply to do it; %s is not changed", from)
@@ -199,8 +199,11 @@ func aliasRoute(routes []config.Route, from, to string) (route config.Route, exi
 			current = &routes[i]
 		}
 	}
-	if source == nil || source.Site == "" || source.RequiresAuth() || source.Access != nil {
-		return route, false, errors.New("the source must be an existing public Pages site; nothing was changed")
+	if source == nil || source.RequiresAuth() || source.IsRedirect() {
+		return route, false, errors.New("the source must be an existing public application; nothing was changed")
+	}
+	if source.Site == "" && source.Root == "" && source.Target == "" && len(source.Upstreams) == 0 && source.Connector == "" {
+		return route, false, errors.New("the source route has no serving destination; nothing was changed")
 	}
 	encoded, err := json.Marshal(source)
 	if err != nil {

@@ -136,6 +136,26 @@ func TestAliasSavesThenCreatesDNSThenWaitsForConnection(t *testing.T) {
 	}
 }
 
+func TestAliasCopiesPublicReverseProxyRoute(t *testing.T) {
+	source := config.Route{
+		Host:       "old.example.com",
+		Upstreams:  []string{"http://127.0.0.1:8080", "http://127.0.0.1:8081"},
+		HealthPath: "/ready", AuditMode: "best_effort",
+	}
+	got, exists, err := aliasRoute([]config.Route{source}, source.Host, "new.example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exists || got.Host != "new.example.com" || got.Target != source.Target ||
+		strings.Join(got.Upstreams, ",") != strings.Join(source.Upstreams, ",") ||
+		got.HealthPath != source.HealthPath || got.AuditMode != source.AuditMode {
+		t.Fatalf("alias did not preserve the public proxy route: source=%+v alias=%+v exists=%v", source, got, exists)
+	}
+	if source.Host != "old.example.com" {
+		t.Fatalf("alias changed the original route: %+v", source)
+	}
+}
+
 func TestAliasAlreadyConnectedCreatesNoRecord(t *testing.T) {
 	f := newFakeEdge()
 	f.checks = []connectionReport{readyReport()}
@@ -194,9 +214,12 @@ func TestAliasRefusals(t *testing.T) {
 		mutate func(*fakeEdge)
 		want   string
 	}{
-		"private source": {func(f *fakeEdge) { f.routes[0].AuthRequired = true }, "public Pages site"},
-		"proxy source":   {func(f *fakeEdge) { f.routes[0].Site = "" }, "public Pages site"},
-		"missing source": {func(f *fakeEdge) { f.routes[0].Host = "other.example.com" }, "public Pages site"},
+		"private source":      {func(f *fakeEdge) { f.routes[0].AuthRequired = true }, "public application"},
+		"missing destination": {func(f *fakeEdge) { f.routes[0].Site = "" }, "serving destination"},
+		"redirect source": {func(f *fakeEdge) {
+			f.routes[0] = config.Route{Host: "old.example.com", Redirect: "https://elsewhere.example"}
+		}, "public application"},
+		"missing source": {func(f *fakeEdge) { f.routes[0].Host = "other.example.com" }, "public application"},
 		"other route at destination": {func(f *fakeEdge) {
 			f.routes = append(f.routes, config.Route{Host: "ozal.example.com", Site: "different"})
 		}, "different route"},
