@@ -18,16 +18,15 @@
 </header>
 <main>
   <h1>Create your passkey</h1>
-  <p>Your device will ask for your face, fingerprint or PIN. They never leave it; Ozal only keeps a public key.</p>
+  <p>Where you keep it will ask for your face, fingerprint or PIN. They never reach Ozal, which keeps only a public key.</p>
+  <fieldset id="choices" class="choices" hidden>
+    <legend>Where will you keep this passkey?</legend>
+    <div id="choice-list"></div>
+  </fieldset>
   <button id="action" type="button">Create passkey</button>
-  <p class="hint">When asked where to save it, choose your device's passwords (the Passwords app on an iPhone, Google Password Manager on Android) so it is there next time.</p>
   <p id="status" role="status" aria-live="polite"></p>
-  <details id="choices" class="choices" hidden>
-    <summary>What can hold a passkey?</summary>
-    <ul id="choice-list"></ul>
-  </details>
   <nav id="sites" class="sites" aria-label="Your sites" hidden></nav>
 </main>
-<footer>Self-hosted access · your passkey never leaves your device</footer>
+<footer>Self-hosted access · Ozal keeps only your passkey’s public key</footer>
 </body>
 </html>

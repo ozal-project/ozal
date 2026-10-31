@@ -1,28 +1,40 @@
-// What can hold a passkey (ID-017). A desktop without a built-in authenticator
-// (most Linux machines) jumps straight to "insert your security key"; saying
-// beforehand what else works keeps that from being a dead end. The same list
-// and rule as the sign-in pages (internal/passkey/assets/passkey.js).
+// Where a passkey can live (ID-017). A desktop without a built-in
+// authenticator (most Linux machines) jumps straight to "insert your security
+// key"; letting the person say first where they keep passkeys, and passing
+// that to the browser as a hint, keeps that from being a dead end. The same
+// list and rules as the sign-in pages (internal/passkey/assets/passkey.js).
+// Hints are a preference the browser may ignore; no product is required.
 export type Choice = "device" | "manager" | "phone" | "key";
 export type Capabilities = Record<string, boolean | undefined> | null;
 
-export const choiceText: Record<Choice, string> = {
-  device: "This device: Windows Hello, Touch ID, or the screen lock of a phone or tablet.",
-  manager: "A password manager that saves passkeys, built into the browser or added as an extension.",
-  phone: "Your phone, if this browser offers a QR code to scan.",
-  key: "A security key (USB or NFC).",
+export const choices: Record<Choice, { label: string; detail: string; hints: string[] }> = {
+  device: { label: "This device", detail: "Windows Hello, Touch ID or the screen lock of this phone or tablet.", hints: ["client-device"] },
+  manager: {
+    label: "My password manager",
+    detail: "Its browser extension takes the prompt: for example Bitwarden (or self-hosted Vaultwarden), 1Password, Proton Pass or KeePassXC, or any other that saves passkeys.",
+    hints: [],
+  },
+  phone: { label: "My phone", detail: "Scan the QR code the browser shows; this computer needs Bluetooth.", hints: ["hybrid"] },
+  key: { label: "A security key", detail: "Plugged in by USB or held to NFC.", hints: ["security-key"] },
 };
 
 const order: Choice[] = ["device", "manager", "phone", "key"];
 
-// passkeyChoices orders the choices for this browser: what it confirms goes
-// first, what it denies goes last, and every choice stays. Its answer can be
-// missing or incomplete, and only the person knows what they have.
+const deviceSaid = (caps: Capabilities) => (caps ? caps.userVerifyingPlatformAuthenticator ?? caps.passkeyPlatformAuthenticator : undefined);
+
+// recommendedChoice is the one worth suggesting on this browser, or "" when
+// the browser did not say enough to suggest anything.
+export function recommendedChoice(caps: Capabilities): Choice | "" {
+  const device = deviceSaid(caps);
+  return device === true ? "device" : device === false ? "manager" : "";
+}
+
+// passkeyChoices orders the choices for this browser: the recommended one
+// first, what it confirms next, what it denies last, and every choice stays.
 export function passkeyChoices(caps: Capabilities): Choice[] {
-  const said: Partial<Record<Choice, boolean | undefined>> = {
-    device: caps ? caps.userVerifyingPlatformAuthenticator ?? caps.passkeyPlatformAuthenticator : undefined,
-    phone: caps ? caps.hybridTransport : undefined,
-  };
-  const rank = (choice: Choice) => (said[choice] === true ? 0 : said[choice] === false ? 2 : 1);
+  const recommended = recommendedChoice(caps);
+  const said: Partial<Record<Choice, boolean | undefined>> = { device: deviceSaid(caps), phone: caps ? caps.hybridTransport : undefined };
+  const rank = (choice: Choice) => (choice === recommended ? -1 : said[choice] === true ? 0 : said[choice] === false ? 2 : 1);
   return [...order].sort((a, b) => rank(a) - rank(b) || order.indexOf(a) - order.indexOf(b));
 }
 
@@ -46,4 +58,9 @@ export async function readCapabilities(api: CapabilityAPI | undefined, timeout =
   } catch {
     return null;
   }
+}
+
+// withHints adds the chosen place to WebAuthn options; no hint, no member.
+export function withHints<T extends Record<string, unknown>>(options: T, hints?: string[]): T {
+  return hints && hints.length ? { ...options, hints } : options;
 }

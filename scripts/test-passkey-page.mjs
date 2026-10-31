@@ -9,13 +9,14 @@ import assert from "node:assert/strict";
 
 const src = readFileSync(new URL("../internal/passkey/assets/passkey.js", import.meta.url), "utf8");
 
-function render(search, { oidc = "", webauthn = true, page = "login", fetch = () => new Promise(() => {}), assign = () => {}, caps, get = () => new Promise(() => {}) } = {}) {
+function render(search, { oidc = "", webauthn = true, page = "login", fetch = () => new Promise(() => {}), assign = () => {}, caps, get = () => new Promise(() => {}), create = () => new Promise(() => {}), hash = "" } = {}) {
   const els = {};
   const el = (id) => (els[id] ??= {
     id, textContent: "", hidden: id === "oidc", open: false, href: "", disabled: false, dataset: {}, children: [], on: {},
     addEventListener(ev, fn) { this.on[ev] = fn; }, focus() {}, setAttribute() {}, append(...c) { this.children.push(...c); }, replaceChildren(...c) { this.children = c; },
+    querySelector(q) { return q === "a" ? this.children.find((c) => c.href) || null : null; },
   });
-  ["title", "intro", "action", "oidc", "status", "first-time", "username", "sites", "devices", "who", "email", "signout", "apps", "manage", "choices", "choice-list"].forEach(el);
+  ["title", "intro", "action", "oidc", "status", "first-time", "username", "sites", "devices", "who", "email", "signout", "apps", "manage", "choices", "choice-list", "use-phone", "use-key"].forEach(el);
   const label = { hidden: false };
   const head = [];
   let ready;
@@ -32,10 +33,10 @@ function render(search, { oidc = "", webauthn = true, page = "login", fetch = ()
     document, URL, URLSearchParams, encodeURIComponent, AbortController, atob, btoa, JSON, Date, String, Uint8Array,
     window: webauthn ? { PublicKeyCredential: Object.assign(function () {}, caps === undefined ? {} : { getClientCapabilities: caps }) } : {},
     setTimeout,
-    location: { search, hash: "", pathname: "/_/auth/" + page, origin: "https://auth.example.com", assign },
+    location: { search, hash, pathname: "/_/auth/" + page, origin: "https://auth.example.com", assign },
     history: { replaceState() {} },
     localStorage: { setItem() {}, getItem: () => null, removeItem() {} },
-    navigator: webauthn ? { credentials: { get } } : {},
+    navigator: webauthn ? { credentials: { get, create } } : {},
     PublicKeyCredential: webauthn ? {} : undefined,
     fetch,
   };
@@ -57,7 +58,12 @@ function render(search, { oidc = "", webauthn = true, page = "login", fetch = ()
     manageShown: () => !els.manage.hidden,
     get choices() { return els.choices.hidden ? "hidden" : els.choices.open ? "open" : "closed"; },
     get choiceOrder() { return els["choice-list"].children.map((item) => item.dataset.choice); },
-    click: () => els.action.on.click(),
+    // The checked choice and the label of each, as rendered.
+    get checked() { return (els["choice-list"].children.find((item) => item.children[0].checked) || { dataset: {} }).dataset.choice; },
+    get choiceLabels() { return els["choice-list"].children.map((item) => item.children[1].textContent); },
+    pick: (choice) => els["choice-list"].children.find((item) => item.dataset.choice === choice).children[0].on.change(),
+    get siteLinks() { return els.sites.children.map((a) => a.textContent); },
+    click: (id = "action") => els[id].on.click(),
     get preconnect() { return head.filter((n) => n.rel === "preconnect").map((n) => n.href); },
   };
 }
@@ -100,50 +106,86 @@ page = render(rt, { webauthn: false });
 assert.equal(page.passkey, "disabled");
 assert.match(page.status, /does not support passkeys/);
 
-// What can hold a passkey (ID-017): capabilities only reorder the choices;
-// none is hidden, and no or a failed answer keeps the default order.
+// Where a passkey can live (ID-017): the person picks the place before the
+// prompt and that becomes a hint to the browser. Capabilities only reorder
+// and recommend; no choice is hidden, and no or a failed answer keeps the
+// default order without a recommendation.
 const tick = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
 const all = ["device", "manager", "phone", "key"];
-page = render(rt);
+const enrol = (opts = {}) => render("", { page: "enrol", hash: "#invite-token", ...opts });
+page = enrol();
 await tick();
-assert.equal(page.choices, "closed", "the guidance is offered before the prompt");
+assert.equal(page.choices, "closed", "the enrolment page asks where to keep the passkey before the prompt");
 assert.deepEqual(page.choiceOrder, all, "an old browser that cannot answer shows every choice");
-page = render(rt, { caps: async () => ({ userVerifyingPlatformAuthenticator: false, hybridTransport: true }) });
+assert.equal(page.checked, "device");
+assert.ok(page.choiceLabels.every((label) => !/recommended/.test(label)), "nothing is recommended without an answer");
+assert.match(page.choiceLabels[1], /password manager/);
+page = enrol({ caps: async () => ({ userVerifyingPlatformAuthenticator: false, hybridTransport: true }) });
 await tick();
-assert.deepEqual(page.choiceOrder, ["phone", "manager", "key", "device"], "a confirmed choice goes first, a denied one last, none hidden");
-page = render(rt, { caps: async () => ({ passkeyPlatformAuthenticator: true }) });
+assert.deepEqual(page.choiceOrder, ["manager", "phone", "key", "device"], "no built-in authenticator: the password manager is suggested first, none hidden");
+assert.equal(page.checked, "manager");
+assert.match(page.choiceLabels[0], /recommended here/);
+page = enrol({ caps: async () => ({ passkeyPlatformAuthenticator: true }) });
 await tick();
 assert.deepEqual(page.choiceOrder, all);
-page = render(rt, { caps: async () => { throw new Error("not allowed"); } });
+assert.match(page.choiceLabels[0], /This device · recommended here/);
+page = enrol({ caps: async () => { throw new Error("not allowed"); } });
 await tick();
 assert.deepEqual(page.choiceOrder, all, "a failing answer is unknown, not unsupported");
-page = render(rt, { caps: () => new Promise(() => {}) });
+page = enrol({ caps: () => new Promise(() => {}) });
 await tick(1100);
 assert.deepEqual(page.choiceOrder, all, "a browser that never answers still shows every choice");
+page = enrol({ caps: () => new Promise((resolve) => setTimeout(() => resolve({ userVerifyingPlatformAuthenticator: false }), 20)) });
+page.pick("key");
+await tick(40);
+assert.equal(page.checked, "key", "a later answer never overrides what the person picked");
+
+// The choice reaches the browser as a hint; the password manager adds none
+// (its extension takes the prompt whatever the hint).
+const creationReply = async (url) => ({ ok: true, json: async () => (url.endsWith("/begin") ? { publicKey: { challenge: "AAAA", user: { id: "AAAA" } } } : { sites: [] }) });
+const created = [];
+const credential = { id: "c", rawId: new Uint8Array([1]).buffer, type: "public-key", getClientExtensionResults: () => ({}), response: { clientDataJSON: new Uint8Array([1]).buffer, attestationObject: new Uint8Array([1]).buffer } };
+for (const [choice, hints] of [["phone", ["hybrid"]], ["key", ["security-key"]], ["device", ["client-device"]], ["manager", undefined]]) {
+  page = enrol({ fetch: creationReply, create: async (request) => { created.push(request.publicKey.hints && [...request.publicKey.hints]); return credential; } });
+  await tick();
+  page.pick(choice);
+  page.click();
+  await tick();
+  assert.deepEqual(created.at(-1), hints, `${choice} sends ${hints}`);
+}
+assert.deepEqual(page.siteLinks, ["Add a backup passkey somewhere else"], "a first passkey is followed by the suggestion of a backup");
+assert.match(page.status, /second one in another place/);
+
 page = render(rt + "&reauth=method&methods=oidc", { oidc: "Okta" });
 assert.equal(page.choices, "hidden", "no passkey guidance where only the provider is allowed");
 page = render(rt, { webauthn: false });
-assert.equal(page.choices, "open", "a browser without passkeys still learns what can hold one elsewhere");
-assert.deepEqual(page.choiceOrder, all);
+assert.equal(page.choices, "open", "a browser without passkeys still learns where a passkey can live");
 assert.match(page.status, /another browser|a device that does/);
-page = render("", { page: "enrol", webauthn: false });
-assert.equal(page.choices, "open");
+page = enrol({ webauthn: false });
+assert.notEqual(page.choices, "hidden");
 assert.match(page.status, /Copy this page's address/, "the invitation can move to a browser that supports passkeys");
 
+// Signing in keeps one button for the passkey at hand; the passkey
+// somewhere else is one step away, steered by the same hints.
 const notAllowed = Object.assign(new Error("closed"), { name: "NotAllowedError" });
+const asked = [];
 page = render(rt, {
   fetch: async () => ({ ok: true, json: async () => ({ publicKey: { challenge: "AAAA" } }) }),
-  get: async (request) => { if (request.mediation) return new Promise(() => {}); throw notAllowed; },
+  get: async (request) => { if (request.mediation) return new Promise(() => {}); asked.push(request.publicKey.hints && [...request.publicKey.hints]); throw notAllowed; },
 });
+await tick();
+assert.equal(page.choices, "closed");
 page.click();
 await tick();
-assert.equal(page.choices, "open", "a prompt that ended without a passkey unfolds the choices");
+assert.equal(page.choices, "open", "a prompt that ended without a passkey unfolds the other places");
 assert.match(page.status, /no passkey for this site/);
-page = render("", { page: "enrol" });
+page.click("use-phone");
 await tick();
-assert.equal(page.choices, "closed", "the enrolment page offers the guidance too");
+page.click("use-key");
+await tick();
+assert.deepEqual(asked, [undefined, ["hybrid"], ["security-key"]], "the main button adds no hint; the shortcuts steer to the phone or the key");
 page = render("", { page: "devices", fetch: () => new Promise(() => {}) });
-assert.equal(page.choices, "closed", "and the devices page");
+assert.equal(page.choices, "closed", "adding a passkey asks where to keep it too");
 
 // The devices page lists the passkeys and never offers removing the only one.
 const listing = (keys) => () => Promise.resolve({ ok: true, json: () => Promise.resolve({ email: "ana@example.com", passkeys: keys, sites: ["https://private.example.com/"] }) });
@@ -200,4 +242,4 @@ shown = await portal({ ok: false, status: 401, json: async () => ({ error: "You 
 assert.deepEqual(shown.assigned, ["/_/auth/login?return_to=" + encodeURIComponent("https://auth.example.com/_/auth/me")], "a signed-out person logs in and comes back to the portal");
 assert.equal(shown.page.who(), "", "nothing about a person is shown without a session");
 
-console.log("passkey pages: 25 variants OK");
+console.log("passkey pages: 31 variants OK");

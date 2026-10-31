@@ -1,14 +1,25 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { passkeyChoices, readCapabilities } from "./passkeyChoices.ts";
+import { choices, passkeyChoices, readCapabilities, recommendedChoice, withHints } from "./passkeyChoices.ts";
 
 const all = ["device", "manager", "phone", "key"];
 
-test("capabilities only reorder the passkey choices; none is hidden", () => {
+test("capabilities reorder and recommend the passkey choices; none is hidden", () => {
   assert.deepEqual(passkeyChoices(null), all);
-  assert.deepEqual(passkeyChoices({ userVerifyingPlatformAuthenticator: false, hybridTransport: true }), ["phone", "manager", "key", "device"]);
+  assert.equal(recommendedChoice(null), "", "nothing is recommended without an answer");
+  assert.deepEqual(passkeyChoices({ userVerifyingPlatformAuthenticator: false, hybridTransport: true }), ["manager", "phone", "key", "device"]);
+  assert.equal(recommendedChoice({ userVerifyingPlatformAuthenticator: false }), "manager", "no built-in authenticator: a password manager");
   assert.deepEqual(passkeyChoices({ passkeyPlatformAuthenticator: true, hybridTransport: false }), ["device", "manager", "key", "phone"]);
+  assert.equal(recommendedChoice({ passkeyPlatformAuthenticator: true }), "device");
   assert.deepEqual(passkeyChoices({}), all, "an incomplete answer keeps the default order");
+});
+
+test("each place becomes a browser hint; the password manager adds none", () => {
+  assert.deepEqual(withHints({ challenge: "x" }, choices.phone.hints), { challenge: "x", hints: ["hybrid"] });
+  assert.deepEqual(withHints({ challenge: "x" }, choices.key.hints), { challenge: "x", hints: ["security-key"] });
+  assert.deepEqual(withHints({ challenge: "x" }, choices.device.hints), { challenge: "x", hints: ["client-device"] });
+  assert.deepEqual(withHints({ challenge: "x" }, choices.manager.hints), { challenge: "x" });
+  assert.match(choices.manager.detail, /or any other/, "products are examples, not requirements");
 });
 
 test("a browser that cannot, fails to or never answers is unknown, not unsupported", async () => {

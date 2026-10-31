@@ -31,16 +31,20 @@ async function post(path, body) {
   return data;
 }
 
-function creationOptions(options) {
+// hints, when the person said where they keep passkeys, steer the browser's
+// prompt there; a browser that does not know hints ignores the member.
+function creationOptions(options, hints) {
   const pk = options.publicKey;
+  if (hints && hints.length) pk.hints = hints;
   pk.challenge = b64url.decode(pk.challenge);
   pk.user.id = b64url.decode(pk.user.id);
   for (const c of pk.excludeCredentials || []) c.id = b64url.decode(c.id);
   return pk;
 }
 
-function requestOptions(options) {
+function requestOptions(options, hints) {
   const pk = options.publicKey;
+  if (hints && hints.length) pk.hints = hints;
   pk.challenge = b64url.decode(pk.challenge);
   for (const c of pk.allowCredentials || []) c.id = b64url.decode(c.id);
   return pk;
@@ -82,7 +86,7 @@ function explain(error, page) {
   if (error.name === "NotAllowedError") {
     return page === "login"
       ? "The sign-in did not finish: the prompt was closed, it timed out, or this device has no passkey for this site. If you have not created one yet, you need the invitation link (see below)."
-      : "The passkey was not created: the prompt was closed or it timed out. If it asked for a security key you do not have, see what else can hold a passkey below.";
+      : "The passkey was not created: the prompt was closed or it timed out. If it asked for something you do not have, choose another place to keep it and try again.";
   }
   if (error.name === "InvalidStateError") return "This device already has a passkey for this account.";
   // Other browser errors carry technical text meant for developers; say what
@@ -96,27 +100,42 @@ function explain(error, page) {
   return error.message || "Something went wrong.";
 }
 
-// What can hold a passkey (ID-017). A desktop without a built-in
+// Where a passkey can live (ID-017). A desktop without a built-in
 // authenticator (most Linux machines) jumps straight to "insert your
-// security key"; saying beforehand what else works keeps that from being a
-// dead end. It never promises that a given choice works in this browser.
-const choiceText = {
-  device: "This device: Windows Hello, Touch ID, or the screen lock of a phone or tablet.",
-  manager: "A password manager that saves passkeys, built into the browser or added as an extension.",
-  phone: "Your phone, if this browser offers a QR code to scan.",
-  key: "A security key (USB or NFC).",
+// security key"; letting the person say first where they keep passkeys, and
+// passing that to the browser as a hint, keeps that from being a dead end.
+// Hints are a preference the browser may ignore; nothing here promises that
+// a choice works in this browser, and no product is required.
+const choices = {
+  device: { label: "This device", detail: "Windows Hello, Touch ID or the screen lock of this phone or tablet.", hints: ["client-device"] },
+  manager: {
+    label: "My password manager",
+    detail: "Its browser extension takes the prompt: for example Bitwarden (or self-hosted Vaultwarden), 1Password, Proton Pass or KeePassXC, or any other that saves passkeys.",
+    hints: [],
+  },
+  phone: { label: "My phone", detail: "Scan the QR code the browser shows; this computer needs Bluetooth.", hints: ["hybrid"] },
+  key: { label: "A security key", detail: "Plugged in by USB or held to NFC.", hints: ["security-key"] },
 };
 
-// passkeyChoices orders the choices for this browser: what it confirms goes
-// first, what it denies goes last, and every choice stays. Its answer can be
-// missing or incomplete, and only the person knows what they have.
+// recommendedChoice is the one worth suggesting on this browser, or "" when
+// the browser did not say enough to suggest anything.
+function recommendedChoice(caps) {
+  const device = caps ? caps.userVerifyingPlatformAuthenticator ?? caps.passkeyPlatformAuthenticator : undefined;
+  return device === true ? "device" : device === false ? "manager" : "";
+}
+
+// passkeyChoices orders the choices for this browser: the recommended one
+// first, what it confirms next, what it denies last, and every choice stays.
+// Its answer can be missing or incomplete, and only the person knows what
+// they have.
 function passkeyChoices(caps) {
   const order = ["device", "manager", "phone", "key"];
+  const recommended = recommendedChoice(caps);
   const said = {
     device: caps ? caps.userVerifyingPlatformAuthenticator ?? caps.passkeyPlatformAuthenticator : undefined,
     phone: caps ? caps.hybridTransport : undefined,
   };
-  const rank = (choice) => (said[choice] === true ? 0 : said[choice] === false ? 2 : 1);
+  const rank = (choice) => (choice === recommended ? -1 : said[choice] === true ? 0 : said[choice] === false ? 2 : 1);
   return order.slice().sort((a, b) => rank(a) - rank(b) || order.indexOf(a) - order.indexOf(b));
 }
 
@@ -138,13 +157,32 @@ async function readCapabilities(timeout = 1000) {
   }
 }
 
+// The choice for a new passkey. Until the person picks one, a later and
+// better-informed render may move the default; after that it never does.
+const keep = { choice: "", picked: false };
+const keepHints = () => (choices[keep.choice] || { hints: [] }).hints;
+
 function renderChoices(caps) {
   const list = document.getElementById("choice-list");
   if (!list) return;
-  list.replaceChildren(...passkeyChoices(caps).map((choice) => {
-    const item = document.createElement("li");
+  const order = passkeyChoices(caps);
+  const recommended = recommendedChoice(caps);
+  if (!keep.picked) keep.choice = order[0];
+  list.replaceChildren(...order.map((choice) => {
+    const item = document.createElement("label");
+    item.className = "choice";
     item.dataset.choice = choice;
-    item.textContent = choiceText[choice];
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = "keep";
+    input.value = choice;
+    input.checked = choice === keep.choice;
+    input.addEventListener("change", () => { keep.choice = choice; keep.picked = true; });
+    const title = document.createElement("strong");
+    title.textContent = choices[choice].label + (choice === recommended ? " · recommended here" : "");
+    const detail = document.createElement("span");
+    detail.textContent = choices[choice].detail;
+    item.append(input, title, detail);
     return item;
   }));
 }
@@ -158,8 +196,8 @@ function setupChoices(visible) {
   readCapabilities().then(renderChoices);
 }
 
-// openChoices unfolds the list after a prompt that ended without a passkey:
-// the browser does not say why, so the page shows what else can work.
+// openChoices unfolds the login page's other places after a prompt that
+// ended without a passkey: the browser does not say why.
 function openChoices(error) {
   const box = document.getElementById("choices");
   if (box && !box.hidden && error && error.name === "NotAllowedError") box.open = true;
@@ -183,7 +221,9 @@ function forgetReturn() { try { localStorage.removeItem(pendingKey); } catch {} 
 
 // After a sign-in or enrolment: go back to the validated destination, or
 // say so and offer the protected sites as explicit links.
-function finish(result, message) {
+// backup, after a first enrolment, suggests a second passkey kept somewhere
+// else: losing the only one is the costliest way to get stuck.
+function finish(result, message, backup) {
   forgetReturn();
   if (result.redirect) {
     show(message + " Taking you back…", "ok");
@@ -200,7 +240,7 @@ function finish(result, message) {
   const nav = document.getElementById("sites");
   nav.replaceChildren(
     ...(result.sites || []).map((url) => link(url, "Continue to " + new URL(url).host)),
-    link("/_/auth/devices", "Manage your passkeys"),
+    link("/_/auth/devices", backup ? "Add a backup passkey somewhere else" : "Manage your passkeys"),
   );
   nav.hidden = false;
   nav.querySelector("a").focus();
@@ -266,12 +306,12 @@ function setupLoginPage(button) {
 function setupLogin(button, returnTo) {
   let pending = null;
 
-  async function login(conditional) {
+  async function login(conditional, hints) {
     if (pending) pending.abort();
     const controller = new AbortController();
     pending = controller;
     const options = await post("/_/auth/login/begin", { return_to: returnTo, conditional });
-    const request = { publicKey: requestOptions(options), signal: controller.signal };
+    const request = { publicKey: requestOptions(options, hints), signal: controller.signal };
     if (conditional) request.mediation = "conditional";
     const credential = await navigator.credentials.get(request);
     button.disabled = true;
@@ -287,6 +327,11 @@ function setupLogin(button, returnTo) {
   }
 
   button.addEventListener("click", () => login(false).catch(fail));
+  // The passkey somewhere else: the same sign-in, steered to that place.
+  for (const [id, choice] of [["use-phone", "phone"], ["use-key", "key"]]) {
+    const other = document.getElementById(id);
+    if (other) other.addEventListener("click", () => login(false, choices[choice].hints).catch(fail));
+  }
   if (PublicKeyCredential.isConditionalMediationAvailable) {
     PublicKeyCredential.isConditionalMediationAvailable().then((ok) => {
       // The silent autofill attempt fails quietly: the button is still
@@ -313,9 +358,9 @@ function setupEnrol(button) {
     show("Waiting for your device…");
     try {
       const options = await post("/_/auth/enrol/begin", { token, return_to: returnTo });
-      const credential = await navigator.credentials.create({ publicKey: creationOptions(options) });
+      const credential = await navigator.credentials.create({ publicKey: creationOptions(options, keepHints()) });
       const result = await post("/_/auth/enrol/finish", credentialJSON(credential));
-      finish(result, "Your passkey is saved and you are signed in.");
+      finish(result, "Your passkey is saved and you are signed in. A second one in another place (another device, your password manager or a key) keeps you from being locked out if you lose this one.", true);
     } catch (error) {
       button.disabled = false;
       show(explain(error, "enrol"), "error");
@@ -414,7 +459,7 @@ function setupDevices(button) {
     show("Waiting for your device…");
     try {
       const options = await post("/_/auth/devices/add/begin", {});
-      const credential = await navigator.credentials.create({ publicKey: creationOptions(options) });
+      const credential = await navigator.credentials.create({ publicKey: creationOptions(options, keepHints()) });
       const added = await post("/_/auth/devices/add/finish", credentialJSON(credential));
       show(added.provider + " passkey added.", "ok");
       button.disabled = false;

@@ -3,7 +3,8 @@
   import { Button } from "$lib/components/ui/button";
   import { onMount } from "svelte";
   import { enrolInfo, enrolWithPasskey, explainPasskeyError, type EnrolInfo } from "$lib/passkey";
-  import PasskeyChoices from "$lib/auth/PasskeyChoices.svelte";
+  import KeepChoice from "$lib/auth/KeepChoice.svelte";
+  import { choices, type Choice } from "$lib/passkeyChoices";
   import CopyCommand from "$lib/CopyCommand.svelte";
   import { hostLoginCommand } from "$lib/hostCommand";
 
@@ -13,8 +14,10 @@
   let email = $state("");
   let busy = $state(false);
   let error = $state("");
-  // A prompt that ended without a passkey: show what else can hold one and,
-  // for the first administrator, the temporary way in from the host.
+  // Where the passkey will live; it steers the browser's prompt.
+  let keep = $state<Choice>("device");
+  // A prompt that ended without a passkey: for the first administrator, the
+  // temporary way in from the host opens.
   let stuck = $state(false);
   const uid = $props.id();
   // What the link already fixes. Null until known (or if it cannot be read: the
@@ -36,7 +39,7 @@
     if (busy || !admin.enrol) return;
     busy = true; error = ""; stuck = false;
     try {
-      const session = await enrolWithPasskey(admin.enrol, name.trim(), email.trim());
+      const session = await enrolWithPasskey(admin.enrol, name.trim(), email.trim(), choices[keep].hints);
       startSession(session, true);
     } catch (e) { error = explainPasskeyError(e); stuck = (e as Error)?.name === "NotAllowedError"; }
     finally { busy = false; }
@@ -66,8 +69,9 @@
       </div>
     {/if}
   {/if}
+  <KeepChoice bind:choice={keep} />
+  {#if stuck}<p class="text-muted-foreground -mt-2 text-xs" role="status">If the prompt asked for something you do not have, choose another place above and try again.</p>{/if}
   <Button type="submit" disabled={busy || (!recovery && !device && (!name.trim() || !email.trim()))}>{busy ? "Waiting for your device…" : "Create my passkey"}</Button>
-  <PasskeyChoices open={stuck} />
   {#if !device && !recovery && info?.kind !== "invite"}
     <!-- Offered before the prompt: while the browser waits for a security key
          this form is hidden behind its dialog, so the way out must already be known. -->

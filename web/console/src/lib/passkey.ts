@@ -1,6 +1,8 @@
 // Administrator passkeys. The edge sends WebAuthn options with binary fields
 // as base64url; the browser wants ArrayBuffers and the edge wants base64url
 // back. The ceremony ID travels in a header, never in a cookie or URL.
+import { withHints } from "$lib/passkeyChoices";
+
 export type AdminSession = { token: string; name: string; expires: string; tools: string[]; renewable?: boolean };
 
 const decode = (text: string): ArrayBuffer => {
@@ -79,23 +81,23 @@ export async function renewSession(session: string): Promise<{ expires?: string;
 
 type Begun = { ceremony: string; options: { publicKey: Record<string, any> } };
 
-export async function signInWithPasskey(): Promise<AdminSession> {
+export async function signInWithPasskey(hints?: string[]): Promise<AdminSession> {
   const begun = await api<Begun>("/_/api/admin/login/begin", {});
   const pk = begun.options.publicKey;
   pk.challenge = decode(pk.challenge);
   for (const c of pk.allowCredentials ?? []) c.id = decode(c.id);
-  const credential = (await navigator.credentials.get({ publicKey: pk as PublicKeyCredentialRequestOptions })) as PublicKeyCredential | null;
+  const credential = (await navigator.credentials.get({ publicKey: withHints(pk, hints) as PublicKeyCredentialRequestOptions })) as PublicKeyCredential | null;
   if (!credential) throw new Error("No passkey was chosen.");
   return api<AdminSession>("/_/api/admin/login/finish", credentialJSON(credential), begun.ceremony);
 }
 
-export async function enrolWithPasskey(token: string, name: string, email: string): Promise<AdminSession> {
+export async function enrolWithPasskey(token: string, name: string, email: string, hints?: string[]): Promise<AdminSession> {
   const begun = await api<Begun>("/_/api/admin/enrol/begin", { token, name, email });
   const pk = begun.options.publicKey;
   pk.challenge = decode(pk.challenge);
   pk.user.id = decode(pk.user.id);
   for (const c of pk.excludeCredentials ?? []) c.id = decode(c.id);
-  const credential = (await navigator.credentials.create({ publicKey: pk as PublicKeyCredentialCreationOptions })) as PublicKeyCredential | null;
+  const credential = (await navigator.credentials.create({ publicKey: withHints(pk, hints) as PublicKeyCredentialCreationOptions })) as PublicKeyCredential | null;
   if (!credential) throw new Error("No passkey was created.");
   return api<AdminSession>("/_/api/admin/enrol/finish", credentialJSON(credential), begun.ceremony);
 }

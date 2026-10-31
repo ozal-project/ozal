@@ -52,11 +52,20 @@ button:disabled { opacity: 0.55; cursor: progress; }
 .first-time strong { display: block; margin-bottom: 4px; }
 .first-time p, .hint { margin: 0; font-size: 0.88rem; }
 .hint { margin-top: 14px; }
-.choices { margin-top: 16px; font-size: 0.88rem; }
+.choices { margin: 16px 0 0; padding: 0; border: 0; font-size: 0.88rem; }
 .choices[hidden] { display: none; }
 .choices summary { cursor: pointer; color: var(--muted); }
 .choices summary:hover, .choices[open] summary { color: var(--fg); }
-.choices ul { display: grid; gap: 4px; margin: 8px 0 0; padding-left: 1.2em; }
+.choices > p { margin: 8px 0 0; }
+.choices legend { margin-bottom: 8px; padding: 0; font-weight: 600; }
+#choice-list { display: grid; gap: 8px; margin-bottom: 16px; }
+.choice { display: grid; grid-template-columns: auto 1fr; column-gap: 10px; align-items: start; margin: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--raised); font-size: 0.88rem; font-weight: 400; color: var(--muted); cursor: pointer; }
+.choice:has(input:checked) { border-color: var(--fg); }
+.choice input { margin: 3px 0 0; grid-row: span 2; accent-color: var(--fg); }
+.choice strong { font-weight: 600; color: var(--fg); }
+.choice span { color: var(--muted); }
+.choice-actions { display: grid; gap: 8px; margin-top: 10px; }
+.choice-actions .secondary { margin-top: 0; }
 .sites { display: grid; gap: 8px; margin-top: 16px; }
 .sites a { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--raised); color: var(--fg); font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
 .sites-title { margin: 8px 0 0; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }

@@ -7,7 +7,7 @@
   import EnrolForm from "$lib/EnrolForm.svelte";
   import HostLogin from "$lib/auth/HostLogin.svelte";
   import Logo from "$lib/brand/Logo.svelte";
-  import PasskeyChoices from "$lib/auth/PasskeyChoices.svelte";
+  import OtherPlaces from "$lib/auth/OtherPlaces.svelte";
 
   // The only thing a signed-out tab shows. It says what this is and how to get
   // in, and nothing about what is inside.
@@ -39,11 +39,11 @@
     }).catch(() => { enrolled = null; mode = "host"; });
   });
 
-  async function passkey() {
+  async function passkey(hints?: string[]) {
     if (waiting) return;
     waiting = true; error = ""; stuck = false;
     try {
-      const session = await signInWithPasskey();
+      const session = await signInWithPasskey(hints);
       startSession(session, true);
     } catch (e) { error = explainPasskeyError(e, "sign-in"); stuck = (e as Error)?.name === "NotAllowedError"; }
     finally { waiting = false; }
@@ -90,8 +90,8 @@
         {#if admin.notice && !error}<p class="text-muted-foreground mt-1 text-sm" role="status">{admin.notice}</p>
         {:else}<p class="text-muted-foreground mt-1 text-sm">Welcome back.</p>{/if}
         {#if error}<p class="text-destructive mt-3 text-sm" role="alert">{error}</p>{/if}
-        <Button class="mt-6 w-full" onclick={passkey} disabled={waiting || !onLocalhost}>{waiting ? "Waiting for your device…" : "Sign in with passkey"}</Button>
-        <PasskeyChoices open={stuck} />
+        <Button class="mt-6 w-full" onclick={() => passkey()} disabled={waiting || !onLocalhost}>{waiting ? "Waiting for your device…" : "Sign in with passkey"}</Button>
+        <OtherPlaces open={stuck} disabled={waiting || !onLocalhost} onuse={(hints) => void passkey(hints)} />
       {:else}
         <p class="text-muted-foreground mt-2 text-sm" role="status">Checking…</p>
       {/if}
