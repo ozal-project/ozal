@@ -11,16 +11,20 @@ export type Capabilities = Record<string, boolean | undefined> | null;
 // page (internal/passkey/assets/help.html).
 export const goodFor: Record<Choice, string> = {
   device: "Your own laptop or phone. Linux desktops usually have no built-in place for passkeys.",
-  manager: "Linux, several computers, or keeping passkeys off a personal device. Install its browser extension first.",
+  manager: "Linux, several computers, or keeping passkeys off a personal device. On this private console only some managers work: see below.",
   phone: "A computer that is not yours. Needs Bluetooth on this computer, so usually not in a virtual machine.",
   key: "Administrators and shared computers. Any FIDO2 key, such as YubiKey, Nitrokey, Google Titan or SoloKeys; set a PIN on it.",
 };
 
 export const choices: Record<Choice, { label: string; detail: string; hints: string[] }> = {
   device: { label: "This device", detail: "Windows Hello, Touch ID or the screen lock of this phone or tablet.", hints: ["client-device"] },
+  // This console runs on http://ozal.localhost, and many managers only save
+  // passkeys on https:// sites (Bitwarden refuses localhost). KeePassXC
+  // allows *.localhost behind a setting; the sign-in pages, on HTTPS, keep
+  // the general examples.
   manager: {
     label: "My password manager",
-    detail: "Its browser extension takes the prompt: for example Bitwarden (or self-hosted Vaultwarden), 1Password, Proton Pass or KeePassXC, or any other that saves passkeys.",
+    detail: "Its browser extension takes the prompt. On this private console many managers, Bitwarden among them, do not offer passkeys; KeePassXC does after Settings → Browser Integration → Advanced → Allow using localhost with passkeys.",
     hints: [],
   },
   phone: { label: "My phone", detail: "Scan the QR code the browser shows; this computer needs Bluetooth.", hints: ["hybrid"] },

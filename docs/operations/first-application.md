@@ -77,7 +77,10 @@ autohospedado, 1Password, Proton Pass o KeePassXC; ninguno es requisito), el
 teléfono por QR o una llave FIDO2. Recomiendan una según lo que el navegador
 informa y pasan la elección como *hint*, que algunos navegadores ignoran.
 En un escritorio Linux sin autenticador, y en una VM sin Bluetooth, sirven el
-gestor de contraseñas o la llave. Comparte con las personas que invitas
+gestor de contraseñas o la llave. En la consola (`http://ozal.localhost`)
+muchos gestores, Bitwarden entre ellos, no ofrecen passkeys; KeePassXC sí, con
+*Settings → Browser Integration → Advanced → Allow using localhost with
+passkeys*. En las páginas de login por HTTPS funcionan todos. Comparte con las personas que invitas
 `https://<host de login>/_/auth/help`, que compara las opciones sin pedir
 sesión, y sugiéreles una segunda passkey en otro lugar. Si el túnel usa otro
 puerto local que `admin.listen`, añade `-url http://ozal.localhost:PUERTO` a

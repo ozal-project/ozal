@@ -19,7 +19,8 @@ test("each place becomes a browser hint; the password manager adds none", () => 
   assert.deepEqual(withHints({ challenge: "x" }, choices.key.hints), { challenge: "x", hints: ["security-key"] });
   assert.deepEqual(withHints({ challenge: "x" }, choices.device.hints), { challenge: "x", hints: ["client-device"] });
   assert.deepEqual(withHints({ challenge: "x" }, choices.manager.hints), { challenge: "x" });
-  assert.match(choices.manager.detail, /or any other/, "products are examples, not requirements");
+  assert.match(choices.manager.detail, /Bitwarden among them, do not offer passkeys/, "the console says which managers fail on http://ozal.localhost");
+  assert.match(choices.manager.detail, /KeePassXC does after .*Allow using localhost with passkeys/, "and the one that works, with its setting");
   assert.match(goodFor.key, /any FIDO2 key/i);
   assert.match(goodFor.phone, /Bluetooth/, "the phone's real requirement is said before the prompt");
 });

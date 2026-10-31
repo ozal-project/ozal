@@ -462,6 +462,63 @@ métodos insuficientes y permitidos, proveedor OIDC real si se activa, reinicio,
 y acceso permitido/denegado sin registrar credenciales. Los autenticadores
 virtuales y una respuesta de salud no sustituyen esas pruebas.
 
+#### Passkeys de administrador en el host de login HTTPS (`ID-021`)
+
+**Hallazgo 2026-10-31 (prueba en la VM):** la consola privada vive en
+`http://ozal.localhost`. WebAuthn está pensado para HTTPS con dominio real y
+muchos autenticadores no aceptan la excepción de localhost: la extensión de
+Bitwarden no ofrece passkeys en localhost, así que Firefox cayó a su diálogo de
+llave; KeePassXC lo acepta solo con *Allow using localhost with passkeys*. No
+se trata de adaptarse a un gestor: en HTTPS funcionan todos (gestores, iCloud,
+gestor de Google, teléfono, llaves). Una passkey ligada al dominio real tampoco
+depende del puerto ni del nombre local del túnel.
+
+**Propuesta aceptada para diseño:** con `auth.passkeys.login_url` en HTTPS, la
+ceremonia del administrador ocurre en el host de login y la consola recibe la
+sesión por un código de un solo uso, como en `ID-015`. La consola y su listener
+siguen en loopback.
+
+```
+pestaña consola (loopback)           edge                 host de login (HTTPS)
+  V = 256 bits en memoria de la pestaña
+  POST /_/api/admin/remote/start {H(V)} --> tx T (10 min, H(V), origen loopback)
+  navega a https://auth…/_/admin/login?tx=T -------------> ceremonia de admin
+                                                           (directorio de admins)
+  <---------- 302 http://ozal.localhost:PUERTO/overview#admin_code=C (60 s, un uso)
+  POST /_/api/admin/remote/finish {C, V} --> C ligado a T y H(V) → sesión de consola
+```
+
+- **Sin superficie pública nueva por sí sola:** `/_/admin/login` solo atiende un
+  `tx` creado por el listener loopback; sin él responde lo mismo que una ruta
+  desconocida. Límite de intentos como el resto de `/_/auth/*`.
+- **El código no sirve sin `V`**, que solo tiene la pestaña que empezó (papel
+  del verificador PKCE). Va en el fragmento: no llega a servidores, registros
+  ni `Referer`. El retorno solo acepta `ozal.localhost`, `localhost` o el
+  nombre compatible, con cualquier puerto del túnel; nunca un host externo.
+- **Identidades separadas:** credenciales del directorio de administradores,
+  handle propio y página propia. Una passkey de visitante no abre la consola
+  ni una de administrador crea sesión de visitante (`UI-007`).
+- **Enrolamiento e invitaciones:** `console enrol` e invitaciones imprimen el
+  enlace en el host de login cuando está configurado; sin dominio HTTPS, el
+  primer acceso sigue siendo `ozal.localhost` o el host login, presentado como
+  paso normal de instalación. Recuperación sigue siendo solo del host.
+- **Compatibilidad:** las passkeys de `ozal.localhost` siguen sirviendo; el
+  administrador agrega una en el dominio desde su menú. Activación explícita
+  (`admin.login_host`) hasta la aceptación; después, predeterminada cuando hay
+  host de login HTTPS.
+- **Pruebas:** código reutilizado, vencido, de otra pestaña o sin `V`; `tx`
+  inexistente en el host público; retorno a host externo; passkey de visitante
+  en la ceremonia de admin y viceversa; step-up de consola; eventos de login
+  con método. **Aceptación:** VM o VPS con dominio, Firefox en Linux con
+  Bitwarden, Mac con iCloud o teléfono, y el host público sin `tx` sin revelar
+  la existencia de la consola.
+
+**Visitantes sin instalar nada:** en Firefox o Brave sin autenticador propio, la
+vía de menor fricción es el proveedor OIDC (`ID-007`, Google, Microsoft o
+GitHub), que ya convive con las passkeys y aporta su propio MFA según el
+contrato de `ID-018`. Su aceptación con un proveedor real pasa a ser prioridad
+del recorrido de identidad. El teléfono queda como opción secundaria.
+
 Shield challenge (`SHD-003`) sigue propuesto: posición antes de identificar,
 nonce de uso único, token ligado a host/acción/expiración, clearance firmado,
 replay/tamper tests, accesibilidad y fallback explícito; log-only antes de
