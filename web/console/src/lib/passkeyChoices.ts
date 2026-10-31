@@ -7,6 +7,15 @@
 export type Choice = "device" | "manager" | "phone" | "key";
 export type Capabilities = Record<string, boolean | undefined> | null;
 
+// goodFor answers "which one?" in the same words as the sign-in host's help
+// page (internal/passkey/assets/help.html).
+export const goodFor: Record<Choice, string> = {
+  device: "Your own laptop or phone. Linux desktops usually have no built-in place for passkeys.",
+  manager: "Linux, several computers, or keeping passkeys off a personal device. Install its browser extension first.",
+  phone: "A computer that is not yours. Needs Bluetooth on this computer, so usually not in a virtual machine.",
+  key: "Administrators and shared computers. Any FIDO2 key, such as YubiKey, Nitrokey, Google Titan or SoloKeys; set a PIN on it.",
+};
+
 export const choices: Record<Choice, { label: string; detail: string; hints: string[] }> = {
   device: { label: "This device", detail: "Windows Hello, Touch ID or the screen lock of this phone or tablet.", hints: ["client-device"] },
   manager: {

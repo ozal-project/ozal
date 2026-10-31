@@ -66,6 +66,10 @@ button:disabled { opacity: 0.55; cursor: progress; }
 .choice span { color: var(--muted); }
 .choice-actions { display: grid; gap: 8px; margin-top: 10px; }
 .choice-actions .secondary { margin-top: 0; }
+.help section { margin-top: 22px; }
+.help h2 { margin: 0 0 6px; font-size: 1.05rem; }
+.help section p { margin: 0 0 6px; }
+.help > .secondary { margin-top: 26px; }
 .sites { display: grid; gap: 8px; margin-top: 16px; }
 .sites a { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--raised); color: var(--fg); font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
 .sites-title { margin: 8px 0 0; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }

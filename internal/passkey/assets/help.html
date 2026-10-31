@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e0e0d">
+<link rel="icon" href="/_/auth/icons/ozal.svg" type="image/svg+xml">
+<title>Ways to sign in · Ozal</title>
+<link rel="stylesheet" href="/_/auth/passkey.css">
+</head>
+<body data-page="help">
+<header>
+  <span class="brand">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><path class="arch" d="M5 30V14.5A11 11 0 0 1 27 14.5V30H21.6V14.8A5.6 5.6 0 0 0 10.4 14.8V30Z"/><path class="leaf" d="M10.4 30V14.8A5.6 5.6 0 0 1 16 9.2V30Z"/><path class="light" d="M16 9.2A5.6 5.6 0 0 1 21.6 14.8V30H16Z"/></svg>
+    <span><span class="name">ozal</span><span class="sub">secure sign-in</span></span>
+  </span>
+</header>
+<main class="help">
+  <h1>Ways to sign in</h1>
+  <p>This site uses passkeys instead of passwords. A passkey lives in one place you choose; you confirm it there with your face, fingerprint or PIN, and this site keeps only a public key. Pick the place that suits the device you are on: every option works the same here, and none is required.</p>
+
+  <section>
+    <h2>This device</h2>
+    <p><strong>Good for</strong> your own laptop or phone.</p>
+    <p><strong>You need</strong> Windows Hello, Touch ID, or an Android phone or iPhone with a screen lock. Apple and Google may copy it to your other devices through iCloud Keychain or Google Password Manager.</p>
+    <p class="hint">Linux desktops usually have no built-in place for passkeys; use one of the options below there.</p>
+  </section>
+
+  <section>
+    <h2>A password manager</h2>
+    <p><strong>Good for</strong> Linux, several computers, or keeping passkeys off a personal device.</p>
+    <p><strong>You need</strong> a password manager that saves passkeys, with its browser extension installed: the extension takes over the browser's prompt. For example Bitwarden (or a self-hosted Vaultwarden server), 1Password, Proton Pass or KeePassXC (open source, kept on your computer), or any other that saves passkeys.</p>
+  </section>
+
+  <section>
+    <h2>Your phone</h2>
+    <p><strong>Good for</strong> a computer that is not yours: the passkey stays on the phone.</p>
+    <p><strong>You need</strong> a browser that shows a QR code to scan, Bluetooth on the computer, and the phone nearby.</p>
+    <p class="hint">Not every browser offers this, and virtual machines usually have no Bluetooth.</p>
+  </section>
+
+  <section>
+    <h2>A security key</h2>
+    <p><strong>Good for</strong> administrators and shared computers: the key never leaves your hands.</p>
+    <p><strong>You need</strong> a FIDO2 key that plugs in by USB or works over NFC, with a PIN set on it. For example YubiKey, Nitrokey, Google Titan or SoloKeys, or any other FIDO2 key.</p>
+  </section>
+
+  <section>
+    <h2>Keep a second one</h2>
+    <p>After you sign in, add a passkey in another place from <a href="/_/auth/devices">Your passkeys</a>, for example your password manager and a security key. If you lose your only passkey you need a new invitation from the person who runs this site.</p>
+  </section>
+
+  <section>
+    <h2>If nothing works here</h2>
+    <p>Open your invitation on another device or browser that offers one of these options, or ask the person who runs this site. If they set up single sign-on, the sign-in page offers it too.</p>
+  </section>
+
+  <a class="secondary" href="/_/auth/login">Back to sign in</a>
+</main>
+<footer>Self-hosted access · Ozal keeps only your passkey’s public key</footer>
+</body>
+</html>

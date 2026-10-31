@@ -73,6 +73,8 @@ func (g *Gate) servePage(w http.ResponseWriter, r *http.Request) {
 		name = "assets/enrol.html"
 	case "/_/auth/devices":
 		name = "assets/devices.html"
+	case "/_/auth/help":
+		name = "assets/help.html"
 	case portalPath:
 		name = "assets/me.html"
 	}

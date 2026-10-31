@@ -70,6 +70,19 @@ herramienta usa el DNS del sistema y no resuelve el nombre, puedes añadir
 `127.0.0.1 ozal.localhost` al archivo `hosts` de tu equipo. El navegador
 permite las passkeys en este contexto local sin instalar un certificado TLS.
 
+**Dónde guardar la passkey.** Antes del diálogo del navegador, la consola y
+las páginas de login preguntan dónde quedará: este equipo, un gestor de
+contraseñas con extensión del navegador (por ejemplo Bitwarden o Vaultwarden
+autohospedado, 1Password, Proton Pass o KeePassXC; ninguno es requisito), el
+teléfono por QR o una llave FIDO2. Recomiendan una según lo que el navegador
+informa y pasan la elección como *hint*, que algunos navegadores ignoran.
+En un escritorio Linux sin autenticador, y en una VM sin Bluetooth, sirven el
+gestor de contraseñas o la llave. Comparte con las personas que invitas
+`https://<host de login>/_/auth/help`, que compara las opciones sin pedir
+sesión, y sugiéreles una segunda passkey en otro lugar. Si el túnel usa otro
+puerto local que `admin.listen`, añade `-url http://ozal.localhost:PUERTO` a
+`console enrol` y `console login` para que el enlace abra en ese navegador.
+
 **Pasar desde localhost:** las passkeys están vinculadas al nombre y no se
 copian al nuevo dominio. Inicia sesión en `http://localhost:PUERTO`, abre tu
 menú y elige **Sign in on another browser**. El enlace ya usa

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -411,6 +412,42 @@ func TestDisabledUserIsRefusedEvenWithALiveSession(t *testing.T) {
 	}
 	if _, ok := b.signedIn(); ok {
 		t.Fatal("session of a disabled user still authenticates")
+	}
+}
+
+// ID-017: the ways to sign in are explained on the login host, without a
+// session and without a script, under the same page headers.
+func TestHelpPageExplainsTheWaysToSignIn(t *testing.T) {
+	h := newHarness(t)
+	rec := httptest.NewRecorder()
+	h.gate.ServeAuthEndpoint(rec, httptest.NewRequest(http.MethodGet, loginOrigin+"/_/auth/help", nil))
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Header().Get("Content-Security-Policy"), "frame-ancestors 'none'") {
+		t.Fatalf("help page: %d, CSP %q", rec.Code, rec.Header().Get("Content-Security-Policy"))
+	}
+	for _, want := range []string{"password manager", "security key", "QR code", "or any other"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("help page does not mention %q", want)
+		}
+	}
+	if strings.Contains(body, "<script") {
+		t.Error("the help page needs no script")
+	}
+	for _, page := range []string{"/_/auth/login", "/_/auth/enrol"} {
+		rec := httptest.NewRecorder()
+		h.gate.ServeAuthEndpoint(rec, httptest.NewRequest(http.MethodGet, loginOrigin+page, nil))
+		if !strings.Contains(rec.Body.String(), `href="/_/auth/help"`) {
+			t.Errorf("%s does not link to the help page", page)
+		}
+	}
+	// The devices page needs a session; its file carries the same link.
+	if devices, _ := os.ReadFile("assets/devices.html"); !strings.Contains(string(devices), `href="/_/auth/help"`) {
+		t.Error("the devices page does not link to the help page")
+	}
+	rec = httptest.NewRecorder()
+	h.gate.ServeAuthEndpoint(rec, httptest.NewRequest(http.MethodGet, "https://"+appHost+"/_/auth/help", nil))
+	if rec.Code != http.StatusFound || rec.Header().Get("Location") != loginOrigin+"/_/auth/help" {
+		t.Fatalf("help on app host: %d → %q", rec.Code, rec.Header().Get("Location"))
 	}
 }
 

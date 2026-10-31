@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { choices, passkeyChoices, readCapabilities, recommendedChoice, type Capabilities, type Choice } from "$lib/passkeyChoices";
+  import { choices, goodFor, passkeyChoices, readCapabilities, recommendedChoice, type Capabilities, type Choice } from "$lib/passkeyChoices";
 
   // Where the new passkey will live, asked before the prompt and passed to the
   // browser as a hint. Until the person picks, a better-informed answer from
@@ -27,4 +27,11 @@
       <span class="text-muted-foreground leading-relaxed">{choices[option].detail}</span>
     </label>
   {/each}
+  <details class="text-muted-foreground text-xs">
+    <summary class="hover:text-foreground cursor-pointer">Not sure which to choose?</summary>
+    <dl class="mt-2 grid gap-1.5 leading-relaxed">
+      {#each order as option (option)}<div><dt class="text-foreground inline font-medium">{choices[option].label}:</dt> <dd class="inline">{goodFor[option]}</dd></div>{/each}
+    </dl>
+    <p class="mt-2 leading-relaxed">Add a second passkey in another place later from your account menu, so losing one does not lock you out.</p>
+  </details>
 </fieldset>

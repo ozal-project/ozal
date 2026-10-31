@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { choices, passkeyChoices, readCapabilities, recommendedChoice, withHints } from "./passkeyChoices.ts";
+import { choices, goodFor, passkeyChoices, readCapabilities, recommendedChoice, withHints } from "./passkeyChoices.ts";
 
 const all = ["device", "manager", "phone", "key"];
 
@@ -20,6 +20,8 @@ test("each place becomes a browser hint; the password manager adds none", () => 
   assert.deepEqual(withHints({ challenge: "x" }, choices.device.hints), { challenge: "x", hints: ["client-device"] });
   assert.deepEqual(withHints({ challenge: "x" }, choices.manager.hints), { challenge: "x" });
   assert.match(choices.manager.detail, /or any other/, "products are examples, not requirements");
+  assert.match(goodFor.key, /any FIDO2 key/i);
+  assert.match(goodFor.phone, /Bluetooth/, "the phone's real requirement is said before the prompt");
 });
 
 test("a browser that cannot, fails to or never answers is unknown, not unsupported", async () => {

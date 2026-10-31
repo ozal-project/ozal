@@ -271,7 +271,7 @@ func (g *Gate) ServeAuthEndpoint(w http.ResponseWriter, r *http.Request) bool {
 		} else {
 			g.oidc.HandleLogin(w, r)
 		}
-	case "/_/auth/login", "/_/auth/enrol":
+	case "/_/auth/login", "/_/auth/enrol", "/_/auth/help":
 		g.servePage(w, r)
 	case "/_/auth/devices":
 		g.serveDevicesPage(w, r)
