@@ -165,7 +165,10 @@ crean las invitaciones (sus enlaces se copian ahí, solo esa vez) y el panel
 muestra el **único registro DNS** que falta y lo comprueba cada pocos segundos:
 DNS → certificado → una petición pública con un token de un solo uso que solo
 este edge responde (`/.well-known/ozal-probe/…`, antes del pipeline). Desde
-GitHub se continúa primero en Sites. Cada fila tiene **Edit** y un menú **Más**
+GitHub el panel muestra el PR para revisar y espera la primera publicación;
+si el edge no puede abrir PRs, dice que el workflow se agrega aparte y se
+continúa en Sites. La lista muestra de qué repositorio y rama publica cada
+sitio, y **Integrations** reúne la conexión con GitHub. Cada fila tiene **Edit** y un menú **Más**
 con *DNS & HTTPS*, *Publish a new version* y *Versions & rollback* (sitios),
 *Who opened it* y *Remove*.
 

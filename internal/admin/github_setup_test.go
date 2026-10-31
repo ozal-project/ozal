@@ -22,6 +22,7 @@ type setupGitHub struct {
 	testRepositories
 	conversions  int
 	installation int64
+	everyRepo    bool
 	afterConvert func()
 }
 
@@ -34,7 +35,7 @@ func (s *setupGitHub) ConvertManifest(_ context.Context, code string) (githubapp
 }
 
 func (s *setupGitHub) AppStatus(context.Context, config.GitHubApp) (githubapp.AppStatus, error) {
-	return githubapp.AppStatus{Slug: "ozal-abc123", Owner: "octo", Installation: s.installation}, nil
+	return githubapp.AppStatus{Slug: "ozal-abc123", Owner: "octo", Installation: s.installation, AllRepositories: s.everyRepo, ManageURL: "https://github.com/settings/installations/42"}, nil
 }
 
 type githubManager struct {
@@ -215,6 +216,24 @@ func TestInstallationComesFromGitHubNotTheBrowser(t *testing.T) {
 	setup.installation = 42
 	if rec := request(h, http.MethodPost, "/_/api/github/installation", token, body); rec.Code != 200 || m.cfg.GitHub.InstallationID != 42 {
 		t.Fatalf("installation: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestRepositoryListingSaysHowWideTheInstallationIs(t *testing.T) {
+	h, m, setup, _ := setupFixture(t)
+	token, _, _ := h.operators.issue("Publisher", false, "publishing")
+	m.cfg.GitHub = &config.GitHubApp{AppID: 77, InstallationID: 42, PrivateKey: "file:/private/reference"}
+	setup.installation, setup.everyRepo = 42, true
+	rec := request(h, http.MethodGet, "/_/api/github/repositories", token, "")
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"all_repositories":true`) || !strings.Contains(rec.Body.String(), `"manage_url":"https://github.com/settings/installations/42"`) || !strings.Contains(rec.Body.String(), `"owner":"octo"`) {
+		t.Fatalf("installed state: %d %s", rec.Code, rec.Body)
+	}
+	// GitHub now reports another installation than the configured one: the
+	// listing stands, but nothing about the other one is described as ours.
+	setup.installation = 43
+	rec = request(h, http.MethodGet, "/_/api/github/repositories", token, "")
+	if rec.Code != 200 || strings.Contains(rec.Body.String(), "all_repositories") || strings.Contains(rec.Body.String(), "manage_url") {
+		t.Fatalf("described another installation: %d %s", rec.Code, rec.Body)
 	}
 }
 

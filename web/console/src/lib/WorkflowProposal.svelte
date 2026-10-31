@@ -71,7 +71,7 @@
 </script>
 
 <div class="mt-4">
-    <Button bind:ref={trigger} variant="outline" size="sm" onclick={() => open = true}>Prepare publishing workflow for {project.name}</Button>
+    <Button bind:ref={trigger} variant="outline" size="sm" class="h-auto max-w-full py-1.5 text-left break-all whitespace-normal" onclick={() => open = true}>Prepare publishing workflow for {project.name}</Button>
 </div>
 <dialog bind:this={dialog} aria-labelledby={`${id}-title`} class="bg-card text-card-foreground m-auto max-h-[85svh] w-[min(44rem,calc(100vw-2rem))] overflow-y-auto rounded-xl p-5 backdrop:bg-black/70 sm:p-6" oncancel={(event) => { if (busy) event.preventDefault(); else close(); }} onclose={() => open = false}>
       <h2 id={`${id}-title`} class="text-lg font-semibold">Publish {project.name} from GitHub</h2>

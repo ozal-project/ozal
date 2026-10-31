@@ -71,7 +71,18 @@ func (h *Handler) githubRepositories(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 503, err.Error())
 		return
 	}
-	state["repositories"], state["page"], state["more"] = listing.Repositories, listing.Page, listing.More
+	state["repositories"], state["page"], state["more"], state["total"] = listing.Repositories, listing.Page, listing.More, listing.Total
+	// Which account and how wide the installation is, so the console can warn
+	// about an App that sees every repository. Optional: the listing stands
+	// without it.
+	if setup, ok := h.setupGitHub(); ok && page == 1 {
+		if app, err := setup.AppStatus(r.Context(), *cfg.GitHub); err == nil && app.Installation == cfg.GitHub.InstallationID {
+			state["app"], state["owner"], state["all_repositories"] = app.Slug, app.Owner, app.AllRepositories
+			if app.ManageURL != "" {
+				state["manage_url"] = app.ManageURL
+			}
+		}
+	}
 	writeJSON(w, 200, state)
 }
 func (h *Handler) saveGitHubProject(w http.ResponseWriter, r *http.Request) {

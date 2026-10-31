@@ -114,6 +114,12 @@ type AppStatus struct {
 	Slug         string
 	Owner        string
 	Installation int64
+	// AllRepositories is true when the installation covers every repository
+	// of its account, present and future, instead of a chosen list.
+	AllRepositories bool
+	// ManageURL is the installation's settings page on GitHub, where the
+	// operator changes which repositories it can see.
+	ManageURL string
 }
 
 func (s AppStatus) InstallURL() string {
@@ -136,7 +142,9 @@ func (c *Client) AppStatus(ctx context.Context, cfg config.GitHubApp) (AppStatus
 		return AppStatus{}, ErrUnavailable
 	}
 	var installations []struct {
-		ID int64 `json:"id"`
+		ID                  int64  `json:"id"`
+		RepositorySelection string `json:"repository_selection"`
+		HTMLURL             string `json:"html_url"`
 	}
 	if err := c.call(ctx, http.MethodGet, "/app/installations?per_page=2", token, nil, &installations); err != nil || len(installations) > 1 {
 		return AppStatus{}, ErrUnavailable
@@ -147,6 +155,11 @@ func (c *Client) AppStatus(ctx context.Context, cfg config.GitHubApp) (AppStatus
 			return AppStatus{}, ErrUnavailable
 		}
 		status.Installation = installations[0].ID
+		status.AllRepositories = installations[0].RepositorySelection == "all"
+		// Only a github.com settings page is offered as a link.
+		if manage, err := url.Parse(installations[0].HTMLURL); err == nil && manage.Scheme == "https" && manage.Host == "github.com" && manage.User == nil {
+			status.ManageURL = manage.String()
+		}
 	}
 	return status, nil
 }

@@ -196,14 +196,20 @@
 .console-workspace { display: flex; min-height: 100svh; flex-direction: column; }
 .console-header { position: sticky; top: 0; z-index: 30; background: var(--background); border-bottom: 1px solid var(--border); }
 .console-bar, .console-content { width: min(1360px, 100%); margin-inline: auto; padding-inline: 32px; }
-.console-bar { display: grid; grid-template-columns: 160px minmax(0, 1fr) minmax(140px, 180px); align-items: center; gap: 24px; min-height: 76px; }
+.console-bar { display: grid; grid-template-columns: 160px minmax(0, 1fr) auto; align-items: center; gap: 24px; min-height: 76px; }
 .console-brand { display: inline-flex; width: fit-content; text-decoration: none; }
 .console-nav { display: flex; justify-content: center; align-self: stretch; gap: 20px; }
 .console-nav-link { position: relative; display: inline-flex; align-items: center; color: var(--muted-foreground); font-size: 14px; text-decoration: none; white-space: nowrap; transition: color 150ms; }
 .console-nav-link:hover, .console-nav-link[aria-current="page"] { color: var(--foreground); }
 .console-nav-link[aria-current="page"]::after { content: ""; position: absolute; bottom: -1px; left: calc(50% - 7px); width: 14px; height: 9px; border: 2px solid var(--primary); border-bottom: 0; border-radius: 9px 9px 0 0; }
 .console-nav-link:focus-visible, .console-brand:focus-visible, .console-tab:focus-visible { outline: 2px solid var(--ring); outline-offset: 6px; border-radius: 3px; }
-.console-account { min-width: 0; justify-self: end; max-width: 180px; }
+.console-account { min-width: 0; justify-self: end; max-width: 260px; }
+/* Between the drawer and a wide screen the menu needs the room: the account
+   shows its initial, and its full name on hover and in the menu itself. */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .console-nav { gap: 16px; }
+  .console-account-name { display: none; }
+}
 .console-content { flex: 1; padding-block: 40px; }
 .console-mobile-place, .console-menu-toggle { display: none; }
 .console-drawer { position: fixed; inset: 0; margin: 0; width: 100%; max-width: none; height: 100svh; max-height: none; padding: 24px; color: var(--foreground); background: var(--background); border: 0; }

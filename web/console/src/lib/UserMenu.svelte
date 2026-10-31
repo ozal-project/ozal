@@ -62,7 +62,7 @@
       placement === "up" ? "hover:bg-sidebar-accent/60 w-full px-2 py-2" : "hover:bg-muted h-9 w-full px-2"]}>
     <span class="bg-primary/15 text-primary flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold" aria-hidden="true">{initial}</span>
     <span class="min-w-0 flex-1 leading-tight">
-      <span class="block truncate font-medium">{admin.name || "Admin token"}</span>
+      <span class={["block truncate font-medium", placement === "down" && "console-account-name"]} title={admin.name || undefined}>{admin.name || "Admin token"}</span>
       {#if placement === "up"}<span class="text-muted-foreground block truncate text-xs">{admin.tools.length === tools.length ? "Full access" : "Limited access"}</span>{/if}
     </span>
     <ChevronIcon class={["text-muted-foreground size-3.5 shrink-0", placement === "up" && "rotate-180"]} aria-hidden="true" />

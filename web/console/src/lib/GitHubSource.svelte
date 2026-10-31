@@ -1,11 +1,5 @@
 <script lang="ts" module>
   export type GitHubSelection = { repository: import("$lib/api").Repository; page: number; branch: string; directory: string; output: string };
-  // GitHub sends the browser back to /applications with these parameters
-  // after creating the App (code, state) or installing it (setup_action).
-  export const returningFromGitHub = (search: string) => {
-    const q = new URLSearchParams(search);
-    return (q.has("code") && q.has("state")) || q.has("setup_action") || q.has("installation_id");
-  };
 </script>
 
 <script lang="ts">
@@ -15,11 +9,13 @@
   import { Label } from "$lib/components/ui/label";
   import CopyCommand from "$lib/CopyCommand.svelte";
   import { admin } from "$lib/adminToken.svelte";
-  import { route } from "$lib/router.svelte";
+  import { route, navigate } from "$lib/router.svelte";
+  import { leaveForGitHub, clearReturn } from "$lib/githubReturn";
   import { githubRepositories, fetchPublishing, startGitHubConnection, finishGitHubConnection, recordGitHubInstallation, type Repositories } from "$lib/api";
   import LockIcon from "@lucide/svelte/icons/lock";
   import GlobeIcon from "@lucide/svelte/icons/globe";
   import SearchIcon from "@lucide/svelte/icons/search";
+  import ExternalIcon from "@lucide/svelte/icons/external-link";
 
   // `changed` runs after this component changes the server's configuration
   // (an installation recorded), so the page reviews against the new revision.
@@ -48,12 +44,13 @@
   onMount(async () => {
     const q = new URLSearchParams(location.search);
     const code = q.get("code"), returned = q.get("state");
-    if (q.size) { history.replaceState(null, "", "/applications"); route.search = ""; }
+    if (q.size) { history.replaceState(null, "", "/applications"); route.search = ""; clearReturn(); }
     try {
       if (code && returned) {
         busy = "Saving the new GitHub App…";
         const app = await finishGitHubConnection(token(), code, returned, await expected());
         busy = `Created ${app.slug}. Opening GitHub to choose its repositories…`;
+        leaveForGitHub("/applications");
         location.assign(app.install_url);
         return;
       }
@@ -70,6 +67,7 @@
     busy = "Preparing the GitHub App…"; error = "";
     try {
       manifest = await startGitHubConnection(token(), location.origin, organization.trim());
+      leaveForGitHub("/applications");
       // GitHub reads the manifest from a form posted by this browser; no
       // credential leaves this server in the request.
       await tick();
@@ -123,11 +121,19 @@
     <div class="bg-muted/40 grid gap-3 rounded-lg border p-4 text-sm">
       <p>The App <span class="font-mono text-xs">{connection.app}</span> exists{connection.owner ? ` in ${connection.owner}` : ""}. Now choose which repositories it can see.</p>
       <div class="flex flex-wrap gap-2">
-        <Button type="button" href={connection.install_url} disabled={!!busy}>Choose repositories on GitHub</Button>
+        <Button type="button" href={connection.install_url} disabled={!!busy} onclick={() => leaveForGitHub("/applications")}>Choose repositories on GitHub</Button>
         <Button type="button" variant="outline" disabled={!!busy} onclick={checkInstallation}>{busy || "I've done it, check again"}</Button>
       </div>
     </div>
   {:else if connection}
+    <p class="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+      <span class="lamp lamp-on" aria-hidden="true"></span>
+      <span>GitHub connected{connection.owner ? ` · ${connection.owner}` : ""}{connection.all_repositories ? " · every repository" : connection.total !== undefined ? ` · ${connection.total} ${connection.total === 1 ? "repository" : "repositories"}` : ""}</span>
+      <a class="text-foreground underline underline-offset-4" href="/integrations" onclick={(e) => { e.preventDefault(); navigate("/integrations"); }}>Manage</a>
+    </p>
+    {#if connection.all_repositories}
+      <p class="border-warning/40 bg-warning/[0.06] rounded-md border px-3 py-2 text-xs">The App can see every repository in {connection.owner ?? "the account"}, private ones included. Ozal writes only to the one you choose, but keep the App to the repositories that publish websites.{#if connection.manage_url} <a class="inline-flex items-center gap-1 underline underline-offset-4" href={connection.manage_url} onclick={() => leaveForGitHub("/applications")}>Choose repositories on GitHub <ExternalIcon class="size-3" /></a>{/if}</p>
+    {/if}
     <div class="grid gap-2">
       <div class="relative">
         <SearchIcon class="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />

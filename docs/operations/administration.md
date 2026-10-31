@@ -499,8 +499,10 @@ Son tres funciones distintas: login OIDC de personas, descubrimiento de
 repositorios con una GitHub App y autorización del workflow para publicar.
 Una no concede automáticamente las otras.
 
-La forma habitual es conectarla desde la consola: **Applications → Add
-application → A website built from GitHub → Connect GitHub**. Ozal crea en tu
+La forma habitual es conectarla desde la consola, en **Integrations → GitHub →
+Connect GitHub** o dentro del asistente (**Applications → Add application → A
+website built from GitHub → Connect GitHub**); al volver de GitHub la consola
+regresa a la página desde la que empezaste. Ozal crea en tu
 cuenta (o en la organización que indiques) una App **privada** propia mediante
 un manifest: `Metadata: read` y `Contents`, `Workflows` y `Pull requests` en
 escritura, sin webhooks ni eventos. Apruébala en GitHub; GitHub vuelve a la
@@ -529,6 +531,16 @@ la confianza o el PR, la dirección queda guardada y el paso lo dice; termina en
 Sites. Un sitio privado o un edge sin `pages.deploy` guarda la confianza pero no
 abre PR: el workflow se escribe y revisa aparte. El asistente rechaza un nombre
 de sitio que ya publique desde GitHub en vez de reemplazar su publicador.
+
+**Integrations** muestra la conexión: App y cuenta, qué repositorios ve, qué
+puede hacer, si el edge puede abrir PRs (`pages.deploy`) y qué sitios publican
+desde GitHub. Si la instalación cubre **todos** los repositorios de la cuenta
+lo advierte y enlaza a su página de GitHub para elegir sólo los que publican
+sitios: Ozal pide escritura a un repositorio por vez, pero la clave de la App
+alcanzaría a todos. La misma página explica que el login sigue siendo de Ozal
+(passkeys u OIDC configurado): conectar GitHub o un proveedor DNS nunca permite
+entrar con esa cuenta. Sin `pages.deploy` el asistente termina indicando que el
+workflow se agrega aparte, en vez de esperar una publicación.
 
 Desconectar sigue siendo una operación del host (`ozal github disconnect`);
 borra la App en GitHub si ya no la usas y elimina su archivo de clave.

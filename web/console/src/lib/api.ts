@@ -289,7 +289,7 @@ export async function deploySite(token: string, site: string, file: File): Promi
 export type Repository = { id: number; owner: { id: number }; full_name: string; default_branch: string; private: boolean };
 // How far GitHub is connected: not at all, an App created but installed
 // nowhere yet (install_url says where to choose its repositories), or installed.
-export type Repositories = { configured: boolean; installed?: boolean; connect_available?: boolean; workflow_available?: boolean; app?: string; owner?: string; install_url?: string; repositories: Repository[]; page?: number; more?: boolean };
+export type Repositories = { configured: boolean; installed?: boolean; connect_available?: boolean; workflow_available?: boolean; app?: string; owner?: string; install_url?: string; manage_url?: string; all_repositories?: boolean; total?: number; repositories: Repository[]; page?: number; more?: boolean };
 export async function githubRepositories(token: string, page = 1, signal?: AbortSignal): Promise<Repositories> {
   const res = await fetch(`/_/api/github/repositories?page=${page}`, { cache: "no-store", headers: { Authorization: `Bearer ${token}` }, signal: boundedSignal(signal) });
   const body = await res.json().catch(() => ({}));

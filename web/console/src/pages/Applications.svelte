@@ -11,7 +11,8 @@
   import { Label } from "$lib/components/ui/label";
   import { admin, askForToken, can } from "$lib/adminToken.svelte";
   import { setupStatus, planApplication, saveApplication, fetchGroups, fetchZones, fetchConnectors, deploySite, invitePerson, fetchPublishing, bindGitHubProject, previewGitHubWorkflow, proposeWorkflow, fetchSites, type SetupStatus, type ApplicationRoute, type ApplicationPlan, type ApplicationDraft, type Repositories, type WorkflowPlan, type Deployment } from "$lib/api";
-  import GitHubSource, { returningFromGitHub, type GitHubSelection } from "$lib/GitHubSource.svelte";
+  import GitHubSource, { type GitHubSelection } from "$lib/GitHubSource.svelte";
+  import { returningFromGitHub } from "$lib/githubReturn";
   import { servedBy, whoMayEnter } from "$lib/wording";
   import { navigate } from "$lib/router.svelte";
   import ApplicationRemove from "$lib/ApplicationRemove.svelte";
@@ -37,6 +38,8 @@
   let known = $state<string[]>([]);
   let zones = $state<string[]>([]);
   let connectors = $state<string[] | null>(null);
+  // Websites that publish from GitHub: site name → repository and branch.
+  let sources = $state<Record<string, { repository: string; branch: string }>>({});
   let error = $state("");
   let loading = $state(false);
 
@@ -45,10 +48,16 @@
     loading = true; error = "";
     const token = admin.token.trim();
     try {
-      const [next, catalog, domains, links] = await Promise.all([
+      const [next, catalog, domains, links, publishing] = await Promise.all([
         setupStatus(token), fetchGroups(token).catch(() => null), fetchZones().catch(() => null),
         can("connectors") ? fetchConnectors(token).catch(() => null) : Promise.resolve(null),
+        can("publishing") ? fetchPublishing(token).catch(() => null) : Promise.resolve(null),
       ]);
+      sources = Object.fromEntries((publishing?.projects ?? []).flatMap((p) => p.deployers.flatMap((d) => {
+        if (d.type !== "github") return [];
+        const ref = d.github.workflow_ref ?? "", cut = ref.indexOf("/.github/workflows/");
+        return [[p.site, { repository: cut > 0 ? ref.slice(0, cut) : "GitHub", branch: d.github.ref.replace(/^refs\/heads\//, "") }]];
+      })));
       status = next;
       if (catalog) known = catalog.map((g) => g.name);
       zones = domains?.available ? domains.zones.map((z) => z.name) : [];
@@ -234,7 +243,7 @@
 
   // After saving a website from GitHub, watch for its first publication.
   $effect(() => {
-    if (!editing || step !== 5 || kind !== "github" || !githubResult?.trusted || published) return;
+    if (!editing || step !== 5 || kind !== "github" || !githubResult?.pr || published) return;
     const name = site;
     const look = () => fetchSites().then((all) => { published = all.find((s) => s.name === name)?.deployments.find((d) => d.live) ?? null; }).catch(() => {});
     void look();
@@ -273,14 +282,14 @@
     2: "Its address",
     3: "Who can open it?",
     4: "Review",
-    5: kind === "github" ? (published ? `${site} is published` : "Next: merge and publish") : `Connect ${host}`,
+    5: kind === "github" ? (published ? `${site} is published` : githubResult?.pr ? "Next: merge and publish" : "Next: add the workflow") : `Connect ${host}`,
   }[step]);
   const intros = $derived({
     1: base ? "What serves this address. Nothing changes until you review and save." : "Pick what serves the address. You can change it later.",
     2: "The web address people will type. Nothing changes for them until its DNS points at this server.",
     3: "Ozal checks this before anything reaches the app.",
     4: "Nothing changes until you save.",
-    5: kind === "github" ? "Saved. The first build after merging publishes it here; check it before moving DNS." : "Saved. Point its DNS here; this panel checks until a visitor's request arrives.",
+    5: kind === "github" ? (githubResult?.pr ? "Saved. The first build after merging publishes it here; check it before moving DNS." : "Saved. Add the workflow to publish it; check it before moving DNS.") : "Saved. Point its DNS here; this panel checks until a visitor's request arrives.",
   }[step]);
 </script>
 
@@ -313,7 +322,7 @@
   {#if !signIn}
     <div class="border-warning/40 bg-warning/[0.06] mb-6 rounded-lg border px-4 py-3 text-sm">
       <p class="font-medium">Sign-in is not set up yet, so every application is public.</p>
-      <p class="text-muted-foreground mt-0.5">To make an app private, enable passkeys (<code class="font-mono text-xs">auth.passkeys</code>) or an external login in this server's configuration.</p>
+      <p class="text-muted-foreground mt-0.5">To make an app private, enable passkeys (<code class="font-mono text-xs">auth.passkeys</code>) or an external login in this server's configuration. <a class="text-foreground underline underline-offset-4" href="/integrations" onclick={(e) => { e.preventDefault(); navigate("/integrations"); }}>How sign-in works</a></p>
     </div>
   {/if}
   {#if status.routes.length === 0}
@@ -333,7 +342,7 @@
             <div class="min-w-0">
               <div class="flex items-center gap-1.5"><h2 class="truncate text-sm font-medium">{app.host}</h2>
                 <a href={`${scheme}://${app.host}/`} target="_blank" rel="noreferrer" class="text-muted-foreground hover:text-foreground shrink-0" aria-label={`Open ${app.host} in a new tab`}><ExternalIcon class="size-3.5" /></a></div>
-              <p class="text-muted-foreground truncate text-xs">{servedBy(app)}</p>
+              <p class="text-muted-foreground truncate text-xs">{servedBy(app)}{#if app.site && sources[app.site]}{" · from "}<span class="font-mono">{sources[app.site].repository}</span>{` · ${sources[app.site].branch}`}{/if}</p>
             </div>
           </div>
           <p class={["flex min-w-0 items-center gap-2 pl-12 text-xs md:pl-0", who.tone === "public" ? "text-warning" : "text-muted-foreground"]}>
@@ -531,7 +540,8 @@
           <li class="flex gap-2"><span class="lamp lamp-warn mt-1.5 shrink-0" aria-hidden="true"></span><span>Add the publishing workflow to the repository{githubResult.error ? "" : " yourself"}; Sites shows what it must contain.</span></li>
         {/if}
         <li class="flex gap-2">{#if published}<CheckIcon class="text-signal mt-0.5 size-4 shrink-0" /><span>Published version <span class="font-mono text-xs">{published.id.slice(0, 12)}</span>. Open <a class="underline underline-offset-4" href={`${scheme}://${host}/`} target="_blank" rel="noreferrer">{host}</a> to check it.</span>
-          {:else}<span class="lamp mt-1.5 shrink-0 animate-pulse" aria-hidden="true"></span><span class="text-muted-foreground" role="status">Waiting for the first build to publish. This panel checks every few seconds.</span>{/if}</li>
+          {:else if githubResult?.pr}<span class="lamp mt-1.5 shrink-0 animate-pulse" aria-hidden="true"></span><span class="text-muted-foreground" role="status">After you merge it, the first build publishes here. This panel checks every few seconds; you can close it and follow it in Sites.</span>
+          {:else}<span class="lamp mt-1.5 shrink-0" aria-hidden="true"></span><span class="text-muted-foreground">It publishes once the repository has the workflow and something is pushed to {github?.branch.trim()}. Follow it in Sites.</span>{/if}</li>
       </ol>
       {#if githubResult?.error}<p class="text-destructive mt-3 text-sm" role="alert">The address is saved, but GitHub did not finish: {githubResult.error} Continue in Sites.</p>{/if}
       {#if published}<div class="mt-6 border-t pt-5"><DomainConnect {host} https={!!status?.tls_enabled} /></div>{/if}

@@ -161,6 +161,14 @@ checkout ni ejecución del repositorio). Las acciones y `ozalctl` están fijados
 por SHA; el publicador usa el ref publicado `900003e224c785f698ec015945b43fb2456753fd`.
 Los cambios de pins requieren revisar la plantilla y sus regresiones.
 
+`githubapp.AppStatus` informa además si la instalación cubre todos los
+repositorios y su página de ajustes (sólo un enlace `https://github.com`); el
+listado de repositorios lo agrega en la página 1 cuando la instalación
+coincide con la configurada, y lo omite si GitHub no responde. GitHub siempre
+vuelve a `/applications`; la consola guarda por pestaña (`sessionStorage`,
+sólo una ruta conocida) si el operador salió de Integrations y el router lo
+devuelve ahí antes de procesar el código o la instalación.
+
 El shell admin deriva repo/owner/ref/workflow del proyecto guardado, vuelve a
 comprobar la instalación y el digest antes de una escritura, y exige un plan
 revisado y la herramienta `publishing`. El guardado de confianza y la propuesta

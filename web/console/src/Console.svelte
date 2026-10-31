@@ -15,6 +15,7 @@
   import Administrators from "./pages/Administrators.svelte";
   import Groups from "./pages/Groups.svelte";
   import Domains from "./pages/Domains.svelte";
+  import Integrations from "./pages/Integrations.svelte";
   import Wordmark from "$lib/brand/Wordmark.svelte";
   import MenuIcon from "@lucide/svelte/icons/menu";
   import XIcon from "@lucide/svelte/icons/x";
@@ -37,6 +38,7 @@
     { name: "Edge", items: [
       { path: "/sites", label: "Sites" },
       { path: "/connectors", label: "Connectors", tool: "connectors" },
+      { path: "/integrations", label: "Integrations" },
       { path: "/activity", label: "Activity" },
     ] },
   ];
@@ -64,6 +66,7 @@
     "/administrators": "People, groups and administrators",
     "/sites": "Published versions and CI",
     "/connectors": "Trusted connections to private hosts",
+    "/integrations": "GitHub, DNS and how sign-in works",
     "/activity": "Access decisions and their reasons",
   };
   $effect(() => {
@@ -204,6 +207,7 @@
     {:else if route.path === "/administrators"}<Administrators />
     {:else if route.path === "/sites"}<Sites />
     {:else if route.path === "/domains"}<Domains />
+    {:else if route.path === "/integrations"}<Integrations />
     {:else}<Overview />{/if}
     </div>{/key}
   </main>

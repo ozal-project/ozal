@@ -9,6 +9,7 @@
   import { LatestRequest } from "$lib/latestRequest";
   import ConfirmAction from "$lib/ConfirmAction.svelte";
   import WorkflowProposal from "$lib/WorkflowProposal.svelte";
+  import { navigate } from "$lib/router.svelte";
   let { embedded = false }: { embedded?: boolean } = $props();
   let repositories = $state<Repositories | null>(null);
   let projects = $state<Project[]>([]);
@@ -85,18 +86,21 @@
 {#if notice}<p class="mb-4 text-sm" role="status">{notice}</p>{/if}
 {#if repositories && !repositories.configured}
   <details class="bg-card mb-6 rounded-lg px-5 py-4 text-sm">
-    <summary class="cursor-pointer font-medium">Optional: connect a GitHub App <span class="text-muted-foreground font-normal">· to pick repositories here and let Ozal propose the workflow</span></summary>
+    <summary class="cursor-pointer font-medium">Optional: connect GitHub <span class="text-muted-foreground font-normal">· to pick repositories here and let Ozal propose the workflow</span></summary>
     <div class="text-muted-foreground mt-3 grid gap-2">
       <p>Without it, websites that already publish keep working; you add the workflow file to the repository yourself.</p>
-      <p>With it, you install your own GitHub App on the repositories you choose and set its App ID, installation ID and private-key file in this server's configuration (see the GitHub guide in the documentation). No GitHub token or key passes through this browser.</p>
+      <p>Connect it in <a class="text-foreground underline underline-offset-4" href="/integrations" onclick={(e) => { e.preventDefault(); navigate("/integrations"); }}>Integrations</a>: Ozal creates a private GitHub App in your account and you choose its repositories. No GitHub token or key passes through this browser.</p>
     </div>
   </details>
 {:else if repositories?.configured}
-  <Panel label="Repository discovery" title="Repositories this installation can see" class="mb-6">
-    <p class="text-muted-foreground mb-3 text-sm">Only selected installation repositories are listed. This does not import GitHub users or teams.</p>
-    <ul class="divide-y">{#each repositories.repositories as repo (repo.id)}<li class="flex flex-wrap items-center justify-between gap-3 py-3"><span class="break-all text-sm">{repo.full_name} · {repo.private ? "Private repository" : "Public repository"}</span><Button size="sm" variant="outline" disabled={busy || !sites.length} onclick={() => select(repo)}>Use repository</Button></li>{:else}<li class="py-3 text-sm">No selected repositories are available. Check the App installation and permissions.</li>{/each}</ul>
+  <Panel label="Repository discovery" title="Use a repository for an existing website" sub="New websites from GitHub start in Applications. Here a website that already exists gets a repository as its publisher." class="mb-6">
+    <details>
+    <summary class="text-muted-foreground cursor-pointer text-sm">{repositories.repositories.length}{repositories.more ? "+" : ""} {repositories.repositories.length === 1 ? "repository" : "repositories"} the App can see</summary>
+    <ul class="mt-2 divide-y">{#each repositories.repositories as repo (repo.id)}<li class="flex flex-wrap items-center justify-between gap-3 py-3"><span class="break-all text-sm">{repo.full_name} · {repo.private ? "Private repository" : "Public repository"}</span><Button size="sm" variant="outline" disabled={busy || !sites.length} onclick={() => select(repo)}>Use repository</Button></li>{:else}<li class="py-3 text-sm">No selected repositories are available. Check the App installation and permissions.</li>{/each}</ul>
     {#if !sites.length}<p class="mt-3 text-sm">Add a static website in Applications before binding a publisher.</p>{/if}
-    <div class="mt-3 flex gap-3"><Button size="sm" variant="ghost" disabled={page <= 1 || busy} onclick={() => { selected = null; page--; void load(); }}>Previous</Button><span class="self-center text-sm">Page {page}</span><Button size="sm" variant="ghost" disabled={!repositories.more || busy} onclick={() => { selected = null; page++; void load(); }}>Next</Button></div>
+    {#if page > 1 || repositories.more}<div class="mt-3 flex gap-3"><Button size="sm" variant="ghost" disabled={page <= 1 || busy} onclick={() => { selected = null; page--; void load(); }}>Previous</Button><span class="self-center text-sm">Page {page}</span><Button size="sm" variant="ghost" disabled={!repositories.more || busy} onclick={() => { selected = null; page++; void load(); }}>Next</Button></div>{/if}
+    </details>
+    <p class="mt-3 text-xs"><a class="underline underline-offset-4" href="/integrations" onclick={(e) => { e.preventDefault(); navigate("/integrations"); }}>GitHub connection and its repositories</a></p>
   </Panel>
 {/if}
 {#if selected}
@@ -127,14 +131,14 @@
         <li class="grid gap-2 py-4">
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div class="min-w-0">
-              <h3 class="font-medium">{p.site}{#if p.name !== p.site}<span class="text-muted-foreground font-normal"> · project {p.name}</span>{/if}</h3>
+              <h3 class="font-medium break-all">{p.site}{#if p.name !== p.site}<span class="text-muted-foreground font-normal"> · project {p.name}</span>{/if}</h3>
               <p class="text-muted-foreground mt-0.5 text-sm break-all">{p.hostnames.length ? p.hostnames.join(", ") : "Not served at any address yet"}</p>
             </div>
             <Button variant="ghost" size="sm" class="text-muted-foreground" disabled={busy} onclick={() => { removing = p; frozen = null; confirm = true; }}>Stop publishing</Button>
           </div>
           {#each github as g (g.repository_id)}
             {@const source = trusted(g.workflow_ref, g.ref)}
-            <p class="text-sm">Publishes from <span class="font-mono text-xs">{source.repository ?? `repository #${g.repository_id}`}</span>{#if source.branch}{" · branch "}<span class="font-mono text-xs">{source.branch}</span>{/if}{#if source.workflow}{" · "}<span class="font-mono text-xs">{source.workflow}</span>{/if}</p>
+            <p class="text-sm break-all">Publishes from <span class="font-mono text-xs">{source.repository ?? `repository #${g.repository_id}`}</span>{#if source.branch}{" · branch "}<span class="font-mono text-xs">{source.branch}</span>{/if}{#if source.workflow}{" · "}<span class="font-mono text-xs">{source.workflow}</span>{/if}</p>
           {/each}
           {#if p.deployers.some((d) => d.type === "token")}<p class="text-sm">Publishes with a project token (for CI outside GitHub).</p>{/if}
           {#if github.length === 1 && repositories?.configured}<WorkflowProposal project={p} {page} />{/if}

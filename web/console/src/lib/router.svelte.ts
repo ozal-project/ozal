@@ -1,6 +1,8 @@
+import { returningFromGitHub, returnTarget } from "$lib/githubReturn";
+
 // A tiny History API router: a few fixed pages do not need a routing library.
 // The Go handler serves index.html for each of these paths.
-export const pages = ["/connectors", "/applications", "/domains", "/overview", "/activity", "/routes", "/people", "/groups", "/administrators", "/sites"] as const;
+export const pages = ["/connectors", "/integrations", "/applications", "/domains", "/overview", "/activity", "/routes", "/people", "/groups", "/administrators", "/sites"] as const;
 export type Page = (typeof pages)[number];
 
 // Old bookmarks: CI projects live inside Sites, and the policy simulator moved
@@ -8,7 +10,11 @@ export type Page = (typeof pages)[number];
 const moved: Record<string, Page> = { "/projects": "/sites", "/simulator": "/activity" };
 const normalize = (p: string): Page => moved[p] ?? ((pages as readonly string[]).includes(p) ? (p as Page) : "/overview");
 
-export const route = $state({ path: normalize(location.pathname), search: location.search });
+// GitHub always returns to /applications; an operator who left from
+// Integrations lands back there, with GitHub's parameters for that page.
+const arrived = normalize(location.pathname);
+const first: Page = arrived === "/applications" && returningFromGitHub(location.search) ? returnTarget() : arrived;
+export const route = $state({ path: first, search: location.search });
 
 // The address bar shows the page that is shown: "/" or an old bookmark is
 // rewritten in place instead of leaving a URL that names something else.

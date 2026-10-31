@@ -2,11 +2,11 @@
   // How Ozal's sign-in layer works, for someone who has never put a login in
   // front of an app: four steps in order, then the details a developer needs.
   // The header names are the ones the proxy injects (internal/pipeline).
-  let { host = "" }: { host?: string } = $props();
+  let { host = "", rule = "Only the people you choose below get through. Others see a “no access” page." }: { host?: string; rule?: string } = $props();
   const steps = $derived([
     { title: "A visitor opens", detail: host || "your app's address" , mono: !!host },
     { title: "Ozal asks them to sign in", detail: "With a passkey: fingerprint, face or PIN. No passwords." },
-    { title: "Ozal checks your rule", detail: "Only the people you choose below get through. Others see a “no access” page." },
+    { title: "Ozal checks your rule", detail: rule },
     { title: "Your app receives them", detail: "Already signed in, with their email. The app needs no login of its own." },
   ]);
 </script>

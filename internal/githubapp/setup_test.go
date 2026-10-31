@@ -118,8 +118,17 @@ func TestAppStatusFindsTheSingleInstallation(t *testing.T) {
 		t.Fatalf("not installed: %+v %v", status, err)
 	}
 	installations = `[{"id":42}]`
-	if status, err = client.AppStatus(context.Background(), cfg); err != nil || status.Installation != 42 {
+	if status, err = client.AppStatus(context.Background(), cfg); err != nil || status.Installation != 42 || status.AllRepositories || status.ManageURL != "" {
 		t.Fatalf("installed: %+v %v", status, err)
+	}
+	installations = `[{"id":42,"repository_selection":"all","html_url":"https://github.com/settings/installations/42"}]`
+	if status, err = client.AppStatus(context.Background(), cfg); err != nil || !status.AllRepositories || status.ManageURL != "https://github.com/settings/installations/42" {
+		t.Fatalf("installed on every repository: %+v %v", status, err)
+	}
+	// A settings link that is not GitHub's is dropped rather than offered.
+	installations = `[{"id":42,"repository_selection":"selected","html_url":"https://evil.example/settings"}]`
+	if status, err = client.AppStatus(context.Background(), cfg); err != nil || status.AllRepositories || status.ManageURL != "" {
+		t.Fatalf("selected repositories, foreign link: %+v %v", status, err)
 	}
 	installations = `[{"id":42},{"id":43}]`
 	if _, err = client.AppStatus(context.Background(), cfg); err != ErrUnavailable {
