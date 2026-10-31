@@ -205,9 +205,10 @@ siga abierto, **todavía puede eludirse la nueva política**.
   tarjeta muestra lo que falta en Cloudflare: el registro para certificados, el
   modo SSL Full (strict) y el certificado que el proxy presenta al edge
   (*Authenticated Origin Pulls*, si el edge usa `tls.origin_client_ca_file`; sin
-  él Cloudflare responde 520). Con `dns.cloudflare.token` (permisos *DNS · Edit*,
+  él Cloudflare responde 520) y *Always Use HTTPS* (sin él, quien escribe
+  `http://` recibe 522). Con `dns.cloudflare.token` (permisos *DNS · Edit*,
   *Zone Settings · Edit* y *SSL and Certificates · Edit*) el botón **Set up in
-  Cloudflare** hace los tres: sube un certificado propio del edge a nivel de
+  Cloudflare** hace los cuatro: sube un certificado propio del edge a nivel de
   zona, así cada dirección futura del dominio funciona sin otra asociación. Sin
   token, cada paso dice qué tocar en el panel de Cloudflare. Nada se borra ni se
   reemplaza.

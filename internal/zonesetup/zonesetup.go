@@ -18,6 +18,8 @@ const (
 	Encryption StepName = "encryption"
 	// OriginPull is the client certificate the proxy presents to this edge.
 	OriginPull StepName = "origin_pull"
+	// HTTPSRedirect is the proxy sending http:// visitors to https://.
+	HTTPSRedirect StepName = "https_redirect"
 )
 
 // State is where a step stands.
@@ -39,6 +41,7 @@ const (
 	SetStrict      Action = "set_strict"
 	UploadIdentity Action = "upload_certificate"
 	EnablePull     Action = "enable_origin_pull"
+	SetAlwaysHTTPS Action = "set_always_https"
 )
 
 // Observed is what the edge read about one zone.
@@ -61,6 +64,8 @@ type Observed struct {
 
 	// SSLMode is the proxy's mode: off, flexible, full or strict.
 	SSLMode string
+	// AlwaysHTTPS is the proxy's "Always Use HTTPS" setting: on or off.
+	AlwaysHTTPS string
 	// OriginAuth is true when this edge refuses connections without a
 	// client certificate from its trust bundle.
 	OriginAuth bool
@@ -94,7 +99,7 @@ func Ready(steps []Step) bool {
 
 // Plan returns the steps in the order Apply runs them.
 func Plan(o Observed) []Step {
-	return []Step{challenge(o), encryption(o), originPull(o)}
+	return []Step{challenge(o), encryption(o), originPull(o), httpsRedirect(o)}
 }
 
 func challenge(o Observed) Step {
@@ -161,6 +166,28 @@ func originPull(o Observed) Step {
 	default:
 		s.State, s.Action, s.Manual = Todo, UploadIdentity, manual
 		s.Detail = "The proxy has no certificate this edge trusts: visitors get error 520."
+	}
+	return s
+}
+
+// httpsRedirect: a proxy answers http:// by connecting to this edge on port
+// 80, where an edge behind a proxy usually does not listen, so visitors who
+// type the bare address get error 522. The proxy redirects instead.
+func httpsRedirect(o Observed) Step {
+	s := Step{Name: HTTPSRedirect, Title: "http:// sent to https://"}
+	manual := "SSL/TLS → Edge Certificates: turn on Always Use HTTPS."
+	switch {
+	case !o.Proxied:
+		s.State, s.Detail = NotNeeded, "Visitors reach this edge directly; it redirects http:// itself."
+	case !o.Provider:
+		s.State, s.Detail, s.Manual = Unknown, "The proxy should send http:// to https://; otherwise a typed address gets error 522.", manual
+	case o.AlwaysHTTPS == "on":
+		s.State, s.Detail = Done, "Always Use HTTPS is on."
+	case o.AlwaysHTTPS == "off":
+		s.State, s.Action, s.Manual = Todo, SetAlwaysHTTPS, manual
+		s.Detail = "The proxy forwards http:// to this edge, which does not answer it: visitors who type the address get error 522."
+	default:
+		s.State, s.Detail, s.Manual = Unknown, "The proxy reported an unknown value.", manual
 	}
 	return s
 }

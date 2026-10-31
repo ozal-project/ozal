@@ -279,13 +279,15 @@ fue hace menos de un minuto o la CA pidió esperar.
 
 **Alta en el proveedor (EDGE-009).** `GET /_/api/zones/{zona}/setup` devuelve
 lo que le falta a la zona fuera del edge, como pasos `challenge` (el CNAME de
-arriba), `encryption` (modo SSL del proxy) y `origin_pull` (certificado cliente
-que el proxy presenta), cada uno `done`, `todo`, `blocked`, `unknown` o
+arriba), `encryption` (modo SSL del proxy), `origin_pull` (certificado cliente
+que el proxy presenta) y `https_redirect` (*Always Use HTTPS*: el proxy redirige
+`http://` en vez de reenviarlo al puerto 80 del edge, que detrás de un proxy no
+suele escuchar y da error 522), cada uno `done`, `todo`, `blocked`, `unknown` o
 `not_needed`, con la acción posible y la instrucción manual.
 `POST /_/api/zones/{zona}/setup` hace por la API de Cloudflare los pasos `todo`:
 crea el CNAME si el nombre está vacío, pasa `off`/`flexible` a Full (strict),
 sube el certificado propio del edge a Authenticated Origin Pulls a nivel de zona
-y lo activa. Nunca borra ni reemplaza un registro o certificado ajeno (un
+y lo activa, y enciende *Always Use HTTPS* si está apagado. Nunca borra ni reemplaza un registro o certificado ajeno (un
 registro distinto queda `blocked`) y deja `full` como está. Responde el estado
 posterior; si un paso falla, 502 con `error` y `report`. Necesita
 `dns.cloudflare.token` con permisos *DNS · Edit*, *Zone Settings · Edit* y

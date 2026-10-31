@@ -32,6 +32,15 @@ func TestZoneSetupEndpoints(t *testing.T) {
 				t.Errorf("ssl patch = %v", body)
 			}
 			writeFakeCloudflare(w, 200, body)
+		case r.URL.Path == "/zones/z1/settings/always_use_https" && r.Method == http.MethodGet:
+			writeFakeCloudflare(w, 200, map[string]string{"id": "always_use_https", "value": "off"})
+		case r.URL.Path == "/zones/z1/settings/always_use_https" && r.Method == http.MethodPatch:
+			var body map[string]string
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if body["value"] != "on" {
+				t.Errorf("always_use_https patch = %v", body)
+			}
+			writeFakeCloudflare(w, 200, body)
 		case r.URL.Path == "/zones/z1/origin_tls_client_auth/settings":
 			writeFakeCloudflare(w, 200, map[string]bool{"enabled": r.Method == http.MethodPut})
 		case r.URL.Path == "/zones/z1/origin_tls_client_auth" && r.Method == http.MethodGet:
@@ -61,6 +70,12 @@ func TestZoneSetupEndpoints(t *testing.T) {
 		t.Fatalf("mode %q, %v", mode, err)
 	}
 	if err := c.SetZoneSSLStrict(ctx, "example.dev"); err != nil {
+		t.Fatal(err)
+	}
+	if value, err := c.ZoneAlwaysUseHTTPS(ctx, "example.dev"); err != nil || value != "off" {
+		t.Fatalf("always_use_https %q, %v", value, err)
+	}
+	if err := c.SetZoneAlwaysUseHTTPS(ctx, "example.dev"); err != nil {
 		t.Fatal(err)
 	}
 	if on, list, err := c.ZoneOriginPull(ctx, "example.dev"); err != nil || on || len(list) != 1 || list[0].ID != "old" {

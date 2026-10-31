@@ -20,7 +20,7 @@
   $effect(() => { const r = setup?.ready; if (r !== undefined) untrack(() => onReady?.(r)); });
   const lamp: Record<SetupStep["state"], string> = { done: "lamp-on", todo: "lamp-wait", blocked: "lamp-off", unknown: "lamp-warn", not_needed: "" };
   const word: Record<SetupStep["state"], string> = { done: "Done", todo: "To do", blocked: "Needs you", unknown: "Check by hand", not_needed: "" };
-  const actionWord: Record<string, string> = { create_cname: "created the DNS record for certificates", set_strict: "set encryption to Full (strict)", upload_certificate: "uploaded this edge's proxy certificate", enable_origin_pull: "turned on Authenticated Origin Pulls" };
+  const actionWord: Record<string, string> = { create_cname: "created the DNS record for certificates", set_strict: "set encryption to Full (strict)", upload_certificate: "uploaded this edge's proxy certificate", enable_origin_pull: "turned on Authenticated Origin Pulls", set_always_https: "turned on Always Use HTTPS" };
 
   async function load() {
     busy = busy || "check";

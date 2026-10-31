@@ -58,6 +58,31 @@ func (c *CloudflareClient) SetZoneSSLStrict(ctx context.Context, zone string) er
 	return c.call(ctx, http.MethodPatch, path, map[string]string{"value": "strict"}, nil)
 }
 
+// ZoneAlwaysUseHTTPS reads the zone's "Always Use HTTPS" setting: on or off.
+func (c *CloudflareClient) ZoneAlwaysUseHTTPS(ctx context.Context, zone string) (string, error) {
+	path, err := c.zonePath(ctx, zone, "/settings/always_use_https")
+	if err != nil {
+		return "", err
+	}
+	var setting struct {
+		Value string `json:"value"`
+	}
+	if err := c.call(ctx, http.MethodGet, path, nil, &setting); err != nil {
+		return "", err
+	}
+	return setting.Value, nil
+}
+
+// SetZoneAlwaysUseHTTPS turns "Always Use HTTPS" on: the proxy redirects
+// http:// itself instead of forwarding it to the edge.
+func (c *CloudflareClient) SetZoneAlwaysUseHTTPS(ctx context.Context, zone string) error {
+	path, err := c.zonePath(ctx, zone, "/settings/always_use_https")
+	if err != nil {
+		return err
+	}
+	return c.call(ctx, http.MethodPatch, path, map[string]string{"value": "on"}, nil)
+}
+
 // ZoneOriginPull reads the zone-level setting and its uploaded certificates.
 func (c *CloudflareClient) ZoneOriginPull(ctx context.Context, zone string) (enabled bool, certificates []ZoneClientCertificate, err error) {
 	settings, err := c.zonePath(ctx, zone, "/origin_tls_client_auth/settings")

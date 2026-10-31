@@ -7,7 +7,7 @@ func base() Observed {
 		Zone: "example.dev", Provider: true, Proxied: true,
 		ChallengeDelegated: true, ChallengeName: "_acme-challenge.example.dev", ChallengeTarget: "example-dev.acme.edge.net",
 		ChallengeRead: true, ChallengeCurrent: "example-dev.acme.edge.net",
-		SSLMode: "strict", OriginAuth: true, PullEnabled: true, PullTrusted: true,
+		SSLMode: "strict", AlwaysHTTPS: "on", OriginAuth: true, PullEnabled: true, PullTrusted: true,
 	}
 }
 
@@ -100,6 +100,36 @@ func TestOriginPull(t *testing.T) {
 		c.change(&o)
 		if s := step(t, o, OriginPull); s.State != c.state || s.Action != c.action {
 			t.Errorf("%s: got %s/%q, want %s/%q", name, s.State, s.Action, c.state, c.action)
+		}
+	}
+}
+
+// A proxied zone answers http:// at the proxy, which connects to this edge
+// over port 80; an edge that only listens on 443 then shows error 522
+// (ozal.dev, 2026-10-31). The proxy must redirect to https:// itself.
+func TestHTTPSRedirect(t *testing.T) {
+	cases := map[string]struct {
+		value    string
+		provider bool
+		proxied  bool
+		state    State
+		action   Action
+	}{
+		"on":            {"on", true, true, Done, ""},
+		"off":           {"off", true, true, Todo, SetAlwaysHTTPS},
+		"unknown value": {"weird", true, true, Unknown, ""},
+		"no provider":   {"", false, true, Unknown, ""},
+		"not proxied":   {"off", true, false, NotNeeded, ""},
+	}
+	for name, c := range cases {
+		o := base()
+		o.AlwaysHTTPS, o.Provider, o.Proxied = c.value, c.provider, c.proxied
+		s := step(t, o, HTTPSRedirect)
+		if s.State != c.state || s.Action != c.action {
+			t.Errorf("%s: got %s/%q, want %s/%q", name, s.State, s.Action, c.state, c.action)
+		}
+		if (s.State == Todo || s.State == Unknown) && s.Manual == "" {
+			t.Errorf("%s: no manual instruction", name)
 		}
 	}
 }

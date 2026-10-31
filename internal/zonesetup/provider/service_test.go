@@ -21,6 +21,7 @@ import (
 type fakeZone struct {
 	records  map[string][]certs.NameRecord
 	ssl      string
+	always   string
 	pullOn   bool
 	certs    []certs.ZoneClientCertificate
 	uploaded [][]byte
@@ -43,6 +44,17 @@ func (f *fakeZone) ZoneSSLMode(context.Context, string) (string, error) { return
 func (f *fakeZone) SetZoneSSLStrict(context.Context, string) error {
 	f.calls = append(f.calls, "strict")
 	f.ssl = "strict"
+	return nil
+}
+func (f *fakeZone) ZoneAlwaysUseHTTPS(context.Context, string) (string, error) {
+	if f.always == "" {
+		return "off", f.fail // Cloudflare's default for a new zone
+	}
+	return f.always, f.fail
+}
+func (f *fakeZone) SetZoneAlwaysUseHTTPS(context.Context, string) error {
+	f.calls = append(f.calls, "always_https")
+	f.always = "on"
 	return nil
 }
 func (f *fakeZone) ZoneOriginPull(context.Context, string) (bool, []certs.ZoneClientCertificate, error) {
@@ -125,7 +137,7 @@ func TestApplySetsUpANewZone(t *testing.T) {
 	if got := zone.records[challenge.Name]; len(got) != 1 || got[0].Content != challenge.Target {
 		t.Fatalf("challenge record = %+v, want CNAME to %s", got, challenge.Target)
 	}
-	if len(zone.certs) != 1 || !zone.pullOn || zone.ssl != "strict" {
+	if len(zone.certs) != 1 || !zone.pullOn || zone.ssl != "strict" || zone.always != "on" {
 		t.Fatalf("zone after Apply: %+v", zone)
 	}
 	chain := originauth.ParseCertificates([]byte(zone.certs[0].Certificate))

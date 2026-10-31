@@ -23,6 +23,8 @@ type Client interface {
 	CreateChallengeCNAME(ctx context.Context, name, target string) error
 	ZoneSSLMode(ctx context.Context, zone string) (string, error)
 	SetZoneSSLStrict(ctx context.Context, zone string) error
+	ZoneAlwaysUseHTTPS(ctx context.Context, zone string) (string, error)
+	SetZoneAlwaysUseHTTPS(ctx context.Context, zone string) error
 	ZoneOriginPull(ctx context.Context, zone string) (bool, []certs.ZoneClientCertificate, error)
 	UploadZoneClientCertificate(ctx context.Context, zone string, certPEM, keyPEM []byte) (certs.ZoneClientCertificate, error)
 	EnableZoneOriginPull(ctx context.Context, zone string) error
@@ -146,6 +148,13 @@ func (s *Service) observeProvider(ctx context.Context, client Client, o *zoneset
 		return err
 	}
 	o.SSLMode = mode
+	if o.Proxied {
+		always, err := client.ZoneAlwaysUseHTTPS(ctx, o.Zone)
+		if err != nil {
+			return err
+		}
+		o.AlwaysHTTPS = always
+	}
 	if o.OriginAuth {
 		enabled, list, err := client.ZoneOriginPull(ctx, o.Zone)
 		if err != nil {
@@ -258,6 +267,10 @@ func (s *Service) do(ctx context.Context, client Client, zone string, cfg config
 		}
 		if err := client.EnableZoneOriginPull(ctx, zone); err != nil {
 			return failed("turning on Authenticated Origin Pulls", err)
+		}
+	case zonesetup.SetAlwaysHTTPS:
+		if err := client.SetZoneAlwaysUseHTTPS(ctx, zone); err != nil {
+			return failed("turning on Always Use HTTPS", err)
 		}
 	case zonesetup.EnablePull:
 		if err := client.EnableZoneOriginPull(ctx, zone); err != nil {

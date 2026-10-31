@@ -361,7 +361,7 @@ export type ZoneCheck = { zone: string; state?: ZoneState; challenge: { state: C
 export const fetchZones = (signal?: AbortSignal) => getJSON<Zones>("/_/api/zones", signal);
 // EDGE-009: what a domain still needs at its DNS provider and proxy.
 export type SetupStepState = "done" | "todo" | "blocked" | "unknown" | "not_needed";
-export type SetupStep = { name: "challenge" | "encryption" | "origin_pull"; state: SetupStepState; action?: string; title: string; detail: string; manual?: string };
+export type SetupStep = { name: "challenge" | "encryption" | "origin_pull" | "https_redirect"; state: SetupStepState; action?: string; title: string; detail: string; manual?: string };
 export type ZoneSetup = { zone: string; provider?: string; ready: boolean; steps: SetupStep[]; error?: string; applied?: string[] };
 export const fetchZoneSetup = (name: string, signal?: AbortSignal) => getJSON<ZoneSetup>(`/_/api/zones/${encodeURIComponent(name)}/setup`, signal);
 export const applyZoneSetup = (token: string, name: string) => adminPost<ZoneSetup>(token, `/_/api/zones/${encodeURIComponent(name)}/setup`, undefined, undefined, 75_000);
