@@ -6,6 +6,28 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## SEC-020 — no edge authentication cookie reaches an upstream — 2026-10-31 (`28fe43e`, `65b5cfa`)
+
+The proxy strips the session, OIDC login-attempt (`sb_login`), handoff and
+passkey ceremony (`sb_passkey`) cookies before forwarding, directly and through
+a connector; other cookies are preserved. `sb_passkey` was found in the
+2026-10-31 review: without `cookie_domain` the login host also serves protected
+apps, and an unknown `/_/auth/` path falls through to them. Its name now lives
+in `auth.PasskeyCeremonyCookieName`. Evidence: direct and connector
+regressions failed before each change; full `scripts/verify.sh` passed
+2026-10-31. No live exploit or deployment is claimed.
+
+## BUG-014 — no raw error text for observers — 2026-10-31 (`aec2a57`, `9b06458`)
+
+`Multi`, `Broker` and `SlogSink` clear `Event.Error`; Telegram alerts receive
+events through `Multi`; durable audit records never contain it. Config reload,
+route mutation and static-site failures carry distinct types, stable codes and
+generic reasons, and admin mutations emit success only after success. The
+2026-10-31 review fixed the last gap: a failed SIGHUP reload was emitted as
+`config.reloaded` with only `Error` set, so observers saw a success; it is now
+`config.reload_failed` (pure `sighupReloadEvent`, regression mutation-checked).
+Evidence: full `scripts/verify.sh` passed 2026-10-31.
+
 ## REL-018 — native operational commands — 2026-10-29 (`424bf41`, initial sources `d1bb55b`, lint `7dc2c21`)
 
 Installation, CI publication and the remaining provider/authority helpers now

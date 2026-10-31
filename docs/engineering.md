@@ -349,6 +349,115 @@ y checkpoints offline respetan el lock. [Seguridad](security.md#auditoria-y-priv
 
 ## Propuestas pendientes
 
+### Identidad sin contraseña y alternativas MFA
+
+**Decisión del mantenedor 2026-10-31 (opción A): Ozal sigue sin contraseñas.**
+Sin WebAuthn ni un proveedor OIDC con contrato de confianza no se promete MFA.
+El primer acceso se resuelve con guía y acceso desde el host, no con un método
+nuevo. TOTP queda después del MVP y solo como método de un factor. Tareas:
+`ID-017` (guía de autenticadores y primer acceso), `ID-018` (política MFA
+explícita), `ID-019` (TOTP de un factor) e `ID-020` (autenticador propio, idea).
+Nada de esto está implementado.
+
+**Observación:** la instalación de prueba en una VM Linux ARM64 permitió
+iniciar el servicio y entrar a la consola con `console login`. En el equipo
+cliente, Firefox y Chromium pidieron una llave de seguridad y no se completó el
+registro de la primera passkey (`console enrol`). Ambas ceremonias exigen
+credencial residente y verificación del usuario
+([gate](../internal/passkey/gate.go), [consola](../internal/admin/identities.go)).
+Linux de escritorio no trae un autenticador de plataforma: sin gestor de
+contraseñas con passkeys, cuenta de navegador con passkeys o llave, el navegador
+solo ofrece la llave o, según navegador, el teléfono por QR (hybrid). La
+consola no detecta ese caso ni lo explica. Esto no demuestra incompatibilidad
+general de esos navegadores, y la VM no es el bloqueo: la ceremonia ocurre en el
+navegador y autenticador del cliente. La aceptación real sigue pendiente
+(`REL-012`, `UI-006`).
+
+**Requisito de MFA:** al menos dos factores de categorías distintas
+(conocimiento, posesión, inherencia). Una passkey con verificación del usuario
+combina posesión con PIN o biometría. TOTP, un código por correo o una
+aprobación push son, por sí solos, posesión. El PIN o la biometría que
+desbloquean una aplicación TOTP no cuentan si Ozal no recibe evidencia. Los
+códigos manuales pueden retransmitirse en un ataque de phishing; no equivalen a
+WebAuthn. Ver [NIST: factores](https://pages.nist.gov/800-63-4/sp800-63/model/)
+y [resistencia al phishing](https://pages.nist.gov/800-63-4/sp800-63b.html).
+
+**Por qué A:** sin un cliente propio, el único segundo factor verificable que
+acompaña a TOTP es un secreto memorizado comprobado por el servidor, es decir,
+una contraseña (opción B, descartada). La otra vía técnica es un autenticador
+criptográfico multifactor propio o integrado, con clave en el dispositivo y
+activación local ([NIST](https://pages.nist.gov/800-63-4/sp800-63b.html));
+exige construir o integrar un cliente y queda como idea (`ID-020`).
+
+**MVP:**
+
+- **Guía de autenticadores (`ID-017`).** Antes de la ceremonia, en consola,
+  login, enrolamiento y dispositivos, explicar qué sirve: passkey del sistema o
+  del navegador, gestor de contraseñas, llave de seguridad y, cuando el
+  navegador lo ofrezca, el teléfono. La detección de capacidades
+  ([W3C](https://www.w3.org/TR/webauthn-3/)) solo
+  ordena o destaca opciones: nunca las oculta ni bloquea la ceremonia, y si el
+  navegador no responde o responde de forma incompleta se muestran todas. Un
+  `NotAllowedError` o una ceremonia cancelada ofrece la misma guía. No prometer
+  que todos los navegadores o gestores ofrezcan una opción concreta.
+- **Primer acceso desde el host (`ID-017`).** Mientras no exista administrador,
+  la consola explica que `console login` da acceso temporal autorizado desde el
+  host y que la cuenta persistente necesita una passkey; el enlace de
+  `console enrol` que no se completa no deja la instalación sin salida. La sesión
+  temporal no crea cuenta ni demuestra MFA, y la recuperación sigue siendo solo
+  del host (`UI-004`). Identidades administrativas y de visitantes siguen
+  separadas.
+- **Prueba real del teléfono por QR (`ID-017`).** Con RP ID `ozal.localhost` a
+  través del túnel SSH y en el login público. Hasta tener ese resultado, la guía
+  no presenta el QR como la solución para Linux. `ozal.localhost` por SSH
+  resuelve al equipo que abre el túnel, no al teléfono; el teléfono solo actúa
+  como autenticador de ese navegador. El listener administrativo sigue en
+  loopback.
+
+**Bloque separado: política MFA explícita (`ID-018`).** Una ruta puede exigir
+MFA o resistencia al phishing. Passkey cuenta solo con verificación del usuario
+comprobada en la ceremonia. Una sesión OIDC no prueba qué factores usó el
+proveedor: cuenta solo si su emisor tiene un contrato configurado (valores de
+`acr`/`amr` aceptados y su significado); sin contrato o sin afirmación, no es
+MFA. `policy explain` nombra el motivo. Depende de la separación por emisor de
+`ID-014`.
+
+**Después del MVP:**
+
+- **TOTP de un factor (`ID-019`).** No es extender un valor de
+  `access.methods`: requiere enrolamiento desde una sesión autenticada o una
+  invitación, secreto protegido en reposo, ventana de reloj acotada, límite de
+  intentos, rechazo de códigos repetidos, sesiones con `amr` propio, revocación
+  y recuperación. Solo vale en rutas que lo acepten expresamente, nunca en la
+  consola ni donde se exija MFA (`ID-018`).
+- **Correo.** Puerto de mensajes y SMTP configurable (`ID-002`), relay propio o
+  proveedor elegido, sin servidor SMTP incorporado. `ID-001` no cambia: el
+  correo solo inicia el enrolamiento de una passkey. Usarlo para iniciar sesión
+  de forma recurrente sigue pendiente de decisión del mantenedor.
+- **OIDC.** Login delegado en un proveedor (`ID-007`) y Ozal como proveedor
+  (`ID-004`) siguen separados; añadir un método no implementa `ID-004`.
+- **Push estilo Okta**, fuera del MVP. Antes de tratarlo como factor hay que
+  decidir cliente y transporte, enrolamiento y revocación, desafío ligado a la
+  solicitud y de corta duración, fatiga, verificación de PIN/biometría,
+  evidencia que recibe Ozal y recuperación. Telegram es integración, no
+  autenticador. Okta distingue push con y sin verificación del usuario
+  ([documentación](https://help.okta.com/oie/en-us/content/topics/identity-engine/password-optional/mfa-for-passwordless.htm)).
+
+**Presentación del producto:** "Sin contraseñas; MFA con passkeys (tu
+dispositivo más huella o PIN)". Publicar qué necesita el equipo cliente
+(passkey del sistema o navegador, gestor, llave, teléfono cuando el navegador
+lo ofrezca, o el proveedor de identidad de la organización) y mostrar por ruta
+el nivel de cada método: resistente al phishing (passkey), según contrato del
+emisor (OIDC) y un factor (TOTP o correo, cuando existan). No afirmar MFA para
+métodos de un factor, equivalencia de TOTP con passkey, Telegram como MFA ni
+resistencia al phishing fuera de WebAuthn.
+
+**Aceptación:** VM limpia, primer administrador y recuperación, navegador real
+sin autenticador de plataforma, teléfono por QR, enrolamiento y revocación,
+métodos insuficientes y permitidos, proveedor OIDC real si se activa, reinicio,
+y acceso permitido/denegado sin registrar credenciales. Los autenticadores
+virtuales y una respuesta de salud no sustituyen esas pruebas.
+
 Shield challenge (`SHD-003`) sigue propuesto: posición antes de identificar,
 nonce de uso único, token ligado a host/acción/expiración, clearance firmado,
 replay/tamper tests, accesibilidad y fallback explícito; log-only antes de
