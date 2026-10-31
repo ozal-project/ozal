@@ -303,12 +303,8 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-hup:
-				event := events.Event{Type: events.ConfigReloaded, Actor: "signal:SIGHUP", Time: time.Now()}
-				if err := manager.Reload(); err != nil {
-					event.Error = err.Error()
-				}
-				event.ConfigSHA256 = manager.ConfigDigest()
-				sink.Emit(event)
+				err := manager.Reload()
+				sink.Emit(sighupReloadEvent(err, manager.ConfigDigest(), time.Now()))
 			}
 		}
 	}()
@@ -1072,4 +1068,17 @@ func startBuiltinDNS(ctx context.Context, dns01 *config.DNS01) (certs.DNSProvide
 		return nil, nil, err
 	}
 	return provider, func() { server.Close() }, nil
+}
+
+// sighupReloadEvent reports a reload triggered by SIGHUP. A failure gets its
+// own type and stable code, like the admin reload: observers never receive
+// the raw error, so it cannot be the only sign that the reload failed.
+func sighupReloadEvent(err error, digest string, now time.Time) events.Event {
+	event := events.Event{Type: events.ConfigReloaded, Actor: "signal:SIGHUP", Time: now, ConfigSHA256: digest}
+	if err != nil {
+		event.Type = events.ConfigReloadFailed
+		event.Code = "config.reload_failed"
+		event.Reason = "the configuration could not be loaded or validated; run ozal validate for details"
+	}
+	return event
 }
