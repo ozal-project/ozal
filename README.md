@@ -17,7 +17,6 @@
   <a href="VISION.md">Vision</a>
 </p>
 
-> Formerly Switchboard. Existing installations follow the [rename guide](docs/operations/administration.md#migrate-from-switchboard-to-ozal).
 > **Alpha:** interfaces and config keys may change. Not production-ready yet.
 
 ![Ozal console: visitors, the apps Ozal serves, and what needs attention](site/public/shots/overview.jpg)
