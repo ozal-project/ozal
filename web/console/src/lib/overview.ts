@@ -264,6 +264,11 @@ export function changes(events: AccessEvent[], subjects?: Map<string, string>): 
   return out;
 }
 
+export function sitePublishSource(site: string, events: AccessEvent[], subjects?: Map<string, string>): string {
+  const deployed = events.find((event) => event.type === "pages.deployed" && event.host === site);
+  return deployed ? changes([deployed], subjects)[0]?.source ?? "Published before this session" : "Published before this session";
+}
+
 export type StreamState = "locked" | "connecting" | "live" | "reconnected" | "lost";
 type FeedView = { missed: number; restarted: boolean; partial: boolean };
 

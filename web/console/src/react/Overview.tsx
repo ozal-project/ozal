@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router";
 import { Button } from "$lib/components/ui/button/react";
 import { Badge } from "$lib/components/ui/badge/react";
-import { fetchAccessHistory, fetchPeople, fetchStatus, type AccessEvent, type AccessHistorySummary, type StatusResponse } from "$lib/api";
-import { accessScope, accessSummary, applications, attention, certificateView, changes, headline, historyScope, historySummary, streamNotices, whoGotIn, type StreamState } from "$lib/overview";
+import { fetchAccessHistory, fetchPeople, fetchSites, fetchStatus, PagesDisabledError, type AccessEvent, type AccessHistorySummary, type Site, type StatusResponse } from "$lib/api";
+import { accessScope, accessSummary, applications, attention, certificateView, changes, headline, historyScope, historySummary, sitePublishSource, streamNotices, whoGotIn, type StreamState } from "$lib/overview";
 import { emptyFeed, receive, type FeedState } from "$lib/feed";
 import { openEventStream } from "$lib/eventStream";
 import { subjectsOf } from "$lib/wording.ts";
@@ -22,9 +23,13 @@ export function Overview() {
   const { session, end } = useSession();
   const token = session?.token ?? "";
   const peopleAllowed = !!session?.tools.includes("people");
+  const sitesAllowed = !!session?.tools.includes("sites");
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [statusError, setStatusError] = useState("");
   const [statusAt, setStatusAt] = useState<number | null>(null);
+  const [sites, setSites] = useState<Site[] | null>(null);
+  const [sitesError, setSitesError] = useState("");
+  const [pagesOff, setPagesOff] = useState(false);
   const [history, setHistory] = useState<AccessHistorySummary | null>(null);
   const [events, setEvents] = useState<AccessEvent[]>([]);
   const [feed, setFeed] = useState<FeedState>(emptyFeed);
@@ -33,6 +38,37 @@ export function Overview() {
   const [trimmed, setTrimmed] = useState(false);
   const feedRef = useRef<FeedState>(emptyFeed());
   const historyRefresh = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const sitesRequest = useRef<AbortController | null>(null);
+
+  const loadSites = useCallback(async () => {
+    if (!sitesAllowed) return;
+    sitesRequest.current?.abort();
+    const request = new AbortController();
+    sitesRequest.current = request;
+    try {
+      const value = await fetchSites(request.signal);
+      if (sitesRequest.current !== request) return;
+      setSites(value); setSitesError(""); setPagesOff(false);
+    } catch (cause) {
+      if (sitesRequest.current !== request || request.signal.aborted) return;
+      if (cause instanceof PagesDisabledError) { setPagesOff(true); setSitesError(""); }
+      else setSitesError((cause as Error).message);
+    } finally {
+      if (sitesRequest.current === request) sitesRequest.current = null;
+    }
+  }, [sitesAllowed]);
+
+  useEffect(() => {
+    setSites(null); setSitesError(""); setPagesOff(false);
+    if (!sitesAllowed) return;
+    void loadSites();
+    const timer = window.setInterval(() => void loadSites(), 30_000);
+    return () => {
+      window.clearInterval(timer);
+      sitesRequest.current?.abort();
+      sitesRequest.current = null;
+    };
+  }, [token, sitesAllowed, loadSites]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -125,6 +161,15 @@ export function Overview() {
 
       <div className="grid gap-5">
         <section className="bg-card min-w-0 rounded-lg" aria-labelledby="overview-apps"><header className="px-5 py-4"><p className="plate">Applications</p><h2 id="overview-apps" className="mt-1 text-base font-medium">{status ? `${apps.length} configured` : "Reading the edge…"}</h2></header>{apps.length === 0 && status ? <p className="text-muted-foreground px-5 pb-5 text-sm">No application routes configured.</p> : <ul aria-label="Applications and their state">{apps.slice(0, 8).map((app) => <li key={app.host}><a className="app-row" href={`/routes?host=${encodeURIComponent(app.host)}`}><span className={`lamp ${app.state === "down" ? "lamp-off" : app.state === "up" ? "edge-live" : "lamp-idle"}`} aria-hidden="true" /><span className="min-w-0 truncate text-sm">{app.name}</span><span className={`text-xs ${app.state === "down" ? "text-destructive" : "text-muted-foreground"}`}>{app.label}</span></a></li>)}</ul>}</section>
+        <section className="bg-card min-w-0 rounded-lg" aria-labelledby="overview-sites"><header className="flex items-center justify-between gap-3 px-5 py-4"><div className="min-w-0"><p className="plate">Sites</p><h2 id="overview-sites" className="mt-1 text-base font-medium">What is live, and where it came from</h2></div>{sitesAllowed && !pagesOff && <Link className="shrink-0 text-xs underline underline-offset-4" to="/sites">All →</Link>}</header>
+          {sitesError && sites !== null && <p className="border-warning/40 bg-warning/[0.06] border-y px-5 py-3 text-sm" role="status">Showing the last successful site read. Refresh failed: {sitesError}</p>}
+          {!sitesAllowed ? <p className="text-muted-foreground px-5 pb-5 text-sm">This session does not include the Sites tool, so deployments are not listed here.</p>
+            : pagesOff ? <p className="text-muted-foreground px-5 pb-5 text-sm">Static sites are not enabled on this edge.</p>
+            : sitesError && sites === null ? <p className="text-destructive px-5 pb-5 text-sm" role="alert">Sites could not be read ({sitesError}). <button className="underline" onClick={() => void loadSites()}>Retry</button></p>
+              : sites === null ? <p className="text-muted-foreground px-5 pb-5 text-sm" role="status" aria-busy="true">Reading sites…</p>
+                : sites.length === 0 ? <p className="text-muted-foreground px-5 pb-5 text-sm">No site has been published yet.</p>
+                  : <ul className="divide-border border-border divide-y border-t" aria-label="Live site versions">{sites.map((site) => <li key={site.name} className="px-5 py-3"><div className="flex items-baseline justify-between gap-3"><h3 className="min-w-0 truncate text-sm font-medium" title={site.name}>{site.name}</h3><span className="shrink-0 text-xs"><span className="bg-success/15 text-success rounded-md px-1.5 py-0.5 font-mono">{site.live ? site.live.slice(0, 7) : "none"}</span><span className="text-muted-foreground ml-2">{site.deployments.length} version{site.deployments.length === 1 ? "" : "s"}</span></span></div><p className="text-muted-foreground mt-1 text-xs break-words">{sitePublishSource(site.name, events, subjects)}{site.changed_at ? ` · ${since(site.changed_at)}` : ""}</p></li>)}</ul>}
+        </section>
         {certificate && <section className="bg-card rounded-lg px-5 py-4" aria-labelledby="overview-certificate"><p className="plate">Certificate</p><h2 id="overview-certificate" className="mt-1 text-base font-medium">{certificate.tone === "bad" ? "Needs attention" : "Valid"}</h2><dl className="mt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm"><dt className="text-muted-foreground">Covers</dt><dd className="break-words">{certificate.domains.length ? certificate.domains.join(", ") : certificate.names.join(", ")}</dd><dt className="text-muted-foreground">Valid until</dt><dd>{certificate.expires}</dd><dt className="text-muted-foreground">Next renewal</dt><dd>{certificate.renews}</dd></dl></section>}
       </div>
     </div>

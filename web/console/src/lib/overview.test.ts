@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { accessScope, accessSummary, applications, attention, certificateView, changes, headline, historyScope, historySummary, streamNotices, whoGotIn } from "./overview.ts";
+import { accessScope, accessSummary, applications, attention, certificateView, changes, headline, historyScope, historySummary, sitePublishSource, streamNotices, whoGotIn } from "./overview.ts";
 import type { AccessEvent, RouteStatus, StatusResponse } from "./api.ts";
 
 const route = (over: Partial<RouteStatus> = {}): RouteStatus => ({
@@ -55,6 +55,16 @@ test("a deploy from CI says where it came from; a manual one says who", () => {
   assert.equal(hand.source, "uploaded via the admin token");
   const api = changes([event("pages.deployed", { host: "docs", actor: "127.0.0.1:56198" })])[0];
   assert.equal(api.source, "uploaded via the admin API", "a throwaway client port is never shown");
+});
+
+test("the live-site summary uses its newest deploy event or says it predates this session", () => {
+  const events = [
+    event("pages.deployed", { host: "docs", actor: "github", deployment: { project: "docs", ref: "refs/heads/main", commit_sha: "1234567890abcdef" } }),
+    event("pages.deployed", { host: "other", actor: "admin" }),
+  ];
+  assert.equal(sitePublishSource("docs", events), "GitHub Actions · main · 1234567890ab");
+  assert.equal(sitePublishSource("other", events), "uploaded via the admin token");
+  assert.equal(sitePublishSource("docs", []), "Published before this session");
 });
 
 test("a failed deploy is shown as a failure and carries no undo", () => {
