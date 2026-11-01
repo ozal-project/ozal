@@ -104,6 +104,16 @@ try {
   const { stdout } = await exec(binary, ["console", "login", "-config", join(edge.dir, "config.json"), "-name", "React preview acceptance", "-url", previewURL]);
   const loginURL = stdout.split("\n").find((line) => line.startsWith("http"));
   assert(loginURL, "host login returned no one-use URL");
+
+  step = "reduced-motion preference disables sign-in animation";
+  await browser("open", previewURL);
+  await browser("wait", "--fn", "document.querySelector('.auth-shell') !== null");
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('.auth-shell'), '::before').animationName"), "auth-glow", "sign-in animation fixture was not active without reduced motion");
+  await browser("set", "media", "light", "reduced-motion");
+  assert.equal(await evaluate("matchMedia('(prefers-reduced-motion: reduce)').matches"), true, "browser did not enable reduced motion");
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('.auth-shell'), '::before').animationName"), "none", "sign-in animation remained active with reduced motion");
+  await browser("set", "media", "light", "no-preference");
+
   await browser("open", loginURL);
   await browser("wait", "--text", "React preview acceptance");
   assert.equal(await evaluate("location.hash"), "", "one-use credential remained in the URL");
@@ -167,7 +177,7 @@ try {
   await browser("wait", "--fn", "document.querySelector('[aria-label=\"React preview acceptance\"]')?.getAttribute('aria-expanded') === 'true'");
   await browser("press", "Escape");
   await browser("wait", "--fn", "document.querySelector('[aria-label=\"React preview acceptance\"]')?.getAttribute('aria-expanded') === 'false' && document.activeElement?.getAttribute('aria-label') === 'React preview acceptance'");
-  console.log("React preview acceptance passed: production build, CSP parity, local-edge API proxy, host-issued login, 11 page routes, two aliases, unknown-route fallback, session resume, axe/overflow at 1440/1024/390/320px, and shell keyboard focus behavior.");
+  console.log("React preview acceptance passed: production build, CSP parity, local-edge API proxy, host-issued login, reduced-motion behavior, 11 page routes, two aliases, unknown-route fallback, session resume, axe/overflow at 1440/1024/390/320px, and shell keyboard focus behavior.");
 } catch (error) {
   console.error(`React preview acceptance failed during ${step}: ${error.message}`);
   try {
