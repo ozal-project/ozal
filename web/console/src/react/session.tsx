@@ -12,6 +12,7 @@ type SessionContextValue = {
   enrol: string;
   start: (value: Partial<OperatorSession> & Pick<OperatorSession, "token">, passkey: boolean) => void;
   end: (message?: string) => void;
+  logout: () => void;
   setEnrol: (value: string) => void;
 };
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -28,6 +29,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setSession({ token: value.token, name: value.name ?? "", expires: value.expires ?? "", tools: value.tools ?? [], renewable: !!value.renewable, passkey });
   }, []);
   const end = useCallback((message = "") => { setSession(null); setNotice(message); }, []);
+  const logout = useCallback(() => {
+    const token = sessionRef.current?.token ?? "";
+    setSession(null);
+    if (token) void fetch("/_/api/operators/logout", { method: "POST", headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10_000) }).catch(() => {});
+  }, []);
   const updateEnrol = useCallback((value: string) => setEnrol(value), []);
 
   useEffect(() => {
@@ -55,7 +61,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return () => { live = false; removeEventListener("hashchange", onHash); };
   }, []);
 
-  const value = useMemo(() => ({ session, ready, notice, enrol, start, end, setEnrol: updateEnrol }), [session, ready, notice, enrol, start, end, updateEnrol]);
+  const value = useMemo(() => ({ session, ready, notice, enrol, start, end, logout, setEnrol: updateEnrol }), [session, ready, notice, enrol, start, end, logout, updateEnrol]);
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
 
