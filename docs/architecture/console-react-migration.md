@@ -114,9 +114,9 @@ Read `internal/admin/console.go` before touching the build.
   filenames are required.
 - **Route table:** `consoleRoutes` in `internal/admin/console.go` is the server
   side. The client must keep these routes and aliases: `/projects` → `/sites`,
-  `/simulator` → `/activity`, unknown routes → `/overview`, `/routes` keeps its
-  `?host=` query, and the GitHub return restores the last tab
-  (`sessionStorage`, one known route) before processing `code`, `state`,
+  `/simulator` → `/activity`, unknown routes → `/overview` while retaining the
+  query and fragment, `/routes` keeps its `?host=` query, and the GitHub return
+  restores the last tab (`sessionStorage`, one known route) before processing `code`, `state`,
   `setup_action` or `installation_id` on `/applications`.
 - **No secrets in the bundle.** The admin token lives in tab memory; after a
   reload the edge returns it from the `HttpOnly` resume cookie.
@@ -268,9 +268,9 @@ scripts/verify.sh
 `react-console-acceptance.mjs` builds the isolated React preview, serves it
 with the console CSP, and proxies its API calls to a disposable loopback edge.
 It checks the host-issued operator login, page routes and aliases, resumed
-session, axe and horizontal overflow at four viewport widths. This is local
-preview evidence only; real-edge passkey and update acceptance still gate the
-cutover.
+session, unknown-route redirect with query/fragment preservation, axe and
+horizontal overflow at four viewport widths. This is local preview evidence
+only; real-edge passkey and update acceptance still gate the cutover.
 
 `react-passkey-acceptance.mjs` uses the same production preview and disposable
 edge with separate virtual-authenticator browser contexts. It covers first

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, NavLink, Route, Routes, useLocation } from "react-router";
+import { Link, Navigate, NavLink, Route, Routes, useLocation } from "react-router";
 import { Button } from "$lib/components/ui/button/react";
 import { fetchUpdateStatus } from "$lib/api";
 import { availableUpdateNotice, type AvailableUpdateNotice } from "$lib/updateStatus";
@@ -137,7 +137,7 @@ export default function Console() {
         <Route path="/groups" element={<Groups />} />
         <Route path="/people" element={<People />} />
         <Route path="/connectors" element={<Connectors />} />
-        <Route path="*" element={<MigrationPlaceholder title={pageTitle} />} />
+        <Route path="*" element={<Navigate to={{ pathname: "/overview", search: location.search, hash: location.hash }} replace />} />
       </Routes>}
     </div></main>
   </div>
@@ -147,8 +147,4 @@ export default function Console() {
   </aside>}
   <UpdateDialog open={updateDialogOpen} token={session?.token ?? ""} canInstall={can("updates.install")} onOpenChange={setUpdateDialogOpen} onDone={completeUpdate} />
   </>;
-}
-
-function MigrationPlaceholder({ title }: { title: string }) {
-  return <header><p className="plate">UI-012 · Migration in progress</p><h1 tabIndex={-1} className="mt-1 text-2xl font-semibold tracking-tight">{title}</h1><p className="text-muted-foreground mt-2 text-sm">This React view is being brought over from the current console.</p></header>;
 }

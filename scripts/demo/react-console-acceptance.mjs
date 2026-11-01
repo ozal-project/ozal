@@ -134,6 +134,12 @@ try {
     await browser("wait", "--fn", `location.pathname === ${JSON.stringify(destination)} && document.querySelector('#main-content h1')?.textContent?.trim() === ${JSON.stringify(heading)}`);
   }
 
+  step = "unknown route returns to Overview without dropping URL context";
+  await browser("open", `${previewURL}/not-a-console-page?source=bookmark#main-content`);
+  await browser("wait", "--fn", "location.pathname === '/overview' && document.querySelector('#main-content h1')?.textContent?.trim() === 'Overview'");
+  assert.equal(await evaluate("location.search"), "?source=bookmark", "unknown-route redirect dropped the query string");
+  assert.equal(await evaluate("location.hash"), "#main-content", "unknown-route redirect dropped the fragment");
+
   step = "React session resumes after a reload";
   await browser("open", `${previewURL}/people`);
   await browser("wait", "--fn", "document.querySelector('#main-content h1')?.textContent?.trim() === 'People'");
