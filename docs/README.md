@@ -1,5 +1,8 @@
 # Documentation
 
+New here? Begin with [Start here](START-HERE.md): it lists what to read, in what
+order, depending on whether you want to try Ozal, run it, or contribute.
+
 ## Using Ozal
 
 1. [Install](operations/download-install.md): version, integrity and the Linux service.

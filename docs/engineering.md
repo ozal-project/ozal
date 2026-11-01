@@ -659,10 +659,9 @@ go test -run '^$' -bench '^BenchmarkLimiter' -benchmem ./internal/ratelimit
 go test -run '^$' -bench '^BenchmarkWriterAppendGrouped' -benchmem ./internal/audit
 ```
 
-Proxy benchmarks use a synthetic transport. The 2026-10-25 historical
-measurement compared about 16 µs/op without audit with about 9 ms/op for serial
-required audit on that host: it shows the cost of persistence, not public
-throughput or p99. Measure listener/TLS, SQLite, audit and tunnel together with
+Proxy benchmarks use a synthetic transport. Required, serial audit persistence
+costs far more per request than the proxy path without it; that cost is the
+persistence, not public throughput or p99. Measure listener/TLS, SQLite, audit and tunnel together with
 representative storage, saturation and sustained load before declaring capacity.
 
 Property/fuzz and mutation tests must detect rule changes, not copy the

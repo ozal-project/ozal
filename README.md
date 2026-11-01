@@ -62,6 +62,7 @@ For a minimal routing example with no TLS and no identity provider, see [QUICKST
 
 | I want to… | Read |
 |---|---|
+| Not sure where to begin | [Start here](docs/START-HERE.md) |
 | Install Ozal and run it as a service | [Install](docs/operations/download-install.md) |
 | Publish my first application or website | [First application](docs/operations/first-application.md) |
 | Upgrade, back up, connect hosts, publish from CI | [Administration](docs/operations/administration.md) |
