@@ -82,8 +82,12 @@ try {
   const { stdout } = await exec(binary, ["console", "login", "-config", join(edge.dir, "config.json"), "-name", "React Sites acceptance", "-url", previewURL]);
   const loginURL = stdout.split("\n").find((line) => line.startsWith("http"));
   assert(loginURL, "the host printed no one-use login URL");
+  const overviewSitesRead = page.waitForResponse((response) => response.url().includes("/_/api/sites"));
   await page.goto(loginURL);
   await page.locator("#main-content h1", { hasText: "Overview" }).waitFor();
+  await overviewSitesRead;
+  assert.equal(siteReads, 1, "Overview did not load its live-sites summary exactly once");
+  siteReads = 0;
 
   step = "recover Sites after Pages becomes available";
   await page.goto(`${previewURL}/sites`);
