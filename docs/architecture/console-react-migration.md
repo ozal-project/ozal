@@ -221,6 +221,11 @@ edge's WebAuthn step-up. The plan and update-job responses are fixtures because
 the disposable edge has no configured update executor; this does not verify an
 actual installation.
 
+Publishing from Sites keeps the separate final confirmation before opening a
+workflow pull request. `react-publishing-acceptance.mjs` verifies that
+cancelling this confirmation sends no GitHub write and confirming it sends one
+request with the reviewed workflow digest. GitHub responses are fixtures.
+
 ## Parity checklist
 
 Every item is observable behavior, not an implementation detail. Verify each in
@@ -257,6 +262,7 @@ node --test web/console/src/lib/*.test.ts
 OZAL_BIN=/path/to/ozal node scripts/demo/react-console-acceptance.mjs
 OZAL_BIN=/path/to/ozal CHROME=/path/to/chrome node scripts/demo/react-passkey-acceptance.mjs
 OZAL_BIN=/path/to/ozal CHROME=/path/to/chrome node scripts/demo/react-update-acceptance.mjs
+OZAL_BIN=/path/to/ozal CHROME=/path/to/chrome node scripts/demo/react-publishing-acceptance.mjs
 node scripts/demo/product-acceptance.mjs
 node scripts/demo/passkey-acceptance.mjs
 OZAL_BIN=/path/binary node scripts/demo/update-acceptance.mjs
@@ -283,6 +289,12 @@ edge. It exercises first-admin enrolment with delayed enrolment info, a real
 WebAuthn step-up against that edge, and the React review/retry/polling flow.
 The update plan and executor endpoints are fixtures, so it does not establish
 real installation, live-edge, or public acceptance.
+
+`react-publishing-acceptance.mjs` uses the production preview and a disposable
+Go edge. It exercises workflow preview, the final pull-request confirmation,
+cancellation without a write, and one confirmed request carrying the reviewed
+digest. GitHub responses are fixtures, so it does not establish GitHub App or
+repository acceptance.
 
 Also check by hand: Windows-style MIME behavior is covered by `consoleTypes`;
 the CSP header on `index.html` and on a hashed asset; an old hashed asset is
