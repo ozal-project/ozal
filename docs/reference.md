@@ -393,9 +393,9 @@ act outside it; no permission to list zones is needed. Each change is an asynchr
 the adapter waits for it to finish before treating the record as created or deleted, and an
 Action that never finishes counts as an unknown result. Deletion removes only the record it
 created (the API identifies them by value inside the RRSet). The TTL is fixed at 60 s, the
-minimum. **Pending verification in a real zone:** the official spec does not state how TXT
-records are written; they are sent quoted, and that decision lives in one place
-(`hetznerTXTValue`). Until that test, use the provider in staging.
+minimum. **Known limit:** the official API specification does not state how TXT records
+must be written. Ozal sends them quoted. Test the provider against a staging zone before
+relying on it for production certificates.
 
 #### Delegating the challenge by CNAME (any DNS provider)
 
