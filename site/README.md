@@ -5,11 +5,11 @@ hostname stay as aliases), built with Astro and served by Ozal Pages. Its tokens
 ivory and camel, Geist) are shared with the
 console.
 
-Publishing is CI: a push to `main` that touches `site/` or
-`scripts/pages/` runs `.github/workflows/site.yml`, which builds, refuses secrets
+Publishing is CI: a push to `main` that touches `site/` or the engine paths
+runs `.github/workflows/site.yml`, which builds, refuses secrets
 in `dist/`, uploads through the deploy endpoint with a GitHub OIDC token (project
 `ozal-site`, renamed on the edge with `ozal project rename`), checks the public page and rolls back to the last good build
-if that check fails. The explanation, walkthrough tabs and release plan work without JavaScript.
+if that check fails. The explanation, walkthrough tabs and capability cards work without JavaScript.
 Only the optional live engine and progressive entrance motion use client scripts;
 all content is visible if those scripts fail.
 
@@ -21,7 +21,7 @@ npm run build   # astro check + static build into dist/
 
 Describe capabilities only at the level supported by the current alpha. Keep
 automated test coverage, observed single-host operation, experimental code and
-roadmap items distinct; a passing build alone is not deployment
+unreleased work distinct; a passing build alone is not deployment
 evidence.
 
 The "Ask it a question" section runs `internal/auth` in the browser: `scripts/build-site-engine.sh`
@@ -42,10 +42,49 @@ that advance on their own while on screen (paused on hover, handed to the visito
 first click or key, off under reduced motion; no video; `scripts/demo/tour.mjs`
 regenerates the stills by signing in with a host login). Below it: one card and a status
 tag per capability ("In use" on the author's server, "Tested" by automated tests,
-"Unreleased" on main) and the four releases on a year-long rail. There is no separate
-roadmap page; the trackers stay in `docs/`. The public source is linked; release downloads stay unadvertised until Ozal artifacts exist.
+"Unreleased" on main). There is no roadmap page; the trackers stay in `docs/`. The
+public source is linked; release downloads stay unadvertised until Ozal artifacts exist.
 Automatic site publication requires repository variable `OZAL_SITE_DEPLOY_ENABLED=true`,
 set only after the edge trusts the new repository owner and workflow.
+
+## Discovery by search engines and assistants
+
+The page is static HTML, so every claim is readable without JavaScript. Four
+pieces carry the machine-readable layer:
+
+- `public/robots.txt` allows ordinary search and names the assistant search
+  and on-request agents explicitly (`OAI-SearchBot`, `ChatGPT-User`,
+  `Claude-SearchBot`, `Claude-User`, `PerplexityBot`, `Perplexity-User`), so
+  Ozal can appear in answers. Training collectors (`GPTBot`, `ClaudeBot`,
+  `Google-Extended`, `Applebot-Extended`, `CCBot`) are disallowed: appearing
+  in answers does not need them (owner decision 2026-11-01). Cloudflare prepends its Content
+  Signals preamble to the origin file, so the live response starts with that
+  comment block and then this one.
+- `public/sitemap.xml` lists the canonical URL; `robots.txt` references it.
+- `public/llms.txt` is a short Markdown summary for agents: what Ozal is, what
+  it does, what it does not do, and links. No major provider documents reading
+  `llms.txt` at inference time, so treat it as a summary for tools and people,
+  not as a switch that makes ChatGPT or Claude cite the page.
+- `src/layouts/Base.astro` emits JSON-LD (`WebSite` + `SoftwareApplication`),
+  `robots` with `max-snippet:-1`, and Open Graph/Twitter metadata.
+
+The owner-only steps matter more than the files: verify `ozal.dev` in
+[Bing Webmaster Tools](https://www.bing.com/webmasters) (ChatGPT search uses
+Bing among its sources) and [Google Search Console](https://search.google.com/search-console),
+submit `https://ozal.dev/sitemap.xml`, and check Cloudflare's AI Crawl Control
+so it does not block the search agents. Indexing takes days to weeks and is
+never guaranteed. Third-party mentions (self-hosted directories, comparison
+pages, GitHub topics and the README) are what make an assistant willing to
+name the product, not just describe the page.
+
+Verify the live result after publishing:
+
+```bash
+curl -sS https://ozal.dev/robots.txt | grep -E 'OAI-SearchBot|Claude-SearchBot|Sitemap'
+curl -sSI https://ozal.dev/sitemap.xml | head -1
+curl -sSI https://ozal.dev/llms.txt | head -1
+curl -sS https://ozal.dev/ | grep -o 'application/ld+json'
+```
 
 Browser regression checks reuse the tour's existing Playwright dependency:
 

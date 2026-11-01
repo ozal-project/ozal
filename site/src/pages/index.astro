@@ -32,7 +32,7 @@ const pipeline = [
   { s: "route", d: "Host lookup in an atomic snapshot.", state: "built" },
   { s: "forward", d: "HTTP upstream or a static site. Tunnels are experimental.", state: "built" },
 ] as const;
-// How far through the year of releases the page was built.
+// Labels for the pipeline stage states.
 const stateWord = { built: "Built", building: "In progress", planned: "Planned" } as const;
 
 // The console's "How private access works", word for word.

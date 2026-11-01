@@ -2,6 +2,43 @@
 import "../styles.css";
 const { title, description } = Astro.props;
 const canonical = new URL(Astro.url.pathname, Astro.site).toString();
+const ogImage = new URL("/og.png", Astro.site).toString();
+// One machine-readable description of the project for search engines and
+// assistants that read structured data. It repeats only claims the page and
+// the repository already make; there is no rating or review markup.
+const schema = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://ozal.dev/#website",
+      url: "https://ozal.dev/",
+      name: "Ozal",
+      description,
+      inLanguage: "en",
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://ozal.dev/#software",
+      name: "Ozal",
+      url: "https://ozal.dev/",
+      description,
+      applicationCategory: "SecurityApplication",
+      applicationSubCategory: "Self-hosted access gateway",
+      operatingSystem: "Linux, macOS, Windows",
+      isAccessibleForFree: true,
+      license: "https://opensource.org/license/mit",
+      codeRepository: "https://github.com/ozal-project/ozal",
+      isPartOf: { "@id": "https://ozal.dev/#website" },
+      offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+      author: {
+        "@type": "Person",
+        name: "Octavio Santacruz",
+        url: "https://octaviosantacruz.com",
+      },
+    },
+  ],
+};
 ---
 <!doctype html>
 <html lang="en">
@@ -10,22 +47,33 @@ const canonical = new URL(Astro.url.pathname, Astro.site).toString();
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
+    <!-- Allow long snippets: assistants quote pages best when they can see the
+         whole answer, not a truncated preview. -->
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+    <meta name="author" content="Octavio Santacruz" />
     <link rel="canonical" href={canonical} />
     <!-- ?v= busts the long favicon cache browsers keep across deploys. -->
     <link rel="icon" href="/favicon.ico?v=2" sizes="32x32" />
     <link rel="icon" href="/favicon.svg?v=2" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2" />
+    <meta property="og:site_name" content="Ozal" />
+    <meta property="og:locale" content="en_US" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
     <meta property="og:url" content={canonical} />
-    <meta property="og:image" content={new URL("/og.png", Astro.site).toString()} />
+    <meta property="og:image" content={ogImage} />
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1440" />
     <meta property="og:image:height" content="756" />
     <meta property="og:image:alt" content="Ozal: every door to your apps, one place that decides." />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+    <meta name="twitter:image:alt" content="Ozal: every door to your apps, one place that decides." />
     <meta name="theme-color" content="#0e0e0d" />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(schema)} />
   </head>
   <body><slot /></body>
 </html>

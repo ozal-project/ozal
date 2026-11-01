@@ -1,0 +1,31 @@
+# ozal.dev is the public project page for Ozal, an open-source, self-hosted
+# access gateway. It is meant to be found, quoted and cited by search engines
+# and by assistants answering questions about Ozal or self-hosted access tools.
+#
+# Source: https://github.com/ozal-project/ozal
+# Summary for assistants: https://ozal.dev/llms.txt
+
+User-agent: *
+Allow: /
+
+# Assistant search and fetches made at a person's request: allowed, so Ozal
+# can appear in answers. OAI-SearchBot decides whether ChatGPT search can
+# surface this site, Claude-SearchBot does the same for Claude.
+User-agent: OAI-SearchBot
+User-agent: ChatGPT-User
+User-agent: Claude-SearchBot
+User-agent: Claude-User
+User-agent: PerplexityBot
+User-agent: Perplexity-User
+Allow: /
+
+# Collection for model training: not needed to appear in answers, so it is
+# opted out. Ordinary search crawlers (Googlebot, Bingbot) are unaffected.
+User-agent: GPTBot
+User-agent: ClaudeBot
+User-agent: Google-Extended
+User-agent: Applebot-Extended
+User-agent: CCBot
+Disallow: /
+
+Sitemap: https://ozal.dev/sitemap.xml

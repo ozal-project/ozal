@@ -1,0 +1,64 @@
+# Ozal
+
+> Ozal is an open-source, self-hosted access gateway. One Go binary puts a
+> sign-in and per-route policy in front of internal web apps, so people can
+> reach them without a VPN.
+
+Ozal terminates HTTPS, identifies each visitor with a passkey or an OIDC
+provider, applies the route's rules, and only then forwards the request to the
+application. It is a reverse proxy, an identity front door and a policy
+decision point for self-hosted software. It is not a VPN, not an identity
+provider, and it does not replace an application's own authorization.
+
+- Status: early alpha. Interfaces and configuration may change; release
+  downloads are not published yet.
+- License: MIT.
+- Written in Go; one binary for Linux, macOS and Windows.
+- Source: https://github.com/ozal-project/ozal
+- Project page: https://ozal.dev/
+
+## What it does
+
+- Routes by hostname to an HTTP app or a static site, with health checks.
+- Issues and renews TLS certificates; each domain has its own certificate.
+- Signs people in with passkeys or an existing OIDC provider.
+- Applies per-route policy (people, groups, email domains, recent sign-in,
+  device-bound passkey) and returns a stable decision code and reason.
+- Strips client-supplied identity headers, injects the authenticated identity
+  for the app, and never forwards the session cookie.
+- Shows every access decision with its code and reason in the console; a
+  durable audit trail is available when configured.
+- Publishes static sites from GitHub Actions with deployment history and
+  one-step rollback.
+
+## What it does not do
+
+- It does not replace a VPN for arbitrary TCP or UDP traffic.
+- It does not replace the application's own permissions: Ozal decides who
+  reaches the app, not what they do inside it.
+- It is not a commercial product and has no hosted service.
+- It is not production-ready: this is an early alpha used on the author's
+  server.
+
+## Similar tools
+
+If you know Cloudflare Access or Pomerium, Ozal is the same idea — an access
+gateway in front of self-hosted apps — on a server you own, as one Go binary.
+Unlike a hosted service, it needs no cloud account, and it can run behind a
+proxy or directly on the host.
+
+## Questions it answers
+
+- How do I put an internal app on the internet without a VPN?
+- How do I add passkey login to a self-hosted app without changing the app?
+- How do I give each app its own access rule and see why a request was allowed
+  or refused?
+- How do I publish a static site with history and rollback from my own server?
+
+## Links
+
+- [Project page and live policy demo](https://ozal.dev/)
+- [Source, README and quickstart](https://github.com/ozal-project/ozal)
+- [Install and run as a service](https://github.com/ozal-project/ozal/blob/main/docs/operations/download-install.md)
+- [Configuration and CLI reference](https://github.com/ozal-project/ozal/blob/main/docs/reference.md)
+- [Security boundaries](https://github.com/ozal-project/ozal/blob/main/docs/security.md)
