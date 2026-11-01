@@ -89,14 +89,69 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // open opens name inside dir. os.OpenInRoot fails if name, or any symlink it
 // follows, would leave dir.
 func open(dir, name string) (*os.File, fs.FileInfo, error) {
-	file, err := os.OpenInRoot(dir, name)
+	root, err := os.OpenRoot(dir)
 	if err != nil {
 		return nil, nil, err
 	}
-	info, err := file.Stat()
+	defer root.Close()
+	if name == "." {
+		file, err := root.Open(name)
+		if err != nil {
+			return nil, nil, err
+		}
+		info, err := file.Stat()
+		if err != nil {
+			file.Close()
+			return nil, nil, err
+		}
+		return file, info, nil
+	}
+
+	parts := strings.Split(name, "/")
+	current := root
+	owned := false
+	defer func() {
+		if owned {
+			current.Close()
+		}
+	}()
+	for _, part := range parts[:len(parts)-1] {
+		before, err := current.Lstat(part)
+		if err != nil || before.Mode()&os.ModeSymlink != 0 || !before.IsDir() {
+			return nil, nil, fs.ErrNotExist
+		}
+		next, err := current.OpenRoot(part)
+		if err != nil {
+			return nil, nil, fs.ErrNotExist
+		}
+		opened, statErr := next.Stat(".")
+		after, lstatErr := current.Lstat(part)
+		if statErr != nil || lstatErr != nil || after.Mode()&os.ModeSymlink != 0 ||
+			!os.SameFile(before, opened) || !os.SameFile(opened, after) {
+			next.Close()
+			return nil, nil, fs.ErrNotExist
+		}
+		if owned {
+			current.Close()
+		}
+		current, owned = next, true
+	}
+
+	leaf := parts[len(parts)-1]
+	before, err := current.Lstat(leaf)
+	if err != nil || before.Mode()&os.ModeSymlink != 0 {
+		return nil, nil, fs.ErrNotExist
+	}
+	file, err := current.Open(leaf)
 	if err != nil {
-		file.Close()
 		return nil, nil, err
+	}
+	info, statErr := file.Stat()
+	after, lstatErr := current.Lstat(leaf)
+	if statErr != nil || lstatErr != nil || after.Mode()&os.ModeSymlink != 0 ||
+		!os.SameFile(before, info) || !os.SameFile(info, after) {
+		file.Close()
+		return nil, nil, fs.ErrNotExist
 	}
 	return file, info, nil
 }

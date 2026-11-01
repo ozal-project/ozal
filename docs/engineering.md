@@ -907,12 +907,21 @@ pending experiments and their limits.
 <a id="revisión-estática-de-seguridad-capacidad-y-código-sin-uso"></a>
 ### Static security, capacity and unused-code review
 
-The 2026-10-31 source review is tracked as `SEC-021`, `SEC-022`, `BUG-015` and
-`BUG-016` in [TO_IMPLEMENT](TO_IMPLEMENT.md). It inspected identity, proxy,
-static files, publishing, sessions, tunnels, events and health checks. It did not
-modify code, run services or reproduce attacks; it is not a complete audit, a
-capacity measurement or evidence of exploitation. The security candidates have
-no confirmed severity and require an isolated fixture with fictitious data.
-Corrections are tracked in [TO_IMPLEMENT](TO_IMPLEMENT.md), without reopening
-historical closures by analogy. A local test does not authorize deployment or
-public exposure.
+The 2026-10-31 source review tracked `SEC-021`, `SEC-022`, `BUG-015` and
+`BUG-016` in [TO_IMPLEMENT](TO_IMPLEMENT.md). Focused follow-up confirmed that
+an in-root symlink could expose a hidden file; the static handler now rejects
+symlink traversal while comparing opened files and directories with their
+before-and-after filesystem entries. A deterministic fixture covers the leak.
+Forward logs now omit application-controlled paths and query values while
+retaining method, host, target and client address. When required access-audit
+persistence fails, the edge emits `access.audit_failed` to live observers and
+returns 503; it never reports the request as allowed. The failed-audit event is
+not durable, but remains visible in live activity and counts as refused in
+in-memory access history.
+These focused changes do not constitute a complete audit, capacity measurement,
+or evidence of exploitation. The full `scripts/verify.sh` gate passed, including
+the race suite, Go builds, short fuzz runs, console checks/build, logic tests,
+passkey checks, site checks/build and staged installer tests. `govulncheck`
+reported no vulnerabilities reachable from the code; three findings were in
+required modules that the code does not appear to call. Local tests do not
+authorize deployment or public exposure.

@@ -136,6 +136,7 @@ const refusalText: Record<string, string> = {
   reauthentication_required: "Needed to sign in again",
   device_bound_required: "Needed a device-bound passkey",
   context_rule_denied: "Blocked by a context rule",
+  audit_unavailable: "Blocked because the access record could not be saved",
 };
 
 export function accessSummary(events: AccessEvent[]): AccessSummary {
@@ -145,7 +146,7 @@ export function accessSummary(events: AccessEvent[]): AccessSummary {
     if (e.type === "access.allowed") sum.allowed++;
     else if (e.type === "access.rate_limited") sum.rateLimited++;
     else if (e.type === "login.started") sum.loginsStarted++;
-    else if (e.type === "access.denied") {
+    else if (e.type === "access.denied" || e.type === "access.audit_failed") {
       sum.refused++;
       const code = e.code || "unspecified";
       byCode.set(code, (byCode.get(code) ?? 0) + 1);

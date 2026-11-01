@@ -20,19 +20,20 @@ func TestStoreKeepsOnlyAccessDecisionsAndCountsThem(t *testing.T) {
 	s.Add(decision(events.AccessAllowed, "sb:ana", "grafana.example.com", "allowed", 1))
 	s.Add(decision(events.AccessAllowed, "sb:ana", "grafana.example.com", "allowed", 3))
 	s.Add(decision(events.AccessDenied, "sb:bob", "grafana.example.com", "email_not_allowed", 2))
+	s.Add(decision(events.AccessAuditFailed, "sb:ana", "grafana.example.com", "audit_unavailable", 2))
 	s.Add(decision(events.AccessDenied, "", "grafana.example.com", "", 4))
 	s.Add(decision(events.AccessStepUp, "sb:ana", "billing.example.com", "max_auth_age", 5))
 	s.Add(decision(events.AccessRateLimited, "sb:bob", "grafana.example.com", "rate_limited", 6))
 	s.Add(events.Event{Type: events.RouteCreated, Host: "wiki.example.com", Time: at(7)})
 
 	sum := s.Summary(10)
-	if sum.Allowed != 2 || sum.Refused != 2 || sum.StepUp != 1 || sum.RateLimited != 1 || sum.Held != 6 {
+	if sum.Allowed != 2 || sum.Refused != 3 || sum.StepUp != 1 || sum.RateLimited != 1 || sum.Held != 7 {
 		t.Fatalf("summary = %+v", sum)
 	}
 	if !sum.Since.Equal(t0) || sum.Source != Memory {
 		t.Fatalf("source/since = %s %s, want memory since start", sum.Source, sum.Since)
 	}
-	if len(sum.Reasons) != 2 || sum.Reasons[0].Count != 1 || sum.Reasons[0].Code != "email_not_allowed" || sum.Reasons[1].Code != "unspecified" {
+	if len(sum.Reasons) != 3 || sum.Reasons[0].Count != 1 || sum.Reasons[0].Code != "audit_unavailable" || sum.Reasons[1].Code != "email_not_allowed" || sum.Reasons[2].Code != "unspecified" {
 		t.Fatalf("reasons = %+v", sum.Reasons)
 	}
 	if len(sum.People) != 1 || sum.People[0] != (Person{Actor: "sb:ana", Host: "grafana.example.com", Count: 2, Last: at(3)}) {

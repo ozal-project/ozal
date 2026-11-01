@@ -77,14 +77,16 @@ test("the access summary counts decisions and ranks refusal reasons", () => {
   const sum = accessSummary([
     event("access.allowed"), event("access.allowed"), event("access.allowed"),
     event("access.denied", { code: "missing_required_group" }), event("access.denied", { code: "missing_required_group" }), event("access.denied", { code: "authentication_required" }),
+    event("access.audit_failed", { code: "audit_unavailable" }),
     event("login.started"), event("access.rate_limited"),
   ]);
   assert.equal(sum.allowed, 3);
-  assert.equal(sum.refused, 3);
+  assert.equal(sum.refused, 4);
   assert.equal(sum.rateLimited, 1);
   assert.equal(sum.loginsStarted, 1);
   assert.deepEqual(sum.reasons[0], { code: "missing_required_group", text: "Not in the group the app needs", count: 2 });
   assert.equal(sum.reasons[1].text, "Not signed in");
+  assert.deepEqual(sum.reasons[2], { code: "audit_unavailable", text: "Blocked because the access record could not be saved", count: 1 });
 });
 
 test("an unknown refusal code is shown as is, never dropped", () => {

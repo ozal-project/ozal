@@ -489,11 +489,11 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 			handler = rt.upstreams[selectedIndex].handler
 			target = rt.upstreams[selectedIndex].target
 		}
-		// Path only: a query string can carry tokens and must never be logged.
+		// Request paths can contain credentials or other sensitive values.
+		// Keep operational context without recording application-controlled URLs.
 		cfg.logger.LogAttrs(req.Context(), slog.LevelInfo, "proxy.forward",
 			slog.String("method", req.Method),
 			slog.String("host", host),
-			slog.String("path", req.URL.Path),
 			slog.String("target", targetLogLabel(target)),
 			slog.String("client_ip", clientIP),
 		)
@@ -516,7 +516,11 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 func emitAccessEvent(w http.ResponseWriter, r *http.Request, cfg options, event events.Event, required bool) bool {
 	if cfg.audit != nil {
 		if err := cfg.audit.Append(r.Context(), event); err != nil && required {
-			cfg.sink.Emit(event)
+			failed := event
+			failed.Type = events.AccessAuditFailed
+			failed.Code = "audit_unavailable"
+			failed.Reason = "required access audit could not be recorded"
+			cfg.sink.Emit(failed)
 			http.Error(w, "audit unavailable", http.StatusServiceUnavailable)
 			return false
 		}

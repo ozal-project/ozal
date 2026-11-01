@@ -43,6 +43,8 @@ func outcomeOf(t events.Type) (Outcome, bool) {
 		return Allowed, true
 	case events.AccessDenied:
 		return Refused, true
+	case events.AccessAuditFailed:
+		return Refused, true
 	case events.AccessStepUp:
 		return StepUp, true
 	case events.AccessRateLimited:

@@ -16,8 +16,11 @@ import (
 type Type string
 
 const (
-	AccessAllowed     Type = "access.allowed"
-	AccessDenied      Type = "access.denied"
+	AccessAllowed Type = "access.allowed"
+	AccessDenied  Type = "access.denied"
+	// Required audit persistence failed, so the request was blocked before
+	// forwarding. It is emitted only to live observers and is not durable.
+	AccessAuditFailed Type = "access.audit_failed"
 	AccessRateLimited Type = "access.rate_limited"
 	// An operator repaired an incomplete final record in the local audit log.
 	AuditRepaired Type = "audit.repaired"

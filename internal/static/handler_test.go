@@ -39,6 +39,12 @@ func newSite(t *testing.T) string {
 	if err := os.Symlink(filepath.Join(base, "secret.txt"), filepath.Join(site, "escape.txt")); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(site, ".private"), []byte("hidden site data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(".private", filepath.Join(site, "visible.txt")); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Symlink(base, filepath.Join(site, "up")); err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +110,7 @@ func TestHandlerNeverLeavesTheSite(t *testing.T) {
 			t.Errorf("GET %s leaked %q (status %d)", target, body, rec.Code)
 		}
 	}
-	for _, target := range []string{"/escape.txt", "/up/secret.txt", "/.env"} {
+	for _, target := range []string{"/escape.txt", "/up/secret.txt", "/.env", "/visible.txt"} {
 		if rec := serve(h, http.MethodGet, target); rec.Code != http.StatusNotFound {
 			t.Errorf("GET %s = %d, want 404", target, rec.Code)
 		}

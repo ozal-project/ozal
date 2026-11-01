@@ -48,12 +48,13 @@ func TestRequiredAccessAuditFailureStopsBeforeUpstream(t *testing.T) {
 	})
 
 	gate := &fakeGate{authenticated: true, principal: auth.Principal{Subject: "person-1"}}
+	var observed events.Recorder
 	var appended events.Event
 	appender := auditAppenderFunc(func(_ context.Context, event events.Event) error {
 		appended = event
 		return errors.New("disk full")
 	})
-	handler, err := New([]config.Route{{Host: "private.localhost", Target: "http://upstream.local", Access: &config.AccessPolicy{}}}, nil, gate, WithAuditAppender(appender), WithTransport(transport))
+	handler, err := New([]config.Route{{Host: "private.localhost", Target: "http://upstream.local", Access: &config.AccessPolicy{}}}, nil, gate, WithAuditAppender(appender), WithEventSink(&observed), WithTransport(transport))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -70,6 +71,10 @@ func TestRequiredAccessAuditFailureStopsBeforeUpstream(t *testing.T) {
 	}
 	if appended.Type != events.AccessAllowed || appended.Host != "private.localhost" {
 		t.Fatalf("appended event = %+v", appended)
+	}
+	got := observed.Events()
+	if len(got) != 1 || got[0].Type != events.AccessAuditFailed || got[0].Code != "audit_unavailable" || got[0].Host != "private.localhost" {
+		t.Fatalf("observed events = %+v, want one audit-failure event and no allow event", got)
 	}
 }
 
@@ -1114,17 +1119,17 @@ func TestForwardedRequestIsLoggedAsStructuredRecord(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	req := httptest.NewRequest(http.MethodGet, "http://app.localhost/a/b?token=secret", nil)
+	req := httptest.NewRequest(http.MethodGet, "http://app.localhost/reset/known-secret?token=query-secret", nil)
 	handler.ServeHTTP(httptest.NewRecorder(), req)
 
 	line := out.String()
-	for _, want := range []string{`"msg":"proxy.forward"`, `"host":"app.localhost"`, `"path":"/a/b"`, `"method":"GET"`} {
+	for _, want := range []string{`"msg":"proxy.forward"`, `"host":"app.localhost"`, `"method":"GET"`} {
 		if !strings.Contains(line, want) {
 			t.Errorf("log record missing %s: %s", want, line)
 		}
 	}
-	if strings.Contains(line, "secret") {
-		t.Errorf("the query string must never be logged: %s", line)
+	if strings.Contains(line, "secret") || strings.Contains(line, "/reset") {
+		t.Errorf("application URL paths and query values must never be logged: %s", line)
 	}
 }
 
