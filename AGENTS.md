@@ -20,14 +20,16 @@ report the difference before making a broad change.
 
 Ozal is a year-long open-source project (October 2026 –
 September 2027): a self-hostable **transparent zero-trust access platform**
-in a single Go binary. Today it is a host-based reverse proxy with health
-checks, ACME TLS, OIDC login against an external provider, per-route claim
-authorization, atomic routing snapshots and a loopback control plane. The
-plan grows it into tunnels, passwordless identity, a private CA,
-infrastructure access, a WAF ("Shield"), Telegram approvals, an AI-agent
-gateway and a transparency log. See `VISION.md`.
+in a single Go binary. Today it is a self-hosted access gateway: host-based
+reverse proxy, health checks, ACME TLS, native passkey and OIDC login,
+per-route claim and context policy, atomic routing snapshots, static sites
+with deployment history, experimental tunnels, an embedded console on
+loopback or a local socket, and signed update plumbing. The plan grows it
+into a private CA, infrastructure access, a WAF ("Shield"), Telegram
+approvals, an AI-agent gateway and a transparency log. See `VISION.md`.
 
-It is dogfooded on `octaviosantacruz.com`. It is not a commercial product.
+It is dogfooded on `ozal.dev` and `octaviosantacruz.com`. It is not a
+commercial product.
 
 ## Boundary with Server Ops
 
@@ -53,16 +55,25 @@ scripts/verify.sh                              # full gate before reporting done
 ## Code map (current)
 
 - `cmd/ozal/` — composition root: flags, listeners, signals, shutdown.
+- `cmd/ozalctl/` — SSH operator CLI (targets, upgrades, publication).
 - `internal/config/` — parse, validate and normalize config; atomic persistence.
-- `internal/auth/` — `Principal`, pure `Authorize`, OIDC `Gate`, session and
-  pending-login stores.
+- `internal/auth/` — `Principal`, pure `Authorize`, OIDC `Gate`, sessions.
+- `internal/passkey/` — WebAuthn ceremonies, enrolment, devices and login pages.
 - `internal/proxy/` — host-routed reverse proxy; strips/injects identity headers.
+- `internal/pipeline/` — inbound stage order; `trust` is a middleware today.
+- `internal/routing/` — pure, health-aware upstream selection.
 - `internal/healthcheck/` — background upstream probes.
 - `internal/originauth/` — client-certificate policy for the public HTTPS listener (pure `Decide` + TLS/HTTP adapters).
-- `internal/routemanager/` — builds immutable snapshots, atomic swap, reload,
-  route mutations.
-- `internal/admin/` — loopback control plane: status dashboard, bearer-token
-  mutations, audit lines.
+- `internal/routemanager/` — immutable snapshots, atomic swap, reload, route mutations.
+- `internal/certs/`, `internal/acmedns/`, `internal/cloudflare/`, `internal/zonesetup/`, `internal/domaincheck/` — ACME, DNS providers and domain state.
+- `internal/pages/` — static sites, uploads, GitHub workflow generation and deploy auth.
+- `internal/tunnel/`, `internal/tunnelrenew/` — connector transport and renewal.
+- `internal/admin/` — loopback/socket control plane, embedded console and login host.
+- `internal/audit/`, `internal/events/`, `internal/notify/` — durable journal, event stream and alerts.
+- `internal/store/sqlite/` — sessions, identities, connectors and deployments.
+- `internal/release/`, `internal/updateexec/`, `internal/updatejob/`, `internal/updatelock/`, `internal/upgrade/` — signed releases and updates.
+- `internal/ctl/`, `internal/githubapp/` — operator and GitHub App adapters.
+- Smaller adapters: `internal/ratelimit`, `internal/static`, `internal/policycontext`, `internal/policydemo`, `internal/install`, `internal/diskspace`, `internal/adminid`.
 
 The target layout and the mapping from these packages is in
 `docs/architecture/design.md`. Move a package only when a task already touches
@@ -121,6 +132,11 @@ adapters, tests, integration, documentation and verification.
   and CLI details belong in `docs/reference.md`, implementation contracts and
   verification in `docs/engineering.md`. Update the existing section rather
   than creating a dated review, plan or delivery report for each task.
+- Write everything in the repository in English (owner decision 2026-11-01):
+  docs, trackers, site, product copy, code comments and commit messages, with
+  a product mindset for public readers. Quote an owner's words in their
+  original language only as a cited decision. When a heading changes, update
+  every link to its anchor.
 - Keep temporary drafts, captures and historical review copies in ignored
   `docs/local/` or `.local/docs-archive/`. They must never be build dependencies.
   Preserve security contracts and canonical trackers in Git.

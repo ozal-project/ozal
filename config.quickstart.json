@@ -1,5 +1,5 @@
 {
-  "listen": ":8888",
+  "listen": "127.0.0.1:8888",
   "admin": { "listen": "127.0.0.1:9090" },
   "dev_errors": true,
   "routes": [

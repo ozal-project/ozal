@@ -5,6 +5,30 @@
 *.test
 *.out
 config.json
+/ozalctl.json
+/config.*.json
+!/config.example.json
+!/config.direct.example.json
+!/config.quickstart.json
+!/config.tunnel.example.json
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+*.token
+*.sock
+*.log
+*.pid
+
+# Local agent/cloud state
+/.claude/
+/.codex/
+/.aws/
 
 # Editors/OS
 .vscode/

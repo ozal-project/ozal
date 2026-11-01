@@ -1,8 +1,9 @@
 # Quickstart
 
 From a clean checkout to a routed app and a process check, with no TLS and no
-OIDC provider. Everything stays on loopback. You need Go (version in
-[`go.mod`](go.mod)), Python 3 for the demo upstream, and `curl`.
+OIDC provider. Everything stays on loopback: the example config binds
+`127.0.0.1:8888`. You need Go (version in [`go.mod`](go.mod)), Python 3 for the
+demo upstream, and `curl`.
 
 ## 1. Demo upstream — terminal 1
 
