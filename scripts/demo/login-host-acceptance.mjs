@@ -59,7 +59,7 @@ try {
 
   step = "sign out and in again through the login host";
   await page.getByRole("button", { name: "Olivia Owner", exact: true }).click();
-  await page.locator("#user-menu").getByRole("button", { name: "Sign out" }).click();
+  await page.getByRole("dialog", { name: "Your session" }).getByRole("button", { name: "Sign out" }).click();
   await page.getByRole("button", { name: "Sign in with passkey" }).click();
   await page.waitForURL((url) => url.origin === loginURL);
   await page.getByRole("button", { name: "Continue with a passkey" }).click();

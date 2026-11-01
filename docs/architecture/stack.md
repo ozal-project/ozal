@@ -42,8 +42,9 @@ meta-framework is needed: the console is a static SPA behind the admin listener.
 
 The console is a static SPA embedded in the Go binary; Node is not a runtime
 dependency. Keep the sign-in entry small and load the console after
-authentication. Bundle limits, CSP requirements and behavior parity are in the
-[console frontend contract](console-react-migration.md).
+authentication. Bundle limits and behavior parity are in the [console frontend
+contract](console-react-migration.md); the CSP contract is in
+[engineering](../engineering.md#console-asset-and-csp-contract).
 
 The Linux CI and release jobs prepare dependencies with lockfiles and a pinned
 Node version, and use `OZAL_REQUIRE_FRONTEND=1` to fail when frontend checks

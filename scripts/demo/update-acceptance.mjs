@@ -71,7 +71,7 @@ try {
   step='desktop review';
   await ab('find','role','button','click','--name','Review update','--exact');
   await ab('wait','--text','linux/arm64');
-  const desktop=await ab('eval','document.querySelector("dialog[open]").textContent');
+  const desktop=await ab('eval','document.querySelector("[role=dialog]").textContent');
   assert.match(desktop.data.result,/20.0 MiB/);
   assert.match(desktop.data.result,/state database/);
   if (captures) await ab('screenshot',join(captures,'update-desktop.png'));
@@ -82,9 +82,9 @@ try {
   await ab('set','viewport','390','844');
   await ab('find','role','button','click','--name','Review update','--exact');
   await ab('wait','--text','linux/arm64');
-  const bounds=await ab('eval','(() => { const r=document.querySelector("dialog[open]").getBoundingClientRect(); return {left:r.left,right:r.right,width:innerWidth}; })()');
+  const bounds=await ab('eval','(() => { const r=document.querySelector("[role=dialog]").getBoundingClientRect(); return {left:r.left,right:r.right,width:innerWidth}; })()');
   assert(bounds.data.result.left>=0 && bounds.data.result.right<=bounds.data.result.width);
-  const a11y=await ab('a11y','--selector','dialog[open]');
+  const a11y=await ab('a11y','--selector','[role="dialog"]');
   const violations=a11y.data?.violations ?? a11y.data?.results?.violations;
   assert(Array.isArray(violations)); assert.equal(violations.length,0);
   if (captures) await ab('screenshot',join(captures,'update-mobile.png'));
@@ -103,7 +103,7 @@ try {
 } catch(e) {
   console.error(`FAIL during ${step}: ${e.message}`);
   try {
-    const view = await ab('eval', 'document.querySelector("dialog[open]")?.textContent?.trim()');
+    const view = await ab('eval', 'document.querySelector("[role=dialog]")?.textContent?.trim()');
     console.error('Dialog fixture state:', String(view.data?.result ?? 'closed').slice(0, 1200));
   } catch {}
   process.exitCode=1;

@@ -505,6 +505,18 @@ history limited to retained events, with site/change lists for mobile. Without a
 session only the access screen and its mark are downloaded; navigation,
 applications and administrative data are not exposed.
 
+### Console asset and CSP contract
+
+The console is a static SPA embedded in the Go binary. Keep scripts external
+and self-host fonts and images. Its Content Security Policy is
+`default-src 'none'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; form-action https://github.com; base-uri 'none'; frame-ancestors 'none'`.
+The narrow `style-src-attr` exception lets Radix position floating controls;
+`style-src` remains self-only, so injected style elements stay blocked. Do not
+broaden it to `style-src 'unsafe-inline'`. Keep Vite's `assetsInlineLimit: 0`
+so fonts remain same-origin, and do not inline scripts. Go regression tests
+check the policy on console routes. The frontend contract records the build,
+routing, caching and parity requirements.
+
 The stack decision lives in [stack.md](architecture/stack.md). The Go binary
 embeds a static console with no Node runtime. WebAuthn, OIDC, JOSE and yamux are
 reused instead of reimplementing their primitives; local SQLite avoids another

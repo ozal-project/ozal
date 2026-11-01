@@ -19,6 +19,7 @@ const root = await mkdtemp(join(tmpdir(), "ozal-react-console-"));
 const reactEnv = { ...process.env, OZAL_REACT_OUT_DIR: join(root, "react-dist") };
 const session = `ozal-react-ui012-${process.pid}`;
 const consoleCSP = "default-src 'none'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; form-action https://github.com; base-uri 'none'; frame-ancestors 'none'";
+const consoleMetaCSP = consoleCSP.replace("; frame-ancestors 'none'", "");
 let edge;
 let preview;
 let step = "start";
@@ -94,10 +95,12 @@ try {
   ]);
   assert.equal(pageResponse.headers.get("content-security-policy"), consoleCSP, "React preview CSP differs from the embedded console contract");
   assert.equal(edgeResponse.headers.get("content-security-policy"), consoleCSP, "preview CSP fixture differs from the live console contract");
+  const unknownEdgeRoute = await fetch(`${edge.consoleURL}/not-a-console-page?source=bookmark#main-content`);
+  assert.equal(unknownEdgeRoute.status, 404, "an unknown server path fell through to the single-page app");
   assert.equal(apiResponse.status, 200, "React preview did not proxy admin API requests to the local edge");
   const html = await pageResponse.text();
   const metaCSP = html.match(/<meta\s+http-equiv="Content-Security-Policy"\s+content="([^"]+)"\s*\/>/i)?.[1];
-  assert.equal(metaCSP, consoleCSP, "React document CSP differs from the embedded console contract");
+  assert.equal(metaCSP, consoleMetaCSP, "React document CSP differs from the embedded console contract (frame-ancestors is header-only)");
   const inlineScripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].filter(([, attributes, body]) => !/\bsrc\s*=/i.test(attributes) && body.trim());
   assert.equal(inlineScripts.length, 0, "React preview contains an inline script");
 

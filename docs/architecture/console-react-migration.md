@@ -3,9 +3,9 @@
 This document defines the security, routing, accessibility and behavior
 requirements for the console frontend. The Go binary embeds the React app. Each
 Vite browser acceptance run writes to its own temporary output and starts its
-disposable edge on free loopback ports, so concurrent runs cannot overwrite
-committed Go assets or contend for demo listeners. Do not combine frameworks in
-one bundle.
+disposable edge on dynamic loopback ports, so runs do not overwrite committed
+Go assets and avoid the fixed demo listeners. Do not combine frameworks in one
+bundle.
 
 ## Change boundary
 
@@ -45,9 +45,8 @@ React source but have separate output directories.
 
 Read `internal/admin/console.go` before touching the build.
 
-- **CSP is strict and non-negotiable except for the documented directive
-  below.** Current value:
-  `default-src 'none'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; form-action https://github.com; base-uri 'none'; frame-ancestors 'none'`.
+- **CSP:** preserve the policy and narrow Radix style exception in the
+  [engineering contract](../engineering.md#console-asset-and-csp-contract).
 - **No inline scripts.** Vite must keep emitting external files; do not add a
   plugin that inlines the entry or the runtime.
 - **`assetsInlineLimit: 0`** exists because `font-src 'self'` rejects `data:`
@@ -65,31 +64,17 @@ Read `internal/admin/console.go` before touching the build.
   filenames are required.
 - **Route table:** `consoleRoutes` in `internal/admin/console.go` is the server
   side. The client must keep these routes and aliases: `/projects` → `/sites`,
-  `/simulator` → `/activity`, unknown routes → `/overview` while retaining the
-  query and fragment, `/routes` keeps its `?host=` query, and the GitHub return
-  restores the last tab (`sessionStorage`, one known route) before processing `code`, `state`,
-  `setup_action` or `installation_id` on `/applications`.
+  `/simulator` → `/activity`, and client-side navigation to an unknown route
+  maps to `/overview` while retaining the query and fragment. A direct request
+  for an unknown server path remains a 404. `/routes` keeps its `?host=` query,
+  and the GitHub return restores the last tab (`sessionStorage`, one known
+  route) before processing `code`, `state`, `setup_action` or `installation_id`
+  on `/applications`.
 - **No secrets in the bundle.** The admin token lives in tab memory; after a
   reload the edge returns it from the `HttpOnly` resume cookie.
 - **Accessibility:** the shell keeps its keyboard behavior (Escape closes the
   menu, Tab stays contained, focus returns to the trigger). Acceptance runs axe
   at 1440, 1024, 390 and 320 px.
-
-## CSP and runtime styles
-
-`style-src 'self'` blocks `style` attributes as well as `<style>` elements.
-Radix floating components position themselves by setting inline style
-properties on elements; their positioning requires the narrow exception.
-
-Use the narrow directive `style-src 'self'; style-src-attr 'unsafe-inline'`.
-Keep `<style>` injection blocked; only element-level style attributes are
-allowed. A Go regression test checks both directives on the console routes.
-Application layout should use classes; the attribute directive exists for
-library positioning.
-
-Browsers without `style-src-attr` fall back to `style-src` and lose floating
-positioning, not access. Do not use `style-src 'unsafe-inline'`: that would also
-allow injected `<style>` blocks. Keep Radix within the narrow directive.
 
 ## Parity checklist
 

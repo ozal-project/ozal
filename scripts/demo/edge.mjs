@@ -84,6 +84,7 @@ export async function startDemoEdge({ binary, dir = join(homedir(), ".cache", "o
     await Promise.all(servers.map((server) => new Promise((resolve) => server.close(resolve))));
     throw upstreamFailure.reason;
   }
+  const closeUpstreams = () => Promise.all(servers.map((server) => new Promise((resolve) => server.close(resolve))));
   const appPorts = Object.fromEntries(APPS.map((app, index) => [app.name, servers[index].address().port]));
   const allocatedPorts = new Set(Object.values(appPorts));
   const nextPort = async () => {
@@ -94,6 +95,7 @@ export async function startDemoEdge({ binary, dir = join(homedir(), ".cache", "o
   };
   const port = dynamicPorts ? await nextPort() : PORT;
   const adminPort = dynamicPorts ? await nextPort() : ADMIN_PORT;
+  const deadPort = dynamicPorts ? await nextPort() : 19199;
   const loginURL = `http://auth.${DOMAIN}:${port}`;
   const additionalRoutes = typeof extraRoutes === "function"
     ? extraRoutes({ port, adminPort, loginURL, upstreamPorts: appPorts })
@@ -110,14 +112,13 @@ export async function startDemoEdge({ binary, dir = join(homedir(), ".cache", "o
       { host: `blog.${DOMAIN}:${port}`, site: "blog" },
       { host: `docs.${DOMAIN}:${port}`, site: "docs" },
       // Nothing listens here: the console should say so.
-      { host: `reports.${DOMAIN}:${port}`, target: "http://127.0.0.1:19199", health_path: "/" },
+      { host: `reports.${DOMAIN}:${port}`, target: `http://127.0.0.1:${deadPort}`, health_path: "/" },
       ...additionalRoutes,
     ],
   };
   writeFileSync(join(dir, "config.json"), JSON.stringify(config, null, 2));
   const env = { ...process.env, SB_DEMO_TOKEN: token };
   // A fresh database must be migrated before the edge will start.
-  execFileSync(binary, ["migrate", "-db", join(dir, "state.db")], { env, stdio: "pipe" });
   let child;
   const boot = async () => {
     child = spawn(binary, ["-config", join(dir, "config.json"), "-db", join(dir, "state.db")], { env, stdio: ["ignore", "pipe", "pipe"] });
@@ -136,7 +137,18 @@ export async function startDemoEdge({ binary, dir = join(homedir(), ".cache", "o
     child.kill("SIGTERM");
     await exited;
   };
-  await boot();
+  try {
+    execFileSync(binary, ["migrate", "-db", join(dir, "state.db")], { env, stdio: "pipe" });
+    await boot();
+  } catch (error) {
+    if (child && child.exitCode === null) {
+      const exited = new Promise((resolve) => child.once("exit", resolve));
+      child.kill("SIGTERM");
+      await exited;
+    }
+    await closeUpstreams();
+    throw error;
+  }
 
   const edge = {
     token,
@@ -158,7 +170,7 @@ export async function startDemoEdge({ binary, dir = join(homedir(), ".cache", "o
     },
     async stop() {
       await halt();
-      await Promise.all(servers.map((s) => new Promise((r) => s.close(r))));
+      await closeUpstreams();
     },
   };
 

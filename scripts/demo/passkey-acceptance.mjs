@@ -42,7 +42,7 @@ const device = async () => {
 };
 const inConsole = (page) => page.locator("#main-content h1", { hasText: "Overview" }).waitFor();
 const signedOut = (page) => page.getByRole("button", { name: "Sign in with passkey" }).waitFor();
-const menu = async (page, name) => { await page.getByRole("button", { name, exact: true }).click(); return page.locator("#user-menu"); };
+const menu = async (page, name) => { await page.getByRole("button", { name, exact: true }).click(); return page.getByRole("dialog", { name: "Your session" }); };
 // A revoked session ends on the console's next request: either the page
 // already noticed (event stream, renewal) or the next navigation makes it.
 const endedOnNextRequest = async (page) => {
@@ -80,19 +80,22 @@ try {
   await signOut(laptop.page, "Olivia Owner");
   await laptop.page.getByRole("button", { name: "Sign in with passkey" }).click();
   await inConsole(laptop.page);
-  assert.match(await (await menu(laptop.page, "Olivia Owner")).textContent(), /Signed in with a passkey[\s\S]*Full access/);
+  const session = await menu(laptop.page, "Olivia Owner");
+  assert.match(await session.textContent(), /Signed in with a passkey/);
+  const grantedTools = await session.getByRole("listitem").allTextContents();
+  assert.ok(grantedTools.length > 0, `the session did not show its granted tools: ${await session.textContent()}`);
   await laptop.page.keyboard.press("Escape");
 
   step = "another browser through a one-use device link";
   const deviceLink = await (async () => {
     const m = await menu(laptop.page, "Olivia Owner");
     await m.getByRole("button", { name: "Sign in on another browser" }).click();
-    return (await m.locator("code").textContent()).trim();
+    return await m.locator("#device-link").inputValue();
   })();
   await laptop.page.keyboard.press("Escape");
   const phone = await device();
   await phone.page.goto(deviceLink);
-  await phone.page.getByText("This adds a passkey from this browser for").waitFor();
+  await phone.page.getByText("This adds a passkey for").waitFor();
   await phone.page.getByRole("button", { name: "Create my passkey" }).click();
   await inConsole(phone.page);
   await signOut(phone.page, "Olivia Owner");
@@ -126,7 +129,7 @@ try {
   await own.getByText("can no longer sign in").waitFor();
   assert.equal(await own.getByRole("listitem").count(), 1);
   assert.equal((await admins()).find((a) => a.email === "olivia@acme.dev").passkeys, 1);
-  await own.getByRole("button", { name: "Close" }).click();
+  await own.locator('button[aria-label="Close"]').click();
   // On a phone the menu lives in the drawer; the dialog must still show.
   await laptop.page.setViewportSize({ width: 390, height: 844 });
   await laptop.page.getByRole("button", { name: "Open menu" }).click();
@@ -147,31 +150,32 @@ try {
   step = "invite an administrator with one tool";
   await laptop.page.locator('nav[aria-label="Console"] a[href="/people"]').first().click();
   await laptop.page.locator('nav[aria-label="People views"] a[href="/administrators"]').click();
-  await laptop.page.locator("#main-content h1", { hasText: "People" }).waitFor();
+  await laptop.page.locator("#main-content h1", { hasText: "Administrators" }).waitFor();
   await laptop.page.getByRole("button", { name: "Add administrator" }).first().click();
   await laptop.page.locator("#adm-email").fill("bea@acme.dev");
   await laptop.page.locator("#adm-name").fill("Bea");
   await laptop.page.getByRole("checkbox", { name: /^People/ }).check();
   await laptop.page.getByRole("button", { name: "Create invitation" }).click();
-  const invitation = (await laptop.page.getByText("Invitation for bea@acme.dev").locator("..").locator("code").textContent()).trim();
+  const invitation = (await laptop.page.getByRole("dialog", { name: "Invitation ready" }).locator("code").textContent()).trim();
   const bea = await device();
   await bea.page.goto(invitation);
   await bea.page.getByText("Invited as").waitFor();
   assert.equal(await bea.page.getByLabel("Full name").inputValue(), "Bea");
   await bea.page.getByRole("button", { name: "Create my passkey" }).click();
   await inConsole(bea.page);
-  assert.match(await (await menu(bea.page, "Bea")).textContent(), /This session can invite people/);
+  assert.match(await (await menu(bea.page, "Bea")).textContent(), /Invite people, edit groups, disable accounts and passkeys/);
   await bea.page.keyboard.press("Escape");
   assert.deepEqual((await admins()).find((a) => a.email === "bea@acme.dev").tools, ["people"]);
 
   step = "reset another administrator's passkeys";
   // A reload keeps the session: the edge resumes it from its HttpOnly cookie.
   await laptop.page.reload();
-  await laptop.page.locator("#main-content h1", { hasText: "People" }).waitFor();
+  await laptop.page.locator("#main-content h1", { hasText: "Administrators" }).waitFor();
   assert.equal(new URL(laptop.page.url()).pathname, "/administrators", "the reload did not keep the session on the same view");
   assert.equal(await laptop.page.evaluate(() => document.cookie), "", "the session cookie must not be readable by page script");
   await laptop.page.locator("li", { hasText: "bea@acme.dev" }).getByRole("button", { name: "Reset passkeys" }).click();
-  const recovery = (await laptop.page.getByText("Recovery link for bea@acme.dev").locator("..").locator("code").textContent()).trim();
+  const recoveryDialog = laptop.page.getByRole("dialog", { name: "Recovery link" });
+  const recovery = (await recoveryDialog.locator("code").textContent()).trim();
   step = "recovery link on a new device";
   const beaNew = await device();
   await beaNew.page.goto(recovery);

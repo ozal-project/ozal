@@ -45,7 +45,7 @@ try {
   await ab("wait", "--text", "What are you putting online?");
   await ab("wait", "--text", "octavia/website");
   assert.equal(await evaluate("location.search"), "", "GitHub's parameters stayed in the address");
-  assert.equal(await evaluate("document.querySelector('input[name=\"app-kind\"][value=\"github\"]')?.checked"), true, "wizard did not reopen on GitHub");
+  assert.equal(await evaluate("document.querySelector('input[name=\"application-kind\"][value=\"github\"]')?.checked"), true, "wizard did not reopen on GitHub");
   await audit("repositories");
   step = "choose repository";
   await ab("find", "text", "octavia/website", "click");
@@ -67,7 +67,7 @@ try {
   const content = await evaluate("document.querySelector('pre[aria-label=\"Generated workflow\"]')?.textContent");
   assert(content.includes("https://www.example.test") && content.includes("id-token: write"), "review did not show the generated workflow");
   await audit("review");
-  await evaluate("document.querySelector('dialog[open] input[type=checkbox]').click()");
+  await evaluate("document.querySelector('[role=dialog] input[type=checkbox]').click()");
   await button("Save application");
   await ab("wait", "--text", "Save this application?");
   assert((await text()).includes("a pull request adding its workflow is opened"), "confirmation does not mention the pull request");
@@ -89,7 +89,8 @@ try {
   console.log("GitHub wizard browser acceptance passed: connect panel, install return, repository choice, workflow review, one save with trust and PR; axe 0 at 1440/1024/390/320.");
 } catch (error) {
   // What the operator saw helps more than the timeout; it holds no credential.
-  console.error(await text().catch(() => ""));
+  console.error(JSON.stringify(await evaluate("({path: location.pathname, title: document.title})").catch(() => null)));
+  console.error(JSON.stringify({ pageErrors: await ab("errors").catch((cause) => String(cause)), console: await ab("console").catch((cause) => String(cause)) }));
   throw error;
 } finally {
   await ab("close").catch(() => {});
