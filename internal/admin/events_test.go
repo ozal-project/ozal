@@ -195,8 +195,20 @@ func TestActivityPageIsLoopbackOnlyAndStrictCSP(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "http://127.0.0.1:9090/activity", nil))
 	csp := rec.Header().Get("Content-Security-Policy")
-	if rec.Code != 200 || !strings.Contains(csp, "script-src 'self'") || strings.Contains(csp, "unsafe") {
+	directives := make(map[string]string)
+	for _, directive := range strings.Split(csp, ";") {
+		fields := strings.Fields(directive)
+		if len(fields) > 0 {
+			directives[fields[0]] = strings.Join(fields[1:], " ")
+		}
+	}
+	if rec.Code != 200 || directives["script-src"] != "'self'" || directives["style-src"] != "'self'" || directives["style-src-attr"] != "'unsafe-inline'" {
 		t.Fatalf("activity page: %d %v", rec.Code, rec.Header())
+	}
+	for directive, value := range directives {
+		if directive != "style-src-attr" && strings.Contains(value, "unsafe") {
+			t.Fatalf("activity page has unsafe %s: %q", directive, value)
+		}
 	}
 
 	// The old server-rendered URL keeps working as a redirect.

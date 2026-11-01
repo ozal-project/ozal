@@ -4,12 +4,14 @@
   import { exchangeHostLogin, resumeSession, takeHostLink } from "$lib/operatorLogin";
   import { renewSession } from "$lib/passkey";
   import { finishLoginHost } from "$lib/loginHost";
+  import { configureAPISession } from "$lib/apiSession";
   import AuthScreen from "$lib/auth/AuthScreen.svelte";
 
   // The console is behind the sign-in, not beside it: without a session the
   // tab shows only the sign-in screen and never downloads the console itself
   // (its pages, their names and its navigation load after authentication).
   const loadConsole = () => import("./Console.svelte");
+  configureAPISession({ token: () => admin.token, unauthorized: () => { signOut(); admin.notice = "This session is no longer valid. Sign in again."; } });
 
   // A link pasted into a tab that is already open only changes the fragment,
   // which does not reload the page: take it then too.
