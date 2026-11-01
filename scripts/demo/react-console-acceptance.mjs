@@ -159,11 +159,13 @@ try {
   await browser("wait", "--fn", "document.querySelector('#main-content h1')?.textContent?.trim() === 'People'");
   const sessionName = await evaluate("document.querySelector('.console-account-name')?.textContent?.trim()");
   assert.equal(sessionName, "React preview acceptance", "the operator session did not resume after navigating to a new document");
+  assert.equal(await evaluate("!!document.querySelector('.console-brand .logo-live .logo-arch')"), true, "desktop shell wordmark lost the animated Ozal mark");
 
   step = "keyboard navigation, Escape and focus return in mobile drawer";
   await browser("set", "viewport", "390", "844");
   await browser("find", "role", "button", "click", "--name", "Open menu", "--exact");
   await browser("wait", "--fn", "document.querySelector('#mobile-menu')?.open === true && document.activeElement?.closest('#mobile-menu') !== null");
+  assert.equal(await evaluate("!!document.querySelector('#mobile-menu .console-drawer-header .logo') && !document.querySelector('#mobile-menu .console-drawer-header .logo').classList.contains('logo-live')"), true, "mobile drawer wordmark lost its static Ozal mark");
   await browser("eval", "document.querySelector('#mobile-menu a[href=\"/overview\"]').focus()");
   await browser("press", "Shift+Tab");
   assert.equal(await evaluate("document.activeElement?.getAttribute('aria-label')"), "React preview acceptance", "backward Tab escaped the mobile navigation");

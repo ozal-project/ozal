@@ -17,6 +17,7 @@ import { Connectors } from "./Connectors";
 import { UpdateDialog } from "./UpdateDialog";
 import { useSession } from "./session";
 import { UserMenu } from "./UserMenu";
+import { Wordmark } from "./Wordmark";
 
 type Tool = "applications" | "people" | "administrators" | "sites" | "connectors" | "updates" | "updates.install" | "publishing";
 type Item = { path: string; label: string; tool?: Tool; also?: string[] };
@@ -121,14 +122,14 @@ export default function Console() {
   <div className="console-workspace">
     <a href="#main-content" className="sr-only focus:not-sr-only focus:bg-background focus:text-foreground focus:ring-ring fixed top-2 left-2 z-50 rounded-md px-3 py-2 text-sm focus:ring-2">Skip to content</a>
     <header className="console-header"><div className="console-bar">
-      <Link to="/overview" className="console-brand" aria-label="Ozal console home"><span className="text-lg font-medium tracking-tight">ozal</span><span className="text-muted-foreground ml-2 self-center text-xs">Private console</span></Link>
+      <Link to="/overview" className="console-brand" aria-label="Ozal console home"><Wordmark sub="Private console" animated /></Link>
       <nav className="console-nav" aria-label="Console">{visible.flatMap((group) => group.items).map((item) => <NavLink key={item.path} to={target(item)} className="console-nav-link" aria-current={[item.path, ...(item.also ?? [])].includes(location.pathname) ? "page" : undefined}>{item.label}</NavLink>)}</nav>
       <UserMenu />
       <span className="console-mobile-place" aria-hidden="true">{pageTitle}</span><button ref={trigger} type="button" className="console-menu-toggle" aria-expanded={menuOpen} aria-controls="mobile-menu" aria-label="Open menu" onClick={() => setMenuOpen(true)}><span aria-hidden="true" className="grid gap-1"><i className="bg-current h-0.5 w-4" /><i className="bg-current h-0.5 w-4" /><i className="bg-current h-0.5 w-4" /></span></button>
     </div></header>
 
     <dialog ref={drawer} id="mobile-menu" aria-label="Console navigation" className="console-drawer" onClose={closeDrawer} onCancel={() => setMenuOpen(false)} onKeyDown={containDrawerTab}>
-      {menuOpen && <><div className="console-drawer-header"><Link to="/overview" className="text-lg font-medium" onClick={() => setMenuOpen(false)}>ozal</Link><button type="button" className="console-menu-toggle" aria-label="Close menu" onClick={() => setMenuOpen(false)}><span aria-hidden="true" className="relative block size-4 before:absolute before:left-0 before:top-1/2 before:h-0.5 before:w-4 before:-rotate-45 before:bg-current after:absolute after:left-0 after:top-1/2 after:h-0.5 after:w-4 after:rotate-45 after:bg-current" /></button></div><nav aria-label="Console">{visible.flatMap((group) => group.items).map((item) => <NavLink key={item.path} to={target(item)} className="console-drawer-link" aria-current={[item.path, ...(item.also ?? [])].includes(location.pathname) ? "page" : undefined} onClick={() => setMenuOpen(false)}><span>{item.label}</span><span className="console-nav-purpose">{purpose[target(item)]}</span></NavLink>)}</nav><div className="console-drawer-account"><UserMenu placement="up" /></div></>}
+      {menuOpen && <><div className="console-drawer-header"><Link to="/overview" onClick={() => setMenuOpen(false)}><Wordmark sub="Private console" /></Link><button type="button" className="console-menu-toggle" aria-label="Close menu" onClick={() => setMenuOpen(false)}><span aria-hidden="true" className="relative block size-4 before:absolute before:left-0 before:top-1/2 before:h-0.5 before:w-4 before:-rotate-45 before:bg-current after:absolute after:left-0 after:top-1/2 after:h-0.5 after:w-4 after:rotate-45 after:bg-current" /></button></div><nav aria-label="Console">{visible.flatMap((group) => group.items).map((item) => <NavLink key={item.path} to={target(item)} className="console-drawer-link" aria-current={[item.path, ...(item.also ?? [])].includes(location.pathname) ? "page" : undefined} onClick={() => setMenuOpen(false)}><span>{item.label}</span><span className="console-nav-purpose">{purpose[target(item)]}</span></NavLink>)}</nav><div className="console-drawer-account"><UserMenu placement="up" /></div></>}
     </dialog>
 
     <main id="main-content" tabIndex={-1} className="console-content outline-none"><div className="page-enter">
