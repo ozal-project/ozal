@@ -326,7 +326,7 @@ available. Approvals, email delivery and the OIDC provider are not.
 9. A signed-in person can add or revoke their own passkeys from
    `/_/auth/devices`; every addition alerts.
 10. Recovery after losing every device stays `user invite -recover` on the
-    host; it replaces the previous passkeys and ends their sessions (`SEC-023`).
+    host; it replaces the previous passkeys and ends their sessions.
 
 The invitation is still sent by hand; email delivery is planned. Session expiry
 is implemented: `Max-Age` ends sessions at the earlier of 12 h without use and
