@@ -65,7 +65,13 @@ function explain(error, create) {
       : "The sign-in did not finish: the prompt was closed, it timed out, or no passkey here belongs to an administrator. Try again.";
   }
   if (error.name === "InvalidStateError") return "This place already has a passkey for this account.";
-  if (typeof DOMException !== "undefined" && error instanceof DOMException) return "This browser could not use a passkey here. Try again, or use another browser.";
+  if (typeof DOMException !== "undefined" && error instanceof DOMException) {
+    // On this page the address is the edge's own sign-in host, so a refused
+    // address is a setting to check on the host, not a link to open again.
+    if (error.name === "SecurityError") return "This browser refused passkeys for this address. Ask the host to check that auth.passkeys.login_url names this sign-in address.";
+    if (error.name === "NotSupportedError") return "This browser cannot use this kind of passkey. Update it, or use another browser, your phone or a security key.";
+    return "This browser could not use a passkey here. Try again, or use another browser.";
+  }
   return error.message || "Something went wrong.";
 }
 

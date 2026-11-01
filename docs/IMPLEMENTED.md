@@ -6,6 +6,23 @@
 Closed work and its evidence. Active work, blockers and pending tasks live in
 [`TO_IMPLEMENT.md`](TO_IMPLEMENT.md). Do not add open tasks here.
 
+## SEC-023 — visitor recovery replaces credentials — 2026-10-31 (`bc54890`, `6c270d3`)
+
+`user invite -recover` used to add a passkey while the old ones and every
+session stayed valid. Completing a recovery invitation now revokes the user's
+active passkeys, retires their other unused recovery invitations and deletes
+their sessions in the same transaction that inserts the new passkey; a failed
+insert leaves access and links unchanged. The enrolment page reads the stored
+purpose through `POST /_/auth/enrol/info` and labels the action "Replace my
+passkeys"; a committed recovery emits `user.recovered` instead of
+`passkey.registered`. Recovery is documented as an explicit alternative
+authority ([contract](engineering.md#alta-login-cli-y-recuperación-revisión-2026-10-31)).
+Evidence: `TestRecoveryReplacesPasskeysAndEndsSessions` failed before the
+change and each step (revoke, retire links, end sessions) is mutation-caught;
+regressions for event selection, rollback and metadata privacy; full
+`scripts/verify.sh` passed 2026-10-31. Not exercised: a real authenticator
+ceremony and alert delivery on a deployed edge.
+
 ## SEC-020 — no edge authentication cookie reaches an upstream — 2026-10-31 (`28fe43e`, `65b5cfa`)
 
 The proxy strips the session, OIDC login-attempt (`sb_login`), handoff and

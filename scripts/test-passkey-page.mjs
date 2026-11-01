@@ -30,7 +30,7 @@ function render(search, { oidc = "", webauthn = true, page = "login", fetch = ()
     addEventListener: (ev, fn) => { if (ev === "DOMContentLoaded") ready = fn; },
   };
   const ctx = {
-    document, URL, URLSearchParams, encodeURIComponent, AbortController, atob, btoa, JSON, Date, String, Uint8Array,
+    document, URL, URLSearchParams, encodeURIComponent, AbortController, atob, btoa, JSON, Date, String, Uint8Array, DOMException,
     window: webauthn ? { PublicKeyCredential: Object.assign(function () {}, caps === undefined ? {} : { getClientCapabilities: caps }) } : {},
     setTimeout,
     location: { search, hash, pathname: "/_/auth/" + page, origin: "https://auth.example.com", assign },
@@ -228,6 +228,19 @@ await tick();
 assert.deepEqual(asked, [undefined, ["hybrid"], ["security-key"]], "the main button adds no hint; the shortcuts steer to the phone or the key");
 page = render("", { page: "devices", fetch: () => new Promise(() => {}) });
 assert.equal(page.choices, "closed", "adding a passkey asks where to keep it too");
+
+// Browser errors other than NotAllowedError name what the person can do.
+for (const [name, said] of [["NotSupportedError", /cannot use this kind of passkey/], ["SecurityError", /Open the sign-in link again/], ["UnknownError", /could not use a passkey here/]]) {
+  page = render(rt, {
+    fetch: async () => ({ ok: true, json: async () => ({ publicKey: { challenge: "AAAA" } }) }),
+    get: async (request) => { if (request.mediation) return new Promise(() => {}); throw new DOMException("browser detail", name); },
+  });
+  await tick();
+  page.click();
+  await tick();
+  assert.match(page.status, said, name);
+  assert.doesNotMatch(page.status, /browser detail/, "the browser's technical text is not shown");
+}
 
 // The devices page lists the passkeys and never offers removing the only one.
 const listing = (keys) => () => Promise.resolve({ ok: true, json: () => Promise.resolve({ email: "ana@example.com", passkeys: keys, sites: ["https://private.example.com/"] }) });

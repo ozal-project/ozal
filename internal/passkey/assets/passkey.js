@@ -93,9 +93,9 @@ function explain(error, page) {
   // the visitor can do instead. Server errors are plain Errors with a message
   // written for people, and are shown as they are.
   if (typeof DOMException !== "undefined" && error instanceof DOMException) {
-    return error.name === "SecurityError"
-      ? "This page cannot use passkeys here. Open the sign-in link again from the site you were visiting."
-      : "This browser could not use a passkey here. Try again, or use another browser or device.";
+    if (error.name === "SecurityError") return "This page cannot use passkeys here. Open the sign-in link again from the site you were visiting.";
+    if (error.name === "NotSupportedError") return "This browser cannot use this kind of passkey. Update it, or use another browser, your phone or a security key.";
+    return "This browser could not use a passkey here. Try again, or use another browser or device.";
   }
   return error.message || "Something went wrong.";
 }

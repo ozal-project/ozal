@@ -2,6 +2,7 @@
   import { onMount, untrack } from "svelte";
   import { admin, can, endSession } from "$lib/adminToken.svelte";
   import PageHeader from "$lib/PageHeader.svelte";
+  import BackupPasskeyNotice from "$lib/BackupPasskeyNotice.svelte";
   import Panel from "$lib/Panel.svelte";
   import Freshness from "$lib/Freshness.svelte";
   import { Button } from "$lib/components/ui/button";
@@ -158,6 +159,8 @@
     <p class="text-muted-foreground flex items-center gap-2 text-sm"><CheckIcon class="text-success size-4" aria-hidden="true" />Nothing needs you right now.</p>
   {/if}
 </div>
+
+{#if admin.passkey}<BackupPasskeyNotice />{/if}
 
 
 {#if notices.length}

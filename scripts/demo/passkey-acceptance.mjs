@@ -73,6 +73,7 @@ try {
   assert.equal(await laptop.credentials(), 1, "enrolment did not store a passkey on the device");
   assert.equal(new URL(laptop.page.url()).hash, "", "the setup token stayed in the address bar");
   await assert.rejects(host("enrol"), "a second first-administrator link was issued");
+  await laptop.page.getByRole("heading", { name: "Add a second passkey" }).waitFor();
 
   step = "passkey sign-in after signing out";
   await signOut(laptop.page, "Olivia Owner");
@@ -97,6 +98,11 @@ try {
   await phone.page.getByRole("button", { name: "Sign in with passkey" }).click();
   await inConsole(phone.page);
   assert.equal((await admins()).find((a) => a.email === "olivia@acme.dev").passkeys, 2, "the second browser's passkey was not added");
+  assert.equal(await phone.page.getByRole("heading", { name: "Add a second passkey" }).count(), 0, "a second passkey still asked for one");
+  await laptop.page.reload();
+  await inConsole(laptop.page);
+  await laptop.page.waitForTimeout(500);
+  assert.equal(await laptop.page.getByRole("heading", { name: "Add a second passkey" }).count(), 0, "the suggestion outlived the second passkey");
   const reused = await device();
   await reused.page.goto(deviceLink);
   await reused.page.getByRole("alert").waitFor();
