@@ -178,10 +178,11 @@ Svelte+React bundle: two frameworks in one bundle costs more than one cutover.
    GitHub flows against the React API layer, then Applications was moved ahead
    of the remaining directory and publishing pages to establish the access
    configuration flow those pages depend on. This sequencing choice was made
-   during implementation; it does not reduce the parity checklist. Groups, People, and Connectors remain to be ported; Administrators is now
-   routed at `/administrators` with bounded tool grants and reviewed account
-   actions. The Projects workflow is covered within the Sites/Publishing React
-   preview port. Applications is the largest
+   during implementation; it does not reduce the parity checklist. People and
+   Connectors remain to be ported. Administrators is routed at `/administrators`
+   with bounded tool grants and reviewed account actions; Groups is routed at
+   `/groups` with concurrency-aware membership updates. The Projects workflow
+   is covered within the Sites/Publishing React preview port. Applications is the largest
    view (576 lines, stepper and uploads), so its early port was a deliberate
    vertical slice rather than a size-based priority.
 6. **Acceptance selectors.** Prefer `getByRole` and accessible names, which
