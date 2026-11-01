@@ -30,6 +30,7 @@ const tabTo = async (href) => {
   throw new Error(`Keyboard tab order did not reach ${href}`);
 };
 const failNextRequest = async (path) => evaluate(`(() => { const original = window.fetch.bind(window); let failed = false; window.fetch = (input, init) => { const url = new URL(typeof input === "string" ? input : input.url, location.href); if (!failed && url.pathname === ${JSON.stringify(path)}) { failed = true; window.__acceptanceFailedPath = url.pathname; window.fetch = original; return Promise.resolve(new Response("", { status: 503 })); } return original(input, init); }; return true; })()`);
+const failRequestsUntilRecovery = async (path) => evaluate(`(() => { const original = window.fetch.bind(window); window.__acceptanceFailedPath = ""; window.__acceptanceRecover = () => { window.fetch = original; }; window.fetch = (input, init) => { const url = new URL(typeof input === "string" ? input : input.url, location.href); if (url.pathname === ${JSON.stringify(path)}) { window.__acceptanceFailedPath = url.pathname; return Promise.resolve(new Response("", { status: 503 })); } return original(input, init); }; return true; })()`);
 const goPage = async (href, title) => {
   await ab("set", "viewport", "1440", "1000");
   await ab("eval", "window.scrollTo(0, 0)");
@@ -174,12 +175,13 @@ try {
   await goPage("/sites", "Sites");
   await ab("wait", "--text", "Publishing from GitHub");
   await ab("wait", "--text", "No website publishes from GitHub yet");
-  await failNextRequest("/_/api/projects");
+  await failRequestsUntilRecovery("/_/api/projects");
+  const outageShown = await evaluate(`(async () => { document.querySelector('button[aria-label="Refresh publishing"]').click(); const until = Date.now() + 5000; while (Date.now() < until) { if (document.body.innerText.includes("HTTP 503")) return true; await new Promise((resolve) => setTimeout(resolve, 25)); } return false; })()`);
+  assert.equal(outageShown, true, "the publishing error was not visible while its endpoint returned 503");
+  assert.equal(await evaluate("window.__acceptanceFailedPath === '/_/api/projects'"), true, "the projects endpoint did not receive the injected outage");
+  await evaluate("window.__acceptanceRecover()");
   await ab("find", "role", "button", "click", "--name", "Refresh publishing", "--exact");
-  await ab("wait", "--fn", "window.__acceptanceFailedPath === '/_/api/projects'");
-  await ab("wait", "--text", "HTTP 503");
-  await ab("find", "role", "button", "click", "--name", "Refresh publishing", "--exact");
-  await ab("wait", "--text", "Optional: connect a GitHub App");
+  await ab("wait", "--text", "Optional: connect GitHub");
   await ab("wait", "--text", "No website publishes from GitHub yet");
   await auditPage([[1440, 1000], [390, 844]]);
 
@@ -230,27 +232,13 @@ try {
   await ab("wait", "--fn", `![...document.querySelectorAll('#main-content h2')].some((el) => el.textContent.trim() === ${JSON.stringify(appHost)})`);
   assert.equal((await api("GET", "/_/api/setup")).routes.some((r) => r.host === appHost), false, "confirmed removal left the route configured");
 
-  step = "start a GitHub website without a local build";
+  step = "require a GitHub connection before creating a GitHub website";
   await ab("find", "role", "button", "click", "--name", "Add application", "--exact");
   await ab("click", 'label:has(input[name="app-kind"][value="github"])');
   await ab("find", "role", "button", "click", "--name", "Next", "--exact");
-  await ab("fill", "#app-host", `gitflow.demo.localhost:${PORT}`);
-  await ab("find", "role", "button", "click", "--name", "Next", "--exact");
-  const githubSite = "gitflow-demo-localhost";
-  await ab("click", 'label:has(input[name="app-privacy"][value="public"])');
-  await ab("find", "role", "button", "click", "--name", "Review", "--exact");
-  await ab("wait", "--text", "repository chosen after saving");
-  await ab("check", 'dialog[open] input[type="checkbox"]');
-  await ab("find", "role", "button", "click", "--name", "Save application", "--exact");
-  await ab("wait", "--text", "shows content after the first publication");
-  await ab("find", "role", "button", "click", "--name", "Confirm and save", "--exact");
-  await ab("wait", "--text", "Nothing has been built or published yet.");
-  const githubRoute = (await api("GET", "/_/api/setup")).routes.find((r) => r.host === `gitflow.demo.localhost:${PORT}`);
-  assert.equal(githubRoute?.site, githubSite, "GitHub onboarding did not configure the reviewed site route");
-  assert.equal((await api("GET", "/_/api/sites")).sites.some((s) => s.name === githubSite), false, "GitHub onboarding claimed a deployment without a build");
-  await ab("find", "role", "button", "click", "--name", "Continue in Sites", "--exact");
-  await ab("wait", "--fn", "location.pathname === '/sites'");
-  await ab("wait", "--text", "Optional: connect a GitHub App");
+  await ab("wait", "--text", "Connect GitHub first");
+  assert.equal((await api("GET", "/_/api/setup")).routes.some((r) => r.host === `gitflow.demo.localhost:${PORT}`), false, "GitHub website was created without a connected repository");
+  await ab("find", "role", "button", "click", "--name", "Close", "--exact");
 
   step = "responsive layouts and accessibility";
   const pages = [["/overview", "Overview"], ["/applications", "Applications"], ["/routes", "Applications"], ["/sites", "Sites"], ["/domains", "Domains"], ["/people", "People"], ["/groups", "People"], ["/administrators", "People"], ["/connectors", "Connectors"], ["/activity", "Activity"]];
