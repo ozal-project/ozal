@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io/fs"
 	"net/http"
-	"path"
 	"strings"
 	"testing"
 	"time"
@@ -133,22 +132,17 @@ func TestConsoleHomeAndAssets(t *testing.T) {
 	// The page references only the sign-in entry; the console itself is a
 	// separate chunk loaded after authentication.
 	index := request(handler, http.MethodGet, "/activity", "", "")
-	asset := ""
+	var referenced []string
 	for _, a := range assets {
 		name := "/" + strings.TrimPrefix(a, "console/")
-		if strings.HasPrefix(path.Base(a), "Console-") {
-			if strings.Contains(index.Body.String(), name) {
-				t.Fatalf("index preloads the console chunk %s before sign-in", name)
-			}
-			continue
-		}
 		if strings.Contains(index.Body.String(), name) {
-			asset = name
+			referenced = append(referenced, name)
 		}
 	}
-	if asset == "" {
-		t.Fatalf("console index references none of its built scripts %v", assets)
+	if len(referenced) != 1 {
+		t.Fatalf("console index must reference only the sign-in entry before authentication; found %v", referenced)
 	}
+	asset := referenced[0]
 	rec := request(handler, http.MethodGet, asset, "", "")
 	if rec.Code != 200 || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/javascript") ||
 		!strings.Contains(rec.Header().Get("Cache-Control"), "immutable") || rec.Header().Get("X-Content-Type-Options") != "nosniff" {
