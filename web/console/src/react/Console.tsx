@@ -4,6 +4,7 @@ import { Button } from "$lib/components/ui/button/react";
 import { Activity } from "./Activity";
 import { Overview } from "./Overview";
 import { Routes as RoutingPage } from "./Routes";
+import { Domains } from "./Domains";
 import { useSession } from "./session";
 
 type Tool = "applications" | "people" | "administrators" | "sites" | "connectors" | "updates" | "updates.install" | "publishing";
@@ -78,6 +79,7 @@ export default function Console() {
         <Route path="/" element={<Overview />} />
         <Route path="/activity" element={<Activity />} />
         <Route path="/routes" element={<RoutingPage />} />
+        <Route path="/domains" element={<Domains />} />
         <Route path="*" element={<MigrationPlaceholder title={pageTitle} />} />
       </Routes>}
     </div></main>
