@@ -24,8 +24,15 @@ func validProfileFile(t *testing.T) (Profile, string) {
 	if err := os.WriteFile(filepath.Join(binDir, "ozal"), []byte("binary"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// A short directory for the socket: sun_path is 104 bytes on macOS and
+	// t.TempDir() embeds the test name.
+	socketDir, err := os.MkdirTemp("", "sb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(socketDir) })
 	p := Profile{
-		Socket: filepath.Join(dir, "executor.sock"), Unit: "ozal",
+		Socket: filepath.Join(socketDir, "executor.sock"), Unit: "ozal",
 		Binary: filepath.Join(binDir, "ozal"), Config: filepath.Join(dir, "config.json"),
 		PublicKey: key, CatalogBase: "https://ozal.dev/api/v1/releases",
 		Channel: "stable", Status: filepath.Join(dir, "update-status.json"),

@@ -89,7 +89,7 @@ func argValue(args []string, name string) string {
 func newTestServer(t *testing.T, runner Runner) *Server {
 	t.Helper()
 	dir := t.TempDir()
-	return &Server{
+	s := &Server{
 		Profile: Profile{
 			Socket: filepathJoin(dir, "executor.sock"), Unit: "ozal",
 			Binary: filepathJoin(dir, "ozal"), Config: filepathJoin(dir, "config.json"),
@@ -99,6 +99,10 @@ func newTestServer(t *testing.T, runner Runner) *Server {
 		},
 		Store: updatejob.Store{Dir: filepathJoin(dir, "jobs")}, Runner: runner,
 	}
+	// A started job keeps writing its record and log after the request; wait
+	// for it before t.TempDir's cleanup (registered earlier, so run later).
+	t.Cleanup(s.wg.Wait)
+	return s
 }
 
 func filepathJoin(parts ...string) string { return strings.Join(parts, "/") }
