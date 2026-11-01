@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, Route, Routes, useLocation } from "react-router";
 import { Button } from "$lib/components/ui/button/react";
+import { Activity } from "./Activity";
 import { Overview } from "./Overview";
 import { useSession } from "./session";
 
@@ -65,6 +66,7 @@ export default function Console() {
       {blocked ? <div className="panel mx-auto max-w-lg p-8 text-center"><p className="plate">Not included in this session</p><h1 className="mt-2 text-xl font-semibold">This session cannot open {current.label}</h1><p className="text-muted-foreground mt-2 text-sm">You are signed in as {session?.name || "an operator"} without the {current.tool} tool. Ask an administrator to include it.</p></div> : <Routes>
         <Route path="/overview" element={<Overview />} />
         <Route path="/" element={<Overview />} />
+        <Route path="/activity" element={<Activity />} />
         <Route path="*" element={<MigrationPlaceholder title={pageTitle} />} />
       </Routes>}
     </div></main>
