@@ -43,8 +43,12 @@ meta-framework is needed: the console is a static SPA behind the admin listener.
 The owner chose React as the long-term base on 2026-11-01 for ecosystem breadth
 (Radix, tables, forms) and for contributors who already know it. Svelte resolves
 this application today, so this is a maintenance decision, not a performance,
-security or accessibility claim. Bundle weight was measured and accepted
-(roughly +30 KB gzip on the lazy chunk); a budget is part of the migration. The
+security or accessibility claim. The accepted estimate was roughly +30 KB gzip
+on the lazy chunk. Measured with every page ported, the cost is on the entry
+instead: about 49 to 95 KB gzip, mostly `react-dom`. `react-router` (about
+14 KB) already loads in the lazy chunk after sign-in, and CSS falls from about
+15 to 12 KB, so the total after sign-in grows by about 43 KB (+23%, about 187
+to 230 KB). A budget is part of the migration. The
 contract, CSP decision and parity criteria are in
 [console-react-migration.md](console-react-migration.md).
 

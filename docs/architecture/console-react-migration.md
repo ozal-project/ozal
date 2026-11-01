@@ -20,8 +20,15 @@ migration is a maintenance decision with a real cost, accepted by the owner.
 
 Bundle weight was measured and is not a blocker: the console loads once per tab
 over loopback or an SSH tunnel and every asset under `assets/` is served
-`immutable`. The expected cost is roughly 30 KB more gzip on the lazy chunk. A
-budget still applies (see below) so the change cannot silently grow.
+`immutable`. The original estimate was roughly 30 KB more gzip on the lazy
+chunk; the measured cost landed on the entry instead. With every page ported,
+the entry grew from about 49 KB to 95 KB gzip, mostly from `react-dom`
+(about 45 KB more). `react-router` (about 14 KB) already loads in the lazy
+chunk after sign-in, so the lazy total stays near 123 KB: the console chunk
+falls from about 123 KB to 109 KB, offset by the separate router chunk. CSS
+falls from about 15 KB to 12 KB, so the total after sign-in is about 43 KB
+larger (+23%), about 187 KB to 230 KB. A budget still applies (see below) so
+the change cannot silently grow.
 
 ## Scope
 
@@ -56,7 +63,7 @@ Re-measure before starting; these numbers are the reference, not a promise.
 | Router | `src/lib/router.svelte.ts`, about 40 lines, `history.pushState` + `popstate` |
 | Icons | `@lucide/svelte` in 27 files |
 | Base CSS | `src/app.css`, 246 lines, Tailwind 4 + tokens |
-| Built output | entry ~160 KB (~48 KB gzip), lazy console ~420 KB (~122 KB gzip), CSS ~76 KB (~14 KB gzip) |
+| Built output | entry ~161 KB (~49 KB gzip), lazy console ~420 KB (~123 KB gzip), CSS ~79 KB (~15 KB gzip) |
 | Browser scripts | 14 in `scripts/demo`, 186 scripted lookups overall; only the console ones are in scope |
 
 The 13 pure tests and the 48 TypeScript modules are framework-free and must keep
@@ -320,7 +327,7 @@ still served after a rebuild only if it exists (otherwise 404 is correct); and
 
 ## Bundle budget
 
-Baseline gzip: entry ~48 KB, lazy console ~122 KB, CSS ~14 KB (about 184 KB
+Baseline gzip: entry ~49 KB, lazy console ~123 KB, CSS ~15 KB (about 187 KB
 total after sign-in). Budget after migration: entry ≤ 110 KB, lazy console ≤ 200
 KB, CSS ≤ 20 KB, total ≤ 260 KB. The sign-in path is what matters for perceived
 speed. If the measured result exceeds the budget, report the number and the
