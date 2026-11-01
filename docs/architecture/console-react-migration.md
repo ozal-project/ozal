@@ -217,8 +217,8 @@ a browser, and keep the scripted coverage that already exists.
 - **Step-up:** five-minute proof, single retry, no second session.
 - **Update dialog:** phases, polling by job ID, close and reopen, intervention
   required, unreachable host versus "already current".
-- **Sites and publishing:** upload, history, rollback, reviewed plan and digest,
-  GitHub workflow proposal.
+- **Sites, Projects and publishing:** upload, history, rollback, reviewed plan
+  and digest, GitHub workflow proposal, and project workflow review.
 - **Applications:** resource fields, validation, stepper, access methods,
   preview.
 - **People, groups, administrators:** invite, revoke, tools, groups, device
@@ -227,6 +227,8 @@ a browser, and keep the scripted coverage that already exists.
 - **Domains:** provider state, certificate status, order of operations.
 - **Integrations:** GitHub return path and tab memory, manifest form posts to
   `github.com` only.
+- **Connectors:** registry states, certificate expiry, five-step enrolment,
+  observed enrolment/connectivity progress, and edge-host revocation guidance.
 - **Navigation:** 1440/1024/390/320 px, keyboard, Escape, focus return, reduced
   motion, no horizontal scroll.
 
