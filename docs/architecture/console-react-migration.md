@@ -226,6 +226,11 @@ workflow pull request. `react-publishing-acceptance.mjs` verifies that
 cancelling this confirmation sends no GitHub write and confirming it sends one
 request with the reviewed workflow digest. GitHub responses are fixtures.
 
+The Sites view keeps its refresh action when Pages is not enabled, so an
+operator can retry after the host configuration changes. Its browser acceptance
+also verifies hostname review, cancellation without a rollback request, and
+reconciliation after restoring a retained deployment.
+
 ## Parity checklist
 
 Every item is observable behavior, not an implementation detail. Verify each in
@@ -263,6 +268,7 @@ OZAL_BIN=/path/to/ozal node scripts/demo/react-console-acceptance.mjs
 OZAL_BIN=/path/to/ozal CHROME=/path/to/chrome node scripts/demo/react-passkey-acceptance.mjs
 OZAL_BIN=/path/to/ozal CHROME=/path/to/chrome node scripts/demo/react-update-acceptance.mjs
 OZAL_BIN=/path/to/ozal CHROME=/path/to/chrome node scripts/demo/react-publishing-acceptance.mjs
+OZAL_BIN=/path/to/ozal CHROME=/path/to/chrome node scripts/demo/react-sites-acceptance.mjs
 node scripts/demo/product-acceptance.mjs
 node scripts/demo/passkey-acceptance.mjs
 OZAL_BIN=/path/binary node scripts/demo/update-acceptance.mjs
@@ -295,6 +301,11 @@ Go edge. It exercises workflow preview, the final pull-request confirmation,
 cancellation without a write, and one confirmed request carrying the reviewed
 digest. GitHub responses are fixtures, so it does not establish GitHub App or
 repository acceptance.
+
+`react-sites-acceptance.mjs` uses the production preview and a disposable Go
+edge. It verifies recovery after Pages becomes available, review of the mapped
+hostname before rollback, cancellation without a mutation, and the updated live
+deployment after confirmation. Site and rollback responses are fixtures.
 
 Also check by hand: Windows-style MIME behavior is covered by `consoleTypes`;
 the CSP header on `index.html` and on a hashed asset; an old hashed asset is
