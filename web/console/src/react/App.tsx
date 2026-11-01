@@ -1,7 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router";
 import { returningFromGitHub, returnTarget } from "$lib/githubReturn";
-import { AuthScreen } from "./AuthScreen";
 import { SessionLifetime, useSession } from "./session";
 
 const Console = lazy(() => import("./Console"));
@@ -18,7 +17,7 @@ function LoadingConsole() {
 }
 
 export function App() {
-  const { session, ready } = useSession();
+  const { session } = useSession();
   const location = useLocation();
   const navigate = useNavigate();
   useEffect(() => {
@@ -27,8 +26,6 @@ export function App() {
     }
   }, [location.pathname, location.search, navigate]);
   useEffect(() => { document.title = session ? "Overview · Ozal" : "Sign in · Ozal"; }, [session]);
-  if (!ready) return <div className="text-muted-foreground flex min-h-screen items-center justify-center text-sm" role="status">Checking your session…</div>;
-  if (!session) return <AuthScreen />;
   return (
     <>
       <Routes>
