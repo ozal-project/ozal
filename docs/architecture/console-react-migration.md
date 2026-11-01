@@ -1,9 +1,11 @@
 # Console frontend contract
 
 This document defines the security, routing, accessibility and behavior
-requirements for the console frontend. The Go binary embeds the React app. Vite
-browser acceptance writes to a separate local output so it cannot overwrite the
-committed Go assets. Do not combine frameworks in one bundle.
+requirements for the console frontend. The Go binary embeds the React app. Each
+Vite browser acceptance run writes to its own temporary output and starts its
+disposable edge on free loopback ports, so concurrent runs cannot overwrite
+committed Go assets or contend for demo listeners. Do not combine frameworks in
+one bundle.
 
 ## Change boundary
 

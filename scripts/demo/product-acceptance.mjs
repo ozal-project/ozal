@@ -6,7 +6,7 @@ import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
-import { startDemoEdge, PORT } from "./edge.mjs";
+import { startDemoEdge } from "./edge.mjs";
 const exec = promisify(execFile);
 const binary = process.env.OZAL_BIN;
 if (!binary) throw new Error("Set OZAL_BIN to the built binary");
@@ -56,7 +56,7 @@ const api = async (method, path, body) => {
   return res.json();
 };
 try {
-  edge = await startDemoEdge({ binary, dir: join(root, "edge"), adminSocket: true });
+  edge = await startDemoEdge({ binary, dir: join(root, "edge"), adminSocket: true, dynamicPorts: true });
   await api("POST", "/_/api/people/invite", { email: "new-operator-test@example.test", groups: ["ops"] });
   step = "host operator login";
   const { stdout } = await exec(binary, ["console", "login", "-config", join(edge.dir, "config.json"), "-name", "Acceptance operator", "-url", edge.consoleURL]);
@@ -75,9 +75,9 @@ try {
   step = "refresh Applications configuration";
   await ab("wait", "--fn", "document.querySelector('#main-content')?.textContent?.includes('private ·')");
   await ab("find", "role", "button", "click", "--name", "Add application", "--exact");
-  await ab("fill", "#app-target", "http://127.0.0.1:19101");
+  await ab("fill", "#app-target", `http://127.0.0.1:${edge.upstreamPorts.grafana}`);
   await ab("find", "role", "button", "click", "--name", "Next", "--exact");
-  await ab("fill", "#app-host", `extra.demo.localhost:${PORT}`);
+  await ab("fill", "#app-host", `extra.demo.localhost:${edge.port}`);
   await ab("find", "role", "button", "click", "--name", "Next", "--exact");
   await ab("fill", "#app-groups", "ops");
   await ab("fill", "#app-invite", "invited-in-flow@example.test");
@@ -97,7 +97,7 @@ try {
   await auditPage([[390, 844], [1440, 1000]]);
   await ab("find", "role", "button", "click", "--name", "Done", "--exact");
   const setup = await api("GET", "/_/api/setup");
-  const added = setup.routes.find((r) => r.host === `extra.demo.localhost:${PORT}`);
+  const added = setup.routes.find((r) => r.host === `extra.demo.localhost:${edge.port}`);
   assert.deepEqual(added?.access?.required_groups, ["ops"]);
   const invited = (await api("GET", "/_/api/people")).users.find((p) => p.email === "invited-in-flow@example.test");
   assert.deepEqual(invited?.groups, ["ops"], "the invitation from the flow did not carry the application's group");
@@ -106,24 +106,24 @@ try {
   const pack = join(root, "artifact"); await mkdir(pack);
   await writeFile(join(pack, "index.html"), "<!doctype html><title>Product acceptance</title><h1>Published from Applications</h1>");
   const archive = join(root, "artifact.tar.gz"); await exec("tar", ["-czf", archive, "-C", pack, "."]);
-  await ab("find", "role", "button", "click", "--name", `More actions for blog.demo.localhost:${PORT}`, "--exact");
+  await ab("find", "role", "button", "click", "--name", `More actions for blog.demo.localhost:${edge.port}`, "--exact");
   await ab("find", "role", "menuitem", "click", "--name", "Publish a new version");
   await ab("upload", '[role="dialog"] input[type="file"]', archive);
   await ab("find", "role", "button", "click", "--name", "Review publication", "--exact");
   await ab("find", "role", "button", "click", "--name", "Publish artifact", "--exact");
   await ab("wait", "--text", "is live. Check its content");
   await ab("press", "Escape");
-  let content = (await exec("curl", ["-fsS", "--max-time", "10", "-H", `Host: blog.demo.localhost:${PORT}`, `http://127.0.0.1:${PORT}/`])).stdout;
+  let content = (await exec("curl", ["-fsS", "--max-time", "10", "-H", `Host: blog.demo.localhost:${edge.port}`, `http://127.0.0.1:${edge.port}/`])).stdout;
   assert(content.includes("Published from Applications"));
   await api("POST", "/_/api/sites/blog/rollback", { id: before });
-  content = (await exec("curl", ["-fsS", "--max-time", "10", "-H", `Host: blog.demo.localhost:${PORT}`, `http://127.0.0.1:${PORT}/`])).stdout;
+  content = (await exec("curl", ["-fsS", "--max-time", "10", "-H", `Host: blog.demo.localhost:${edge.port}`, `http://127.0.0.1:${edge.port}/`])).stdout;
   assert(!content.includes("Published from Applications"), "rollback did not restore previous bytes");
   step = "new static website from uploaded files";
   await ab("find", "role", "button", "click", "--name", "Add application", "--exact");
   await ab("find", "role", "radio", "click", "--name", "A static website");
   await ab("upload", '[role="dialog"] input[type="file"]', archive);
   await ab("find", "role", "button", "click", "--name", "Next", "--exact");
-  await ab("fill", "#app-host", `fresh.demo.localhost:${PORT}`);
+  await ab("fill", "#app-host", `fresh.demo.localhost:${edge.port}`);
   await ab("find", "role", "button", "click", "--name", "Next", "--exact");
   await ab("find", "role", "radio", "click", "--name", "Everyone");
   await ab("find", "role", "button", "click", "--name", "Review", "--exact");
@@ -134,9 +134,9 @@ try {
   await ab("find", "role", "button", "click", "--name", "Confirm and save", "--exact");
   await ab("wait", "--text", "Saved. Point its DNS here");
   await ab("find", "role", "button", "click", "--name", "Done", "--exact");
-  content = (await exec("curl", ["-fsS", "--max-time", "10", "-H", `Host: fresh.demo.localhost:${PORT}`, `http://127.0.0.1:${PORT}/`])).stdout;
+  content = (await exec("curl", ["-fsS", "--max-time", "10", "-H", `Host: fresh.demo.localhost:${edge.port}`, `http://127.0.0.1:${edge.port}/`])).stdout;
   assert(content.includes("Published from Applications"), "the new static website does not serve the uploaded build");
-  assert.equal((await api("GET", "/_/api/setup")).routes.find((r) => r.host === `fresh.demo.localhost:${PORT}`)?.site, "fresh-demo-localhost", "the site name was not derived from the address");
+  assert.equal((await api("GET", "/_/api/setup")).routes.find((r) => r.host === `fresh.demo.localhost:${edge.port}`)?.site, "fresh-demo-localhost", "the site name was not derived from the address");
   step = "membership consequence and cancellation";
   await ab("click", 'a[href="/people"]');
   await ab("wait", "--text", "new-operator-test@example.test");
@@ -219,7 +219,7 @@ try {
   assert.equal((await api("GET", "/_/api/sites")).sites.find((s) => s.name === "blog").live, olderBlog.id, "confirmed Sites rollback did not switch the live build");
 
   step = "Application removal review cancellation and confirmation";
-  const appHost = `extra.demo.localhost:${PORT}`;
+  const appHost = `extra.demo.localhost:${edge.port}`;
   await goPage("/applications", "Applications");
   await ab("find", "role", "button", "click", "--name", "Refresh configuration", "--exact");
   await ab("wait", "--text", appHost);
@@ -239,7 +239,7 @@ try {
   await ab("find", "role", "radio", "click", "--name", "A website built from GitHub");
   await ab("find", "role", "button", "click", "--name", "Next", "--exact");
   await ab("wait", "--text", "Connect GitHub first");
-  assert.equal((await api("GET", "/_/api/setup")).routes.some((r) => r.host === `gitflow.demo.localhost:${PORT}`), false, "GitHub website was created without a connected repository");
+  assert.equal((await api("GET", "/_/api/setup")).routes.some((r) => r.host === `gitflow.demo.localhost:${edge.port}`), false, "GitHub website was created without a connected repository");
   await ab("find", "role", "button", "click", "--name", "Close", "--exact");
 
   step = "responsive layouts and accessibility";

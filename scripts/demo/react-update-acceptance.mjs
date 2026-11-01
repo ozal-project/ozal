@@ -20,6 +20,7 @@ const chrome = process.env.CHROME;
 if (!binary || !chrome) throw new Error("Set OZAL_BIN and CHROME");
 
 const root = await mkdtemp(join(tmpdir(), "ozal-react-update-"));
+const reactEnv = { ...process.env, OZAL_REACT_OUT_DIR: join(root, "react-dist") };
 let edge, preview, browser, step = "start";
 const errors = [];
 
@@ -42,12 +43,12 @@ async function waitForPreview(url) {
 
 try {
   step = "start disposable edge and React production preview";
-  edge = await startDemoEdge({ binary, dir: join(root, "edge"), adminSocket: true });
-  await exec("npm", ["run", "react:build"], { cwd: join(process.cwd(), "web/console"), maxBuffer: 4 << 20 });
+  edge = await startDemoEdge({ binary, dir: join(root, "edge"), adminSocket: true, dynamicPorts: true });
+  await exec("npm", ["run", "react:build"], { cwd: join(process.cwd(), "web/console"), env: reactEnv, maxBuffer: 4 << 20 });
   const port = await freePort();
   const previewURL = `http://ozal.localhost:${port}`;
   preview = spawn(process.execPath, [join(process.cwd(), "web/console/node_modules/vite/bin/vite.js"), "preview", "--config", "vite.react.config.ts", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
-    cwd: join(process.cwd(), "web/console"), env: { ...process.env, OZAL_ADMIN: edge.consoleURL }, stdio: ["ignore", "pipe", "pipe"],
+    cwd: join(process.cwd(), "web/console"), env: { ...reactEnv, OZAL_ADMIN: edge.consoleURL }, stdio: ["ignore", "pipe", "pipe"],
   });
   preview.stdout.resume(); preview.stderr.resume();
   await waitForPreview(previewURL);

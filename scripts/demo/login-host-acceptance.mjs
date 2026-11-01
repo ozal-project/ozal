@@ -11,19 +11,22 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { chromium } from "playwright-core";
-import { startDemoEdge, ADMIN_PORT, DOMAIN, LOGIN } from "./edge.mjs";
+import { startDemoEdge, DOMAIN } from "./edge.mjs";
 
 const exec = promisify(execFile);
 const binary = process.env.OZAL_BIN;
 const chrome = process.env.CHROME;
 if (!binary || !chrome) throw new Error("Set OZAL_BIN and CHROME");
-const consoleURL = `http://ozal.localhost:${ADMIN_PORT}`;
+let consoleURL;
+let loginURL;
 const root = await mkdtemp(join(tmpdir(), "ozal-login-host-"));
 let edge, browser, step = "start";
 const errors = [];
 
 try {
-  edge = await startDemoEdge({ binary, dir: join(root, "edge"), adminSocket: true, adminLoginHost: true });
+  edge = await startDemoEdge({ binary, dir: join(root, "edge"), adminSocket: true, adminLoginHost: true, dynamicPorts: true });
+  consoleURL = `http://ozal.localhost:${edge.adminPort}`;
+  loginURL = edge.loginURL;
   browser = await chromium.launch({ executablePath: chrome, args: ["--no-sandbox"] });
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await context.newPage();
@@ -43,7 +46,7 @@ try {
   await page.getByLabel("Full name").fill("Olivia Owner");
   await page.getByLabel("Email").fill("olivia@acme.dev");
   await page.getByRole("button", { name: "Create my passkey" }).click();
-  await page.waitForURL((url) => url.origin === LOGIN && url.pathname === "/_/auth/admin");
+  await page.waitForURL((url) => url.origin === loginURL && url.pathname === "/_/auth/admin");
   assert.equal(new URL(page.url()).hash, "", "nothing secret in the login host's URL");
   assert.ok(!page.url().includes("enrol"), "the enrolment link never reaches the login host's URL");
   await page.getByRole("button", { name: "Create a passkey" }).click();
@@ -58,14 +61,14 @@ try {
   await page.getByRole("button", { name: "Olivia Owner", exact: true }).click();
   await page.locator("#user-menu").getByRole("button", { name: "Sign out" }).click();
   await page.getByRole("button", { name: "Sign in with passkey" }).click();
-  await page.waitForURL((url) => url.origin === LOGIN);
+  await page.waitForURL((url) => url.origin === loginURL);
   await page.getByRole("button", { name: "Continue with a passkey" }).click();
   await inConsole();
 
   step = "the login host hides the ceremony without a transaction";
-  const unknown = await fetch(`${LOGIN}/_/auth/does-not-exist`);
+  const unknown = await fetch(`${loginURL}/_/auth/does-not-exist`);
   for (const path of ["/_/auth/admin", "/_/auth/admin?tx=forged", "/_/auth/admin.js"]) {
-    const res = await fetch(LOGIN + path);
+    const res = await fetch(loginURL + path);
     assert.equal(res.status, unknown.status, `${path} answered differently from an unknown path`);
   }
 

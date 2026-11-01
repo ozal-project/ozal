@@ -11,7 +11,7 @@ import { startDemoEdge } from "./edge.mjs";
 const exec = promisify(execFile);
 const binary = process.env.OZAL_BIN, out = process.env.OUT;
 const root = await mkdtemp(join(tmpdir(), "ozal-domains-"));
-const edge = await startDemoEdge({ binary, dir: join(root, "edge"), adminSocket: true });
+const edge = await startDemoEdge({ binary, dir: join(root, "edge"), adminSocket: true, dynamicPorts: true });
 const browser = await chromium.launch({ executablePath: "/home/saint/.agent-browser/browsers/chrome-156.0.8078.80/chrome", args: ["--no-sandbox"] });
 const errors = [];
 try {

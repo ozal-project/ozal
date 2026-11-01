@@ -9,12 +9,12 @@ import { join } from "node:path";
 import assert from "node:assert/strict";
 import { request } from "node:http";
 import { chromium } from "playwright-core";
-import { startDemoEdge, PORT, DOMAIN } from "./edge.mjs";
+import { startDemoEdge, DOMAIN } from "./edge.mjs";
 const exec = promisify(execFile);
 const binary = process.env.OZAL_BIN, out = process.env.OUT;
 if (!binary) throw new Error("Set OZAL_BIN to the built binary");
 const root = await mkdtemp(join(tmpdir(), "ozal-redirect-"));
-const edge = await startDemoEdge({ binary, dir: join(root, "edge"), adminSocket: true });
+const edge = await startDemoEdge({ binary, dir: join(root, "edge"), adminSocket: true, dynamicPorts: true });
 const browser = await chromium.launch({ executablePath: process.env.CHROME ?? "/home/saint/.agent-browser/browsers/chrome-156.0.8078.80/chrome", args: ["--no-sandbox"] });
 const errors = [];
 try {
@@ -28,7 +28,7 @@ try {
   await page.getByText("A redirect to another address").click();
   await page.locator("#app-redirect").fill("https://ozal.dev/");
   await page.getByRole("button", { name: "Next" }).click();
-  const old = `old.${DOMAIN}:${PORT}`;
+  const old = `old.${DOMAIN}:${edge.port}`;
   await page.locator("#app-host").fill(old);
   await page.getByRole("button", { name: "Next" }).click();
   await page.getByText("Redirects to ozal.dev").waitFor();
@@ -40,7 +40,7 @@ try {
   await page.getByRole("button", { name: "Confirm and save" }).click();
   await page.getByText(`Connect ${old}`).waitFor();
   // node:http, because fetch does not let a caller set Host.
-  const res = await new Promise((resolve, reject) => request({ host: "127.0.0.1", port: PORT, path: "/docs/install?lang=es", headers: { Host: old } }, resolve).on("error", reject).end());
+  const res = await new Promise((resolve, reject) => request({ host: "127.0.0.1", port: edge.port, path: "/docs/install?lang=es", headers: { Host: old } }, resolve).on("error", reject).end());
   assert.equal(res.statusCode, 301);
   assert.equal(res.headers.location, "https://ozal.dev/docs/install?lang=es");
   await page.goto(edge.consoleURL + "/applications");

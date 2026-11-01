@@ -16,6 +16,7 @@ const binary = process.env.OZAL_BIN && resolve(process.env.OZAL_BIN);
 if (!binary) throw new Error("Set OZAL_BIN to the built Ozal binary");
 
 const root = await mkdtemp(join(tmpdir(), "ozal-react-console-"));
+const reactEnv = { ...process.env, OZAL_REACT_OUT_DIR: join(root, "react-dist") };
 const session = `ozal-react-ui012-${process.pid}`;
 const consoleCSP = "default-src 'none'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; form-action https://github.com; base-uri 'none'; frame-ancestors 'none'";
 let edge;
@@ -73,14 +74,14 @@ async function audit(width, height) {
 
 try {
   step = "build isolated React preview";
-  await exec("npm", ["run", "react:build"], { cwd: join(process.cwd(), "web/console"), maxBuffer: 4 << 20 });
-  edge = await startDemoEdge({ binary, dir: join(root, "edge"), adminSocket: true });
+  await exec("npm", ["run", "react:build"], { cwd: join(process.cwd(), "web/console"), env: reactEnv, maxBuffer: 4 << 20 });
+  edge = await startDemoEdge({ binary, dir: join(root, "edge"), adminSocket: true, dynamicPorts: true });
 
   const port = await freePort();
   const previewURL = `http://127.0.0.1:${port}`;
   preview = spawn(process.execPath, [join(process.cwd(), "web/console/node_modules/vite/bin/vite.js"), "preview", "--config", "vite.react.config.ts", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
     cwd: join(process.cwd(), "web/console"),
-    env: { ...process.env, OZAL_ADMIN: edge.consoleURL },
+    env: { ...reactEnv, OZAL_ADMIN: edge.consoleURL },
     stdio: ["ignore", "pipe", "pipe"],
   });
   preview.stdout.resume();

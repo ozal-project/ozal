@@ -11,25 +11,29 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium } from "playwright-core";
-import { startDemoEdge, PORT, LOGIN } from "./edge.mjs";
+import { startDemoEdge } from "./edge.mjs";
 
 const binary = process.env.OZAL_BIN;
 const chrome = process.env.CHROME;
 if (!binary || !chrome) throw new Error("Set OZAL_BIN and CHROME");
-const NOTES = `http://notes.other.localhost:${PORT}`;
-const CRM = `http://crm.third.localhost:${PORT}`;
+let NOTES;
+let CRM;
+let LOGIN;
 const root = await mkdtemp(join(tmpdir(), "sb-hostsessions-"));
 let edge, browser, step = "start";
 const errors = [];
 const servers = [];
 
 // Each upstream names itself and echoes whether a session cookie reached it.
-const upstream = (port, title) => new Promise((ok) => {
+const upstream = (title) => new Promise((ok, fail) => {
   const server = createServer((req, res) => {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     res.end(`<!doctype html><title>${title}</title><h1>${title}</h1><p id="path">${req.url}</p><p id="cookies">${/sb_session|sb_handoff/.test(req.headers.cookie ?? "") ? "leaked" : "clean"}</p>`);
-  }).listen(port, "127.0.0.1", () => ok(server));
-  servers.push(server);
+  });
+  server.once("error", fail).listen(0, "127.0.0.1", () => {
+    servers.push(server);
+    ok(server.address().port);
+  });
 });
 
 const device = async () => {
@@ -84,15 +88,19 @@ const captureCode = async (context, url) => {
 };
 
 try {
-  await upstream(19111, "Notes");
-  await upstream(19112, "CRM");
+  const notesPort = await upstream("Notes");
+  const crmPort = await upstream("CRM");
   edge = await startDemoEdge({
     binary, dir: join(root, "edge"),
-    extraRoutes: [
-      { host: `notes.other.localhost:${PORT}`, target: "http://127.0.0.1:19111", access: { allowed_domains: ["acme.dev"] } },
-      { host: `crm.third.localhost:${PORT}`, target: "http://127.0.0.1:19112", access: { allowed_emails: ["nobody@acme.dev"] } },
+    dynamicPorts: true,
+    extraRoutes: ({ port }) => [
+      { host: `notes.other.localhost:${port}`, target: `http://127.0.0.1:${notesPort}`, access: { allowed_domains: ["acme.dev"] } },
+      { host: `crm.third.localhost:${port}`, target: `http://127.0.0.1:${crmPort}`, access: { allowed_emails: ["nobody@acme.dev"] } },
     ],
   });
+  NOTES = `http://notes.other.localhost:${edge.port}`;
+  CRM = `http://crm.third.localhost:${edge.port}`;
+  LOGIN = edge.loginURL;
   browser = await chromium.launch({ executablePath: chrome, args: ["--no-sandbox"] });
 
   step = "Ana enrols on the login host";
@@ -214,13 +222,18 @@ try {
   step = "try another account after a refusal";
   assert.equal((await bob.page.goto(`${CRM}/`)).status(), 403);
   await bob.page.getByText("This ends your current sign-in and its linked app sessions.").waitFor();
-  await bob.page.route("**/_/auth/login", (route) => route.abort());
+  await bob.page.route("**/_/auth/login", (route) => route.fulfill({
+    status: 200,
+    contentType: "text/html; charset=utf-8",
+    body: "<!doctype html><title>Sign-in suppressed for acceptance</title>",
+  }));
   const logoutResponses = [];
   bob.page.on("response", (response) => { if (new URL(response.url()).pathname === "/_/auth/logout") logoutResponses.push(response.status()); });
   const switched = bob.page.waitForResponse((response) => new URL(response.url()).pathname === "/_/auth/logout", { timeout: 15_000 });
   await bob.page.getByRole("button", { name: "Sign out and try another account" }).click();
   const logout = await switched.catch(() => { throw new Error(`account-switch logout did not answer; statuses ${logoutResponses.join(",")}`); });
   assert.equal(logout.status(), 303, "account-switch logout did not redirect to sign-in");
+  await bob.page.waitForURL(`${LOGIN}/_/auth/login`);
   assert.equal(await reach(bob.context, `${CRM}/`), "login", "trying another account left the previous login active");
   await bob.context.close();
 

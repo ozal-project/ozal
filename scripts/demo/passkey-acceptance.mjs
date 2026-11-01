@@ -10,13 +10,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { chromium } from "playwright-core";
-import { startDemoEdge, ADMIN_PORT } from "./edge.mjs";
+import { startDemoEdge } from "./edge.mjs";
 
 const exec = promisify(execFile);
 const binary = process.env.OZAL_BIN;
 const chrome = process.env.CHROME;
 if (!binary || !chrome) throw new Error("Set OZAL_BIN and CHROME");
-const consoleURL = `http://ozal.localhost:${ADMIN_PORT}`;
+let consoleURL;
 const root = await mkdtemp(join(tmpdir(), "sb-passkeys-"));
 let edge, browser, step = "start";
 const errors = [];
@@ -52,13 +52,14 @@ const endedOnNextRequest = async (page) => {
 };
 const signOut = async (page, name) => { await (await menu(page, name)).getByRole("button", { name: "Sign out" }).click(); await signedOut(page); };
 const admins = async () => {
-  const res = await fetch(`http://127.0.0.1:${ADMIN_PORT}/_/api/admins`, { headers: { Authorization: `Bearer ${edge.token}` } });
+  const res = await fetch(`${edge.consoleURL}/_/api/admins`, { headers: { Authorization: `Bearer ${edge.token}` } });
   assert.equal(res.status, 200, "administrator listing failed");
   return (await res.json()).admins;
 };
 
 try {
-  edge = await startDemoEdge({ binary, dir: join(root, "edge"), adminSocket: true });
+  edge = await startDemoEdge({ binary, dir: join(root, "edge"), adminSocket: true, dynamicPorts: true });
+  consoleURL = `http://ozal.localhost:${edge.adminPort}`;
   browser = await chromium.launch({ executablePath: chrome, args: ["--no-sandbox"] });
 
   step = "first administrator from the host's setup link";
