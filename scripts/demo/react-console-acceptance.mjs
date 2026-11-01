@@ -145,7 +145,29 @@ try {
   await browser("wait", "--fn", "document.querySelector('#main-content h1')?.textContent?.trim() === 'People'");
   const sessionName = await evaluate("document.querySelector('.console-account-name')?.textContent?.trim()");
   assert.equal(sessionName, "React preview acceptance", "the operator session did not resume after navigating to a new document");
-  console.log("React preview acceptance passed: production build, CSP parity, local-edge API proxy, host-issued login, 11 page routes, two aliases, session resume, axe and overflow at 1440/1024/390/320px.");
+
+  step = "keyboard navigation, Escape and focus return in mobile drawer";
+  await browser("set", "viewport", "390", "844");
+  await browser("find", "role", "button", "click", "--name", "Open menu", "--exact");
+  await browser("wait", "--fn", "document.querySelector('#mobile-menu')?.open === true && document.activeElement?.closest('#mobile-menu') !== null");
+  await browser("eval", "document.querySelector('#mobile-menu a[href=\"/overview\"]').focus()");
+  await browser("press", "Shift+Tab");
+  assert.equal(await evaluate("document.activeElement?.getAttribute('aria-label')"), "React preview acceptance", "backward Tab escaped the mobile navigation");
+  await browser("press", "Tab");
+  assert.equal(await evaluate("document.activeElement?.getAttribute('href')"), "/overview", "Tab did not wrap inside the mobile navigation");
+  await browser("press", "Escape");
+  await browser("wait", "--fn", "document.querySelector('#mobile-menu')?.open === false && document.activeElement?.getAttribute('aria-label') === 'Open menu'");
+  await browser("find", "role", "button", "click", "--name", "Open menu", "--exact");
+  await browser("click", "#mobile-menu a[href=\"/sites\"]");
+  await browser("wait", "--fn", "location.pathname === '/sites' && !document.querySelector('#mobile-menu')?.open && document.activeElement?.textContent?.trim() === 'Sites'");
+
+  step = "account menu Escape closes and restores focus";
+  await browser("set", "viewport", "1440", "1000");
+  await browser("find", "role", "button", "click", "--name", "React preview acceptance", "--exact");
+  await browser("wait", "--fn", "document.querySelector('[aria-label=\"React preview acceptance\"]')?.getAttribute('aria-expanded') === 'true'");
+  await browser("press", "Escape");
+  await browser("wait", "--fn", "document.querySelector('[aria-label=\"React preview acceptance\"]')?.getAttribute('aria-expanded') === 'false' && document.activeElement?.getAttribute('aria-label') === 'React preview acceptance'");
+  console.log("React preview acceptance passed: production build, CSP parity, local-edge API proxy, host-issued login, 11 page routes, two aliases, unknown-route fallback, session resume, axe/overflow at 1440/1024/390/320px, and shell keyboard focus behavior.");
 } catch (error) {
   console.error(`React preview acceptance failed during ${step}: ${error.message}`);
   try {

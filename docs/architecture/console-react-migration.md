@@ -281,8 +281,12 @@ scripts/verify.sh
 with the console CSP, and proxies its API calls to a disposable loopback edge.
 It checks the host-issued operator login, page routes and aliases, resumed
 session, unknown-route redirect with query/fragment preservation, axe and
-horizontal overflow at four viewport widths. This is local preview evidence
-only; real-edge passkey and update acceptance still gate the cutover.
+horizontal overflow at four viewport widths. It also checks that Tab and
+Shift+Tab wrap between the first and last controls in the mobile drawer, Escape
+closes it and restores focus, navigation focuses the destination heading, and
+Escape from the desktop account menu restores its trigger. This is local
+preview evidence only; real-edge passkey and update acceptance still gate the
+cutover.
 
 `react-passkey-acceptance.mjs` uses the same production preview and disposable
 edge with separate virtual-authenticator browser contexts. It covers first
