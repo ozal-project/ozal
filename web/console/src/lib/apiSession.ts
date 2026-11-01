@@ -1,4 +1,5 @@
-// The API client is shared by the Svelte reference app and the React cutover.
+// Keep API session transport outside React components so every request uses
+// the same credential and revocation behavior.
 // Each composition root supplies its own in-memory session source.
 export type APISession = { token: () => string; unauthorized: () => void };
 

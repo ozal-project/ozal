@@ -23,7 +23,7 @@ versions or keep a task status table in this file.
 | Persistence | modernc.org/sqlite, explicit SQL and embedded migrations | Local state without an external service or cgo |
 | Tunnels | hashicorp/yamux over mTLS | Reused multiplexing; identity and permissions are Ozal's own |
 | Configuration | Strict JSON, `file:`/`env:` secret references | Validation and persistence without resolving secrets to disk |
-| Console | React, TypeScript, Vite, Tailwind and Radix primitives (shadcn/ui pattern) | React is the target frontend stack. The embedded console remains a static Svelte SPA until the migration contract is satisfied; Node is only needed at build time. |
+| Console | React, TypeScript, Vite, Tailwind and Radix primitives (shadcn/ui pattern) | Static React SPA embedded in the binary; Node is only needed at build time. |
 | Public site | Static Astro, Tailwind and an optional Go/WASM engine | Accessible content without a Node server |
 | Typography | Self-hosted Geist Sans/Mono, OFL | Local assets and a CSP without font providers |
 | CLI | Standard `flag`; separate `ozalctl` for SSH operation | Installation and automation; routine work from the console |

@@ -6,10 +6,10 @@ import { defineConfig } from "vite";
 const consoleCSP = "default-src 'none'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; form-action https://github.com; base-uri 'none'; frame-ancestors 'none'";
 const adminProxy = { target: process.env.OZAL_ADMIN ?? "http://127.0.0.1:9090", changeOrigin: false };
 
-// The React migration preview builds separately from the embedded Svelte app
-// until parity is complete. It never creates a hybrid bundle.
+// Browser acceptance keeps its output isolated from the embedded Go assets.
 export default defineConfig({
   root: fileURLToPath(new URL("./src/react", import.meta.url)),
+  publicDir: fileURLToPath(new URL("./public", import.meta.url)),
   plugins: [tailwindcss(), react()],
   resolve: {
     alias: { $lib: fileURLToPath(new URL("./src/lib", import.meta.url)) },

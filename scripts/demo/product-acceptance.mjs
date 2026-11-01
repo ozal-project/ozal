@@ -83,7 +83,8 @@ try {
   await ab("fill", "#app-invite", "invited-in-flow@example.test");
   await ab("find", "role", "button", "click", "--name", "Review", "--exact");
   await ab("wait", "--text", "I checked what serves it");
-  await ab("check", 'dialog[open] input[type="checkbox"]');
+  await ab("find", "role", "checkbox", "check", "--name", "I checked what serves it and who can open it. I will try it before moving a live address.", "--exact");
+  await ab("wait", "--fn", "document.querySelector('[role=\"dialog\"] input[type=\"checkbox\"]')?.checked === true");
   await ab("find", "role", "button", "click", "--name", "Save application", "--exact");
   await ab("find", "role", "button", "click", "--name", "Confirm and save", "--exact");
   await ab("wait", "--text", "Saved. Point its DNS here");
@@ -92,7 +93,7 @@ try {
   // through the public listener, and the invitation link is offered to copy.
   await ab("wait", "--text", "reached this edge");
   await ab("wait", "--text", "invited-in-flow@example.test");
-  assert.equal(await evaluate("[...document.querySelectorAll('dialog[open] button')].some((b) => b.textContent.includes('Copy link'))"), true, "the invitation link was not offered");
+  assert.equal(await evaluate("[...document.querySelectorAll('[role=\"dialog\"] button')].some((b) => b.textContent.includes('Copy link'))"), true, "the invitation link was not offered");
   await auditPage([[390, 844], [1440, 1000]]);
   await ab("find", "role", "button", "click", "--name", "Done", "--exact");
   const setup = await api("GET", "/_/api/setup");
@@ -106,8 +107,8 @@ try {
   await writeFile(join(pack, "index.html"), "<!doctype html><title>Product acceptance</title><h1>Published from Applications</h1>");
   const archive = join(root, "artifact.tar.gz"); await exec("tar", ["-czf", archive, "-C", pack, "."]);
   await ab("find", "role", "button", "click", "--name", `More actions for blog.demo.localhost:${PORT}`, "--exact");
-  await ab("find", "role", "menuitem", "click", "--name", "Publish a new version", "--exact");
-  await ab("upload", 'dialog[open] input[type="file"]', archive);
+  await ab("find", "role", "menuitem", "click", "--name", "Publish a new version");
+  await ab("upload", '[role="dialog"] input[type="file"]', archive);
   await ab("find", "role", "button", "click", "--name", "Review publication", "--exact");
   await ab("find", "role", "button", "click", "--name", "Publish artifact", "--exact");
   await ab("wait", "--text", "is live. Check its content");
@@ -119,15 +120,16 @@ try {
   assert(!content.includes("Published from Applications"), "rollback did not restore previous bytes");
   step = "new static website from uploaded files";
   await ab("find", "role", "button", "click", "--name", "Add application", "--exact");
-  await ab("click", 'label:has(input[name="app-kind"][value="static"])');
-  await ab("upload", "#app-files", archive);
+  await ab("find", "role", "radio", "click", "--name", "A static website");
+  await ab("upload", '[role="dialog"] input[type="file"]', archive);
   await ab("find", "role", "button", "click", "--name", "Next", "--exact");
   await ab("fill", "#app-host", `fresh.demo.localhost:${PORT}`);
   await ab("find", "role", "button", "click", "--name", "Next", "--exact");
-  await ab("click", 'label:has(input[name="app-privacy"][value="public"])');
+  await ab("find", "role", "radio", "click", "--name", "Everyone");
   await ab("find", "role", "button", "click", "--name", "Review", "--exact");
   await ab("wait", "--text", "uploads artifact.tar.gz");
-  await ab("check", 'dialog[open] input[type="checkbox"]');
+  await ab("find", "role", "checkbox", "check", "--name", "I checked what serves it and who can open it. I will try it before moving a live address.", "--exact");
+  await ab("wait", "--fn", "document.querySelector('[role=\"dialog\"] input[type=\"checkbox\"]')?.checked === true");
   await ab("find", "role", "button", "click", "--name", "Save application", "--exact");
   await ab("find", "role", "button", "click", "--name", "Confirm and save", "--exact");
   await ab("wait", "--text", "Saved. Point its DNS here");
@@ -139,19 +141,19 @@ try {
   await ab("click", 'a[href="/people"]');
   await ab("wait", "--text", "new-operator-test@example.test");
   await ab("find", "role", "button", "click", "--name", "Edit groups for new-operator-test@example.test", "--exact");
-  await ab("fill", 'input[id^="groups-"]', "staff");
+  await ab("fill", "#person-groups", "staff");
   await ab("find", "role", "button", "click", "--name", "Review change", "--exact");
   await ab("press", "Escape");
   let people = await api("GET", "/_/api/people");
   assert.deepEqual(people.users.find((p) => p.email === "new-operator-test@example.test").groups, ["ops"], "cancel changed membership");
   await ab("find", "role", "button", "click", "--name", "Review change", "--exact");
-  assert.equal(await evaluate("document.activeElement?.textContent?.trim()"), "Cancel", "consequence dialog did not focus Cancel initially");
+  assert.equal(await evaluate("document.activeElement?.textContent?.trim()"), "Back", "consequence dialog did not focus the safe return action initially");
   await ab("press", "Tab");
   assert.equal(await evaluate("document.activeElement?.textContent?.trim()"), "Save membership", "dialog Tab order did not reach confirmation");
   await ab("press", "Tab");
-  assert.equal(await evaluate("document.activeElement?.textContent?.trim()"), "Cancel", "dialog focus did not remain contained");
+  assert.equal(await evaluate("document.activeElement?.getAttribute('aria-label')"), "Close", "dialog focus did not wrap to its close control");
   await ab("press", "Escape");
-  assert.equal(await evaluate("document.querySelectorAll('dialog[open]').length"), 1, "Escape did not close only the membership review");
+  assert.equal(await evaluate("document.querySelectorAll('[role=\"dialog\"]').length"), 1, "Escape did not close only the membership review");
   await ab("wait", "--fn", "document.activeElement?.textContent?.trim() === 'Review change'");
   people = await api("GET", "/_/api/people");
   assert.deepEqual(people.users.find((p) => p.email === "new-operator-test@example.test").groups, ["ops"], "Escape changed membership");
@@ -196,10 +198,10 @@ try {
   step = "Sites hostname mapping error and recovery";
   await goPage("/sites", "Sites");
   await failNextRequest("/_/api/status");
-  await ab("find", "role", "button", "click", "--name", "Refresh", "--exact");
+  await ab("find", "role", "button", "click", "--name", "Refresh sites", "--exact");
   await ab("wait", "--text", "Hostname mappings could not be refreshed");
-  assert.equal(await evaluate("document.querySelector('dialog[open]') === null"), true);
-  await ab("find", "role", "button", "click", "--name", "Refresh", "--exact");
+  assert.equal(await evaluate("document.querySelector('[role=\"dialog\"]') === null"), true);
+  await ab("find", "role", "button", "click", "--name", "Refresh sites", "--exact");
   await ab("wait", "--fn", "!document.body.innerText.includes('Hostname mappings could not be refreshed')");
   await auditPage([[1440, 1000], [390, 844]]);
 
@@ -212,7 +214,7 @@ try {
   await ab("press", "Escape");
   assert.equal((await api("GET", "/_/api/sites")).sites.find((s) => s.name === "blog").live, liveBeforeUI, "cancel changed live deployment");
   await ab("find", "role", "button", "click", "--name", `Restore ${olderBlog.id.slice(0, 12)} for blog`, "--exact");
-  await ab("click", "dialog[open] button:last-child");
+  await ab("find", "role", "button", "click", "--name", "Restore version", "--exact");
   await ab("wait", "--text", "blog now serves");
   assert.equal((await api("GET", "/_/api/sites")).sites.find((s) => s.name === "blog").live, olderBlog.id, "confirmed Sites rollback did not switch the live build");
 
@@ -222,26 +224,26 @@ try {
   await ab("find", "role", "button", "click", "--name", "Refresh configuration", "--exact");
   await ab("wait", "--text", appHost);
   await ab("find", "role", "button", "click", "--name", `More actions for ${appHost}`, "--exact");
-  await ab("find", "role", "menuitem", "click", "--name", "Remove", "--exact");
+  await ab("find", "role", "menuitem", "click", "--name", "Remove");
   await ab("wait", "--text", "Remove this application hostname?");
   await ab("press", "Escape");
   assert((await api("GET", "/_/api/setup")).routes.some((r) => r.host === appHost), "cancelling removal removed the route");
   await ab("find", "role", "button", "click", "--name", `More actions for ${appHost}`, "--exact");
-  await ab("find", "role", "menuitem", "click", "--name", "Remove", "--exact");
-  await ab("click", "dialog[open] button:last-child");
+  await ab("find", "role", "menuitem", "click", "--name", "Remove");
+  await ab("find", "role", "button", "click", "--name", "Remove application", "--exact");
   await ab("wait", "--fn", `![...document.querySelectorAll('#main-content h2')].some((el) => el.textContent.trim() === ${JSON.stringify(appHost)})`);
   assert.equal((await api("GET", "/_/api/setup")).routes.some((r) => r.host === appHost), false, "confirmed removal left the route configured");
 
   step = "require a GitHub connection before creating a GitHub website";
   await ab("find", "role", "button", "click", "--name", "Add application", "--exact");
-  await ab("click", 'label:has(input[name="app-kind"][value="github"])');
+  await ab("find", "role", "radio", "click", "--name", "A website built from GitHub");
   await ab("find", "role", "button", "click", "--name", "Next", "--exact");
   await ab("wait", "--text", "Connect GitHub first");
   assert.equal((await api("GET", "/_/api/setup")).routes.some((r) => r.host === `gitflow.demo.localhost:${PORT}`), false, "GitHub website was created without a connected repository");
   await ab("find", "role", "button", "click", "--name", "Close", "--exact");
 
   step = "responsive layouts and accessibility";
-  const pages = [["/overview", "Overview"], ["/applications", "Applications"], ["/routes", "Applications"], ["/sites", "Sites"], ["/domains", "Domains"], ["/people", "People"], ["/groups", "People"], ["/administrators", "People"], ["/connectors", "Connectors"], ["/activity", "Activity"]];
+  const pages = [["/overview", "Overview"], ["/applications", "Applications"], ["/routes", "Hostnames"], ["/sites", "Sites"], ["/domains", "Domains"], ["/people", "People"], ["/groups", "People"], ["/administrators", "Administrators"], ["/connectors", "Connectors"], ["/activity", "Activity"]];
   for (const [href, title] of pages) {
     await goPage(href, title);
     await auditPage([[1440, 1000], [1024, 900], [390, 844], [320, 800]]);
@@ -266,9 +268,11 @@ try {
   await ab("wait", "--fn", "document.activeElement?.closest('#mobile-menu') !== null");
   await ab("eval", "document.querySelector('#mobile-menu button[aria-label=\"Close menu\"]').focus()");
   await ab("press", "Shift+Tab");
+  assert.equal(await evaluate("document.activeElement?.getAttribute('href')"), "/overview", "backward Tab did not reach the drawer brand link");
+  await ab("press", "Shift+Tab");
   assert.equal(await evaluate("document.activeElement?.getAttribute('aria-label')"), "Acceptance operator", "backward Tab escaped the mobile navigation");
   await ab("press", "Tab");
-  assert.equal(await evaluate("document.activeElement?.getAttribute('aria-label')"), "Close menu", "Tab did not wrap inside the mobile navigation");
+  assert.equal(await evaluate("document.activeElement?.getAttribute('href')"), "/overview", "Tab did not wrap to the first control in mobile navigation");
   if (captures) await ab("screenshot", join(captures, "navigation-390.png"), "--full");
   await auditPage([[390, 844], [320, 800]]);
   await ab("press", "Escape");

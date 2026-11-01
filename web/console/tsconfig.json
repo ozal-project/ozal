@@ -1,18 +1,26 @@
 {
-  "extends": "@tsconfig/svelte/tsconfig.json",
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "jsx": "react-jsx",
     "strict": true,
     "verbatimModuleSyntax": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "isolatedModules": true,
     "skipLibCheck": true,
-    "types": ["svelte", "vite/client"],
-    "paths": { "$lib": ["./src/lib"], "$lib/*": ["./src/lib/*"] }
+    "types": ["vite/client"],
+    "paths": {
+      "$lib": ["./src/lib"],
+      "$lib/*": ["./src/lib/*"]
+    }
   },
-  "include": ["src/**/*.ts", "src/**/*.svelte"],
+  "include": [
+    "src/react/**/*.ts",
+    "src/react/**/*.tsx",
+    "src/lib/**/*.ts",
+    "src/lib/**/*.tsx"
+  ],
   "exclude": ["src/**/*.test.ts"]
 }

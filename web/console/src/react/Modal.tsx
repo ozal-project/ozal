@@ -1,6 +1,6 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
-import { useRef, type ReactNode } from "react";
+import { useRef, type ReactNode, type RefObject } from "react";
 import { Button } from "$lib/components/ui/button/react";
 import { cn } from "$lib/utils";
 
@@ -11,10 +11,11 @@ type ModalProps = {
   intro?: string;
   wide?: boolean;
   portalContainer?: HTMLElement;
+  initialFocusRef?: RefObject<HTMLElement | null>;
   children: ReactNode;
 };
 
-export function Modal({ open, onOpenChange, title, intro = "", wide = false, portalContainer, children }: ModalProps) {
+export function Modal({ open, onOpenChange, title, intro = "", wide = false, portalContainer, initialFocusRef, children }: ModalProps) {
   const returnFocus = useRef<HTMLElement | null>(null);
 
   return (
@@ -22,8 +23,12 @@ export function Modal({ open, onOpenChange, title, intro = "", wide = false, por
       <Dialog.Portal container={portalContainer}>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/60 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
         <Dialog.Content
-          onOpenAutoFocus={() => {
+          onOpenAutoFocus={(event) => {
             returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            if (initialFocusRef?.current?.isConnected) {
+              event.preventDefault();
+              initialFocusRef.current.focus();
+            }
           }}
           onCloseAutoFocus={(event) => {
             event.preventDefault();

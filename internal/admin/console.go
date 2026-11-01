@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// consoleApp is the Svelte console built by scripts/build-console.sh from
+// consoleApp is the React console built by scripts/build-console.sh from
 // web/console. It is committed so `go build` alone produces a complete binary;
 // Node is a build-time tool only.
 //

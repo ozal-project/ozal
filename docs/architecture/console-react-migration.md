@@ -1,9 +1,9 @@
 # Console frontend contract
 
 This document defines the security, routing, accessibility and behavior
-requirements for the console frontend. The Go binary currently embeds the
-Svelte console. React uses a separate Vite configuration and output; do not
-combine both frameworks in one bundle.
+requirements for the console frontend. The Go binary embeds the React app. Vite
+browser acceptance writes to a separate local output so it cannot overwrite the
+committed Go assets. Do not combine frameworks in one bundle.
 
 ## Change boundary
 
@@ -23,33 +23,21 @@ combine both frameworks in one bundle.
 - Design, tokens, typography and the Umbral/Marfil identity.
 - Permissions, tools and the session model.
 - Server-side rendering, a Node runtime or a meta-framework.
-- New product behavior. A migration that needs a feature change is two tasks.
+- New product behavior. API or permission changes need their own security
+  review and regression coverage.
 
-## Target stack
+## Frontend stack
 
-| Today | Target | Note |
-|---|---|---|
-| Svelte 5 + runes | React | Function components and hooks; no class components |
-| `@sveltejs/vite-plugin-svelte` | `@vitejs/plugin-react` | Vite, `outDir`, `assetsDir` and `assetsInlineLimit` stay |
-| `bits-ui` | Radix primitives with the shadcn/ui pattern | Components are copied into the repo, not imported from a package |
-| `@lucide/svelte` | `lucide-react` | Same icon set |
-| `router.svelte.ts` | `react-router` | The route table and aliases below stay identical |
-| `svelte-check` | `tsc --noEmit` | Same gate role in `build-console.sh` |
-| `@tsconfig/svelte` | a plain strict `tsconfig.json` with `jsx: react-jsx` | Keep `strict`, `noEmit`, `isolatedModules` |
+Use React function components and hooks, `react-router`, Radix primitives
+following the shadcn/ui pattern, and `lucide-react`. Keep Vite, the `$lib` alias,
+and the strict TypeScript settings in `tsconfig.json`. Do not add state,
+data-fetching or form libraries without a concrete need and a stack entry.
 
-Do not add a state library, a data-fetching library or a form library during
-the migration. Add them only when a page needs them, with a stack entry first. The
-existing `$lib` alias and `components.json` aliases stay so imports keep
-working; shadcn/ui supports custom aliases.
-
-The React frontend uses `react`, `react-dom`, `react-router`,
+The frontend uses `react`, `react-dom`, `react-router`,
 `@radix-ui/*` as used by the copied primitives, `lucide-react`, `clsx`,
 `tailwind-merge`, `tailwind-variants`, `tw-animate-css`, `@fontsource/*`, and
-the build toolchain. Svelte dependencies remain while `.svelte` files are part
-of the embedded console.
-
-`@internationalized/date` stays in the tree because `bits-ui` requires it. The
-direct declaration can be dropped when `bits-ui` leaves, not before.
+the Vite build toolchain. The embedded app and the browser preview use the same
+React source but have separate output directories.
 
 ## Constraints that must survive
 
@@ -57,14 +45,14 @@ Read `internal/admin/console.go` before touching the build.
 
 - **CSP is strict and non-negotiable except for the documented directive
   below.** Current value:
-  `default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; form-action https://github.com; base-uri 'none'; frame-ancestors 'none'`.
+  `default-src 'none'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; form-action https://github.com; base-uri 'none'; frame-ancestors 'none'`.
 - **No inline scripts.** Vite must keep emitting external files; do not add a
   plugin that inlines the entry or the runtime.
 - **`assetsInlineLimit: 0`** exists because `font-src 'self'` rejects `data:`
   fonts. Keep it.
 - **`Console` must stay a lazy chunk** (`React.lazy` + `Suspense`), so the
-  sign-in screen does not download the whole app. The current split is
-  `Root.svelte` importing `Console.svelte` dynamically; keep the equivalent.
+  sign-in screen does not download the whole app. `Root.tsx` loads the router
+  after sign-in, and the router loads the console lazily.
 - **Committed build output.** `scripts/verify.sh` stage `[6b]` rebuilds the
   console and fails when `internal/admin/console` is stale, and
   `OZAL_REQUIRE_FRONTEND=1` turns a skipped console into a failure in CI. Commit
@@ -88,12 +76,8 @@ Read `internal/admin/console.go` before touching the build.
 ## CSP and runtime styles
 
 `style-src 'self'` blocks `style` attributes as well as `<style>` elements.
-Evidence in the current tree:
-
-- `web/console/src/pages/Applications.svelte` sets
-  `style="grid-template-columns: repeat(...)"` on the stepper.
-- The built `bits-ui` bundle calls `element.style.setProperty(...)`; floating
-  positioning needs it. Radix uses the same technique, and more often.
+Radix floating components position themselves by setting inline style
+properties on elements; their positioning requires the narrow exception.
 
 Use the narrow directive `style-src 'self'; style-src-attr 'unsafe-inline'`.
 Keep `<style>` injection blocked; only element-level style attributes are
@@ -103,8 +87,7 @@ library positioning.
 
 Browsers without `style-src-attr` fall back to `style-src` and lose floating
 positioning, not access. Do not use `style-src 'unsafe-inline'`: that would also
-allow injected `<style>` blocks. If Radix cannot work under the narrow
-directive, stop and report; do not widen it silently.
+allow injected `<style>` blocks. Keep Radix within the narrow directive.
 
 ## Parity checklist
 
@@ -201,16 +184,3 @@ Budget: entry ≤ 110 KB, lazy console ≤ 200
 KB, CSS ≤ 20 KB, total ≤ 260 KB. The sign-in path is what matters for perceived
 speed. If the measured result exceeds the budget, report the number and the
 cause before changing the budget; do not raise it to make the task pass.
-
-## Stop conditions
-
-Stop and report instead of improvising when:
-
-- Radix needs more than `style-src-attr 'unsafe-inline'`.
-- Parity requires changing a Go handler, an API field or a route.
-- A pure logic test has to change.
-- Browser acceptance cannot reach parity after the shell step.
-- The build output cannot be reproduced byte-for-byte across two runs.
-
-In any of those cases, keep the Svelte console working and leave the branch
-reversible.
