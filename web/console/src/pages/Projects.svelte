@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import PageHeader from "$lib/PageHeader.svelte";
   import Panel from "$lib/Panel.svelte";
   import { Button } from "$lib/components/ui/button";
@@ -41,7 +41,18 @@
     } catch (e) { if (run.isCurrent()) error = (e as Error).message; }
     finally { if (run.isCurrent()) busy = false; run.finish(); }
   }
-  onMount(() => { if (admin.token.trim()) void load(); return () => reads.cancel(); });
+  $effect(() => {
+    const token = admin.token.trim();
+    reads.cancel();
+    repositories = null; setup = null; projects = []; projectsLoaded = false; error = "";
+    if (token) untrack(() => void load());
+  });
+  // Sites used to refresh this section from its own poll. Keep the same
+  // cadence here so the embedded view and the standalone page stay current.
+  onMount(() => {
+    const timer = setInterval(() => { if (!busy && admin.token.trim()) void load(); }, 15_000);
+    return () => { clearInterval(timer); reads.cancel(); };
+  });
   // The trusted workflow claim reads "owner/repo/.github/workflows/file@ref":
   // show it as a repository, a branch and a file instead of numeric IDs.
   function trusted(workflowRef: string | undefined, ref: string) {

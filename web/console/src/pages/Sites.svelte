@@ -8,7 +8,7 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { Skeleton } from "$lib/components/ui/skeleton";
-  import { fetchSites, fetchProjects, fetchStatus, rollback, PagesDisabledError, type Site, type Project, type StatusResponse, type Deployment } from "$lib/api";
+  import { fetchSites, fetchStatus, rollback, PagesDisabledError, type Site, type StatusResponse, type Deployment } from "$lib/api";
   import { LatestRequest } from "$lib/latestRequest";
   import { navigate } from "$lib/router.svelte";
   import Freshness from "$lib/Freshness.svelte";
@@ -24,12 +24,8 @@
   let loading = $state(false);
   let observedAt = $state<number | null>(null);
   let routeStatus = $state<StatusResponse | null>(null);
-  let projects = $state<Project[] | null>(null);
-  let projectsError = $state("");
-  let projectsLoading = $state(false);
   let routeStatusError = $state("");
   const sitesRequest = new LatestRequest();
-  const projectsRequest = new LatestRequest();
   // The token is shared by the console pages, in this tab's memory only.
   import { admin, askForToken, can } from "$lib/adminToken.svelte";
   import { afterLoad } from "$lib/loadState";
@@ -40,35 +36,8 @@
   // of the page is out of sight when the click happened further down.
   let notices = $state<Record<string, { text: string; ok: boolean }>>({});
 
-  async function loadProjects() {
-    const token = admin.token.trim();
-    if (!token) {
-      projectsRequest.cancel();
-      projects = null;
-      projectsError = "";
-      projectsLoading = false;
-      return;
-    }
-    const run = projectsRequest.start();
-    projectsLoading = true;
-    projectsError = "";
-    try {
-      const result = await fetchProjects(token, run.signal);
-      if (!run.isCurrent()) return;
-      projects = result;
-    } catch (e) {
-      if (!run.isCurrent()) return;
-      projects = null;
-      projectsError = (e as Error).message;
-    } finally {
-      if (run.isCurrent()) projectsLoading = false;
-      run.finish();
-    }
-  }
-
   async function load() {
     if (!admin.token.trim()) return;
-    void loadProjects();
     const run = sitesRequest.start();
     loading = true;
     const [siteResult, statusResult] = await Promise.allSettled([fetchSites(run.signal), fetchStatus(run.signal)]);
@@ -92,11 +61,11 @@
   }
   $effect(() => {
     const token = admin.token.trim();
-    sitesRequest.cancel(); projectsRequest.cancel();
-    sites = null; projects = null; routeStatus = null; error = ""; routeStatusError = ""; projectsError = ""; observedAt = null; disabled = false;
+    sitesRequest.cancel();
+    sites = null; routeStatus = null; error = ""; routeStatusError = ""; observedAt = null; disabled = false;
     if (token) untrack(() => { void load(); });
   });
-  onMount(() => { const t = setInterval(load, 15_000); return () => { clearInterval(t); sitesRequest.cancel(); projectsRequest.cancel(); Object.values(mutations).forEach((controller) => controller.abort()); }; });
+  onMount(() => { const t = setInterval(load, 15_000); return () => { clearInterval(t); sitesRequest.cancel(); Object.values(mutations).forEach((controller) => controller.abort()); }; });
 
   function restore(site: Site, deployment: Deployment) {
     if (!routeStatus || routeStatusError) {
