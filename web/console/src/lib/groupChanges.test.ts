@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { groupMemberChanges, membershipAfterChange } from "./groupChanges.ts";
+import { groupMemberChanges, membershipAfterChange, parseGroupNames } from "./groupChanges.ts";
 
 describe("group membership changes", () => {
   it("plans additions and removals from the displayed membership", () => {
@@ -19,5 +19,9 @@ describe("group membership changes", () => {
   it("keeps a person's other groups and sorts the resulting membership", () => {
     assert.deepEqual(membershipAfterChange(["zeta", "staff"], "ops", true), ["ops", "staff", "zeta"]);
     assert.deepEqual(membershipAfterChange(["ops", "staff"], "ops", false), ["staff"]);
+  });
+
+  it("parses trimmed, unique, case-sensitive group names", () => {
+    assert.deepEqual(parseGroupNames(" staff,ops, staff ,,Ops "), ["Ops", "ops", "staff"]);
   });
 });
