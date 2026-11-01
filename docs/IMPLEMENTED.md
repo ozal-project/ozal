@@ -43,7 +43,7 @@ insert leaves access and links unchanged. The enrolment page reads the stored
 purpose through `POST /_/auth/enrol/info` and labels the action "Replace my
 passkeys"; a committed recovery emits `user.recovered` instead of
 `passkey.registered`. Recovery is documented as an explicit alternative
-authority ([contract](engineering.md#enrolment-login-cli-and-recovery-contract)).
+authority (contract (maintainer notes)).
 Evidence: `TestRecoveryReplacesPasskeysAndEndsSessions` failed before the
 change and each step (revoke, retire links, end sessions) is mutation-caught;
 regressions for event selection, rollback and metadata privacy; full
