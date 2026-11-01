@@ -1,0 +1,238 @@
+@custom-variant dark (&:is(.dark *));
+
+/* Ozal identity (SITE-005, Marfil): warm ink with three brand colours, each
+   with one meaning and never decoration.
+     ivory   (primary)    Ozal itself: actions, the current place, focus
+     camel   (signal)     what is live: a signal on a cord, a connection up
+     graphite (depth)     depth: the door leaf of the mark, quiet surfaces
+   States stay out of the brand range: green allowed, red refused, blue
+   waiting (a check or decision under way), amber only for warnings that need
+   the operator's attention. The project page (site/src/styles.css) and the
+   sign-in pages (internal/passkey/assets) use the same values. Fonts are
+   bundled (OFL): no third-party requests. */
+:root {
+  --radius: 0.5rem;
+  --background: #0e0e0d;
+  --foreground: #f1ede6;
+  --card: #171716;
+  --card-foreground: #f1ede6;
+  --popover: #1f1f1d;
+  --popover-foreground: #f1ede6;
+  --primary: #f1ece2;
+  --primary-foreground: #0e0e0d;
+  --secondary: #1f1f1d;
+  --secondary-foreground: #f1ede6;
+  --muted: #1f1f1d;
+  --muted-foreground: #a19d96;
+  --accent: #262624;
+  --accent-foreground: #f1ede6;
+  --destructive: #ee6b5e;
+  --border: #2a2927;
+  --input: #3a3833;
+  --ring: #c4a17c;
+  --success: #78cc8a;
+  --warning: #e0a84a;
+  --waiting: #86b3e6;
+  /* Camel: what is live. Graphite: depth. */
+  --signal: #c4a17c;
+  --depth: #55514a;
+  --sidebar: #0e0e0d;
+  --sidebar-foreground: #f1ede6;
+  --sidebar-border: #2a2927;
+  --sidebar-accent: #1f1f1d;
+  --sidebar-accent-foreground: #f1ede6;
+}
+
+@theme inline {
+  --font-sans: "Geist Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-waiting: var(--waiting);
+  --color-signal: var(--signal);
+  --color-depth: var(--depth);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    color-scheme: dark;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* Shared pieces. Names are kept from the first console so every page inherits
+   the new look; only their appearance changed. */
+@layer components {
+  /* Small label above a block. */
+  .plate {
+    @apply text-muted-foreground text-xs font-medium;
+  }
+  .plate b { @apply text-signal font-semibold; }
+  /* A state dot: green allowed, red refused, blue waiting, amber warning, grey idle. */
+  .lamp {
+    @apply inline-block size-2 shrink-0 rounded-full;
+    background: var(--lamp, var(--muted-foreground));
+  }
+  .lamp-on { --lamp: var(--success); }
+  .lamp-off { --lamp: var(--destructive); }
+  .lamp-wait { --lamp: var(--waiting); animation: lamp-pulse 1.6s ease-in-out infinite; }
+  .lamp-warn { --lamp: var(--warning); }
+  .lamp-idle { --lamp: #3a3833; }
+  .lamp-lg { @apply size-3; }
+  /* A group name; as a button it adds or removes the group. */
+  .chip {
+    @apply bg-muted text-foreground inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs;
+  }
+  button.chip { @apply hover:bg-accent focus-visible:ring-ring cursor-pointer focus-visible:ring-2 focus-visible:outline-none; }
+  .chip-add { @apply text-muted-foreground border-border border border-dashed bg-transparent; }
+  .panel {
+    @apply bg-card relative rounded-lg;
+  }
+  .panel-head { @apply flex flex-wrap items-center justify-between gap-3 px-5 py-4; }
+  /* A connecting line, as a divider next to labels. */
+  .cord { stroke: #6e6a63; fill: none; stroke-linecap: round; }
+}
+
+@keyframes lamp-pulse { 50% { opacity: 0.45; } }
+
+/* Identity motion. Every animation here stops under prefers-reduced-motion
+   (rule above); none is needed to read or use a page. */
+/* The mark's entrance: the arch rises, the leaf swings open from closed to its
+   resting angle on the left hinge, the light comes up behind it and a beam
+   crosses the doorway. Fill mode is backwards only, so each piece ends on the
+   static mark and hover styles still apply afterwards. */
+.logo-arch, .logo-leaf, .logo-light, .logo-beam { transform-box: fill-box; }
+/* Sign-in entrance: the outline is drawn from the ground up, the arch fills
+   in as the outline fades, then the door opens and the light passes. */
+.logo-trace { opacity: 0; }
+.logo-entrance .logo-trace { animation: logo-trace 1.5s cubic-bezier(0.65, 0, 0.35, 1) both; }
+.logo-entrance .logo-arch { animation: logo-fill 0.7s 0.95s ease-out both; }
+.logo-entrance .logo-door { animation: logo-door 0.5s 1.25s ease-out both; }
+@keyframes logo-door { from { opacity: 0; } }
+.logo-entrance .logo-leaf { animation: logo-swing 1s 1.45s cubic-bezier(0.55, 0, 0.2, 1) backwards; }
+.logo-entrance .logo-light { animation: logo-glow 1s 1.45s ease-out backwards; }
+.logo-entrance .logo-beam { animation: logo-beam 1.2s 2.2s cubic-bezier(0.4, 0, 0.2, 1); }
+@keyframes logo-trace { 0% { opacity: 1; stroke-dashoffset: 100; } 70% { opacity: 1; stroke-dashoffset: 0; } 100% { opacity: 0; stroke-dashoffset: 0; } }
+@keyframes logo-fill { from { opacity: 0; transform: translateY(3%); } }
+.logo-arch { transform-origin: center bottom; transition: transform 0.35s cubic-bezier(0.3, 1.4, 0.5, 1); }
+.logo-leaf { transform-origin: left center; }
+.logo-live .logo-arch { animation: logo-rise 0.6s cubic-bezier(0.3, 1.35, 0.5, 1) backwards; }
+.logo-live .logo-leaf { animation: logo-swing 0.9s 0.35s cubic-bezier(0.55, 0, 0.2, 1) backwards; }
+.logo-live .logo-light { animation: logo-glow 0.9s 0.35s ease-out backwards; }
+.logo-live .logo-beam { animation: logo-beam 1.1s 1.05s cubic-bezier(0.4, 0, 0.2, 1); }
+@keyframes logo-rise { from { opacity: 0; transform: translateY(18%) scaleY(0.92); } }
+@keyframes logo-swing { from { transform: scaleX(2); } 70% { transform: scaleX(0.88); } }
+@keyframes logo-glow { from { opacity: 0.35; } }
+@keyframes logo-beam { from { opacity: 0; transform: translateX(0); } 20% { opacity: 1; } 80% { opacity: 1; } to { opacity: 0; transform: translateX(260%); } }
+/* Pointing at the brand lifts the arch and sends the beam through again
+   (a second keyframe name, because a finished animation does not restart). */
+.console-brand:hover .logo-arch, .console-brand:focus-visible .logo-arch { transform: translateY(-4%); }
+.console-brand:hover .logo-beam, .console-brand:focus-visible .logo-beam { animation: logo-beam-again 1s cubic-bezier(0.4, 0, 0.2, 1); }
+@keyframes logo-beam-again { from { opacity: 0; transform: translateX(0); } 20% { opacity: 1; } 80% { opacity: 1; } to { opacity: 0; transform: translateX(260%); } }
+.page-enter { min-width: 0; }
+
+/* Umbral is the sign-in's own object: an open door. The signed-out screen
+   carries only brand and sign-in, never configuration or app names. */
+.auth-shell { display: grid; min-height: 100svh; place-items: center; padding: 48px 16px; position: relative; overflow: hidden; }
+/* A faint glow where the door opens, behind the mark. */
+.auth-shell::before { content: ""; position: absolute; left: 50%; top: 18%; width: 520px; height: 520px; translate: -50% -50%; pointer-events: none;
+  background: radial-gradient(closest-side, color-mix(in oklab, var(--signal) 14%, transparent), transparent); animation: auth-glow 2.4s 1.2s ease-out both; }
+@keyframes auth-glow { from { opacity: 0; } }
+.auth-column { position: relative; width: min(380px, 100%); display: grid; gap: 28px; }
+.auth-mark { display: grid; justify-items: center; gap: 14px; text-align: center; }
+.auth-name { font-size: 22px; font-weight: 500; letter-spacing: -0.02em; line-height: 1; animation: auth-rise 0.6s 1.1s ease-out both; }
+.auth-sub { margin-top: 6px; color: var(--muted-foreground); font-size: 13px; animation: auth-rise 0.6s 1.25s ease-out both; }
+.auth-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 28px; animation: auth-rise 0.6s 1.35s ease-out both; }
+.auth-links { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px 20px; animation: auth-rise 0.6s 1.5s ease-out both; }
+@keyframes auth-rise { from { opacity: 0; transform: translateY(6px); } }
+@media (max-width: 480px) { .auth-card { padding: 22px; } }
+
+.tab[aria-current="page"] { border-color: var(--primary); }
+
+/* Navigation as a threshold: the active space opens a small Umbral arch in
+   the shared baseline. No extra status, counters or invented workspace. */
+.console-workspace { display: flex; min-height: 100svh; flex-direction: column; }
+.console-header { position: sticky; top: 0; z-index: 30; background: var(--background); border-bottom: 1px solid var(--border); }
+.console-bar, .console-content { width: min(1360px, 100%); margin-inline: auto; padding-inline: 32px; }
+.console-bar { display: grid; grid-template-columns: 160px minmax(0, 1fr) auto; align-items: center; gap: 24px; min-height: 76px; }
+.console-brand { display: inline-flex; width: fit-content; text-decoration: none; }
+.console-nav { display: flex; justify-content: center; align-self: stretch; gap: 20px; }
+.console-nav-link { position: relative; display: inline-flex; align-items: center; color: var(--muted-foreground); font-size: 14px; text-decoration: none; white-space: nowrap; transition: color 150ms; }
+.console-nav-link:hover, .console-nav-link[aria-current="page"] { color: var(--foreground); }
+.console-nav-link[aria-current="page"]::after { content: ""; position: absolute; bottom: -1px; left: calc(50% - 7px); width: 14px; height: 9px; border: 2px solid var(--primary); border-bottom: 0; border-radius: 9px 9px 0 0; }
+.console-nav-link:focus-visible, .console-brand:focus-visible, .console-tab:focus-visible { outline: 2px solid var(--ring); outline-offset: 6px; border-radius: 3px; }
+.console-account { min-width: 0; justify-self: end; max-width: 260px; }
+/* Between the drawer and a wide screen the menu needs the room: the account
+   shows its initial, and its full name on hover and in the menu itself. */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .console-nav { gap: 16px; }
+  .console-account-name { display: none; }
+}
+.console-content { flex: 1; padding-block: 40px; }
+.console-mobile-place, .console-menu-toggle { display: none; }
+.console-drawer { position: fixed; inset: 0; margin: 0; width: 100%; max-width: none; height: 100svh; max-height: none; padding: 24px; color: var(--foreground); background: var(--background); border: 0; }
+.console-drawer[open] { display: flex; flex-direction: column; }
+.console-drawer-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; }
+.console-drawer nav { display: grid; gap: 4px; }
+.console-drawer-link { position: relative; display: grid; gap: 4px; padding: 12px 0 12px 24px; color: var(--muted-foreground); font-size: 22px; font-weight: 500; text-decoration: none; }
+.console-drawer-link[aria-current="page"] { color: var(--foreground); }
+.console-drawer-link[aria-current="page"]::before { content: ""; position: absolute; top: 19px; left: 0; width: 10px; height: 16px; border: 2px solid var(--primary); border-bottom: 0; border-radius: 7px 7px 0 0; }
+.console-nav-purpose { font-size: 12px; font-weight: 400; color: var(--muted-foreground); }
+.console-drawer-account { margin-top: auto; padding-top: 24px; }
+.console-tabs { display: flex; gap: 28px; margin-top: 24px; border-bottom: 1px solid var(--border); }
+.console-tab { position: relative; padding-bottom: 14px; font-size: 14px; color: var(--muted-foreground); text-decoration: none; white-space: nowrap; }
+.console-tab[aria-current="page"] { color: var(--foreground); }
+.console-tab[aria-current="page"]::after { content: ""; position: absolute; bottom: -1px; left: 0; right: 0; height: 2px; background: var(--primary); }
+@media (max-width: 1023px) {
+  .console-bar { display: flex; min-height: 64px; gap: 16px; }
+  .console-nav, .console-account { display: none; }
+  .console-mobile-place { display: block; margin-left: auto; color: var(--muted-foreground); font-size: 12px; }
+  .console-menu-toggle { display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 6px; }
+  .console-menu-toggle:hover { background: var(--muted); }
+}
+@media (max-width: 767px) {
+  .console-bar, .console-content { padding-inline: 20px; }
+  .console-content { padding-block: 28px; }
+  .console-tabs { gap: 20px; }
+}
+
+/* One application on the Overview: its lamp, its name and how people get in.
+   A live, answering route lights in the signal colour. */
+.app-row { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 40px; padding: 8px 20px; color: var(--foreground); text-decoration: none; }
+.app-row:hover { background: color-mix(in oklab, var(--muted) 45%, transparent); }
+.app-row:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.edge-live { --lamp: var(--signal); }

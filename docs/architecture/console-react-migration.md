@@ -171,16 +171,28 @@ Svelte+React bundle: two frameworks in one bundle costs more than one cutover.
 4. **Shell.** Router, root, lazy console chunk, sign-in, session resume,
    step-up, mobile directory. This is where a CSP or routing mistake is
    cheapest to find.
-5. **Pages**, in this order: Overview, Activity, Routes, Projects,
+5. **Pages.** The original sequence was Overview, Activity, Routes, Projects,
    Administrators, Groups, People, Domains, Integrations, Connectors, Sites,
-   Applications. Applications is last: 576 lines, a stepper, uploads and the
-   most state.
+   Applications. The implementation departed from that sequence after Routes:
+   Domains and Integrations were moved forward to validate certificate/DNS and
+   GitHub flows against the React API layer, then Applications was moved ahead
+   of the remaining directory and publishing pages to establish the access
+   configuration flow those pages depend on. This sequencing choice was made
+   during implementation; it does not reduce the parity checklist. Resume with
+   Projects, Administrators, Groups, People, Connectors, and Sites, then close
+   any remaining Applications gaps. Applications is the largest view (576
+   lines, stepper and uploads), so its early port was a deliberate vertical
+   slice rather than a size-based priority.
 6. **Acceptance selectors.** Prefer `getByRole` and accessible names, which
    survive a framework change. Update only selectors whose DOM legitimately
    changed; do not add test-only attributes to the app.
 7. **Cutover.** Delete `*.svelte`, `svelte.config.js`, `@sveltejs/*`, `svelte*`,
    `bits-ui` and `@lucide/svelte`. Rebuild, commit source plus
    `internal/admin/console`.
+
+The shell parity sequence also changed: step-up and the update dialog were
+left out of the initial shell port. Both remain required before cutover and are
+tracked in the checklist below.
 
 ## Parity checklist
 

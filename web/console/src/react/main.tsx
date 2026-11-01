@@ -1,6 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
-import "../app.css";
+import "./app.css";
 import { App } from "./App";
 import { SessionProvider } from "./session";
 

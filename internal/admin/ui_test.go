@@ -107,6 +107,11 @@ func TestConsoleHomeAndAssets(t *testing.T) {
 			!strings.Contains(csp, "form-action https://github.com;") {
 			t.Fatalf("console %s: %d %v", path, rec.Code, rec.Header())
 		}
+		for directive, value := range directives {
+			if directive != "style-src-attr" && strings.Contains(value, "unsafe") {
+				t.Fatalf("console %s has unsafe %s: %q", path, directive, value)
+			}
+		}
 		if strings.Contains(rec.Body.String(), "<script>") {
 			t.Fatalf("console %s has an inline script", path)
 		}
