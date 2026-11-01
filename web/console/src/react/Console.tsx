@@ -16,6 +16,7 @@ import { People } from "./People";
 import { Connectors } from "./Connectors";
 import { UpdateDialog } from "./UpdateDialog";
 import { useSession } from "./session";
+import { UserMenu } from "./UserMenu";
 
 type Tool = "applications" | "people" | "administrators" | "sites" | "connectors" | "updates" | "updates.install" | "publishing";
 type Item = { path: string; label: string; tool?: Tool; also?: string[] };
@@ -38,7 +39,7 @@ const purpose: Record<string, string> = {
 };
 
 export default function Console() {
-  const { session, logout } = useSession();
+  const { session } = useSession();
   const location = useLocation();
   const [updateNotice, setUpdateNotice] = useState<AvailableUpdateNotice | null>(null);
   const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
@@ -114,12 +115,12 @@ export default function Console() {
     <header className="console-header"><div className="console-bar">
       <Link to="/overview" className="console-brand" aria-label="Ozal console home"><span className="text-lg font-medium tracking-tight">ozal</span><span className="text-muted-foreground ml-2 self-center text-xs">Private console</span></Link>
       <nav className="console-nav" aria-label="Console">{visible.flatMap((group) => group.items).map((item) => <NavLink key={item.path} to={target(item)} className="console-nav-link" aria-current={[item.path, ...(item.also ?? [])].includes(location.pathname) ? "page" : undefined}>{item.label}</NavLink>)}</nav>
-      <details className="console-account relative"><summary className="flex cursor-pointer list-none items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted"><span className="grid size-7 place-items-center rounded-full bg-muted text-xs">{(session?.name || "O").slice(0, 1).toUpperCase()}</span><span className="console-account-name max-w-32 truncate">{session?.name || "Operator"}</span></summary><div className="bg-popover border-border absolute top-full right-0 z-40 mt-2 grid w-64 gap-3 rounded-lg border p-4 shadow-xl"><div><p className="text-sm font-medium">{session?.name || "Operator"}</p><p className="text-muted-foreground mt-1 text-xs">This session can use:</p><ul className="text-muted-foreground mt-2 grid gap-1 text-xs">{session?.tools.map((tool) => <li key={tool}>{tool.replaceAll(".", " ")}</li>)}</ul></div><Button variant="outline" size="sm" onClick={logout}>Sign out</Button></div></details>
+      <UserMenu />
       <span className="console-mobile-place" aria-hidden="true">{pageTitle}</span><button ref={trigger} type="button" className="console-menu-toggle" aria-expanded={menuOpen} aria-controls="mobile-menu" aria-label="Open menu" onClick={() => setMenuOpen(true)}><span aria-hidden="true" className="grid gap-1"><i className="bg-current h-0.5 w-4" /><i className="bg-current h-0.5 w-4" /><i className="bg-current h-0.5 w-4" /></span></button>
     </div></header>
 
     <dialog ref={drawer} id="mobile-menu" aria-label="Console navigation" className="console-drawer" onClose={closeDrawer} onCancel={() => setMenuOpen(false)}>
-      {menuOpen && <><div className="console-drawer-header"><Link to="/overview" className="text-lg font-medium" onClick={() => setMenuOpen(false)}>ozal</Link><button type="button" className="console-menu-toggle" aria-label="Close menu" onClick={() => setMenuOpen(false)}><span aria-hidden="true" className="relative block size-4 before:absolute before:left-0 before:top-1/2 before:h-0.5 before:w-4 before:-rotate-45 before:bg-current after:absolute after:left-0 after:top-1/2 after:h-0.5 after:w-4 after:rotate-45 after:bg-current" /></button></div><nav aria-label="Console">{visible.flatMap((group) => group.items).map((item) => <NavLink key={item.path} to={target(item)} className="console-drawer-link" aria-current={[item.path, ...(item.also ?? [])].includes(location.pathname) ? "page" : undefined} onClick={() => setMenuOpen(false)}><span>{item.label}</span><span className="console-nav-purpose">{purpose[target(item)]}</span></NavLink>)}</nav><div className="console-drawer-account"><p className="mb-3 text-sm">{session?.name || "Operator"}</p><Button variant="outline" onClick={logout}>Sign out</Button></div></>}
+      {menuOpen && <><div className="console-drawer-header"><Link to="/overview" className="text-lg font-medium" onClick={() => setMenuOpen(false)}>ozal</Link><button type="button" className="console-menu-toggle" aria-label="Close menu" onClick={() => setMenuOpen(false)}><span aria-hidden="true" className="relative block size-4 before:absolute before:left-0 before:top-1/2 before:h-0.5 before:w-4 before:-rotate-45 before:bg-current after:absolute after:left-0 after:top-1/2 after:h-0.5 after:w-4 after:rotate-45 after:bg-current" /></button></div><nav aria-label="Console">{visible.flatMap((group) => group.items).map((item) => <NavLink key={item.path} to={target(item)} className="console-drawer-link" aria-current={[item.path, ...(item.also ?? [])].includes(location.pathname) ? "page" : undefined} onClick={() => setMenuOpen(false)}><span>{item.label}</span><span className="console-nav-purpose">{purpose[target(item)]}</span></NavLink>)}</nav><div className="console-drawer-account"><UserMenu placement="up" /></div></>}
     </dialog>
 
     <main id="main-content" tabIndex={-1} className="console-content outline-none"><div className="page-enter">

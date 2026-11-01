@@ -10,15 +10,16 @@ type ModalProps = {
   title: string;
   intro?: string;
   wide?: boolean;
+  portalContainer?: HTMLElement;
   children: ReactNode;
 };
 
-export function Modal({ open, onOpenChange, title, intro = "", wide = false, children }: ModalProps) {
+export function Modal({ open, onOpenChange, title, intro = "", wide = false, portalContainer, children }: ModalProps) {
   const returnFocus = useRef<HTMLElement | null>(null);
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
+      <Dialog.Portal container={portalContainer}>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/60 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
         <Dialog.Content
           onOpenAutoFocus={() => {

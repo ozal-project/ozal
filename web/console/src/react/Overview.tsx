@@ -7,6 +7,7 @@ import { emptyFeed, receive, type FeedState } from "$lib/feed";
 import { openEventStream } from "$lib/eventStream";
 import { subjectsOf } from "$lib/wording.ts";
 import { useSession } from "./session";
+import { BackupPasskeyNotice } from "./BackupPasskeyNotice";
 
 const maxEvents = 500;
 const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -98,6 +99,8 @@ export function Overview() {
       <div><p className="plate">At a glance</p><h1 tabIndex={-1} className="mt-1 text-2xl font-semibold tracking-tight">Overview</h1><p className="text-muted-foreground mt-1 text-sm">{headline(status, needs.length)}</p></div>
       <p className="text-muted-foreground text-xs" role={statusError && !status ? "alert" : "status"}>{statusError && !status ? `The edge did not answer (${statusError}). Is Ozal running?` : statusAt ? `Updated ${new Date(statusAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Reading the edge…"}</p>
     </header>
+
+    {session?.passkey && <BackupPasskeyNotice token={token} />}
 
     <section aria-label="Needs attention" aria-live="polite" className="grid gap-3">
       {needs.map((item) => <article key={item.title} className="bg-card flex flex-wrap items-center gap-4 rounded-lg px-4 py-3.5"><span className="text-destructive text-xl" aria-hidden="true">!</span><div className="min-w-0 flex-1"><h2 className="font-semibold">{item.title}</h2><p className="text-muted-foreground text-sm" title={item.raw}>{item.detail}</p></div>{item.action && <Button variant="outline" size="sm" onClick={() => location.assign(item.action?.page ?? "/overview")}>{item.action.label}</Button>}</article>)}

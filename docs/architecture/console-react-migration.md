@@ -205,6 +205,15 @@ pending-job close/reopen, and completion flow. This is preview evidence only;
 real-edge update execution and browser passkey acceptance remain part of the
 cutover gate.
 
+The account shell also preserves the Svelte passkey-management actions:
+`UserMenu.tsx` can add a passkey on this device, issue a one-use link for
+another browser, and open `PasskeysDialog.tsx` to review and revoke a lost
+credential. Overview shows the second-passkey recovery reminder while an
+administrator has only one passkey, and refreshes it when the tab regains
+focus. `react-passkey-acceptance.mjs` exercises these flows against a disposable
+Go edge with Chrome virtual authenticators; it is local preview evidence, not
+the real-edge cutover acceptance.
+
 ## Parity checklist
 
 Every item is observable behavior, not an implementation detail. Verify each in
@@ -239,6 +248,7 @@ cd web/console && npm ci && npm run check && npm run build
 scripts/build-console.sh
 node --test web/console/src/lib/*.test.ts
 OZAL_BIN=/path/to/ozal node scripts/demo/react-console-acceptance.mjs
+OZAL_BIN=/path/to/ozal CHROME=/path/to/chrome node scripts/demo/react-passkey-acceptance.mjs
 node scripts/demo/product-acceptance.mjs
 node scripts/demo/passkey-acceptance.mjs
 OZAL_BIN=/path/binary node scripts/demo/update-acceptance.mjs
@@ -253,6 +263,12 @@ It checks the host-issued operator login, page routes and aliases, resumed
 session, axe and horizontal overflow at four viewport widths. This is local
 preview evidence only; real-edge passkey and update acceptance still gate the
 cutover.
+
+`react-passkey-acceptance.mjs` uses the same production preview and disposable
+edge with separate virtual-authenticator browser contexts. It covers first
+administrator enrolment, the backup-passkey reminder, a one-use second-device
+link, passkey listing and reviewed removal, and passkey sign-in after sign-out.
+It does not establish live-edge or public acceptance.
 
 Also check by hand: Windows-style MIME behavior is covered by `consoleTypes`;
 the CSP header on `index.html` and on a hashed asset; an old hashed asset is
