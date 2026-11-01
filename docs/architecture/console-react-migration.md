@@ -236,8 +236,9 @@ reconciliation after restoring a retained deployment.
 Every item is observable behavior, not an implementation detail. Verify each in
 a browser, and keep the scripted coverage that already exists.
 
-- **Sign-in:** passkey ceremony, host-login fallback, disabled user, expired
-  session, resume after reload, "session ended" wording.
+- **Sign-in:** the animated Ozal doorway mark (disabled for reduced motion),
+  passkey ceremony, host-login fallback, disabled user, expired session, resume
+  after reload, "session ended" wording.
 - **Enrolment and recovery:** token in the fragment, one use, expiry,
   replacement of previous passkeys, alert on `user.recovered`.
 - **Step-up:** five-minute proof, single retry, no second session.

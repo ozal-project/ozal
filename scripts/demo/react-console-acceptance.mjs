@@ -108,9 +108,13 @@ try {
   step = "reduced-motion preference disables sign-in animation";
   await browser("open", previewURL);
   await browser("wait", "--fn", "document.querySelector('.auth-shell') !== null");
+  const mark = await evaluate("(() => { const svg = document.querySelector('.logo-entrance'); const clip = svg?.querySelector('.logo-door')?.getAttribute('clip-path')?.match(/^url\\(#(.+)\\)$/)?.[1]; const gradient = svg?.querySelector('.logo-beam')?.getAttribute('fill')?.match(/^url\\(#(.+)\\)$/)?.[1]; return {hidden: svg?.getAttribute('aria-hidden'), clip: !!clip && document.getElementById(clip)?.tagName === 'clipPath', gradient: !!gradient && document.getElementById(gradient)?.tagName === 'linearGradient'}; })()");
+  assert.deepEqual(mark, { hidden: "true", clip: true, gradient: true }, "Ozal entrance mark geometry or SVG references were incomplete");
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('.logo-entrance .logo-trace')).animationName"), "logo-trace", "Ozal entrance mark animation was missing without reduced motion");
   assert.equal(await evaluate("getComputedStyle(document.querySelector('.auth-shell'), '::before').animationName"), "auth-glow", "sign-in animation fixture was not active without reduced motion");
   await browser("set", "media", "light", "reduced-motion");
   assert.equal(await evaluate("matchMedia('(prefers-reduced-motion: reduce)').matches"), true, "browser did not enable reduced motion");
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('.logo-entrance .logo-trace')).animationName"), "none", "Ozal mark animation remained active with reduced motion");
   assert.equal(await evaluate("getComputedStyle(document.querySelector('.auth-shell'), '::before').animationName"), "none", "sign-in animation remained active with reduced motion");
   await browser("set", "media", "light", "no-preference");
 

@@ -7,6 +7,7 @@ import { adminState, enrolInfo, enrolWithPasskey, explainPasskeyError, signInWit
 import { choices, type Choice } from "$lib/passkeyChoices";
 import { hostLoginCommand } from "$lib/hostCommand";
 import { startLoginHost } from "$lib/loginHost";
+import { Logo } from "./Logo";
 
 const toolList = [
   ["administrators", "Administrators", "Invite and disable other administrators (up to your own tools)"],
@@ -69,7 +70,7 @@ export function AuthScreen() {
   };
 
   return <main className="auth-shell"><div className="auth-column w-full max-w-md">
-    <header className="auth-mark"><div className="grid size-[72px] place-items-center rounded-2xl border border-border bg-card text-2xl font-semibold tracking-tight">O</div><div><p className="auth-name">ozal</p><p className="auth-sub">Private console</p></div></header>
+    <header className="auth-mark"><Logo size={72} entrance /><div><p className="auth-name">ozal</p><p className="auth-sub">Private console</p></div></header>
     <section className="auth-card" aria-labelledby="auth-title">
       <h1 id="auth-title" className="text-lg font-semibold">{enrol ? "Create your passkey" : mode === "host" ? "Host login" : enrolled === false ? "Set up the first administrator" : "Sign in"}</h1>
       {enrol ? <EnrolPanel token={enrol} loginHost={loginHost} /> : mode === "host" ? <HostPanel /> : enrolled === false ? <>
