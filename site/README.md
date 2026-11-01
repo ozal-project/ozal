@@ -67,12 +67,22 @@ pieces carry the machine-readable layer:
   not as a switch that makes ChatGPT or Claude cite the page.
 - `src/layouts/Base.astro` emits JSON-LD (`WebSite` + `SoftwareApplication`),
   `robots` with `max-snippet:-1`, and Open Graph/Twitter metadata.
+- `public/<key>.txt` is the IndexNow key (public by design; the value is
+  `INDEXNOW_KEY` in `.github/workflows/site.yml`). After a deploy passes
+  public acceptance, the workflow posts the sitemap's URLs to
+  `api.indexnow.org`, which tells Bing and the other IndexNow engines at once.
+  A refusal is a warning in the run summary and never fails the deploy. To
+  rotate the key, replace the file and the variable in the same commit.
+- Cloudflare's Email Address Obfuscation is off for `ozal.dev` (2026-11-01):
+  it rewrote the demo's fictional addresses into `/cdn-cgi/l/email-protection`
+  links, so crawlers without JavaScript read "[email protected]" and followed
+  dead links. The page holds no real address to protect.
 
 The owner-only steps matter more than the files: verify `ozal.dev` in
 [Bing Webmaster Tools](https://www.bing.com/webmasters) (ChatGPT search uses
 Bing among its sources) and [Google Search Console](https://search.google.com/search-console),
 submit `https://ozal.dev/sitemap.xml`, and check Cloudflare's AI Crawl Control
-so it does not block the search agents. Indexing takes days to weeks and is
+so it does not block the search agents (checked 2026-11-01: OpenAI's `OAI-SearchBot` and `ChatGPT-User` received 200, and ChatGPT read the page). Indexing takes days to weeks and is
 never guaranteed. Third-party mentions (self-hosted directories, comparison
 pages, GitHub topics and the README) are what make an assistant willing to
 name the product, not just describe the page.

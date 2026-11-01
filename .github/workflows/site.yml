@@ -25,6 +25,9 @@ env:
   DEPLOY_ENDPOINT: https://deploy.octaviosantacruz.com
   DEPLOY_PROJECT: ozal-site
   SITE_URL: https://ozal.dev
+  # Public by design: IndexNow checks it against $SITE_URL/<key>.txt, which the
+  # site publishes from site/public (SITE-007).
+  INDEXNOW_KEY: dbf559d9287e461377dc87aeba5091c5
 
 jobs:
   deploy:
@@ -99,6 +102,23 @@ jobs:
         with:
           path: ${{ runner.temp }}/last-good
           key: site-live-${{ github.sha }}
+
+      # Tell Bing and the other IndexNow engines (ChatGPT search leans on
+      # Bing's index) that the sitemap's pages changed. A refusal or an outage
+      # is a warning: it never fails or rolls back a good deploy.
+      - name: Notify search engines (IndexNow)
+        run: |
+          urls=$(grep -o '<loc>[^<]*</loc>' site/dist/sitemap.xml | sed 's/<[^>]*>//g' | jq -R . | jq -sc .)
+          body=$(jq -nc --arg host "${SITE_URL#https://}" --arg key "$INDEXNOW_KEY" \
+            --arg loc "$SITE_URL/$INDEXNOW_KEY.txt" --argjson urls "$urls" \
+            '{host: $host, key: $key, keyLocation: $loc, urlList: $urls}')
+          status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -X POST https://api.indexnow.org/indexnow \
+            -H 'Content-Type: application/json; charset=utf-8' --data "$body") || status=000
+          echo "IndexNow answered $status." >> "$GITHUB_STEP_SUMMARY"
+          case "$status" in
+            200|202) ;;
+            *) echo "::warning::IndexNow answered $status; search engines were not notified." ;;
+          esac
 
       - name: Roll back to the last good build
         if: failure() && steps.deploy.outputs.live == 'true'
