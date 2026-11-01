@@ -23,7 +23,7 @@ versions or keep a task status table in this file.
 | Persistence | modernc.org/sqlite, explicit SQL and embedded migrations | Local state without an external service or cgo |
 | Tunnels | hashicorp/yamux over mTLS | Reused multiplexing; identity and permissions are Ozal's own |
 | Configuration | Strict JSON, `file:`/`env:` secret references | Validation and persistence without resolving secrets to disk |
-| Console | Svelte 5, TypeScript, Vite, Tailwind and bits-ui | Static SPA embedded in the binary; Node only at build time |
+| Console | React, TypeScript, Vite, Tailwind and Radix primitives (shadcn/ui pattern) | Owner decision 2026-11-01: long-term base for the console, for ecosystem breadth and contributor familiarity. Static SPA embedded in the binary; Node only at build time. Svelte 5 still ships until `UI-012` completes ([migration contract](console-react-migration.md)) |
 | Public site | Static Astro, Tailwind and an optional Go/WASM engine | Accessible content without a Node server |
 | Typography | Self-hosted Geist Sans/Mono, OFL | Local assets and a CSP without font providers |
 | CLI | Standard `flag`; separate `ozalctl` for SSH operation | Installation and automation; routine work from the console |
@@ -37,9 +37,16 @@ The console source is `web/console`; `scripts/build-console.sh` builds it into
 built output with its source. Vite generates external scripts compatible with
 the project's CSP. The
 administrative token lives in the tab's memory; after a reload, the edge returns
-it from an `HttpOnly` cookie limited to its resume endpoint. SvelteKit or SSR is
-not needed for this console. React with Vite would be technically possible, but
-no demonstrated need justifies the migration.
+it from an `HttpOnly` cookie limited to its resume endpoint. No SSR or
+meta-framework is needed: the console is a static SPA behind the admin listener.
+
+The owner chose React as the long-term base on 2026-11-01 for ecosystem breadth
+(Radix, tables, forms) and for contributors who already know it. Svelte resolves
+this application today, so this is a maintenance decision, not a performance,
+security or accessibility claim. Bundle weight was measured and accepted
+(roughly +30 KB gzip on the lazy chunk); a budget is part of the migration. The
+contract, CSP decision and parity criteria are in
+[console-react-migration.md](console-react-migration.md).
 
 The Linux CI and release jobs prepare dependencies with lockfiles and a pinned
 Node version, and use `OZAL_REQUIRE_FRONTEND=1` to fail when frontend checks
@@ -82,6 +89,6 @@ the chosen standalone MVP.
 
 We keep the preference for stdlib, explicit SQL and cgo-free dependencies. The
 edge's access path must not depend on a mandatory hosted database. The
-consolidated review recommends keeping Go, Svelte and SQLite, and prioritizing
-measurement, recovery and external acceptance. It does not prove the absence of
-vulnerabilities.
+consolidated review recommends keeping Go, SQLite and a static embedded
+console, and prioritizing measurement, recovery and external acceptance. It
+does not prove the absence of vulnerabilities.
