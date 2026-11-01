@@ -61,6 +61,7 @@ type Handler struct {
 	connectors             connectors
 	pairing                pairing
 	updatesExecutor        updateExecutor
+	accessHistory          accessHistory
 	domains                domainService
 	mux                    *http.ServeMux
 }
@@ -78,6 +79,7 @@ func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 	h.mux.HandleFunc("GET /_/healthz", h.healthz)
 	h.mux.HandleFunc("GET /_/status", h.requireBearer(h.status))
 	h.mux.HandleFunc("GET /_/api/status", h.requireBearer(h.apiStatus))
+	h.mux.HandleFunc("GET /_/api/access", h.requireBearer(h.listAccess))
 	h.mux.HandleFunc("GET /_/api/updates/status", h.requireTool("updates", h.updateStatus))
 	h.mux.HandleFunc("POST /_/api/updates/status", h.requireLocal(h.reportUpdateStatus))
 	h.mux.HandleFunc("GET /_/api/updates/plan", h.requireTool("updates", h.updatePlan))

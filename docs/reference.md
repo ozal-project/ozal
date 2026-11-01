@@ -636,6 +636,12 @@ SIGHUP reloads the valid state; listener, identity and TLS changes require a res
 the previous snapshot. Operational edits compare revision and digest so they do not overwrite concurrent
 changes.
 
+`GET /_/api/access` answers who reached which protected application and why: a `summary` over every
+decision since the history starts (`source` is `journal` when access is audited, so it survives restarts,
+or `memory` since the edge started), and the newest held `entries`. Filters: `host`, `actor`, `outcome`
+(`allowed`, `refused`, `step_up`, `rate_limited`), `before` (an entry's `seq`, to page back) and `limit`
+(1–200, default 50); an unusable value is a 400. Any operator session may read it.
+
 `ozal project trust -project NAME -repository-id ID -owner-id ID -ref REF -workflow-ref WORKFLOW` shows
 the migration plan of an existing project's GitHub publisher. `-apply -backup FILE` first keeps the
 previous trust metadata (a new file, mode 0600) and confirms the active state. It requires `admin.socket`

@@ -60,8 +60,10 @@ function archive(dir, files) {
 }
 
 // extraRoutes are appended to the demo routes, for scripts that need a host
-// the demo does not have (an app on another domain, for instance).
-export async function startDemoEdge({ binary, dir = join(homedir(), ".cache", "ozal-demo"), adminSocket = false, adminLoginHost = false, extraRoutes = [] } = {}) {
+// the demo does not have (an app on another domain, for instance). auditAccess
+// keeps access decisions in a durable journal, so the console's history
+// survives edge.restart().
+export async function startDemoEdge({ binary, dir = join(homedir(), ".cache", "ozal-demo"), adminSocket = false, adminLoginHost = false, extraRoutes = [], auditAccess = false } = {}) {
   if (!binary || !existsSync(binary)) throw new Error("pass the ozal binary (--binary)");
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(join(dir, "sites"), { recursive: true });
@@ -73,6 +75,7 @@ export async function startDemoEdge({ binary, dir = join(homedir(), ".cache", "o
     admin: { listen: `127.0.0.1:${ADMIN_PORT}`, token: "env:SB_DEMO_TOKEN", ...(adminSocket ? { socket: join(dir, "admin.sock") } : {}), ...(adminLoginHost ? { login_host: true } : {}) },
     auth: { cookie_domain: DOMAIN, passkeys: { rp_id: DOMAIN, login_url: LOGIN, display_name: "Acme" } },
     pages: { dir: join(dir, "sites"), keep: 10 },
+    ...(auditAccess ? { audit: { dir: join(dir, "audit"), include: ["access"] } } : {}),
     routes: [
       ...APPS.map((a) => ({ host: `${a.name}.${DOMAIN}:${PORT}`, target: `http://127.0.0.1:${a.port}`, health_path: "/", access: a.access })),
       { host: `blog.${DOMAIN}:${PORT}`, site: "blog" },
@@ -86,15 +89,25 @@ export async function startDemoEdge({ binary, dir = join(homedir(), ".cache", "o
   const env = { ...process.env, SB_DEMO_TOKEN: token };
   // A fresh database must be migrated before the edge will start.
   execFileSync(binary, ["migrate", "-db", join(dir, "state.db")], { env, stdio: "pipe" });
-  const child = spawn(binary, ["-config", join(dir, "config.json"), "-db", join(dir, "state.db")], { env, stdio: ["ignore", "pipe", "pipe"] });
-  let log = "";
-  child.stdout.on("data", (d) => (log += d));
-  child.stderr.on("data", (d) => (log += d));
-  for (let i = 0; ; i++) {
-    try { if ((await fetch(`http://127.0.0.1:${ADMIN_PORT}/_/healthz`)).ok) break; } catch { /* not up yet */ }
-    if (i > 100 || child.exitCode !== null) throw new Error("the edge did not start:\n" + log.slice(-800));
-    await new Promise((r) => setTimeout(r, 100));
-  }
+  let child;
+  const boot = async () => {
+    child = spawn(binary, ["-config", join(dir, "config.json"), "-db", join(dir, "state.db")], { env, stdio: ["ignore", "pipe", "pipe"] });
+    let log = "";
+    child.stdout.on("data", (d) => (log += d));
+    child.stderr.on("data", (d) => (log += d));
+    for (let i = 0; ; i++) {
+      try { if ((await fetch(`http://127.0.0.1:${ADMIN_PORT}/_/healthz`)).ok) break; } catch { /* not up yet */ }
+      if (i > 100 || child.exitCode !== null) throw new Error("the edge did not start:\n" + log.slice(-800));
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  };
+  const halt = async () => {
+    if (child.exitCode !== null) return;
+    const exited = new Promise((r) => child.once("exit", r));
+    child.kill("SIGTERM");
+    await exited;
+  };
+  await boot();
 
   const edge = {
     token,
@@ -105,8 +118,13 @@ export async function startDemoEdge({ binary, dir = join(homedir(), ".cache", "o
     invite: (email, name) => admin(token, "POST", "/_/api/people/invite", { email, name, groups: [], return_to: "", ttl_minutes: 60 }),
     // A visitor with no session knocks on a protected app: a real refusal event.
     knock: (name) => fetch(`http://127.0.0.1:${PORT}/`, { headers: { Host: `${name}.${DOMAIN}:${PORT}` }, redirect: "manual" }),
+    // The same edge process again, with its state, config and journal.
+    async restart() {
+      await halt();
+      await boot();
+    },
     async stop() {
-      child.kill("SIGTERM");
+      await halt();
       await Promise.all(servers.map((s) => new Promise((r) => s.close(r))));
     },
   };

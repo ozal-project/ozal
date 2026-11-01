@@ -6,8 +6,8 @@
   import Panel from "$lib/Panel.svelte";
   import Freshness from "$lib/Freshness.svelte";
   import { Button } from "$lib/components/ui/button";
-  import { fetchPeople, fetchSites, fetchStatus, PagesDisabledError, type AccessEvent, type Site, type StatusResponse } from "$lib/api";
-  import { accessScope, accessSummary, applications, attention, certificateView, changes, headline, streamNotices, type StreamState } from "$lib/overview";
+  import { fetchAccessHistory, fetchPeople, fetchSites, fetchStatus, PagesDisabledError, type AccessEvent, type AccessHistorySummary, type Site, type StatusResponse } from "$lib/api";
+  import { accessScope, accessSummary, applications, attention, certificateView, changes, headline, historyScope, historySummary, streamNotices, whoGotIn, type StreamState } from "$lib/overview";
   import { subjectsOf } from "$lib/wording.ts";
   import { emptyFeed, receive } from "$lib/feed";
   import { openEventStream } from "$lib/eventStream";
@@ -33,10 +33,16 @@
   let trimmed = $state(false);
   const statusRequest = new LatestRequest();
   const sitesRequest = new LatestRequest();
+  // The edge's access history (UI-005): every decision since the durable
+  // record starts, or since this edge started. Null: use the live events.
+  let history = $state<AccessHistorySummary | null>(null);
+  const historyRequest = new LatestRequest();
+  let historySoon: ReturnType<typeof setTimeout> | undefined;
 
   const needs = $derived(attention(status));
   const certificate = $derived(certificateView(status?.certificate, new Date()));
-  const summary = $derived(accessSummary(events));
+  const summary = $derived(history ? historySummary(history) : accessSummary(events));
+  const people = $derived(history ? whoGotIn(history, subjects) : []);
   const recent = $derived(changes(events, subjects).slice(0, 5));
   // Only the newest deploy of a site offers its versions; older ones were already replaced.
   const undoAt = $derived(new Set(recent.flatMap((c, i) => (c.undo && recent.findIndex((d) => d.undo?.site === c.undo!.site) === i ? [i] : []))));
@@ -105,6 +111,20 @@
     }
   }
 
+  async function loadHistory() {
+    const run = historyRequest.start();
+    try {
+      const next = await fetchAccessHistory("?limit=1", run.signal);
+      if (run.isCurrent()) history = next?.summary ?? null;
+    } catch {
+      // Keep the last answer; the live counts remain if there never was one.
+    } finally {
+      run.finish();
+    }
+  }
+  // A new decision arrived on the live stream: refresh the counts shortly.
+  const historyChanged = () => { clearTimeout(historySoon); historySoon = setTimeout(() => void loadHistory(), 3_000); };
+
   const loadSubjects = () => {
     const token = admin.token.trim();
     if (!token || !can("people")) return;
@@ -113,7 +133,8 @@
   $effect(() => {
     const token = admin.token.trim();
     sitesRequest.cancel(); sites = null; sitesError = ""; pagesOff = false; subjects = new Map();
-    if (token) untrack(() => { loadSubjects(); void loadSites(); });
+    historyRequest.cancel(); history = null;
+    if (token) untrack(() => { loadSubjects(); void loadSites(); void loadHistory(); });
   });
   $effect(() => {
     const token = admin.token.trim();
@@ -126,13 +147,14 @@
         const r = receive(feed, e.id ?? message.id);
         feed = r.state;
         if (r.accept) { if (events.length >= MAX) trimmed = true; events = [e, ...events].slice(0, MAX); }
+        if (r.accept && e.type.startsWith("access.")) historyChanged();
       } catch { /* ignore a malformed event */ }
     } });
   });
   onMount(() => {
     loadStatus();
-    const timers = [setInterval(loadStatus, 15_000), setInterval(loadSites, 30_000), setInterval(loadSubjects, 30_000)];
-    return () => { timers.forEach(clearInterval); statusRequest.cancel(); sitesRequest.cancel(); };
+    const timers = [setInterval(loadStatus, 15_000), setInterval(loadSites, 30_000), setInterval(loadSubjects, 30_000), setInterval(loadHistory, 30_000)];
+    return () => { timers.forEach(clearInterval); clearTimeout(historySoon); statusRequest.cancel(); sitesRequest.cancel(); historyRequest.cancel(); };
   });
 </script>
 
@@ -172,11 +194,11 @@
 <section class="bg-card mb-5 flex flex-wrap items-center gap-x-8 gap-y-3 rounded-lg px-5 py-4" aria-labelledby="overview-access">
   <div class="min-w-0">
     <h2 id="overview-access" class="text-sm font-medium">Who got in</h2>
-    <p class="text-muted-foreground mt-0.5 text-xs">{accessScope(stream, coverage, oldest, events.length)}</p>
+    <p class="text-muted-foreground mt-0.5 text-xs">{history ? historyScope(history) : accessScope(stream, coverage, oldest, events.length)}</p>
   </div>
   {#if decisions > 0 || summary.loginsStarted > 0}
     <dl class="flex flex-wrap gap-x-6 gap-y-2">
-      {#each [{ n: summary.allowed, label: "let in", lamp: "on" }, { n: summary.refused, label: "refused", lamp: "off" }, { n: summary.loginsStarted, label: "sign-ins started", lamp: "wait" }] as s (s.label)}
+      {#each [{ n: summary.allowed, label: "let in", lamp: "on" }, { n: summary.refused, label: "refused", lamp: "off" }, history ? { n: history.step_up, label: "asked to sign in again", lamp: "wait" } : { n: summary.loginsStarted, label: "sign-ins started", lamp: "wait" }] as s (s.label)}
         <div class="flex items-baseline gap-2">
           <dt class="sr-only">{s.label}</dt>
           <dd class="text-xl leading-none font-semibold tabular-nums">{s.n}</dd>
@@ -184,7 +206,7 @@
         </div>
       {/each}
     </dl>
-  {:else if oldest}
+  {:else if history || oldest}
     <p class="text-muted-foreground text-sm">No access decisions yet.</p>
   {/if}
   {#if summary.reasons.length > 0}
@@ -197,6 +219,17 @@
     </div>
   {/if}
   <Button variant="ghost" size="sm" class="-mr-2 ml-auto" onclick={() => navigate("/activity")}>Access log →</Button>
+  {#if people.length > 0}
+    <div class="border-border min-w-0 basis-full border-t pt-3">
+      <p class="plate mb-1">People let in, most recent first</p>
+      <ul class="grid gap-1 text-sm sm:grid-cols-2">
+        {#each people as p (p.who + p.app)}
+          <li class="min-w-0 break-words"><span class="font-medium">{p.who}</span> <span class="text-muted-foreground">→ {p.app} · {p.count}× · {since(p.last)}</span></li>
+        {/each}
+      </ul>
+      {#if history && history.people_total > people.length}<p class="text-muted-foreground mt-1 text-xs">and {history.people_total - people.length} more{history.people_capped ? ", and some not tracked past the history's limit" : ""}.</p>{/if}
+    </div>
+  {/if}
 </section>
 
 <div class="grid items-start gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">

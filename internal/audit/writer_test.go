@@ -968,3 +968,54 @@ func requireAuditFS(t *testing.T) {
 		t.Skip("private ACL support is not implemented on Windows")
 	}
 }
+
+// Observe feeds the console's access history (UI-005): every record already
+// in the journal at Open, then each new record only once it is durable.
+func TestObserveSeesTheJournalAndOnlyDurableAppends(t *testing.T) {
+	requireAuditFS(t)
+	ctx := context.Background()
+	dir := filepath.Join(t.TempDir(), "audit")
+	first, err := Open(ctx, dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, host := range []string{"a.example.test", "b.example.test"} {
+		if err := first.Append(ctx, events.Event{Type: events.AccessAllowed, Host: host}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := first.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	var mu sync.Mutex
+	var seen []Record
+	observe := func(r Record) { mu.Lock(); seen = append(seen, r); mu.Unlock() }
+	writer, err := Open(ctx, dir, Options{Observe: observe})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer writer.Close()
+	if len(seen) != 2 || seen[0].Host != "a.example.test" || seen[1].Seq != 2 {
+		t.Fatalf("observed at open = %+v, want both journal records in order", seen)
+	}
+	if err := writer.Append(ctx, events.Event{Type: events.AccessDenied, Host: "c.example.test", Code: "email_not_allowed"}); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	got := append([]Record(nil), seen...)
+	mu.Unlock()
+	if len(got) != 3 || got[2].Seq != 3 || got[2].Code != "email_not_allowed" || got[2].Hash == "" || got[2].Prev != got[1].Hash {
+		t.Fatalf("observed after append = %+v, want the new record chained to the last one", got)
+	}
+
+	writer.syncFunc = func(*os.File) error { return errors.New("injected sync failure") }
+	if err := writer.Append(ctx, events.Event{Type: events.AccessAllowed, Host: "d.example.test"}); err == nil {
+		t.Fatal("append succeeded although its sync failed")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(seen) != 3 {
+		t.Fatalf("observed %d records, want the failed append left out", len(seen))
+	}
+}

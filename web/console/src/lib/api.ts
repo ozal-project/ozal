@@ -264,6 +264,34 @@ export type Person = { email: string; subject?: string; name?: string; groups: s
 export type People = { enabled: boolean; users: Person[]; protected_hosts: string[] };
 export type Invitation = { email: string; link: string; expires_at: string };
 
+// Who reached which protected application and why (UI-005). The summary
+// covers the whole history; entries are the newest decisions held in detail.
+export type AccessHistorySummary = {
+  source: "journal" | "memory";
+  since: string;
+  allowed: number;
+  refused: number;
+  step_up: number;
+  rate_limited: number;
+  reasons: { code: string; count: number }[];
+  people: { actor: string; host: string; count: number; last: string }[];
+  people_total: number;
+  people_capped?: boolean;
+  held: number;
+  oldest_held?: string;
+};
+export type AccessEntry = { seq: number; time: string; outcome: "allowed" | "refused" | "step_up" | "rate_limited"; host?: string; actor?: string; code?: string; reason?: string; remote?: string };
+export type AccessHistory = { summary: AccessHistorySummary; entries: AccessEntry[]; next?: number };
+
+// fetchAccessHistory returns null when this edge has no access history.
+export async function fetchAccessHistory(query = "", signal?: AbortSignal): Promise<AccessHistory | null> {
+  const res = await authedGet(`/_/api/access${query}`, signal);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const body = (await res.json()) as AccessHistory;
+  return { ...body, entries: body.entries ?? [] };
+}
+
 export async function fetchPeople(signal?: AbortSignal): Promise<People> {
   const res = await authedGet("/_/api/people", signal);
   if (res.status === 404) return { enabled: false, users: [], protected_hosts: [] };

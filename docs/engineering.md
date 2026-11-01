@@ -506,6 +506,21 @@ if the result is stored but the append fails, do not undo content by pretending
 atomicity. Login/certificate/tunnel coverage and rotation/cadence/retention are
 checked by active tasks, not inferred from a list of desired events.
 
+**Access history (`UI-005`).** The console's "Who got in" reads
+`internal/accesshistory`, not the activity broker. When `audit.include` has
+`access` and the journal opens, `audit.Options.Observe` feeds it every record
+the journal holds while `Open` validates them, then each new record only after
+its batch is synced; a record whose append or sync failed is never shown. The
+history then survives restarts and says "from the durable access record". Without
+access audit, or if the journal does not open, it holds what this process saw
+and says so. It keeps the newest 5,000 decisions in detail and running totals
+(outcomes, refusal codes, person-application pairs up to 10,000, with a flag
+when capped) for all of them; older detail stays in the journal for
+`ozal policy replay`. It is rebuilt from the journal on every start, so its
+memory cost is bounded but its startup cost grows with the journal until
+retention exists (`AUD-001`). `GET /_/api/access` is read-only and needs any
+operator session, like the event stream.
+
 An incomplete tail is not repaired at startup: stop the writer, run
 `audit repair` in plan mode and then `-apply`, and check the chain. Interior
 corruption or an invalid hash is not accepted as a repairable truncated tail.

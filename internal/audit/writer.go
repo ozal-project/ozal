@@ -63,6 +63,11 @@ type appendRequest struct {
 // MaxRecordBytes, and is written as the only record in its segment.
 type Options struct {
 	MaxSegmentBytes int64
+	// Observe, when set, sees every record the journal holds: the existing
+	// ones while Open validates them, then each new one only after its batch
+	// is synced. A record whose append failed is never observed. It runs on
+	// the appender and must not block.
+	Observe func(Record)
 }
 
 // Record is one durable event. Error is intentionally absent: upstream and
@@ -162,6 +167,7 @@ type Writer struct {
 	appendWorkerEnd chan struct{}
 	batchWindow     time.Duration
 	syncFunc        func(*os.File) error
+	observe         func(Record)
 }
 
 // Open creates a private log directory when needed, validates all existing
@@ -209,7 +215,11 @@ func Open(ctx context.Context, dir string, options Options) (*Writer, error) {
 		return nil, fmt.Errorf("sync audit parent directory: %w", err)
 	}
 
-	state, err := scanDirectory(ctx, dir, nil)
+	var visit func(Record) error
+	if options.Observe != nil {
+		visit = func(record Record) error { options.Observe(record); return nil }
+	}
+	state, err := scanDirectoryWithVisitor(ctx, dir, nil, visit)
 	if err != nil {
 		return nil, err
 	}
@@ -229,6 +239,7 @@ func Open(ctx context.Context, dir string, options Options) (*Writer, error) {
 		appendQueue:     make(chan appendRequest, appendQueueSize),
 		appendWorkerEnd: make(chan struct{}),
 		batchWindow:     appendBatchWindow,
+		observe:         options.Observe,
 	}
 	retainLock = true
 	go writer.runAppender()
@@ -341,6 +352,7 @@ func (w *Writer) appendBatch(batch []appendRequest) {
 	}
 
 	wrote := false
+	var written []Record
 	var writeFailure error
 	for _, i := range active {
 		if writeFailure != nil {
@@ -408,6 +420,8 @@ func (w *Writer) appendBatch(batch []appendRequest) {
 		w.seq = record.Seq
 		w.logID = logID
 		w.prev = hex.EncodeToString(digest[:])
+		record.Hash = w.prev
+		written = append(written, record)
 		w.segmentSize += int64(len(line))
 		results[i] = nil
 		wrote = true
@@ -433,7 +447,13 @@ func (w *Writer) appendBatch(batch []appendRequest) {
 			}
 		}
 	}
+	committed := wrote && writeFailure == nil && w.failed == nil
 	w.mu.Unlock()
+	if committed && w.observe != nil {
+		for _, record := range written {
+			w.observe(record)
+		}
+	}
 	respondToBatch(batch, results)
 }
 

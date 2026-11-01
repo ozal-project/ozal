@@ -1,7 +1,7 @@
 // What the Overview page says, as pure functions over data the console already
 // reads (status, live events). Wording lives here, not in the page, so it is
 // tested and the page only lays it out. Nothing here decides access.
-import type { AccessEvent, CertificateStatus, RouteStatus, StatusResponse } from "./api";
+import type { AccessEvent, AccessHistorySummary, CertificateStatus, RouteStatus, StatusResponse } from "./api";
 import { eventReason, friendlyHealth, whoActed } from "./wording.ts";
 
 export type Attention = {
@@ -153,6 +153,29 @@ export function accessSummary(events: AccessEvent[]): AccessSummary {
   }
   sum.reasons = [...byCode].map(([code, count]) => ({ code, text: refusalText[code] ?? code, count })).sort((a, b) => b.count - a.count);
   return sum;
+}
+
+// The same counts from the edge's access history, which covers every decision
+// it has seen rather than the events this page holds.
+export function historySummary(h: AccessHistorySummary): AccessSummary & { stepUp: number } {
+  return {
+    allowed: h.allowed, refused: h.refused, rateLimited: h.rate_limited, loginsStarted: 0, stepUp: h.step_up,
+    reasons: h.reasons.map((r) => ({ code: r.code, text: refusalText[r.code] ?? r.code, count: r.count })),
+  };
+}
+
+// Where the history's counts start, and whether they outlive a restart.
+export function historyScope(h: AccessHistorySummary): string {
+  const since = new Date(h.since);
+  const known = h.since && !Number.isNaN(since.getTime()) && since.getTime() > 0;
+  const when = known ? since.toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "";
+  if (h.source === "journal") return known ? `Since ${when}, from the durable access record.` : "The durable access record has no decisions yet.";
+  return `Since this edge started${known ? ` (${when})` : ""}. Audit access decisions to keep this across restarts.`;
+}
+
+// The people who got in, as "who → app", most recent first.
+export function whoGotIn(h: AccessHistorySummary, subjects?: Map<string, string>, shown = 5): { who: string; app: string; count: number; last: string }[] {
+  return h.people.slice(0, shown).map((p) => ({ who: whoActed(p.actor, subjects) || p.actor, app: p.host.replace(/:\d+$/, ""), count: p.count, last: p.last }));
 }
 
 const isChange = (type: string) => !type.startsWith("access.") && !type.startsWith("login.") && !type.startsWith("origin.") && type !== "admin.mutation_requested";

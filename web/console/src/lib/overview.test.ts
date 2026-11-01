@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { accessScope, accessSummary, applications, attention, certificateView, changes, headline, streamNotices } from "./overview.ts";
+import { accessScope, accessSummary, applications, attention, certificateView, changes, headline, historyScope, historySummary, streamNotices, whoGotIn } from "./overview.ts";
 import type { AccessEvent, RouteStatus, StatusResponse } from "./api.ts";
 
 const route = (over: Partial<RouteStatus> = {}): RouteStatus => ({
@@ -182,4 +182,35 @@ test("recovery names the person and the credentials replaced, never the login ho
   assert.match(named.detail, /Previous passkeys were replaced, previous sessions ended and other recovery links retired/);
   const [unknown] = changes([event("user.recovered", { actor: "sb:other" })], people);
   assert.equal(unknown.title, "Someone recovered their account");
+});
+
+const history = (over: Record<string, unknown> = {}) => ({
+  source: "journal" as const, since: "2026-10-20T09:00:00Z", allowed: 12, refused: 3, step_up: 1, rate_limited: 2,
+  reasons: [{ code: "email_not_allowed", count: 2 }, { code: "something_new", count: 1 }],
+  people: [
+    { actor: "sb:ana", host: "grafana.example.com:8443", count: 9, last: "2026-11-01T10:00:00Z" },
+    { actor: "operator:Olivia", host: "wiki.example.com", count: 3, last: "2026-10-31T10:00:00Z" },
+  ],
+  people_total: 2, held: 18, ...over,
+});
+
+test("the access history's counts and reasons read like the live ones", () => {
+  const sum = historySummary(history());
+  assert.equal(sum.allowed, 12);
+  assert.equal(sum.refused, 3);
+  assert.equal(sum.rateLimited, 2);
+  assert.equal(sum.stepUp, 1);
+  assert.deepEqual(sum.reasons.map((r) => r.text), ["Email address not allowed", "something_new"], "an unknown code is shown as it is");
+});
+
+test("the access history says where it starts and whether it survives a restart", () => {
+  assert.match(historyScope(history()), /^Since .*2026.*, from the durable access record\.$/);
+  assert.equal(historyScope(history({ since: "0001-01-01T00:00:00Z" })), "The durable access record has no decisions yet.");
+  assert.match(historyScope(history({ source: "memory" })), /^Since this edge started \(.*\)\. Audit access decisions to keep this across restarts\.$/);
+});
+
+test("who got in names people by email when known and apps without the port", () => {
+  const rows = whoGotIn(history(), new Map([["sb:ana", "ana@acme.dev"]]));
+  assert.deepEqual(rows.map((r) => [r.who, r.app, r.count]), [["ana@acme.dev", "grafana.example.com", 9], ["Olivia (host login)", "wiki.example.com", 3]]);
+  assert.equal(whoGotIn(history(), undefined, 1).length, 1);
 });

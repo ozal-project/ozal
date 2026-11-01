@@ -27,6 +27,7 @@ import (
 
 	"golang.org/x/crypto/acme/autocert"
 
+	"github.com/ozal-project/ozal/internal/accesshistory"
 	"github.com/ozal-project/ozal/internal/acmedns"
 	"github.com/ozal-project/ozal/internal/admin"
 	"github.com/ozal-project/ozal/internal/audit"
@@ -135,7 +136,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("notifications: %v", err)
 	}
-	sink := events.Multi{events.SlogSink{Logger: logger}, broker}
+	// UI-005: who got in, and why. It holds what this process sees until the
+	// durable journal, when it audits access, takes over below.
+	history := accesshistory.NewStore(accesshistory.Memory, time.Now(), 0, 0)
+	live := &liveAccess{store: history}
+	sink := events.Multi{events.SlogSink{Logger: logger}, broker, live}
 	if alertSink != nil {
 		sink = append(sink, alertSink)
 	}
@@ -144,7 +149,13 @@ func main() {
 	var auditAppender events.AuditAppender
 	var auditStatus func() admin.AuditStatus
 	if loaded.Audit != nil {
-		writer, openErr := audit.Open(ctx, loaded.Audit.Dir, audit.Options{MaxSegmentBytes: loaded.Audit.MaxSegmentBytes})
+		options := audit.Options{MaxSegmentBytes: loaded.Audit.MaxSegmentBytes}
+		var journal *accesshistory.Store
+		if loaded.Audit.Includes("access") {
+			journal = accesshistory.NewStore(accesshistory.Journal, time.Time{}, 0, 0)
+			options.Observe = observeAccess(journal)
+		}
+		writer, openErr := audit.Open(ctx, loaded.Audit.Dir, options)
 		if openErr != nil {
 			if errors.Is(openErr, audit.ErrIncompleteTail) ||
 				requiresDurableAccessAudit(*loaded) ||
@@ -157,6 +168,10 @@ func main() {
 			auditStatus = reporter.Status
 		} else {
 			auditWriter = writer
+			if journal != nil {
+				history = journal
+				live.off.Store(true)
+			}
 			reporter := newAuditFailureReporter(writer, logger, nil)
 			auditAppender = reporter
 			auditStatus = reporter.Status
@@ -179,7 +194,7 @@ func main() {
 	if loaded.Pages != nil && *dbPath == "" {
 		log.Fatal("pages configuration requires -db pointing at migrated state")
 	}
-	adminOpts := []admin.Option{admin.WithGitHubRepositories(githubapp.New())}
+	adminOpts := []admin.Option{admin.WithGitHubRepositories(githubapp.New()), admin.WithAccessHistory(history)}
 	// REL-019/REL-020: the console may ask the separately supervised local
 	// executor to review and install a signed release. Without this socket it
 	// stays consultation-only.
