@@ -10,6 +10,29 @@ Closed work and its evidence. Active work, blockers and pending tasks live in
 Switchboard name and commands; they describe this project. Entries explicitly
 marked "working tree, no commit" are historical evidence, not current status.
 
+## SEC-021 — hidden files stay hidden through static symlinks — 2026-11-01 (`7e951d2`)
+
+Static file resolution rejects symlink traversal and compares each opened file
+and directory with its filesystem entry before and after opening, closing the
+replacement race. A regression fixture proved that a visible alias exposed a
+hidden in-root file before the fix and returns 404 after it. Full
+`scripts/verify.sh` passed. No deployment or public exposure is claimed.
+
+## SEC-022 — proxy logs omit application URL paths — 2026-11-01 (`7e951d2`)
+
+Forward logs retain method, host, target and client address while omitting the
+application-controlled path and query. A regression with dummy sensitive path
+and query values confirms neither is logged. Full `scripts/verify.sh` passed.
+
+## BUG-015 — required audit failure is shown as blocked access — 2026-11-01 (`7e951d2`)
+
+When a required access-audit append fails, the request returns 503 and emits
+`access.audit_failed` with stable code `audit_unavailable`; it is not forwarded
+or reported as allowed. Live activity labels the outcome as blocked, and access
+history counts it as refused. The regression verifies no upstream call and no
+misleading allow event. Full `scripts/verify.sh` passed. This failure event is
+live only and is not durably recorded.
+
 ## SEC-023 — visitor recovery replaces credentials — 2026-10-31 (`bc54890`, `6c270d3`)
 
 `user invite -recover` used to add a passkey while the old ones and every
