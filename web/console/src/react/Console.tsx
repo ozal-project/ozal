@@ -6,6 +6,7 @@ import { Overview } from "./Overview";
 import { Routes as RoutingPage } from "./Routes";
 import { Domains } from "./Domains";
 import { Integrations } from "./Integrations";
+import { Applications } from "./Applications";
 import { useSession } from "./session";
 
 type Tool = "applications" | "people" | "administrators" | "sites" | "connectors" | "updates" | "updates.install" | "publishing";
@@ -80,6 +81,7 @@ export default function Console() {
         <Route path="/" element={<Overview />} />
         <Route path="/activity" element={<Activity />} />
         <Route path="/routes" element={<RoutingPage />} />
+        <Route path="/applications" element={<Applications />} />
         <Route path="/domains" element={<Domains />} />
         <Route path="/integrations" element={<Integrations />} />
         <Route path="*" element={<MigrationPlaceholder title={pageTitle} />} />
