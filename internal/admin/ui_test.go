@@ -87,11 +87,22 @@ func TestConsoleHomeAndAssets(t *testing.T) {
 	handler := New(&fakeManager{cfg: config.Config{Admin: config.Admin{Token: readToken}}}, broker, WithEvents(broker))
 
 	// Every client route gets the app shell with the strict CSP.
+	// Radix floating UI needs runtime style attributes; these exact directives
+	// keep inline <style> elements and scripts blocked.
 	for _, path := range []string{"/", "/overview", "/activity", "/routes", "/simulator", "/people", "/groups", "/administrators", "/integrations"} {
 		rec := request(handler, http.MethodGet, path, "", "")
 		csp := rec.Header().Get("Content-Security-Policy")
+		directives := make(map[string]string)
+		for _, directive := range strings.Split(csp, ";") {
+			fields := strings.Fields(directive)
+			if len(fields) > 0 {
+				directives[fields[0]] = strings.Join(fields[1:], " ")
+			}
+		}
 		if rec.Code != 200 || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/html") ||
-			!strings.Contains(csp, "script-src 'self'") || strings.Contains(csp, "unsafe") ||
+			directives["script-src"] != "'self'" ||
+			directives["style-src"] != "'self'" ||
+			directives["style-src-attr"] != "'unsafe-inline'" ||
 			// Forms may only reach GitHub, for the App manifest.
 			!strings.Contains(csp, "form-action https://github.com;") {
 			t.Fatalf("console %s: %d %v", path, rec.Code, rec.Header())
@@ -100,7 +111,6 @@ func TestConsoleHomeAndAssets(t *testing.T) {
 			t.Fatalf("console %s has an inline script", path)
 		}
 	}
-
 	// The CSP allows fonts from this origin only. A font that Vite inlined as a
 	// data: URI is blocked by the browser, so none may be embedded in the CSS.
 	for _, css := range mustGlob(t, "console/assets/*.css") {

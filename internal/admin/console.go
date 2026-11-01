@@ -18,9 +18,11 @@ import (
 var consoleApp embed.FS
 
 // consoleCSP keeps the app to same-origin assets and API calls. Vite emits no
-// inline scripts, so 'unsafe-inline' is never needed. The one form it posts
-// is the GitHub App manifest (PAGES-010), so forms may reach GitHub only.
-const consoleCSP = "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; form-action https://github.com; base-uri 'none'; frame-ancestors 'none'"
+// inline scripts. Runtime-positioned UI primitives need element style
+// attributes, so only style attributes are allowed inline; style elements stay
+// same-origin. The one form it posts is the GitHub App manifest (PAGES-010),
+// so forms may reach GitHub only.
+const consoleCSP = "default-src 'none'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; form-action https://github.com; base-uri 'none'; frame-ancestors 'none'"
 
 // consoleTypes fixes the Content-Type of every file kind Vite emits. Without
 // it ServeContent asks the OS mime table, and on Windows the registry may

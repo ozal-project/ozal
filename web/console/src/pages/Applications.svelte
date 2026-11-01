@@ -372,7 +372,10 @@
 
 <Modal bind:open={editing} wide title={titles} intro={intros}>
   {#if step < 5}
-    <ol class="mb-5 grid gap-1.5" style={`grid-template-columns: repeat(${totalSteps}, minmax(0, 1fr))`} aria-label={`Step ${shownStep} of ${totalSteps}`}>
+    <ol class={[
+      "mb-5 grid gap-1.5",
+      totalSteps === 3 ? "grid-cols-3" : "grid-cols-4",
+    ]} aria-label={`Step ${shownStep} of ${totalSteps}`}>
       {#each Array.from({ length: totalSteps }, (_, i) => i + 1) as n (n)}<li class={["h-1 rounded-full", n <= shownStep ? "bg-primary" : "bg-muted"]}></li>{/each}
     </ol>
   {/if}
