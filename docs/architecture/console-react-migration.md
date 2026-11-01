@@ -214,6 +214,13 @@ focus. `react-passkey-acceptance.mjs` exercises these flows against a disposable
 Go edge with Chrome virtual authenticators; it is local preview evidence, not
 the real-edge cutover acceptance.
 
+Enrolment now preserves name and email input if `enrolInfo` resolves while the
+operator is typing. `react-update-acceptance.mjs` delays that response to
+exercise the race, then checks the React update review against the real Go
+edge's WebAuthn step-up. The plan and update-job responses are fixtures because
+the disposable edge has no configured update executor; this does not verify an
+actual installation.
+
 ## Parity checklist
 
 Every item is observable behavior, not an implementation detail. Verify each in
@@ -249,6 +256,7 @@ scripts/build-console.sh
 node --test web/console/src/lib/*.test.ts
 OZAL_BIN=/path/to/ozal node scripts/demo/react-console-acceptance.mjs
 OZAL_BIN=/path/to/ozal CHROME=/path/to/chrome node scripts/demo/react-passkey-acceptance.mjs
+OZAL_BIN=/path/to/ozal CHROME=/path/to/chrome node scripts/demo/react-update-acceptance.mjs
 node scripts/demo/product-acceptance.mjs
 node scripts/demo/passkey-acceptance.mjs
 OZAL_BIN=/path/binary node scripts/demo/update-acceptance.mjs
@@ -269,6 +277,12 @@ edge with separate virtual-authenticator browser contexts. It covers first
 administrator enrolment, the backup-passkey reminder, a one-use second-device
 link, passkey listing and reviewed removal, and passkey sign-in after sign-out.
 It does not establish live-edge or public acceptance.
+
+`react-update-acceptance.mjs` uses the production preview and a disposable Go
+edge. It exercises first-admin enrolment with delayed enrolment info, a real
+WebAuthn step-up against that edge, and the React review/retry/polling flow.
+The update plan and executor endpoints are fixtures, so it does not establish
+real installation, live-edge, or public acceptance.
 
 Also check by hand: Windows-style MIME behavior is covered by `consoleTypes`;
 the CSP header on `index.html` and on a hashed asset; an old hashed asset is

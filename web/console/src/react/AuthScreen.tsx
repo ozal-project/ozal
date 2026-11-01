@@ -136,7 +136,7 @@ function EnrolPanel({ token, loginHost }: { token: string; loginHost: string }) 
   const [busy, setBusy] = useState(false);
   const [stuck, setStuck] = useState(false);
   const id = useId();
-  useEffect(() => { let live = true; void enrolInfo(token).then((value) => { if (!live) return; setInfo(value); setName(value.name ?? ""); setEmail(value.email ?? ""); }).catch((cause) => { if (live) setError((cause as Error).message); }); return () => { live = false; }; }, [token]);
+  useEffect(() => { let live = true; void enrolInfo(token).then((value) => { if (!live) return; setInfo(value); setName((current) => current.trim() ? current : value.name ?? ""); setEmail((current) => current.trim() ? current : value.email ?? ""); }).catch((cause) => { if (live) setError((cause as Error).message); }); return () => { live = false; }; }, [token]);
   const knownEmail = info?.kind === "invite" || info?.kind === "recover";
   const alternative = info?.kind === "device" || info?.kind === "recover";
   const submit = async (event: FormEvent) => {
