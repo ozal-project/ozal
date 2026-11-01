@@ -92,7 +92,7 @@ export function Activity() {
   const protectedCount = routes?.filter((route) => route.protected).length ?? 0;
   const paused = frozen !== null;
 
-  return <div className="grid content-start gap-6">
+  return <div className="grid min-w-0 content-start gap-6">
     <header className="flex flex-wrap items-end justify-between gap-4"><div><p className="plate">Decisions and changes</p><h1 tabIndex={-1} className="mt-1 text-2xl font-semibold tracking-tight">Activity</h1><p className="text-muted-foreground mt-1 text-sm">Every decision and change, who made it and why.</p></div><span className="border-border bg-card flex items-center gap-2 rounded-full border px-3.5 py-1.5 font-mono text-xs"><span className={`lamp ${stream === "lost" ? "lamp-off" : stream === "connecting" || stream === "locked" ? "lamp-wait" : "lamp-on"}`} aria-hidden="true" />{streamText[stream]}</span></header>
 
     {(feed.missed > 0 || feed.restarted) && <div className="border-warning/40 bg-warning/[0.06] rounded-lg border px-4 py-3 text-sm" role="status">{feed.missed > 0 && <p><strong>{feed.missed} {feed.missed === 1 ? "event" : "events"} missed</strong> by this view (a slow connection, or history the server no longer holds): the table is incomplete. It is a live view, not an audit log.</p>}{feed.restarted && <p>Ozal restarted while this view was open; earlier rows are from the previous run.</p>}</div>}
@@ -109,7 +109,7 @@ export function Activity() {
         </>}
       </section>
 
-      <aside className="grid content-start gap-6">
+      <aside className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-6">
         <section className="bg-card rounded-lg p-5" aria-labelledby="activity-routes"><header><p className="plate">Who each address lets in</p><h2 id="activity-routes" className="mt-1 text-base font-medium">{protectedCount} private · {routes ? routes.length - protectedCount : "…"} public</h2><p className="text-muted-foreground mt-1 text-xs">Test access shows the decision for a person you describe.</p><p className="text-muted-foreground mt-3 font-mono text-[0.7rem]" role={routesError ? "alert" : "status"}>{routesError ? "Route configuration could not be refreshed" : routesRefreshing ? "Refreshing routes…" : routesObservedAt ? `Routes updated ${new Date(routesObservedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Loading routes…"}</p></header>
           {!routes ? <p className="text-muted-foreground mt-4 text-sm">{routesError ? "Routes could not be read. Try again shortly." : "Loading routes…"}</p> : routes.length === 0 ? <p className="text-muted-foreground mt-4 text-sm">No routes are configured.</p> : <ul className="divide-border mt-2 divide-y">{routes.map((route) => <li key={route.host} className="flex items-start gap-3 py-3"><span className={`lamp mt-1.5 ${route.protected ? "lamp-on" : "lamp-warn"}`} aria-hidden="true" /><div className="min-w-0 flex-1"><p className="truncate text-sm" title={route.host}>{route.host}</p><p className={`mt-0.5 text-xs ${route.protected ? "text-muted-foreground" : "text-warning"}`}>{route.protected ? "Private" : "Public"} · {route.policy}</p>{route.connector && <p className="text-muted-foreground text-xs">Through {route.connector} · {route.connection}</p>}</div><Link to={`/routes?host=${encodeURIComponent(route.host)}`} className={buttonVariants({ variant: "ghost", size: "sm" })} aria-label={`Test who can open ${route.host}`}>Test access</Link></li>)}</ul>}
         </section>

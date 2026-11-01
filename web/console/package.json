@@ -10,6 +10,7 @@
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "react:dev": "vite --config vite.react.config.ts",
     "react:build": "vite build --config vite.react.config.ts",
+    "react:preview": "vite preview --config vite.react.config.ts",
     "react:check": "tsc --noEmit -p tsconfig.react.json"
   },
   "devDependencies": {

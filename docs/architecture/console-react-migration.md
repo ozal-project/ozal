@@ -238,6 +238,7 @@ a browser, and keep the scripted coverage that already exists.
 cd web/console && npm ci && npm run check && npm run build
 scripts/build-console.sh
 node --test web/console/src/lib/*.test.ts
+OZAL_BIN=/path/to/ozal node scripts/demo/react-console-acceptance.mjs
 node scripts/demo/product-acceptance.mjs
 node scripts/demo/passkey-acceptance.mjs
 OZAL_BIN=/path/binary node scripts/demo/update-acceptance.mjs
@@ -245,6 +246,13 @@ node scripts/demo/workflow-acceptance.mjs
 node scripts/demo/domains-acceptance.mjs
 scripts/verify.sh
 ```
+
+`react-console-acceptance.mjs` builds the isolated React preview, serves it
+with the console CSP, and proxies its API calls to a disposable loopback edge.
+It checks the host-issued operator login, page routes and aliases, resumed
+session, axe and horizontal overflow at four viewport widths. This is local
+preview evidence only; real-edge passkey and update acceptance still gate the
+cutover.
 
 Also check by hand: Windows-style MIME behavior is covered by `consoleTypes`;
 the CSP header on `index.html` and on a hashed asset; an old hashed asset is

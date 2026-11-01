@@ -3,6 +3,9 @@ import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
+const consoleCSP = "default-src 'none'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; form-action https://github.com; base-uri 'none'; frame-ancestors 'none'";
+const adminProxy = { target: process.env.OZAL_ADMIN ?? "http://127.0.0.1:9090", changeOrigin: false };
+
 // The React migration preview builds separately from the embedded Svelte app
 // until parity is complete. It never creates a hybrid bundle.
 export default defineConfig({
@@ -19,6 +22,10 @@ export default defineConfig({
     assetsInlineLimit: 0,
   },
   server: {
-    proxy: { "/_/": process.env.OZAL_ADMIN ?? "http://127.0.0.1:9090" },
+    proxy: { "/_/": adminProxy },
+  },
+  preview: {
+    headers: { "Content-Security-Policy": consoleCSP },
+    proxy: { "/_/": adminProxy },
   },
 });
