@@ -39,4 +39,5 @@ exact fields and commands.
 This repository publishes the product, its guides and its contracts. Work that is
 scheduled, owner decisions, acceptance records and detailed plans are kept by the
 maintainer and are not in this repository. The [work status](TO_IMPLEMENT.md) note
-explains how to propose work.
+explains how to propose work. The [documentation index](README.md) groups the
+guides by task.

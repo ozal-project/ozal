@@ -20,15 +20,13 @@ report the difference before making a broad change.
 
 ## What this is
 
-Ozal is a year-long open-source project (October 2026 –
-September 2027): a self-hostable **transparent zero-trust access platform**
-in a single Go binary. Today it is a self-hosted access gateway: host-based
-reverse proxy, health checks, ACME TLS, native passkey and OIDC login,
-per-route claim and context policy, atomic routing snapshots, static sites
-with deployment history, experimental tunnels, an embedded console on
-loopback or a local socket, and signed update plumbing. The plan grows it
-into a private CA, infrastructure access, a WAF ("Shield"), Telegram
-approvals, an AI-agent gateway and a transparency log. See `VISION.md`.
+Ozal is an open-source, self-hostable access gateway in a single Go binary.
+Today it is a host-based reverse proxy with health checks, ACME TLS, native
+passkey and OIDC login, per-route policy, atomic routing snapshots, static
+sites with deployment history, an embedded console on loopback or a local
+socket, and signed update plumbing. Tunnels are experimental. Direction is in
+`VISION.md`; what a release includes is in its release notes and the README
+status table. The maintainer's detailed plan is private.
 
 It is dogfooded on `ozal.dev` and `octaviosantacruz.com`. It is not a
 commercial product.
@@ -39,8 +37,8 @@ Ozal is the **trust plane** (identity, policy, access decisions, tunnels,
 verifiable log). Server Ops is the **host plane** (processes, systemd units,
 ports, databases, backups, service health). Do not add a service-health or
 process-control dashboard here, and do not copy `server-ops/ports.json`.
-`/_/status` is a route-debug view, not the product UI. Tracker: `CROSS-010` in
-the workspace `TO_IMPLEMENT.md`.
+`/_/status` is a route-debug view, not the product UI. Cross-project coordination
+is tracked by the maintainer.
 
 ## Commands
 
@@ -135,14 +133,34 @@ adapters, tests, integration, documentation and verification.
   and CLI details belong in `docs/reference.md`, implementation contracts and
   verification in `docs/engineering.md`. Update the existing section rather
   than creating a dated review, plan or delivery report for each task.
-- Write everything in the repository in English (owner decision 2026-11-01):
+- Public and private documentation (maintainer policy). The public
+  repository holds the product, its guides, its contracts and its release
+  notes. It must not hold:
+  - owner decisions, dated acceptance records, VM or host evidence, or work
+    status (`docs/TO_IMPLEMENT.md` and `docs/IMPLEMENTED.md` are public only as
+    short notes that point to the maintainer);
+  - IP addresses, host names, home-lab paths, unit names or private domains
+    used only for the maintainer's deployment;
+  - tracker codes (`REL-*`, `UI-*`, `ID-*`, `EDGE-*`, `SEC-*`, and similar) in
+    user-facing text; a contract may name a behavior, not its ticket.
+  Put such material in `docs/local/` (ignored). When a public sentence depends on
+  private evidence, state the limit it describes, not the evidence.
+- Do not put a plan, a schedule or a quarter in public text. `VISION.md` states
+  direction only; the detailed plan is private.
+- Every public guide under `docs/` must be reachable from
+  [START-HERE](docs/START-HERE.md) by following links. When you add or move a
+  public guide, link it from there.
+- Check links before reporting a documentation change complete: no link may
+  point to a missing file or a missing anchor, and a link may not point into
+  `docs/local/`.
+- Write everything in the repository in English (maintainer policy):
   docs, trackers, site, product copy, code comments and commit messages, with
   a product mindset for public readers. Quote an owner's words in their
   original language only as a cited decision. When a heading changes, update
   every link to its anchor.
 - Keep temporary drafts, captures and historical review copies in ignored
   `docs/local/` or `.local/docs-archive/`. They must never be build dependencies.
-  Preserve security contracts and canonical trackers in Git.
+  Preserve security contracts and canonical reference material in Git.
 - Report changed files, tests, tracker updates, blockers and whether the work
   is committed. Do not commit or push unless explicitly asked.
 
