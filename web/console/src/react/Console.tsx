@@ -3,6 +3,7 @@ import { Link, NavLink, Route, Routes, useLocation } from "react-router";
 import { Button } from "$lib/components/ui/button/react";
 import { Activity } from "./Activity";
 import { Overview } from "./Overview";
+import { Routes as RoutingPage } from "./Routes";
 import { useSession } from "./session";
 
 type Tool = "applications" | "people" | "administrators" | "sites" | "connectors" | "updates" | "updates.install" | "publishing";
@@ -31,6 +32,7 @@ export default function Console() {
   const [menuOpen, setMenuOpen] = useState(false);
   const drawer = useRef<HTMLDialogElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const drawerPath = useRef(location.pathname);
   const pageTitle = useMemo(() => [...groups.flatMap((group) => group.items), { path: "/routes", label: "Applications" }, { path: "/groups", label: "People" }, { path: "/administrators", label: "People" }].find((item) => item.path === location.pathname)?.label ?? "Overview", [location.pathname]);
   const can = (tool: Tool) => !!session?.tools.includes(tool);
   const visible = groups.map((group) => ({ ...group, items: group.items.filter((item) => !item.tool || can(item.tool) || item.path === "/applications" || item.path === "/people" && can("administrators")) })).filter((group) => group.items.length);
@@ -38,16 +40,24 @@ export default function Console() {
   const target = (item: Item) => item.path === "/applications" && !can("applications") ? "/routes" : item.path === "/people" && !can("people") && can("administrators") ? "/administrators" : item.path;
   const blocked = current.path !== "/routes" && !!current.tool && !can(current.tool);
 
-  useEffect(() => { document.title = `${pageTitle} · Ozal`; }, [pageTitle]);
+  useEffect(() => {
+    document.title = `${pageTitle} · Ozal`;
+    const frame = requestAnimationFrame(() => document.querySelector<HTMLElement>("#main-content h1")?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [pageTitle, location.pathname]);
   useEffect(() => {
     const dialog = drawer.current;
     if (!dialog) return;
     if (menuOpen && !dialog.open) {
+      drawerPath.current = location.pathname;
       dialog.showModal();
       requestAnimationFrame(() => dialog.querySelector<HTMLElement>("[aria-current='page']")?.focus());
     } else if (!menuOpen && dialog.open) dialog.close();
-  }, [menuOpen]);
-  const closeDrawer = () => { setMenuOpen(false); requestAnimationFrame(() => trigger.current?.focus()); };
+  }, [menuOpen, location.pathname]);
+  const closeDrawer = () => {
+    setMenuOpen(false);
+    window.setTimeout(() => (drawerPath.current === location.pathname ? trigger.current?.focus() : document.querySelector<HTMLElement>("#main-content h1")?.focus()), 0);
+  };
 
   return <div className="console-workspace">
     <a href="#main-content" className="sr-only focus:not-sr-only focus:bg-background focus:text-foreground focus:ring-ring fixed top-2 left-2 z-50 rounded-md px-3 py-2 text-sm focus:ring-2">Skip to content</a>
@@ -63,10 +73,11 @@ export default function Console() {
     </dialog>
 
     <main id="main-content" tabIndex={-1} className="console-content outline-none"><div className="page-enter">
-      {blocked ? <div className="panel mx-auto max-w-lg p-8 text-center"><p className="plate">Not included in this session</p><h1 className="mt-2 text-xl font-semibold">This session cannot open {current.label}</h1><p className="text-muted-foreground mt-2 text-sm">You are signed in as {session?.name || "an operator"} without the {current.tool} tool. Ask an administrator to include it.</p></div> : <Routes>
+      {blocked ? <div className="panel mx-auto max-w-lg p-8 text-center"><p className="plate">Not included in this session</p><h1 tabIndex={-1} className="mt-2 text-xl font-semibold">This session cannot open {current.label}</h1><p className="text-muted-foreground mt-2 text-sm">You are signed in as {session?.name || "an operator"} without the {current.tool} tool. Ask an administrator to include it.</p></div> : <Routes>
         <Route path="/overview" element={<Overview />} />
         <Route path="/" element={<Overview />} />
         <Route path="/activity" element={<Activity />} />
+        <Route path="/routes" element={<RoutingPage />} />
         <Route path="*" element={<MigrationPlaceholder title={pageTitle} />} />
       </Routes>}
     </div></main>
@@ -74,5 +85,5 @@ export default function Console() {
 }
 
 function MigrationPlaceholder({ title }: { title: string }) {
-  return <header><p className="plate">UI-012 · Migration in progress</p><h1 className="mt-1 text-2xl font-semibold tracking-tight">{title}</h1><p className="text-muted-foreground mt-2 text-sm">This React view is being brought over from the current console.</p></header>;
+  return <header><p className="plate">UI-012 · Migration in progress</p><h1 tabIndex={-1} className="mt-1 text-2xl font-semibold tracking-tight">{title}</h1><p className="text-muted-foreground mt-2 text-sm">This React view is being brought over from the current console.</p></header>;
 }

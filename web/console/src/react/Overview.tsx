@@ -95,7 +95,7 @@ export function Overview() {
 
   return <div className="grid content-start gap-6">
     <header className="flex flex-wrap items-end justify-between gap-3">
-      <div><p className="plate">At a glance</p><h1 className="mt-1 text-2xl font-semibold tracking-tight">Overview</h1><p className="text-muted-foreground mt-1 text-sm">{headline(status, needs.length)}</p></div>
+      <div><p className="plate">At a glance</p><h1 tabIndex={-1} className="mt-1 text-2xl font-semibold tracking-tight">Overview</h1><p className="text-muted-foreground mt-1 text-sm">{headline(status, needs.length)}</p></div>
       <p className="text-muted-foreground text-xs" role={statusError && !status ? "alert" : "status"}>{statusError && !status ? `The edge did not answer (${statusError}). Is Ozal running?` : statusAt ? `Updated ${new Date(statusAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Reading the edge…"}</p>
     </header>
 
