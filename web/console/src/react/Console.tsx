@@ -13,6 +13,7 @@ import { Sites } from "./Sites";
 import { Administrators } from "./Administrators";
 import { Groups } from "./Groups";
 import { People } from "./People";
+import { Connectors } from "./Connectors";
 import { UpdateDialog } from "./UpdateDialog";
 import { useSession } from "./session";
 
@@ -134,6 +135,7 @@ export default function Console() {
         <Route path="/administrators" element={<Administrators />} />
         <Route path="/groups" element={<Groups />} />
         <Route path="/people" element={<People />} />
+        <Route path="/connectors" element={<Connectors />} />
         <Route path="*" element={<MigrationPlaceholder title={pageTitle} />} />
       </Routes>}
     </div></main>
