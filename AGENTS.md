@@ -8,7 +8,9 @@ Before changing code, read completely:
 
 1. `AGENTS.md` (this file).
 2. `docs/architecture/design.md`: the design pattern every package follows.
-3. `docs/TO_IMPLEMENT.md`: find the task's ID, state and done criteria.
+3. The task's ID, state and done criteria come from the maintainer. The public
+   `docs/TO_IMPLEMENT.md` only points to where the status lives; ask for it if a
+   task needs one.
 
 Read `VISION.md` when a task touches direction or scope, and
 `docs/architecture/stack.md` before adding or changing a dependency.
@@ -126,8 +128,9 @@ adapters, tests, integration, documentation and verification.
   needs an entry in `docs/architecture/stack.md` first.
 - Keep `go.mod`'s `go` directive at the supported minimum.
 - Run `scripts/verify.sh` before reporting a change as complete.
-- Track work only in `docs/TO_IMPLEMENT.md` (active) and `docs/IMPLEMENTED.md`
-  (closed, with commit). Do not create parallel roadmaps.
+- Active work and closed evidence are tracked by the maintainer, not in this
+  repository. Do not create parallel roadmaps or task lists in the repo; the
+  public trackers only point to where the status lives.
 - Keep customer docs to the guides linked from `docs/README.md`; configuration
   and CLI details belong in `docs/reference.md`, implementation contracts and
   verification in `docs/engineering.md`. Update the existing section rather

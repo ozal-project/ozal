@@ -3,8 +3,8 @@
 Current contracts and verification commands in one place. Read
 [AGENTS.md](../AGENTS.md), [design](architecture/design.md) and
 [stack](architecture/stack.md) before changing code. Active work, priorities
-and done criteria live only in [TO_IMPLEMENT.md](TO_IMPLEMENT.md); historical
-evidence is in [IMPLEMENTED.md](IMPLEMENTED.md).
+and done criteria are maintained by the project maintainer; the public
+[work status](TO_IMPLEMENT.md) note explains where they are.
 
 <a id="mantenimiento-de-documentacion"></a>
 ## Documentation maintenance
@@ -14,8 +14,7 @@ User guides are [installation](operations/download-install.md),
 [administration](operations/administration.md) and [security](security.md).
 Update the existing section with the code; do not open a new report, plan or
 delivery note for each conversation, test or release. Pending state goes to the
-tracker, closures with a commit go to IMPLEMENTED, and version limits go to the
-release notes.
+maintainer's tracker, and version limits go to the release notes.
 
 `docs/architecture/design.md` and `stack.md` keep the design rules and
 dependencies. Identity contracts live in

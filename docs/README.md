@@ -18,7 +18,7 @@ the current checkout may include later features.
 [Identity](architecture/identity-login.md) ·
 [Host sessions](architecture/host-sessions.md).
 
-The status of work lives only in [TO_IMPLEMENT](TO_IMPLEMENT.md) and
-[IMPLEMENTED](IMPLEMENTED.md). The guides describe behavior; they do not repeat
-the history of each task. Old reviews and local drafts go to the ignored
+The status of work is maintained by the project maintainer; the public
+[work status](TO_IMPLEMENT.md) note says where to ask. The guides describe
+behavior; they do not repeat the history of each task. Old reviews and local drafts go to the ignored
 archive described in [documentation maintenance](engineering.md#documentation-maintenance).

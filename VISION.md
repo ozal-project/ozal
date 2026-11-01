@@ -8,10 +8,9 @@
 > identity and infrastructure access. Only the first part exists today. This
 > file keeps the two apart.
 
-This document is the public product direction. Scheduled work lives in
-[docs/TO_IMPLEMENT.md](docs/TO_IMPLEMENT.md). When the two disagree, the scheduled
-plan wins until this file is updated on purpose. The "Long-range direction" section
-is not a promise.
+This document is the public product direction. Scheduled work is kept by the
+maintainer. When a planned item and this file disagree, this file is updated on
+purpose before the plan changes. The "Long-range direction" section is not a promise.
 
 ---
 

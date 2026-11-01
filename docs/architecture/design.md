@@ -134,8 +134,8 @@ Shield challenge and additional app identity integrations remain proposals.
 The tracker owns acceptance and pending work; this package map is not a release
 promise or a duplicate implementation history.
 
-`LAB-*` learning labs are tracked in [TO_IMPLEMENT](../TO_IMPLEMENT.md); they
-are experiments and artifacts, not commitments.
+`LAB-*` learning labs are tracked by the maintainer; they are experiments and
+artifacts, not commitments.
 
 ## Go rules that make the pattern real
 
