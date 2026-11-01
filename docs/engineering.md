@@ -23,38 +23,27 @@ dependencies. Identity contracts live in
 here. Formats also belong to code and its regressions, not to repeated
 implementation stories.
 
-The consolidation retired dated reviews, long plans and pilot guides. Their
-originals are kept locally in `.local/docs-archive/`, ignored by Git. They are
-not dependencies for building or understanding the product from a clean
-checkout. Use `docs/local/` for new drafts and captures; it is also ignored.
-Never store secrets there.
+Temporary drafts and captures belong in ignored `docs/local/` or
+`.local/docs-archive/`; neither is a build dependency or required to understand
+a clean checkout. Never store secrets there.
 
-Ignoring files does not hide versions already published in Git history. Keep
-the trackers versioned: they are the public record of active and closed work.
-Do not duplicate data or hide files needed to reproduce the product.
+Public status notes point to the maintainer. Detailed status, priorities and
+acceptance records are maintained outside this repository. Do not duplicate
+that private state or hide files needed to reproduce the product.
 
 <a id="publicacion-autonoma"></a>
 ## Autonomous publication
 
-`ARCH-010`: the maintainer chose MVP stages A+B+C, with C first:
-
-| Stage | Result | Limit |
-|---|---|---|
-| C | Central login and per-host sessions for private apps on independent domains | Keep the passkey RP and the session migration; the protocol and its acceptance are their own work |
-| A | Direct profile, initial wildcard DNS at any provider and HTTP-01 per configured name | One public IP/edge, DNS authority and a public CA are still required |
-| B | Outbound public connector without a prior VPN | Removing the private-network restriction is not enough; budget, enrolment and generic renewal are also required |
-
-The real state is recorded in the tracker, not in this scope table.
-Authoritative DNS, URLs for third parties, public accounts and fleets are
-outside the MVP. E only migrates the pilot. `runtime_file` remains the route
-authority; postpone a durable state machine until an external operation needs
-it. No deployment or DNS change is implicit.
+`runtime_file` is the authority for active routes. A configuration edit does
+not imply a DNS or deployment change; the operator reviews and applies those
+operations explicitly. A durable state machine is needed only when an external
+operation requires it.
 
 Cloudflare is an optional integration, not a requirement. DNS-01 has adapters
-for Cloudflare, Hetzner, RFC 2136 and a `builtin` challenge responder; a real
-issuance and renewal with a non-Cloudflare provider is still the portability
-evidence. Full acceptance needs another operator, an external network, TLS,
-allowed and denied access, revocation and recovery.
+for Cloudflare, Hetzner, RFC 2136 and a `builtin` challenge responder. Verify
+portability with issuance and renewal through a non-Cloudflare provider. Test
+TLS, allowed and denied access, revocation and recovery from an independent
+operator and network.
 
 <a id="identidad-y-aplicaciones"></a>
 ## Identity and applications
@@ -62,8 +51,8 @@ allowed and denied access, revocation and recovery.
 Native login, OIDC, expiry, groups and recovery are specified in
 [identity-login.md](architecture/identity-login.md). The cross-domain handoff,
 audiences, one-use codes, parent relationship and logout are in
-[host-sessions.md](architecture/host-sessions.md). Their presence does not
-declare the current implementation accepted.
+[host-sessions.md](architecture/host-sessions.md). These contracts define
+separate identity and session boundaries.
 
 `Authorize` decides identity and groups; `Fresh` decides method, age and device.
 A required group means AND with the other rules. Email allowlists need a
@@ -85,8 +74,8 @@ mutating the policy; `who-can` and `review` must not turn missing history into
 The app may keep its own login. Gateway headers are accepted only from its
 authenticated path; the app keeps its internal authorization. Signed claims that
 the app can verify, token exchange and Ozal as an OIDC provider are distinct
-scopes and are not granted by passing headers. `ARCH-009` keeps the decision
-open; `ID-004` is not closed by the handoff.
+scopes and are not granted by passing headers. Token exchange and Ozal as an
+OIDC provider are separate capabilities; this handoff does not implement them.
 
 <a id="tuneles"></a>
 ## Tunnels
@@ -107,8 +96,8 @@ subnet; the default is loopback. See `-h` for the exact options.
 The connector sets `-root` or `-upstream` and can add up to eight hosts with
 `-route HOST=root:DIR|upstream:URL`; fixed HTTP destinations stay on loopback
 without credentials, path or query. The edge never chooses an arbitrary origin.
-The `tunnel-spike` lab uses ephemeral identities and loopback ports; it is not a
-public ingress product and does not replace persistent credentials.
+Standalone tunnel commands use ephemeral identities and loopback ports; they do
+not provide a public ingress product or replace persistent credentials.
 
 IP and subject/email travel as `X-Ozal-Visitor-*` only inside mTLS.
 `TrustAuthenticatedTunnel` validates the values and turns them into upstream
@@ -122,13 +111,13 @@ before expanding capacity; do not advertise scalability without measured load.
 Enrolment revalidation runs every five seconds; a registry error denies new
 connections but keeps established sessions.
 
-The pilot renewal is a Linux command with SSH coordination and keys generated
+The renewal flow is a Linux command with SSH coordination and keys generated
 per role on their host. Thirty-day leaves, a seven-day threshold, a durable
 journal and an exclusive lock. It keeps previous identities and rolls back only
 when the current fingerprint still belongs to the transaction; operator
 revocation or replacement wins over rollback. A lost SSH response is
-reconciled. It exposes no public CA signer and is not fleet renewal. CA rollover
-is a separate operation; do not replace its root while renewing leaves.
+reconciled. It exposes no public CA signer. CA rollover is a separate operation;
+do not replace its root while renewing leaves.
 
 <a id="certificados"></a>
 ## Certificates
@@ -152,8 +141,8 @@ record by identity; persist the intent and reconcile ambiguous creations.
 
 Origin client authentication and proxy trust are independent of server TLS.
 The autocert ALPN exemption does not apply to the DNS-01 listener. Emit safe
-events without tokens or challenges. Renewal, failure, restart and exterior
-operation need acceptance beyond the first-issuance test.
+events without tokens or challenges. Verify renewal, failure, restart and
+external operations in addition to first issuance.
 
 <a id="publicacion"></a>
 ## Publishing
@@ -163,7 +152,7 @@ site, hostnames and publishers; the dedicated endpoint receives artifacts and
 does not run builds. The admin plane stays private. A publisher can be OIDC
 Actions or a project-scoped token; GitHub App discovery is independent.
 
-`internal/pages/workflow.Build` is the pure core of `PAGES-010`: it validates
+`internal/pages/workflow.Build` is the pure core: it validates
 refs, relative paths and HTTPS origins, generates YAML without expressions from
 inputs, and binds the content by SHA-256 to a deterministic branch. The template
 separates build (`contents: read`, no OIDC) from deploy (`id-token: write`, no
@@ -262,46 +251,21 @@ change.
 Trust snapshots of an upload in progress can outlive a disconnect; do not
 pretend that canceling from the browser reverts the server. An intent without an
 outcome means an unknown result, not success or a proven rollback. Secret
-references are not resolved back into config. Previews, generated PRs and real CI
-have their own tasks and acceptance.
+references are not resolved back into config. Previews and generated PRs are
+separate from deployment; GitHub Actions builds and deploys from a reviewed
+workflow.
 
-<a id="servicio-de-releases-y-configuración--contrato-objetivo-2026-10-30"></a>
+<a id="release-service-and-configuration-contract"></a>
 ## Release service and configuration contract
 
-The console already uses the edge's private API for applications, identities and
-state. The release client queries GitHub or a signed per-platform catalog and
-restricts download hosts. Status and acceptance are tracked in `REL-019` and
-`REL-020`; this section defines the contract, not a deployed service.
+The console uses the edge's private API for applications, identities and state.
+The release client can query GitHub or a signed per-platform catalog and
+restricts download hosts. The edge authorizes and journals update jobs; a
+separately installed root-owned executor downloads and applies only a plan
+reviewed by an operator. The web edge receives no service credentials and does
+not execute installation commands.
 
-Target metadata service under `ozal.dev`:
-
-- `GET /api/v1/releases/{channel}/{os}/{arch}` returns JSON with `schema`,
-  `channel`, `sequence`, `generated_at`, `expires_at`, `version`, `commit`,
-  `published_at`, `prerelease`, `notes_url`, `migrations`, `min_version`, `os`,
-  `arch`, `archive_url`, `archive_sha256`, `archive_size`, `checksums_url` and
-  `signature_url`. The detached signature of the document is served at the same
-  URL with a `.sig` suffix. It contains no secrets, installation identifiers or
-  executable instructions; URLs use HTTPS and explicitly allowed download hosts.
-- `GET /api/v1/announcements?lang={locale}` returns public notices with `id`,
-  `published_at`, `title`, `body`, `severity` and `url`. Notices are
-  informational: they change no configuration and are not executed as commands.
-- The catalog document and checksums are signed with Ed25519. Each installation
-  keeps a public key pinned locally and verifies signature, hash, platform,
-  sequence, expiry and version before installing; TLS or a response from
-  `ozal.dev` does not replace that proof.
-- Queries are anonymous, read-only and telemetry-free. Do not send the installed
-  version, host, forwarded IP, user or configuration. Caching the public catalog
-  is acceptable; private local state remains `no-store`.
-- If `ozal.dev` does not respond, login, policies, routes and already configured
-  traffic continue. The console distinguishes a remote failure from a failure to
-  read the local report. Nothing installs automatically.
-
-This contract is not a deployed API: the operational domain, publication, keys
-and announcement automation are still pending. The web edge receives no service
-credentials and no command execution; only the separate root-owned executor
-downloads and installs a plan reviewed by an operator.
-
-The implemented format adds explicit OS/architecture, commit, artifact
+A catalog record carries explicit OS/architecture, commit, artifact
 hash/size, catalog sequence and expiry, release notes, migrations and
 compatibility constraints. The catalog document is signed with the same Ed25519
 key pinned in each installation, and its checksums are verified again; a
@@ -311,14 +275,15 @@ against rollback are part of that format. An old date or version, an invalid
 signature, the wrong platform and an untrusted clock have explicit outcomes.
 [TUF](https://theupdateframework.io/docs/metadata/) is a reference for expiry,
 roles and trust; this implementation is not TUF and does not claim full
-resistance to key compromise. `ozal.dev` sees the connection's source IP; it
-needs no installation identifier or configuration in the query, and the
-service's log minimisation and retention must be defined.
+resistance to key compromise. Catalog queries are anonymous and must not include
+installation identifiers, configuration or the installed version. A catalog
+host sees the connection's source IP; retain only the operational data needed
+to serve and protect the public catalog.
 
 Publication and trust: a commit is the source of a candidate, not an order to
 update every installation. CI builds from a fixed ref, applies the gate,
-generates per-platform files and signs before announcing them. Propose `stable`
-and `preview` channels chosen by the operator, with unique ascending semver
+generates per-platform files and signs before announcing them. The operator
+chooses the `stable` or `preview` channel, with unique ascending semver
 versions within the channel, full commit and immutable artifacts. Do not order
 only by `+<commit>`: build metadata does not change semver precedence. Never
 announce `preview` as stable or replace an artifact under the same version.
@@ -439,8 +404,8 @@ operation also applies the budget before invoking the candidate, captures the
 previous hash and verifies installed/running images after success or rollback. It
 does not trust only the exit code of an older `upgrade`: if the candidate claims
 success or rollback but that proof fails, the durable result is
-`intervention_required`, without claiming an unverified restoration. Real
-protected application and login acceptance remain pending.
+`intervention_required`, without claiming an unverified restoration. Acceptance
+must verify login and access to both allowed and denied protected applications.
 
 Keep the `/usr/local/bin/ozal` link to the installed path; replacement happens at
 the verified destination, with a rename on the same filesystem, preserving owner
@@ -463,9 +428,9 @@ closing the dialog does not cancel the job. If the session was lost, it asks the
 operator to sign in again. Offline, it distinguishes "could not check" from
 "already updated"; normal traffic continues.
 
-The journal separates job state from the live installed version. Browser/VM
-acceptance and reconciliation after `SIGKILL` or power loss remain in the
-tracker. The single-host flow does not apply to the tunnel edge.
+The journal separates job state from the live installed version. Acceptance
+must also cover reconciliation after `SIGKILL` or power loss. The single-host
+flow does not apply to the tunnel edge.
 
 Acceptance: two published versions from fixed commits, signed for Linux/arm64,
 installation A on a clean VM and update to B from the console; repeat from A
@@ -473,9 +438,9 @@ through the CLI without a checkout or SCP. Test altered signature/hash, wrong
 platform, old/expired catalog, dropped network, double confirmation,
 incompatible config, insufficient permissions/space, failure to start B,
 restoration and reconciliation after interruption. Verify persistent state, the
-binary actually running, login and an allowed/denied app. Pairs keep the
-`REL-019` coordinator: do not apply the single-host flow to the tunnel edge;
-expand and accept platforms per node before offering it there.
+binary actually running, login and an allowed/denied app. Do not apply the
+single-host flow to the tunnel edge: update the edge and connector as a version
+pair and verify every supported platform before offering that flow.
 
 <a id="auditoria"></a>
 ## Audit
@@ -502,10 +467,11 @@ it public transparency or protection against a compromised root.
 A durable administrative intent records an attempt, not a commit. Publishing
 adds an outcome without a common transaction across database, files and JSONL;
 if the result is stored but the append fails, do not undo content by pretending
-atomicity. Login/certificate/tunnel coverage and rotation/cadence/retention are
-checked by active tasks, not inferred from a list of desired events.
+atomicity. Tests cover login, certificate and tunnel events, as well as journal
+rotation, verification cadence and retention; these properties are not inferred
+from a list of desired events.
 
-**Access history (`UI-005`).** The console's "Who got in" reads
+**Access history.** The console's "Who got in" reads
 `internal/accesshistory`, not the activity broker. When `audit.include` has
 `access` and the journal opens, `audit.Options.Observe` feeds it every record
 the journal holds while `Open` validates them, then each new record only after
@@ -517,7 +483,7 @@ and says so. It keeps the newest 5,000 decisions in detail and running totals
 when capped) for all of them; older detail stays in the journal for
 `ozal policy replay`. It is rebuilt from the journal on every start, so its
 memory cost is bounded but its startup cost grows with the journal until
-retention exists (`AUD-001`). `GET /_/api/access` is read-only and needs any
+retention is configured. `GET /_/api/access` is read-only and needs any
 operator session, like the event stream.
 
 An incomplete tail is not repaired at startup: stop the writer, run
@@ -526,7 +492,7 @@ corruption or an invalid hash is not accepted as a repairable truncated tail.
 Offline verification and checkpoints respect the lock.
 [Security](security.md#audit-and-privacy).
 
-<a id="propuestas-pendientes"></a>
+<a id="development-and-stack-criteria"></a>
 ## Development and stack criteria
 
 The console uses Ozal's Umbral/Marfil identity with the same typography and
@@ -539,17 +505,14 @@ history limited to retained events, with site/change lists for mobile. Without a
 session only the access screen and its mark are downloaded; navigation,
 applications and administrative data are not exposed.
 
-The stack decision lives in [stack.md](architecture/stack.md). Keep Go,
-Svelte/Vite, SQLite and stdlib: Go fits network/TLS and binary distribution; the
-console compiles to static files with no Node at runtime; WebAuthn, OIDC, JOSE
-and yamux are reused instead of reimplementing their primitives; local SQLite
-avoids another service. Multi-edge with shared state or measured contention may
-justify another database; do not assume it in advance.
-
-Consolidate frontend CI, tunnel budgets, real capacity, recovery and acceptance by
-another operator. Pure authorization, snapshots and revocation regressions are
-strengths; proxy, config and admin still concentrate responsibilities. Extract
-them when touched, not in a whole-tree rewrite. This is not a line-by-line audit.
+The stack decision lives in [stack.md](architecture/stack.md). The Go binary
+embeds a static console with no Node runtime. WebAuthn, OIDC, JOSE and yamux are
+reused instead of reimplementing their primitives; local SQLite avoids another
+service. Multi-edge shared state or measured contention may justify another
+database. Capacity claims require representative load measurements. Keep
+authorization, snapshots and revocation decisions covered by regressions, and
+extract proxy, config or admin responsibilities when those packages are
+touched.
 
 <a id="verificacion"></a>
 ## Verification
@@ -594,8 +557,8 @@ extra tools implicitly for an example.
 The coordinated upgrade rehearsal requires two trusted binaries on both sides of
 the ALPN change. Build each ref separately from `git archive` with
 `go build -buildvcs=false`, recording ref and SHA-256; it does not modify Git or
-download releases. The chosen "previous" is a protocol reference, **not** a claim
-about what runs on the pilot today. Use loopback and state generated in a
+download releases. The chosen "previous" is a protocol reference, not evidence
+of the version installed on any deployment. Use loopback and state generated in a
 private temporary directory. Test previous pair, both mixtures (persistent 502),
 candidate pair, publication before/after, SQLite restore to a new path, runtime
 and Pages from the checkpoint, restored pair and a new update after rollback.
@@ -603,10 +566,10 @@ Check that a protected app asks for login, the login page responds and forged
 headers/cookies never reach the origin. It does not test browser authentication,
 systemd/SSH, real key backup, ACME or public publication. Measured time is fixture
 recovery, not the server's RTO. The normal gate does not need historical
-artifacts: this rehearsal runs explicitly before a protocol change, in addition
-to `scripts/verify.sh`.
+artifacts: run this rehearsal before a protocol change, in addition to
+`scripts/verify.sh`.
 
-The HTTPS host-session acceptance (`ID-015`) requires Linux, Go, `agent-browser`
+The HTTPS host-session acceptance requires Linux, Go, `agent-browser`
 with `--ca-cert` support, `certutil` (package `libnss3-tools`) and the
 `playwright-core` already pinned in `scripts/demo`. It builds a test executable
 from `cmd/ozal`, uses the production autocert configuration with preloaded local
@@ -632,11 +595,10 @@ with cookie filtering on direct and connector routes.
 
 The normal `TestDirectHTTPSProfileWithoutCloudflare` validates the direct
 template and serves a cached certificate with verified TLS trust. These tests
-**do not issue or renew public certificates**, do not prove DNS propagation or
-firewall, do not start the full distribution binary and do not close
-`ID-015`/`ARCH-010`. External acceptance still requires a public CA, another
-network, a phone, renewal, restart and recovery; the stage B public connector
-keeps its separate task.
+**do not issue or renew public certificates**, prove DNS propagation or
+firewall configuration, or exercise the full distribution binary. External
+validation requires a public CA, another network, a phone, renewal, restart and
+recovery; the public connector has a separate acceptance boundary.
 
 For browser QA: 1440/1024/390/320 px, keyboard, focus/Escape, cancellation
 without mutation, errors/retry, stale data and logout without residual data. Test
@@ -645,10 +607,9 @@ public site check without JS, a failed WASM load and Save-Data. Store captures i
 a temporary/ignored directory, not in product documentation.
 
 For failures: own state, ephemeral ports, fictitious secrets, restart/kill, slow
-or 5xx origin, expiry, full/read-only disk, clock and recovery. Keep the minimum
-commands/results/versions in the task closure; do not repeat chronological
-reports. Fixture tests do not prove real DNS/provider, release signatures or an
-external restore.
+or 5xx origin, expiry, full/read-only disk, clock and recovery. Keep concise,
+reproducible verification evidence with the relevant change. Fixture tests do
+not prove real DNS/provider, release signatures or an external restore.
 
 Example benchmark, on a quiet host with a constant environment:
 
@@ -666,7 +627,6 @@ representative storage, saturation and sustained load before declaring capacity.
 
 Property/fuzz and mutation tests must detect rule changes, not copy the
 implementation. The differential harness requires Caddy/nginx installed; tests
-that skip that dependency do not prove interoperability. `LAB-*` keeps the
-pending experiments and their limits.
+that skip that dependency do not prove interoperability.
 
 <a id="revisión-estática-de-seguridad-capacidad-y-código-sin-uso"></a>

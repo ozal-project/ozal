@@ -1,6 +1,6 @@
 # Host sessions behind the central login
 
-Stage C of the [autonomous publication proposal](../engineering.md#autonomous-publication).
+Part of the [autonomous publication contract](../engineering.md#autonomous-publication).
 A private application on a domain the login's cookie cannot reach
 (`app.other.org` while the login is `auth.example.com`) gets its own
 host-only session, issued after the central login vouches for the visitor.
@@ -106,6 +106,5 @@ The per-transaction cookie change needs no database migration. Existing sessions
 remain valid; pending handoffs are already lost on restart/gate rebuild and are
 retried. The old shared `sb_handoff` cookie is ignored and expires naturally.
 
-Out of scope: authentication between different installations, Ozal as
-an OIDC provider for apps (a planned provider phase), per-app logout that keeps the central
-login.
+Out of scope: authentication between different installations, Ozal acting as
+an OIDC provider for apps, and per-app logout that keeps the central login.

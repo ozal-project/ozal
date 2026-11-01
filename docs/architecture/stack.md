@@ -23,7 +23,7 @@ versions or keep a task status table in this file.
 | Persistence | modernc.org/sqlite, explicit SQL and embedded migrations | Local state without an external service or cgo |
 | Tunnels | hashicorp/yamux over mTLS | Reused multiplexing; identity and permissions are Ozal's own |
 | Configuration | Strict JSON, `file:`/`env:` secret references | Validation and persistence without resolving secrets to disk |
-| Console | React, TypeScript, Vite, Tailwind and Radix primitives (shadcn/ui pattern) | Owner decision 2026-11-01: long-term base for the console, for ecosystem breadth and contributor familiarity. Static SPA embedded in the binary; Node only at build time. Svelte 5 still ships until `UI-012` completes ([migration contract](console-react-migration.md)) |
+| Console | React, TypeScript, Vite, Tailwind and Radix primitives (shadcn/ui pattern) | React is the target frontend stack. The embedded console remains a static Svelte SPA until the migration contract is satisfied; Node is only needed at build time. |
 | Public site | Static Astro, Tailwind and an optional Go/WASM engine | Accessible content without a Node server |
 | Typography | Self-hosted Geist Sans/Mono, OFL | Local assets and a CSP without font providers |
 | CLI | Standard `flag`; separate `ozalctl` for SSH operation | Installation and automation; routine work from the console |
@@ -40,22 +40,14 @@ administrative token lives in the tab's memory; after a reload, the edge returns
 it from an `HttpOnly` cookie limited to its resume endpoint. No SSR or
 meta-framework is needed: the console is a static SPA behind the admin listener.
 
-The owner chose React as the long-term base on 2026-11-01 for ecosystem breadth
-(Radix, tables, forms) and for contributors who already know it. Svelte resolves
-this application today, so this is a maintenance decision, not a performance,
-security or accessibility claim. The accepted estimate was roughly +30 KB gzip
-on the lazy chunk. Measured with every page ported, the cost is on the entry
-instead: about 49 to 95 KB gzip, mostly `react-dom`. `react-router` (about
-14 KB) already loads in the lazy chunk after sign-in, and CSS falls from about
-15 to 12 KB, so the total after sign-in grows by about 43 KB (+23%, about 187
-to 230 KB). A budget is part of the migration. The
-contract, CSP decision and parity criteria are in
-[console-react-migration.md](console-react-migration.md).
+The console is a static SPA embedded in the Go binary; Node is not a runtime
+dependency. Keep the sign-in entry small and load the console after
+authentication. Bundle limits, CSP requirements and behavior parity are in the
+[console frontend contract](console-react-migration.md).
 
 The Linux CI and release jobs prepare dependencies with lockfiles and a pinned
 Node version, and use `OZAL_REQUIRE_FRONTEND=1` to fail when frontend checks
-are skipped. Having the job configured does not prove it ran successfully;
-runner acceptance is tracked separately.
+are skipped. Check the job result in CI when validating a release.
 
 <a id="public-origin-certificate-contract"></a>
 
@@ -77,22 +69,15 @@ not a current dependency.
 
 ## Private renewal
 
-The pilot uses Go crypto/x509 and Ed25519, SSH coordination and a systemd timer.
-Keys are per host, CSRs are public, and rollback respects revocation. It needs
-no Python or OpenSSL at runtime, and it does not yet provide renewal for any
-fleet. The CA and its rollover are separate from the leaf certificates. See the
+The renewal service uses Go crypto/x509 and Ed25519, SSH coordination and a
+systemd timer. Keys are per host, CSRs are public, and rollback respects
+revocation. It needs no Python or OpenSSL at runtime. The CA and its rollover
+are separate from the leaf certificates. See the
 [contract](../engineering.md#tunnels).
 
 ## Decide when there is a need
 
-Postgres or multi-edge state, QUIC, a WAF engine, a private CA or SSH, a mail
-provider, metrics and tracing, and transparency-log primitives keep their
-tracking in the internal trackers and the vision document. None is added merely
-because a proposal mentions it. PowerDNS and a shared URL service are outside
-the chosen standalone MVP.
-
-We keep the preference for stdlib, explicit SQL and cgo-free dependencies. The
-edge's access path must not depend on a mandatory hosted database. The
-consolidated review recommends keeping Go, SQLite and a static embedded
-console, and prioritizing measurement, recovery and external acceptance. It
-does not prove the absence of vulnerabilities.
+Prefer the standard library, explicit SQL and cgo-free dependencies. The edge's
+access path must not depend on a mandatory hosted database. Add a dependency
+only for an approved product requirement, and document its security and
+operational costs here before adopting it.

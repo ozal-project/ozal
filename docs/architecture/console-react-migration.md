@@ -1,36 +1,11 @@
-# Console migration: Svelte to React
+# Console frontend contract
 
-**Status:** decided 2026-11-01 (owner). Task `UI-012` in
-[TO_IMPLEMENT](../TO_IMPLEMENT.md). The tree still ships the Svelte console;
-this document is the execution contract for replacing it and the definition of
-"done". It is deleted when the task closes, after its durable decisions move to
-[engineering.md](../engineering.md) and [stack.md](stack.md).
+This document defines the security, routing, accessibility and behavior
+requirements for the console frontend. The Go binary currently embeds the
+Svelte console. React uses a separate Vite configuration and output; do not
+combine both frameworks in one bundle.
 
-## Decision and reason
-
-React is the long-term base for the admin console. The reason is ecosystem
-breadth and contributor familiarity: Radix primitives, TanStack Table, form and
-data libraries, and the tooling most people and agents already know. Ozal keeps
-choosing a library over writing primitives by hand, as it does for WebAuthn,
-OIDC and JOSE.
-
-This is **not** a claim about performance, security or accessibility. Svelte
-resolves this application today and `bits-ui` provides its primitives. The
-migration is a maintenance decision with a real cost, accepted by the owner.
-
-Bundle weight was measured and is not a blocker: the console loads once per tab
-over loopback or an SSH tunnel and every asset under `assets/` is served
-`immutable`. The original estimate was roughly 30 KB more gzip on the lazy
-chunk; the measured cost landed on the entry instead. With every page ported,
-the entry grew from about 49 KB to 95 KB gzip, mostly from `react-dom`
-(about 45 KB more). `react-router` (about 14 KB) already loads in the lazy
-chunk after sign-in, so the lazy total stays near 123 KB: the console chunk
-falls from about 123 KB to 109 KB, offset by the separate router chunk. CSS
-falls from about 15 KB to 12 KB, so the total after sign-in is about 43 KB
-larger (+23%), about 187 KB to 230 KB. A budget still applies (see below) so
-the change cannot silently grow.
-
-## Scope
+## Change boundary
 
 **In scope**
 
@@ -38,7 +13,8 @@ the change cannot silently grow.
 - `scripts/build-console.sh` (comments and any check command change).
 - The committed build output in `internal/admin/console`.
 - Console selectors in `scripts/demo/*.mjs` where the DOM legitimately changes.
-- `docs/architecture/stack.md` status and the durable CSP note.
+- The durable console and CSP contracts in `docs/architecture/stack.md` and
+  `docs/engineering.md`.
 
 **Out of scope**
 
@@ -48,27 +24,6 @@ the change cannot silently grow.
 - Permissions, tools and the session model.
 - Server-side rendering, a Node runtime or a meta-framework.
 - New product behavior. A migration that needs a feature change is two tasks.
-
-## Current inventory (baseline 2026-11-01)
-
-Re-measure before starting; these numbers are the reference, not a promise.
-
-| Item | Count / value |
-|---|---|
-| Svelte components | 88 files |
-| TypeScript modules | 48 files |
-| Pure logic tests (`node --test src/lib/*.test.ts`) | 13 files, no Svelte or bits-ui imports |
-| Pages | 12: Activity, Administrators, Applications, Connectors, Domains, Groups, Integrations, Overview, People, Projects, Routes, Sites |
-| UI primitives (`src/lib/components/ui`) | 13: alert, badge, button, card, checkbox, input, label, radio-group, select, separator, skeleton, table, tooltip |
-| Router | `src/lib/router.svelte.ts`, about 40 lines, `history.pushState` + `popstate` |
-| Icons | `@lucide/svelte` in 27 files |
-| Base CSS | `src/app.css`, 246 lines, Tailwind 4 + tokens |
-| Built output | entry ~161 KB (~49 KB gzip), lazy console ~420 KB (~123 KB gzip), CSS ~79 KB (~15 KB gzip) |
-| Browser scripts | 14 in `scripts/demo`, 186 scripted lookups overall; only the console ones are in scope |
-
-The 13 pure tests and the 48 TypeScript modules are framework-free and must keep
-passing **without modification**. If a test needs to change, the behavior
-changed; stop and report it.
 
 ## Target stack
 
@@ -82,17 +37,16 @@ changed; stop and report it.
 | `svelte-check` | `tsc --noEmit` | Same gate role in `build-console.sh` |
 | `@tsconfig/svelte` | a plain strict `tsconfig.json` with `jsx: react-jsx` | Keep `strict`, `noEmit`, `isolatedModules` |
 
-Do not add a state library, a data-fetching library or a form library in this
-task. Add them only when a page needs them, with a stack entry first. The
+Do not add a state library, a data-fetching library or a form library during
+the migration. Add them only when a page needs them, with a stack entry first. The
 existing `$lib` alias and `components.json` aliases stay so imports keep
 working; shadcn/ui supports custom aliases.
 
-Expected dependencies after the cutover: `react`, `react-dom`, `react-router`,
+The React frontend uses `react`, `react-dom`, `react-router`,
 `@radix-ui/*` as used by the copied primitives, `lucide-react`, `clsx`,
 `tailwind-merge`, `tailwind-variants`, `tw-animate-css`, `@fontsource/*`, and
-the build toolchain. Remove `svelte`, `svelte-check`, `@tsconfig/svelte`,
-`@sveltejs/vite-plugin-svelte`, `bits-ui` and `@lucide/svelte` in the same
-commit that removes the last `.svelte` file.
+the build toolchain. Svelte dependencies remain while `.svelte` files are part
+of the embedded console.
 
 `@internationalized/date` stays in the tree because `bits-ui` requires it. The
 direct declaration can be dropped when `bits-ui` leaves, not before.
@@ -131,7 +85,7 @@ Read `internal/admin/console.go` before touching the build.
   menu, Tab stays contained, focus returns to the trigger). Acceptance runs axe
   at 1440, 1024, 390 and 320 px.
 
-## Blocking decision: inline styles and CSP
+## CSP and runtime styles
 
 `style-src 'self'` blocks `style` attributes as well as `<style>` elements.
 Evidence in the current tree:
@@ -141,102 +95,16 @@ Evidence in the current tree:
 - The built `bits-ui` bundle calls `element.style.setProperty(...)`; floating
   positioning needs it. Radix uses the same technique, and more often.
 
-So the console already ships a CSP conflict. The migration must settle it
-**before** porting pages, as its own small commit:
-
-1. Add the narrow directive:
-   `style-src 'self'; style-src-attr 'unsafe-inline'`.
-2. Keep `<style>` injection blocked; only element-level style attributes are
-   allowed. This is a data channel, not script execution.
-3. Add a Go regression test asserting both `style-src 'self'` and
-   `style-src-attr 'unsafe-inline'`, with a comment stating why.
-4. Replace the `Applications.svelte` inline style with a class anyway; the
-   directive is for library positioning, not for application layout.
+Use the narrow directive `style-src 'self'; style-src-attr 'unsafe-inline'`.
+Keep `<style>` injection blocked; only element-level style attributes are
+allowed. A Go regression test checks both directives on the console routes.
+Application layout should use classes; the attribute directive exists for
+library positioning.
 
 Browsers without `style-src-attr` fall back to `style-src` and lose floating
 positioning, not access. Do not use `style-src 'unsafe-inline'`: that would also
 allow injected `<style>` blocks. If Radix cannot work under the narrow
 directive, stop and report; do not widen it silently.
-
-Move this decision to `docs/engineering.md` (Development and stack criteria)
-when `UI-012` closes.
-
-## Order of work
-
-Each step is a commit that leaves the tree buildable. Do not run a hybrid
-Svelte+React bundle: two frameworks in one bundle costs more than one cutover.
-
-0. **Preconditions.** No in-flight console work in the tree. Baseline bundle
-   measured and recorded in the task. Branch.
-1. **CSP commit** (above), independent of the framework change.
-2. **Scaffold.** Add React, `@vitejs/plugin-react`, `react-router` and the
-   shadcn/ui React primitives. Replace `components.json` with the React schema,
-   keeping `$lib` aliases. `index.html` stays structurally identical.
-   `build-console.sh` runs `tsc --noEmit` instead of `svelte-check`.
-3. **Primitives.** Port the 13 primitives to Radix/shadcn. Verify keyboard,
-   focus trap and axe behavior before any page uses them.
-4. **Shell.** Router, root, lazy console chunk, sign-in, session resume,
-   step-up, mobile directory. This is where a CSP or routing mistake is
-   cheapest to find.
-5. **Pages.** The original sequence was Overview, Activity, Routes, Projects,
-   Administrators, Groups, People, Domains, Integrations, Connectors, Sites,
-   Applications. The implementation departed from that sequence after Routes:
-   Domains and Integrations were moved forward to validate certificate/DNS and
-   GitHub flows against the React API layer, then Applications was moved ahead
-   of the remaining directory and publishing pages to establish the access
-   configuration flow those pages depend on. This sequencing choice was made
-   during implementation; it does not reduce the parity checklist. All pages
-   now have React preview routes. Administrators is routed at `/administrators`
-   with bounded tool grants and reviewed account actions; Groups at `/groups`
-   with concurrency-aware membership updates; People at `/people` with
-   invitations, membership editing, account status and passkey management; and
-   Connectors at `/connectors` with registry state and the five-step enrolment
-   guide. The Projects workflow is covered within the Sites/Publishing React
-   preview port. Browser and edge cutover acceptance remains outstanding. Applications is the largest
-   view (576 lines, stepper and uploads), so its early port was a deliberate
-   vertical slice rather than a size-based priority.
-6. **Acceptance selectors.** Prefer `getByRole` and accessible names, which
-   survive a framework change. Update only selectors whose DOM legitimately
-   changed; do not add test-only attributes to the app.
-7. **Cutover.** Delete `*.svelte`, `svelte.config.js`, `@sveltejs/*`, `svelte*`,
-   `bits-ui` and `@lucide/svelte`. Rebuild, commit source plus
-   `internal/admin/console`.
-
-The initial shell port omitted step-up and the update dialog. React now ports
-both in `web/console/src/react/UpdateDialog.tsx`: the update executor's
-`passkey_required` response triggers WebAuthn confirmation on the current
-session, then retries the same reviewed plan once. The dialog reads a pending
-job on open, polls by job ID, and closing it only stops browser polling; the
-host job continues. A local browser fixture verified the passkey retry,
-pending-job close/reopen, and completion flow. This is preview evidence only;
-real-edge update execution and browser passkey acceptance remain part of the
-cutover gate.
-
-The account shell also preserves the Svelte passkey-management actions:
-`UserMenu.tsx` can add a passkey on this device, issue a one-use link for
-another browser, and open `PasskeysDialog.tsx` to review and revoke a lost
-credential. Overview shows the second-passkey recovery reminder while an
-administrator has only one passkey, and refreshes it when the tab regains
-focus. `react-passkey-acceptance.mjs` exercises these flows against a disposable
-Go edge with Chrome virtual authenticators; it is local preview evidence, not
-the real-edge cutover acceptance.
-
-Enrolment now preserves name and email input if `enrolInfo` resolves while the
-operator is typing. `react-update-acceptance.mjs` delays that response to
-exercise the race, then checks the React update review against the real Go
-edge's WebAuthn step-up. The plan and update-job responses are fixtures because
-the disposable edge has no configured update executor; this does not verify an
-actual installation.
-
-Publishing from Sites keeps the separate final confirmation before opening a
-workflow pull request. `react-publishing-acceptance.mjs` verifies that
-cancelling this confirmation sends no GitHub write and confirming it sends one
-request with the reviewed workflow digest. GitHub responses are fixtures.
-
-The Sites view keeps its refresh action when Pages is not enabled, so an
-operator can retry after the host configuration changes. Its browser acceptance
-also verifies hostname review, cancellation without a rollback request, and
-reconciliation after restoring a retained deployment.
 
 ## Parity checklist
 
@@ -295,9 +163,9 @@ shell retains its animated wordmark and the mobile drawer retains its static
 wordmark, Tab and
 Shift+Tab wrap between the first and last controls in the mobile drawer, Escape
 closes it and restores focus, navigation focuses the destination heading, and
-Escape from the desktop account menu restores its trigger. This is local
-preview evidence only; real-edge passkey and update acceptance still gate the
-cutover.
+Escape from the desktop account menu restores its trigger. A cutover must also
+verify passkey and update flows on the installed edge; this local preview does
+not exercise those flows against an installed instance.
 
 `react-passkey-acceptance.mjs` uses the same production preview and disposable
 edge with separate virtual-authenticator browser contexts. It covers first
@@ -329,8 +197,7 @@ still served after a rebuild only if it exists (otherwise 404 is correct); and
 
 ## Bundle budget
 
-Baseline gzip: entry ~49 KB, lazy console ~123 KB, CSS ~15 KB (about 187 KB
-total after sign-in). Budget after migration: entry ≤ 110 KB, lazy console ≤ 200
+Budget: entry ≤ 110 KB, lazy console ≤ 200
 KB, CSS ≤ 20 KB, total ≤ 260 KB. The sign-in path is what matters for perceived
 speed. If the measured result exceeds the budget, report the number and the
 cause before changing the budget; do not raise it to make the task pass.
@@ -347,18 +214,3 @@ Stop and report instead of improvising when:
 
 In any of those cases, keep the Svelte console working and leave the branch
 reversible.
-
-## Rollback
-
-The cutover is one commit containing source and built assets and nothing else.
-Reverting it restores the Svelte console completely: no database migration, no
-config change, no API change.
-
-## When it closes
-
-- Move the CSP decision to `docs/engineering.md`.
-- Update the Console row in `docs/architecture/stack.md` to "shipped" and drop
-  the pending note.
-- Move `UI-012` from [TO_IMPLEMENT](../TO_IMPLEMENT.md) to
-  [IMPLEMENTED](../IMPLEMENTED.md) with the commit and the measured bundle.
-- Delete this document.

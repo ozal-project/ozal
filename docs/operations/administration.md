@@ -209,11 +209,11 @@ not start it from `ozal.service` or with `KillMode=control-group`. A job
 interrupted by a crash is marked `intervention_required` unless another updater
 still holds the lock; in that case nothing is touched.
 
-The public catalog, the signing key, the ARM64 release and browser acceptance are
-still pending. There is no deployed `ozal.dev` channel and no button tested
-against a clean VM. Local code and tests do not replace that acceptance. Installing
-from the console is not offered on the tunnel edge: coordinate that with
-`ozalctl edge pair-upgrade`.
+Catalog publication and edge installation are separate operations. Before
+offering an update, validate the signed catalog, installation and recovery on a
+clean VM; local tests alone do not prove that a host can update safely.
+Installing from the console is not supported on the tunnel edge: coordinate
+that update with `ozalctl edge pair-upgrade`.
 
 A binary that is not a release (`ozal version` says `dev`, built by hand) **is
 not replaced automatically**: the newest release could be older than what is
@@ -246,8 +246,9 @@ the edges before signing with it.
 For a tunnel, treat both ends as **one version pair**. `ozalctl edge upgrade`
 updates only the edge: it does not install or roll back the connector, does not
 pause its renewal, and does not check applications. Its exit code 0 proves
-startup and admin health; the full end-to-end acceptance is still pending. Do not
-chain two independent upgrades on the assumption that ALPN stays compatible.
+startup and admin health. Verify tunnel traffic and protocol compatibility
+across both ends; do not chain two independent upgrades on the assumption that
+ALPN stays compatible.
 
 The target may include a `connector` with its SSH host, service account, user
 unit, executable, staging path and lock. In that case `ozalctl edge upgrade` is
