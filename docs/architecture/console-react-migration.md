@@ -178,11 +178,11 @@ Svelte+React bundle: two frameworks in one bundle costs more than one cutover.
    GitHub flows against the React API layer, then Applications was moved ahead
    of the remaining directory and publishing pages to establish the access
    configuration flow those pages depend on. This sequencing choice was made
-   during implementation; it does not reduce the parity checklist. Resume with
-   Projects, Administrators, Groups, People, Connectors, and Sites, then close
-   any remaining Applications gaps. Applications is the largest view (576
-   lines, stepper and uploads), so its early port was a deliberate vertical
-   slice rather than a size-based priority.
+   during implementation; it does not reduce the parity checklist. Projects,
+   Administrators, Groups, People, and Connectors remain to be ported;
+   Sites/Publishing now has a React preview port. Applications is the largest
+   view (576 lines, stepper and uploads), so its early port was a deliberate
+   vertical slice rather than a size-based priority.
 6. **Acceptance selectors.** Prefer `getByRole` and accessible names, which
    survive a framework change. Update only selectors whose DOM legitimately
    changed; do not add test-only attributes to the app.
@@ -190,9 +190,15 @@ Svelte+React bundle: two frameworks in one bundle costs more than one cutover.
    `bits-ui` and `@lucide/svelte`. Rebuild, commit source plus
    `internal/admin/console`.
 
-The shell parity sequence also changed: step-up and the update dialog were
-left out of the initial shell port. Both remain required before cutover and are
-tracked in the checklist below.
+The initial shell port omitted step-up and the update dialog. React now ports
+both in `web/console/src/react/UpdateDialog.tsx`: the update executor's
+`passkey_required` response triggers WebAuthn confirmation on the current
+session, then retries the same reviewed plan once. The dialog reads a pending
+job on open, polls by job ID, and closing it only stops browser polling; the
+host job continues. A local browser fixture verified the passkey retry,
+pending-job close/reopen, and completion flow. This is preview evidence only;
+real-edge update execution and browser passkey acceptance remain part of the
+cutover gate.
 
 ## Parity checklist
 

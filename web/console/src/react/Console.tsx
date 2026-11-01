@@ -1,12 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, Route, Routes, useLocation } from "react-router";
 import { Button } from "$lib/components/ui/button/react";
+import { fetchUpdateStatus } from "$lib/api";
+import { availableUpdateNotice, type AvailableUpdateNotice } from "$lib/updateStatus";
 import { Activity } from "./Activity";
 import { Overview } from "./Overview";
 import { Routes as RoutingPage } from "./Routes";
 import { Domains } from "./Domains";
 import { Integrations } from "./Integrations";
 import { Applications } from "./Applications";
+import { Sites } from "./Sites";
+import { UpdateDialog } from "./UpdateDialog";
 import { useSession } from "./session";
 
 type Tool = "applications" | "people" | "administrators" | "sites" | "connectors" | "updates" | "updates.install" | "publishing";
@@ -32,6 +36,12 @@ const purpose: Record<string, string> = {
 export default function Console() {
   const { session, logout } = useSession();
   const location = useLocation();
+  const [updateNotice, setUpdateNotice] = useState<AvailableUpdateNotice | null>(null);
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
+  const dismissedVersion = useRef("");
+  const updateNoticeRef = useRef(updateNotice);
+  updateNoticeRef.current = updateNotice;
+  const updateRequest = useRef<AbortController | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const drawer = useRef<HTMLDialogElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -42,6 +52,22 @@ export default function Console() {
   const current = [...groups.flatMap((group) => group.items), { path: "/groups", label: "Groups", tool: "people" as const }, { path: "/administrators", label: "Administrators", tool: "administrators" as const }, { path: "/routes", label: "Applications", tool: "applications" as const }].find((item) => item.path === location.pathname) ?? groups[0].items[0];
   const target = (item: Item) => item.path === "/applications" && !can("applications") ? "/routes" : item.path === "/people" && !can("people") && can("administrators") ? "/administrators" : item.path;
   const blocked = current.path !== "/routes" && !!current.tool && !can(current.tool);
+
+  const checkUpdateNotice = useCallback(async (signal: AbortSignal) => {
+    if (!can("updates")) { setUpdateNotice(null); return; }
+    try {
+      const status = await fetchUpdateStatus(signal);
+      if (signal.aborted) return;
+      const notice = availableUpdateNotice(status);
+      setUpdateNotice(notice && notice.version !== dismissedVersion.current ? notice : null);
+    } catch {
+      // Release status is optional and must not interrupt console access.
+    }
+  }, [session?.token, session?.tools]);
+  const completeUpdate = useCallback(() => {
+    dismissedVersion.current = updateNoticeRef.current?.version ?? "";
+    setUpdateNotice(null);
+  }, []);
 
   useEffect(() => {
     document.title = `${pageTitle} · Ozal`;
@@ -57,12 +83,29 @@ export default function Console() {
       requestAnimationFrame(() => dialog.querySelector<HTMLElement>("[aria-current='page']")?.focus());
     } else if (!menuOpen && dialog.open) dialog.close();
   }, [menuOpen, location.pathname]);
+  useEffect(() => {
+    const controller = new AbortController();
+    void checkUpdateNotice(controller.signal);
+    const poll = window.setInterval(() => {
+      updateRequest.current?.abort();
+      const next = new AbortController();
+      void checkUpdateNotice(next.signal);
+      updateRequest.current = next;
+    }, 5 * 60_000);
+    updateRequest.current = controller;
+    return () => {
+      window.clearInterval(poll);
+      updateRequest.current?.abort();
+      updateRequest.current = null;
+    };
+  }, [checkUpdateNotice]);
   const closeDrawer = () => {
     setMenuOpen(false);
     window.setTimeout(() => (drawerPath.current === location.pathname ? trigger.current?.focus() : document.querySelector<HTMLElement>("#main-content h1")?.focus()), 0);
   };
 
-  return <div className="console-workspace">
+  return <>
+  <div className="console-workspace">
     <a href="#main-content" className="sr-only focus:not-sr-only focus:bg-background focus:text-foreground focus:ring-ring fixed top-2 left-2 z-50 rounded-md px-3 py-2 text-sm focus:ring-2">Skip to content</a>
     <header className="console-header"><div className="console-bar">
       <Link to="/overview" className="console-brand" aria-label="Ozal console home"><span className="text-lg font-medium tracking-tight">ozal</span><span className="text-muted-foreground ml-2 self-center text-xs">Private console</span></Link>
@@ -82,12 +125,19 @@ export default function Console() {
         <Route path="/activity" element={<Activity />} />
         <Route path="/routes" element={<RoutingPage />} />
         <Route path="/applications" element={<Applications />} />
+        <Route path="/sites" element={<Sites />} />
         <Route path="/domains" element={<Domains />} />
         <Route path="/integrations" element={<Integrations />} />
         <Route path="*" element={<MigrationPlaceholder title={pageTitle} />} />
       </Routes>}
     </div></main>
-  </div>;
+  </div>
+  {updateNotice && <aside className="border-primary/30 bg-popover fixed top-20 right-4 z-50 w-[calc(100vw-2rem)] max-w-sm rounded-xl border p-4 shadow-2xl" role="status" aria-live="polite">
+    <div className="flex items-start justify-between gap-4"><p className="min-w-0 text-sm font-medium">Ozal {updateNotice.version} is available</p><button type="button" className="text-muted-foreground hover:text-foreground shrink-0 text-xs underline" onClick={() => { dismissedVersion.current = updateNotice.version; setUpdateNotice(null); }}>Dismiss</button></div>
+    <div className="mt-3 flex justify-end"><Button onClick={() => setUpdateDialogOpen(true)}>Review update</Button></div>
+  </aside>}
+  <UpdateDialog open={updateDialogOpen} token={session?.token ?? ""} canInstall={can("updates.install")} onOpenChange={setUpdateDialogOpen} onDone={completeUpdate} />
+  </>;
 }
 
 function MigrationPlaceholder({ title }: { title: string }) {
