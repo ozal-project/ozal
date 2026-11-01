@@ -10,6 +10,7 @@ import { Domains } from "./Domains";
 import { Integrations } from "./Integrations";
 import { Applications } from "./Applications";
 import { Sites } from "./Sites";
+import { Administrators } from "./Administrators";
 import { UpdateDialog } from "./UpdateDialog";
 import { useSession } from "./session";
 
@@ -46,7 +47,7 @@ export default function Console() {
   const drawer = useRef<HTMLDialogElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const drawerPath = useRef(location.pathname);
-  const pageTitle = useMemo(() => [...groups.flatMap((group) => group.items), { path: "/routes", label: "Applications" }, { path: "/groups", label: "People" }, { path: "/administrators", label: "People" }].find((item) => item.path === location.pathname)?.label ?? "Overview", [location.pathname]);
+  const pageTitle = useMemo(() => [...groups.flatMap((group) => group.items), { path: "/routes", label: "Applications" }, { path: "/groups", label: "Groups" }, { path: "/administrators", label: "Administrators" }].find((item) => item.path === location.pathname)?.label ?? "Overview", [location.pathname]);
   const can = (tool: Tool) => !!session?.tools.includes(tool);
   const visible = groups.map((group) => ({ ...group, items: group.items.filter((item) => !item.tool || can(item.tool) || item.path === "/applications" || item.path === "/people" && can("administrators")) })).filter((group) => group.items.length);
   const current = [...groups.flatMap((group) => group.items), { path: "/groups", label: "Groups", tool: "people" as const }, { path: "/administrators", label: "Administrators", tool: "administrators" as const }, { path: "/routes", label: "Applications", tool: "applications" as const }].find((item) => item.path === location.pathname) ?? groups[0].items[0];
@@ -128,6 +129,7 @@ export default function Console() {
         <Route path="/sites" element={<Sites />} />
         <Route path="/domains" element={<Domains />} />
         <Route path="/integrations" element={<Integrations />} />
+        <Route path="/administrators" element={<Administrators />} />
         <Route path="*" element={<MigrationPlaceholder title={pageTitle} />} />
       </Routes>}
     </div></main>
