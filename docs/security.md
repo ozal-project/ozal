@@ -17,7 +17,7 @@ conditions. It is not an ASVS certification or a complete audit of an installati
 - Distinguish visitors, CI publishers, connectors and administrators. A valid
   identity in one scope grants no authority in the others.
 - Back up and rehearse recovery of keys, configuration and data. An old copy can
-  reactivate revoked authorizations. Follow [recovery](operations/administration.md#backup-y-recuperacion).
+  reactivate revoked authorizations. Follow [recovery](operations/administration.md#backup-and-recovery).
 
 ## System boundaries
 
@@ -69,7 +69,7 @@ Activity is a bounded in-memory feed and can lose events; it does not replace th
 durable journal. Routes with required audit wait for persistence before forwarding;
 a failure must deny the request, not downgrade the mode. An administrative intent
 shows an authorized attempt, not a commit of the operation.
-See the [technical contract](engineering.md#auditoria).
+See the [technical contract](engineering.md#audit).
 
 A local chain detects inconsistencies, but whoever controls all the files can
 rewrite it. Checkpoints only help if they survive outside that authority, together

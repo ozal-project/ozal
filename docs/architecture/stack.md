@@ -32,8 +32,10 @@ versions or keep a task status table in this file.
 | Tests | Native testing, httptest, race and fuzz | Regressions in decisions, adapters and boundaries |
 | Release | GoReleaser, SHA-256 and SBOM with syft | Build tools; not runtime dependencies |
 
-The console is built in `internal/admin/console` and served with `embed.FS`.
-Vite generates external scripts compatible with the project's CSP. The
+The console source is `web/console`; `scripts/build-console.sh` builds it into
+`internal/admin/console`, which the Go binary embeds with `embed.FS`. Commit the
+built output with its source. Vite generates external scripts compatible with
+the project's CSP. The
 administrative token lives in the tab's memory; after a reload, the edge returns
 it from an `HttpOnly` cookie limited to its resume endpoint. SvelteKit or SSR is
 not needed for this console. React with Vite would be technically possible, but
@@ -58,7 +60,7 @@ one, TLS fails closed.
 A wildcard covers one label level; the apex needs an additional name. The
 manager accepts the bounded set of names supported by the configuration. Do not
 turn it into an arbitrary platform without a new decision. Details are in the
-[engineering guide](../engineering.md#certificados). CertMagic remains an
+[engineering guide](../engineering.md#certificates). CertMagic remains an
 alternative if maintaining the in-house manager costs more than it saves; it is
 not a current dependency.
 
@@ -68,7 +70,7 @@ The pilot uses Go crypto/x509 and Ed25519, SSH coordination and a systemd timer.
 Keys are per host, CSRs are public, and rollback respects revocation. It needs
 no Python or OpenSSL at runtime, and it does not yet provide renewal for any
 fleet. The CA and its rollover are separate from the leaf certificates. See the
-[contract](../engineering.md#tuneles).
+[contract](../engineering.md#tunnels).
 
 ## Decide when there is a need
 

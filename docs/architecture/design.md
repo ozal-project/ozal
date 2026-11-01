@@ -52,10 +52,15 @@ this pattern in the codebase; everything new follows it.
 
 ## The request pipeline
 
-Every inbound request or stream passes the same ordered stages. Each stage is
-an `http.Handler` middleware (`func(next http.Handler) http.Handler`) or, for
-raw streams, the equivalent stream stage. Order is part of the security model
-and lives in one function.
+The target order is fixed: every inbound request or stream should pass the same
+stages. Each stage is an `http.Handler` middleware (`func(next http.Handler)
+http.Handler`) or, for raw streams, the equivalent stream stage. Order is part
+of the security model and lives in one function.
+
+This is the target, not a claim that every stage is already a separate
+middleware. Today only `trust` exists in `internal/pipeline`; `identify`,
+`authorize`, `route` and `forward` still live inside the proxy's forwarding
+handler, and `shield` is planned (see `internal/pipeline/pipeline.go`).
 
 | # | Stage | Responsibility | Core decision |
 |---|---|---|---|
@@ -110,10 +115,13 @@ internal/
   events/                 event types and sinks                         (core types + adapters)
 ```
 
-Today's mapping: `auth/authz.go` → `policy`, `auth/principal.go` →
-`identity`, `auth/oidc.go` → `oidc`, `proxy` → `httpedge` + `pipeline`, and
-`routemanager` → immutable routing snapshot. `routing.Select` is the pure,
-health-aware upstream-index decision; the proxy advances a per-snapshot
+The current package map is in
+[AGENTS.md](../../AGENTS.md#code-map-current); it is the authority while the
+target above remains a direction. In short: `auth` still combines principal,
+policy and OIDC; `proxy` + `pipeline` + `routing` cover the HTTP edge;
+`routemanager` owns the immutable routing snapshot; `passkey`, `pages`,
+`tunnel`, `certs` and `admin` are separate packages. `routing.Select` is the
+pure, health-aware upstream-index decision; the proxy advances a per-snapshot
 round-robin cursor across it.
 
 ## Implementation contracts

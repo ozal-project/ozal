@@ -19,7 +19,7 @@ belong to root; the state belongs to the service account.
 | SQLite, Pages, runtime and ACME | `/var/lib/ozal/` | ozal, directory 700 |
 | Administrative socket | `/run/ozal/admin.sock` | ozal, 600 |
 
-The [installer](download-install.md#linux-install-the-service-in-one-step)
+The [installer](download-install.md#3-install-the-linux-service)
 prepares the service. The [example unit](ozal.service) documents its
 permissions. Never let an unprivileged user replace the binary, configuration or
 state, because that would grant access at the next restart.
@@ -368,7 +368,7 @@ Configure `tunnel` on the edge and a route with `connector: "homelab"`. The curr
 transport allows loopback or an explicit RFC 1918/ULA subnet; it is not a generic
 public listener. The connector validates the edge's name and certificate and
 serves only its fixed destinations. For the exact options, use
-`ozal tunnel connect -h`; the contracts are in the [engineering guide](../engineering.md#tuneles).
+`ozal tunnel connect -h`; the contracts are in the [engineering guide](../engineering.md#tunnels).
 
 The certificate issued by this flow lasts 30 days. Plan and test rotation
 before it expires. Ozal does not provide generic connector renewal; any
@@ -472,7 +472,7 @@ The deploy endpoint has a dedicated HTTPS hostname and a reduced scope. The
 workflow requests OIDC with the edge's audience, and the repository, owner, ref,
 workflow and authorized event must match. Use pinned actions and `id-token: write`
 only where you deploy. Use `ozalctl site check|pack|deploy|accept` (native Go) and
-see the [publishing contract](../engineering.md#publicacion).
+see the [publishing contract](../engineering.md#publishing).
 Build secrets must not end up in `dist`; runtime secrets stay on the application
 host.
 
@@ -642,4 +642,4 @@ Check separately: the process (`/_/healthz`), effective configuration, the
 connector link, the application itself, DNS and HTTPS. A responding process does
 not prove the full path works. To test limits or recovery, use a disposable
 instance; do not fill a disk or cut the network on a shared host. Development
-commands are in the [engineering guide](../engineering.md#verificacion).
+commands are in the [engineering guide](../engineering.md#verification).

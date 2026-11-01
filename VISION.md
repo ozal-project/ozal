@@ -84,7 +84,7 @@ than the operator: an append-only, externally witnessed log of certificates, pol
 changes and access grants, with signed checkpoints. Today the audit is local and
 hash-chained; the verifier reports `tamper_evident=false` because it cannot prove a
 checkpoint was kept outside the host. The detailed scope is in
-[the audit contract](docs/engineering.md#auditoria).
+[the audit contract](docs/engineering.md#audit).
 
 Later work also covers private certificates for internal services, infrastructure
 access with approval and session recording, and AI agents as identities under the
@@ -120,7 +120,7 @@ to provide exterior protection while Ozal owns gateway identity and policy. DNS 
 ACME adapters keep providers replaceable. A worldwide CDN, volumetric DDoS network
 and distributed functions platform are outside the initial offering.
 
-The [positioning and portability contract](docs/engineering.md#publicacion-autonoma)
+The [positioning and portability contract](docs/engineering.md#autonomous-publication)
 and the [coexistence decision](docs/security.md#direct-ingress-or-behind-a-proxy)
 define the boundaries and the acceptance evidence.
 

@@ -12,7 +12,7 @@ the first tagged build and do not include features added later.
 | You want to… | Go to |
 |---|---|
 | Try Ozal on your own machine | [Try it locally](../../README.md#get-started), then [first application](first-application.md) |
-| Run Ozal as a Linux service | [Install the service in one step](#linux-install-the-service-in-one-step) |
+| Run Ozal as a Linux service | [Install the service in one step](#3-install-the-linux-service) |
 | Update an existing installation | [Upgrade and roll back](administration.md#upgrade-and-roll-back) |
 | Keep an installation from the Switchboard era | [Legacy Switchboard names](administration.md#legacy-switchboard-names) |
 

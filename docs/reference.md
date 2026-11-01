@@ -39,7 +39,7 @@ downloads by streaming and requires the size, hash and candidate version to matc
 reviewed plan. It checks the space budget per filesystem with a 64 MiB margin; an
 `-apply` succeeds only if the unit runs the verified image and answers health checks.
 A check without `-apply` still returns metadata only. Details on the budget, permissions
-and operation are in [administration](operations/administration.md#actualización-automática).
+and operation are in [administration](operations/administration.md#automatic-update).
 
 The scanner recognizes private names and known patterns; it does not prove the absence
 of any secret. `site check`, `pack` and `accept` use no targets or credentials; `pack`
@@ -106,7 +106,7 @@ your own local file and do not commit it to Git. Validation rejects unknown keys
 | `dev_errors` | Local diagnostics; keep `false` on any public exposure |
 
 The runtime is initialized explicitly and does not replace listeners, TLS or host
-authority. See [service state ownership](operations/administration.md#servicio-y-propiedad-del-estado).
+authority. See [service state ownership](operations/administration.md#service-and-state-ownership).
 
 ## Routes and access
 
@@ -600,7 +600,7 @@ files:
 Redirects 301/302/303/307/308 are supported; 200 rewrites and 404/410 rules are not. File rules
 cannot be used to bypass policies. A rollback activates retained content and does not change the
 database, DNS or backend. CI needs a project and a dedicated deploy hostname;
-see [configuration and disconnection](operations/administration.md#github-y-publicacion).
+see [configuration and disconnection](operations/administration.md#github-and-publishing).
 
 `POST /_/api/projects/{name}/workflow` requires the `publishing` tool. By default it returns a plan
 with no writes: `directory` (e.g. `.`), `output` (e.g. `dist`), `hostname` (one public hostname of the
@@ -642,7 +642,7 @@ previous trust metadata (a new file, mode 0600) and confirms the active state. I
 or `-admin unix:/path`: TCP and web tokens are rejected. The endpoint `PUT /_/api/projects/{name}/github-trust`
 is socket-only; its body carries `trust`, `expected` and `apply` (false by default). It neither uses nor
 replaces GitHub App exploration. The remote variant is `ozalctl project trust`; see
-[remote operation](operations/administration.md#operacion-remota-con-ozalctl).
+[remote operation](operations/administration.md#remote-operation-with-ozalctl).
 
 `ozal project rename -project NAME -to NEW_NAME [-apply]` renames a project and its site together. The plan
 names the previous site, the new one and the addresses that move; with `-apply`, the edge first copies the
@@ -656,7 +656,7 @@ undoes it. Afterwards, CI must publish with `DEPLOY_PROJECT` equal to the new na
 `audit` has `dir`, `include` (`access`, `admin`), `admin_mode` and `max_segment_bytes`. For `access`,
 private routes default to required and public ones to best_effort; a route's `audit_mode` allows an
 explicit choice. For admin, required is the default when the family is included. A durable intent is not
-proof of commit. [Audit contract](engineering.md#auditoria).
+proof of commit. [Audit contract](engineering.md#audit).
 
 ```sh
 ozal audit verify -config config.json
@@ -682,4 +682,4 @@ scripts/new-migration.sh name
 
 The parent folder must exist. Applied migrations are immutable, numbering is continuous, and the runner
 owns transactions: do not add BEGIN/COMMIT to the SQL. Do not limit the table list to an older release's;
-the schema and its embedded files are the authority. [Verification](engineering.md#verificacion).
+the schema and its embedded files are the authority. [Verification](engineering.md#verification).

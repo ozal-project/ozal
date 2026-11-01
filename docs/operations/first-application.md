@@ -253,7 +253,7 @@ rejected when you review it.
 - It does not start or install your application.
 - It does not replace your application's permissions. If the app already has a login,
   keep it until you choose and test an
-  [integration](../engineering.md#identidad-y-aplicaciones) contract.
+  [integration](../engineering.md#identity-and-applications) contract.
 - It does not revert DNS, a database or a backend change when you roll back a site. A
   Pages rollback activates a retained artifact only.
 

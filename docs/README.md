@@ -21,4 +21,4 @@ the current checkout may include later features.
 The status of work lives only in [TO_IMPLEMENT](TO_IMPLEMENT.md) and
 [IMPLEMENTED](IMPLEMENTED.md). The guides describe behavior; they do not repeat
 the history of each task. Old reviews and local drafts go to the ignored
-archive described in [documentation maintenance](engineering.md#mantenimiento-de-documentacion).
+archive described in [documentation maintenance](engineering.md#documentation-maintenance).

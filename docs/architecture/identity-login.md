@@ -1,12 +1,13 @@
 # Native login: passkeys, sessions and step-up
 
-**Status:** design. Phase 1 (passkeys, invitations and recovery) is
-implemented; the other phases are planned. This is not a release promise.
+**Status:** design. Passkeys, invitations, recovery, step-up, device-bound
+passkeys and the session-hardening columns are implemented; approvals, the
+OIDC provider and later phases are planned. This is not a release promise.
 Check the release notes of the version you run.
 
-Related: [identity integration](../engineering.md#identidad-y-aplicaciones) (how an
+Related: [identity integration](../engineering.md#identity-and-applications) (how an
 application trusts the gateway), [design](design.md) (the `identify` stage),
-[tunnel visitor contract](../engineering.md#tuneles), [stack](stack.md)
+[tunnel visitor contract](../engineering.md#tunnels), [stack](stack.md)
 (`go-webauthn/webauthn`).
 
 ## What this decides
@@ -230,17 +231,18 @@ later require it, accepting that Firefox and Safari users cannot reach that rout
 
 ## Phases
 
-1. **Passkeys:** model, CLI invite/recover/revoke, Flows 1–2, session columns,
-   events and alerts, then private acceptance with a protected connector route
-   and no external provider.
-2. **Policy and session hardening:** `max_auth_age`, `require_device_bound`,
-   rotation, DBSC.
-3. **Approvals:** Telegram number matching for admin changes and break-glass,
-   always after a passkey session, never instead of one.
-4. **Provider:** Ozal as OIDC provider with `acr`/`amr`, PKCE and DPoP-bound
-   tokens; device flow for `ozal login`.
-5. **Upstreams and signals:** keep Google/OIDC; add atproto login; CAEP/SSF to
-   revoke sessions on external signals.
+1. **Passkeys:** implemented. Model, CLI invite/recover/revoke, Flows 1–2,
+   session columns, events and alerts, then private acceptance with a protected
+   connector route and no external provider.
+2. **Policy and session hardening:** implemented for `max_auth_age`,
+   `require_device_bound`, the session columns and device management. Session
+   rotation and DBSC remain opportunistic.
+3. **Approvals:** planned. Telegram number matching for admin changes and
+   break-glass, always after a passkey session, never instead of one.
+4. **Provider:** planned. Ozal as OIDC provider with `acr`/`amr`, PKCE and
+   DPoP-bound tokens; device flow for `ozal login`.
+5. **Upstreams and signals:** planned. Keep Google/OIDC; add atproto login;
+   CAEP/SSF to revoke sessions on external signals.
 
 ## Design decisions
 
@@ -255,24 +257,28 @@ later require it, accepting that Firefox and Safari users cannot reach that rout
 | 7 | Alert on new passkey | Yes, Telegram when configured, always an event |
 | 8 | DBSC | Phase 2, opportunistic |
 
-## Phase 1 as built
+## Current implementation
 
 Code: `internal/passkey` (gate, ceremonies, pages), `internal/store/sqlite`
-(`identity.go`, migration `004_create_passkey_users`), `ozal user`, config
-`auth.passkeys`. Where it differs from the text above:
+(`identity.go`, migrations `004_create_passkey_users` through
+`015_add_session_audience`), `ozal user`, config `auth.passkeys`. Where it
+differs from the text above:
 
 - **Return address.** The login keeps the existing `return_to` parameter,
   checked against the configured hosts (`auth.SafeReturnTo`, shared with the
   OIDC gate), instead of a server-side record. Same protection against open
   redirects, less state.
-- **Session lifetime.** Phase 1 used the existing absolute lifetime
-  (`session_ttl_minutes`, 8 h by default). The 12 h idle and 7 day absolute
-  split, step-up and the session columns (`auth_time`, `amr`, `device_bound`)
-  moved to phase 2, where the policies that read them are built.
-- **One method at a time** in phase 1. An OIDC provider can run beside passkeys:
-  its callback lives on the login host and each route sets `access.methods`.
-  `auth.passkeys` requires `-db`: users, passkeys and sessions share one
-  database, so revoking a passkey and ending its sessions is one transaction.
+- **Session lifetime.** `session_ttl_minutes` defaults to 10080 (7 days
+  absolute) and `session_idle_minutes` to 720 (12 hours without use). Step-up
+  and the session columns (`auth_time`, `amr`, `device_bound`, `user_verified`,
+  `device_first_seen`) are in migrations 006–009, and the policies that read
+  them are implemented.
+- **Methods.** OIDC can run beside passkeys; its callback lives on the login
+  host and each route sets `access.methods`. `auth.passkeys` requires `-db`:
+  users, passkeys and sessions share one database, so revoking a passkey and
+  ending its sessions is one transaction.
+- **Devices.** A signed-in person can list, add and revoke their own passkeys
+  from `/_/auth/devices`; adding one alerts through the configured notifier.
 - **Revocation** deletes the user's sessions, and every authenticated request
   also checks that the user is still enabled.
 - **Ceremonies** (challenges) live in memory, single use, 5 minutes, capped at
@@ -293,7 +299,8 @@ Code: `internal/passkey` (gate, ceremonies, pages), `internal/store/sqlite`
 
 ## The journey, built and planned
 
-Phase 1 is available on the edge. The rest keeps the same shape.
+Passkey login, invitations, recovery, step-up and device management are
+available. Approvals, email delivery and the OIDC provider are not.
 
 **Built:**
 
@@ -311,24 +318,28 @@ Phase 1 is available on the edge. The rest keeps the same shape.
 6. Later: no session → the login page; the visitor picks the passkey; the edge
    verifies the signature (this origin, user verified, no replay) and the app
    receives `X-Auth-Request-User` and `X-Auth-Request-Email`.
+7. Routes that ask for a recent proof trigger step-up; `max_auth_age_minutes`
+   and `require_device_bound` are enforced by `auth.Fresh`.
+8. The login page offers every configured method (passkey or an upstream OIDC
+   provider such as Google or Okta) and never picks one for the visitor; a
+   route can require one through `access.methods`.
+9. A signed-in person can add or revoke their own passkeys from
+   `/_/auth/devices`; every addition alerts.
+10. Recovery after losing every device stays `user invite -recover` on the
+    host; it replaces the previous passkeys and ends their sessions (`SEC-023`).
 
-Weak points left for later phases: step 2 is manual. In phase 1 the cookie had
-no expiry, so it ended with the browser session. Session expiry was added
-afterwards: `Max-Age` ends sessions at the earlier of 12 h without use and 7
-days after login.
+The invitation is still sent by hand; email delivery is planned. Session expiry
+is implemented: `Max-Age` ends sessions at the earlier of 12 h without use and
+7 days after login.
 
 **Planned:**
 
-- Step-up (a fresh passkey proof) only for routes that ask for it.
 - The invitation is emailed; the email carries a code (primary, finishes in the
   tab the visitor started in) and a link (fallback). Email bootstraps a passkey
   once; it never signs in on its own afterwards and never recovers an account.
-- The login page offers every configured method (passkey, an upstream OIDC
-  provider such as Google or Okta) and never picks one on the visitor's behalf;
-  a route can require a passkey.
-- From a session with a recent passkey proof, add or revoke one's own devices;
-  every addition alerts.
-- Recovery after losing every device stays `user invite -recover` on the host.
+- Telegram approvals for sensitive administrator changes and break-glass,
+  always after a passkey session and never instead of one.
+- Ozal as an OIDC provider and a device flow for `ozal login`.
 
 ## What the provider is, and what it is not
 

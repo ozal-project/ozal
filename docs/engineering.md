@@ -1,1023 +1,875 @@
-# Guía de desarrollo
+# Engineering guide
 
-Contratos vigentes y comandos de verificación en un solo lugar. Lee
-[AGENTS.md](../AGENTS.md), [diseño](architecture/design.md) y
-[stack](architecture/stack.md) antes de cambiar código. Los estados, prioridades
-y criterios pendientes viven únicamente en [TO_IMPLEMENT.md](TO_IMPLEMENT.md);
-la evidencia histórica de cierres está en [IMPLEMENTED.md](IMPLEMENTED.md).
+Current contracts and verification commands in one place. Read
+[AGENTS.md](../AGENTS.md), [design](architecture/design.md) and
+[stack](architecture/stack.md) before changing code. Active work, priorities
+and done criteria live only in [TO_IMPLEMENT.md](TO_IMPLEMENT.md); historical
+evidence is in [IMPLEMENTED.md](IMPLEMENTED.md).
 
 <a id="mantenimiento-de-documentacion"></a>
+## Documentation maintenance
 
-## Mantenimiento de documentación
+User guides are [installation](operations/download-install.md),
+[applications](operations/first-application.md),
+[administration](operations/administration.md) and [security](security.md).
+Update the existing section with the code; do not open a new report, plan or
+delivery note for each conversation, test or release. Pending state goes to the
+tracker, closures with a commit go to IMPLEMENTED, and version limits go to the
+release notes.
 
-Las guías de usuario son [instalación](operations/download-install.md),
-[aplicaciones](operations/first-application.md),
-[administración](operations/administration.md) y [seguridad](security.md).
-Actualiza la sección existente junto con el código; no abras un informe o
-plan nuevo por cada conversación, prueba o entrega. Estado pendiente al tracker,
-cierre con commit a IMPLEMENTED y límites de versión a las notas de release.
+`docs/architecture/design.md` and `stack.md` keep the design rules and
+dependencies. Identity contracts live in
+[identity-login.md](architecture/identity-login.md) and
+[host-sessions.md](architecture/host-sessions.md); the other short contracts are
+here. Formats also belong to code and its regressions, not to repeated
+implementation stories.
 
-`docs/architecture/design.md` y `stack.md` conservan reglas y dependencias.
-Los contratos de identidad se mantienen separados mientras se implementa
-`ID-015`, para no mezclar una migración de seguridad con esta consolidación.
-Los demás contratos cortos están aquí; detalles de formatos pertenecen además
-al código y sus regresiones, no a relatos de implementación repetidos.
+The consolidation retired dated reviews, long plans and pilot guides. Their
+originals are kept locally in `.local/docs-archive/`, ignored by Git. They are
+not dependencies for building or understanding the product from a clean
+checkout. Use `docs/local/` for new drafts and captures; it is also ignored.
+Never store secrets there.
 
-La consolidación retiró revisiones fechadas, planes extensos y guías de pilotos.
-Sus originales se conservan **localmente** en `.local/docs-archive/`, ignorado
-por Git. No son dependencias para compilar o entender el producto desde un
-checkout limpio. Para nuevos borradores/capturas usa `docs/local/` —también
-ignorado— o un directorio temporal. No guardes secretos allí.
+Ignoring files does not hide versions already published in Git history. Keep
+the trackers versioned: they are the public record of active and closed work.
+Do not duplicate data or hide files needed to reproduce the product.
 
-Ignorar archivos no oculta versiones ya publicadas en la historia de Git.
-Los trackers siguen versionados porque la página pública los importa durante
-el build; no duplicar datos ni ocultar archivos necesarios para reproducirlo.
+<a id="publicacion-autonoma"></a>
+## Autonomous publication
 
-## Publicacion autonoma
+`ARCH-010`: the maintainer chose MVP stages A+B+C, with C first:
 
-`ARCH-010`: MVP elegido por el mantenedor, etapas A+B+C, con C primero:
-
-| Etapa | Resultado | Límite |
+| Stage | Result | Limit |
 |---|---|---|
-| C | Login central y sesiones por host para privadas en dominios independientes | Conservar RP de passkeys y migración de sesiones; protocolo y aceptación propios |
-| A | Perfil directo, wildcard DNS inicial en cualquier proveedor y HTTP-01 por nombre configurado | Una IP/edge público, autoridad DNS y CA pública siguen siendo necesarios |
-| B | Conector saliente público sin VPN previa | No basta quitar la restricción de red privada; presupuesto, enrolamiento y renovación genéricos |
+| C | Central login and per-host sessions for private apps on independent domains | Keep the passkey RP and the session migration; the protocol and its acceptance are their own work |
+| A | Direct profile, initial wildcard DNS at any provider and HTTP-01 per configured name | One public IP/edge, DNS authority and a public CA are still required |
+| B | Outbound public connector without a prior VPN | Removing the private-network restriction is not enough; budget, enrolment and generic renewal are also required |
 
-El estado real se registra en el tracker, no en esta tabla de alcance. DNS
-autoritativo propio, URLs para terceros, cuentas públicas y flotas quedan fuera
-del MVP. E se limita a migrar el piloto propio. `runtime_file` sigue siendo la
-autoridad de rutas; posponer una máquina de estados durable hasta que una
-operación externa la necesite. No hay despliegue ni cambio DNS implícitos.
+The real state is recorded in the tracker, not in this scope table.
+Authoritative DNS, URLs for third parties, public accounts and fleets are
+outside the MVP. E only migrates the pilot. `runtime_file` remains the route
+authority; postpone a durable state machine until an external operation needs
+it. No deployment or DNS change is implicit.
 
-Cloudflare es integración opcional como objetivo de portabilidad. Su DNS-01
-actual no demuestra portabilidad de esa API; repetir emisión/renovación con
-otro proveedor cuando se implemente. La aceptación completa necesita otro
-operador, red externa, TLS, acceso permitido/denegado, revocación y recuperación.
+Cloudflare is an optional integration, not a requirement. DNS-01 has adapters
+for Cloudflare, Hetzner, RFC 2136 and a `builtin` challenge responder; a real
+issuance and renewal with a non-Cloudflare provider is still the portability
+evidence. Full acceptance needs another operator, an external network, TLS,
+allowed and denied access, revocation and recovery.
 
-## Identidad y aplicaciones
+<a id="identidad-y-aplicaciones"></a>
+## Identity and applications
 
-Login nativo, OIDC, expiración, grupos y recuperación se especifican en
-[identity-login.md](architecture/identity-login.md). El handoff entre dominios,
-audiencias, códigos de un uso, parentesco y logout está en
-[host-sessions.md](architecture/host-sessions.md). Su presencia no declara que
-la implementación en curso haya sido aceptada.
+Native login, OIDC, expiry, groups and recovery are specified in
+[identity-login.md](architecture/identity-login.md). The cross-domain handoff,
+audiences, one-use codes, parent relationship and logout are in
+[host-sessions.md](architecture/host-sessions.md). Their presence does not
+declare the current implementation accepted.
 
-`Authorize` decide identidad/grupos; `Fresh` decide método, antigüedad y
-dispositivo. Un grupo requerido significa AND con los demás. Email allowlists
-necesitan email verificado. Contexto desconocido conserva fuente/frescura y
-falla cerrado cuando la regla necesita esa evidencia.
+`Authorize` decides identity and groups; `Fresh` decides method, age and device.
+A required group means AND with the other rules. Email allowlists need a
+verified email. Unknown context keeps its source and freshness and fails closed
+when the rule needs that evidence.
 
-`policy explain` usa el mismo motor con identidad/contexto hipotéticos:
+`policy explain` uses the same engine with a hypothetical identity and context:
 
 ```sh
-ozal policy explain -config /ruta/config.json -host app.example.com \
+ozal policy explain -config /path/config.json -host app.example.com \
   -email ana@example.com -verified -groups engineering -expect allowed
 ```
 
-Consulta `policy explain -h` para opciones; no prueba OIDC, TLS, sesión real,
-salud ni transporte. `policy replay` evalúa una regla candidata sin mutar la
-política; `who-can` y `review` no deben convertir historia ausente en "sin uso".
+See `policy explain -h` for options; it does not prove OIDC, TLS, a real session,
+health or transport. `policy replay` evaluates a candidate rule without
+mutating the policy; `who-can` and `review` must not turn missing history into
+"never used".
 
-La app puede conservar su propio login. Headers de gateway solo se aceptan
-desde su camino autenticado; la app conserva autorización interna. Afirmaciones
-firmadas verificables por la app, intercambio de tokens y Ozal como
-proveedor OIDC tienen alcances distintos y no están concedidos por pasar headers.
-`ARCH-009` conserva la decisión pendiente; `ID-004` no se cierra por handoff.
+The app may keep its own login. Gateway headers are accepted only from its
+authenticated path; the app keeps its internal authorization. Signed claims that
+the app can verify, token exchange and Ozal as an OIDC provider are distinct
+scopes and are not granted by passing headers. `ARCH-009` keeps the decision
+open; `ID-004` is not closed by the handoff.
 
-## Tuneles
+<a id="tuneles"></a>
+## Tunnels
 
-El proceso integrado usa `tunnel` más rutas `connector`; exige SQLite migrado
-y enrolamiento activo. Cambios de ruta recargan snapshots, conservando sesiones;
-listener, subred y archivos de identidad requieren reinicio. Offline devuelve
-502 sin fallback TCP. La consola distingue conexión del conector de función real
-de la aplicación. [Incorporación](operations/administration.md#incorporar-un-conector).
+The integrated process uses `tunnel` plus `connector` routes; it requires a
+migrated SQLite database and an active enrolment. Route changes reload snapshots
+and keep sessions; the listener, subnet and identity files require a restart.
+Offline returns 502 without TCP fallback. The console distinguishes the
+connector connection from the application actually working.
+[Onboarding](operations/administration.md#add-a-connector).
 
-`tunnel edge|connect` son comandos independientes; `tunnel edge` sirve una ruta
-anónima. Para políticas de visitante se necesita el proceso integrado. Ambos
-requieren `-cert`, `-key`, `-ca` y host; `connect` también `-edge` literal y
-`-server-name` verificado. `-tunnel-network` admite solo una subred RFC1918/ULA;
-por defecto loopback. Consulta `-h` para las opciones exactas.
+`tunnel edge|connect` are independent commands; `tunnel edge` serves an
+anonymous route. Visitor policies need the integrated process. Both require
+`-cert`, `-key`, `-ca` and a host; `connect` also requires a literal `-edge` and
+a verified `-server-name`. `-tunnel-network` accepts only one RFC1918/ULA
+subnet; the default is loopback. See `-h` for the exact options.
 
-El conector configura `-root` o `-upstream`, y puede añadir hasta ocho hosts con
-`-route HOST=root:DIR|upstream:URL`; destinos HTTP fijos en loopback sin
-credenciales/path/query. El edge nunca elige un origen arbitrario. El lab
-`tunnel-spike` usa identidades efímeras y puertos loopback; no es un producto
-de ingreso público ni reemplaza credenciales persistentes.
+The connector sets `-root` or `-upstream` and can add up to eight hosts with
+`-route HOST=root:DIR|upstream:URL`; fixed HTTP destinations stay on loopback
+without credentials, path or query. The edge never chooses an arbitrary origin.
+The `tunnel-spike` lab uses ephemeral identities and loopback ports; it is not a
+public ingress product and does not replace persistent credentials.
 
-IP y sujeto/email viajan como `X-Ozal-Visitor-*` solo dentro de mTLS.
-`TrustAuthenticatedTunnel` valida valores y los convierte en identidad upstream;
-listeners ordinarios eliminan toda afirmación del cliente y la cookie de sesión.
-Son afirmaciones autenticadas por el túnel, no firmas verificables por la app.
+IP and subject/email travel as `X-Ozal-Visitor-*` only inside mTLS.
+`TrustAuthenticatedTunnel` validates the values and turns them into upstream
+identity; ordinary listeners remove every client assertion and the session
+cookie. They are assertions authenticated by the tunnel, not signatures the app
+can verify.
 
-El código actual comparte 32 solicitudes en vuelo y conserva el cupo de 16
-llamado de handshake durante la sesión completa. Separar presupuesto de
-handshake/sesión/stream antes de ampliar capacidad; no anunciar escalabilidad
-sin carga medida. La revalidación de enrolamiento corre cada cinco segundos;
-error del registro niega conexiones nuevas pero conserva sesiones establecidas.
+The current code shares 32 in-flight requests and keeps a 16-slot handshake
+reservation for the whole session. Separate the handshake/session/stream budgets
+before expanding capacity; do not advertise scalability without measured load.
+Enrolment revalidation runs every five seconds; a registry error denies new
+connections but keeps established sessions.
 
-La renovación del piloto es un comando Linux con coordinación SSH y claves
-generadas por rol en su host. Hojas de 30 días, umbral de siete días, journal
-durable y bloqueo exclusivo. Conserva identidades anteriores y revierte solo
-si la huella actual aún pertenece a la transacción; revocación o reemplazo del
-operador prevalecen sobre rollback. Una respuesta SSH perdida se reconcilia.
-No expone un firmante de CA público ni representa renovación de una flota.
-El rollover de CA es una operación separada; no sustituir su raíz al renovar hojas.
+The pilot renewal is a Linux command with SSH coordination and keys generated
+per role on their host. Thirty-day leaves, a seven-day threshold, a durable
+journal and an exclusive lock. It keeps previous identities and rolls back only
+when the current fingerprint still belongs to the transaction; operator
+revocation or replacement wins over rollback. A lost SSH response is
+reconciled. It exposes no public CA signer and is not fleet renewal. CA rollover
+is a separate operation; do not replace its root while renewing leaves.
 
-## Certificados
+<a id="certificados"></a>
+## Certificates
 
-HTTP-01/autocert atiende nombres configurados y sigue la tabla de rutas.
-DNS-01 usa el gestor propio sobre `x/crypto/acme`; su adaptador actual es
-Cloudflare. Wildcard cubre un nivel, no el apex; nombres alternativos deben
-validarse y encontrarse en la hoja. No emitir por cualquier SNI recibido.
+HTTP-01/autocert serves configured names and follows the route table. DNS-01
+uses the in-house manager over `x/crypto/acme`; the adapters are Cloudflare,
+Hetzner, RFC 2136 and `builtin`. A wildcard covers one label level, not the
+apex; alternative names must be validated and present in the leaf. Do not issue
+for any SNI received.
 
-Mantener cuenta ACME y clave de certificado separadas, generaciones completas
-durables antes del swap, lock de un escritor y recuperación de la última
-generación válida. Validar cadena, clave/nombres y vigencia contra roots del
-sistema o roots explícitos de staging. Nunca mezclar estados staging/producción.
+Keep the ACME account and the certificate key separate, persist complete
+generations before the swap, use a single-writer lock and recover the last valid
+generation. Validate the chain, key/names and validity against system roots or
+explicit staging roots. Never mix staging and production state.
 
-Renovar según la fracción de vida real, no días fijos; una tentativa activa,
-timeouts, backoff con jitter y respeto de retry del proveedor. Con fallo se
-conserva un certificado todavía válido; sin certificado válido TLS falla cerrado.
-El handshake nunca espera emisión. La limpieza TXT elimina solo el registro
-propio por identidad; persistir intención y reconciliar creaciones ambiguas.
+Renew according to the real fraction of remaining life, not fixed days; one
+active attempt, timeouts, jittered backoff and respect for the provider's retry
+budget. On failure keep a still-valid certificate; without one, TLS fails
+closed. The handshake never waits for issuance. TXT cleanup removes only our own
+record by identity; persist the intent and reconcile ambiguous creations.
 
-Origin client-auth y confianza de proxy son independientes de TLS servidor.
-La excepción ALPN de autocert no aplica al listener DNS-01. Emitir eventos
-seguros sin tokens ni desafíos. Renovación, caída, restart y operación exterior
-necesitan aceptación además del test de primera emisión.
+Origin client authentication and proxy trust are independent of server TLS.
+The autocert ALPN exemption does not apply to the DNS-01 listener. Emit safe
+events without tokens or challenges. Renewal, failure, restart and exterior
+operation need acceptance beyond the first-issuance test.
 
-## Publicacion
+<a id="publicacion"></a>
+## Publishing
 
-Builds fuera del edge, normalmente GitHub Actions. Un proyecto asocia sitio,
-hostnames y publicadores; el endpoint dedicado recibe artefactos, no ejecuta
-builds. El admin continúa privado. El publicador puede ser OIDC Actions o un
-token limitado por proyecto; GitHub App de descubrimiento es independiente.
+Builds run outside the edge, normally in GitHub Actions. A project associates a
+site, hostnames and publishers; the dedicated endpoint receives artifacts and
+does not run builds. The admin plane stays private. A publisher can be OIDC
+Actions or a project-scoped token; GitHub App discovery is independent.
 
-`internal/pages/workflow.Build` es el núcleo puro de `PAGES-010`: valida refs,
-rutas relativas y orígenes HTTPS, genera YAML sin expresiones provenientes de
-entradas, y liga el contenido por SHA-256 a una rama determinista. La plantilla
-separa build (`contents: read`, sin OIDC) de deploy (`id-token: write`, sin
-checkout ni ejecución del repositorio). Las acciones y `ozalctl` están fijados
-por SHA; el publicador usa el ref publicado `900003e224c785f698ec015945b43fb2456753fd`.
-Los cambios de pins requieren revisar la plantilla y sus regresiones.
+`internal/pages/workflow.Build` is the pure core of `PAGES-010`: it validates
+refs, relative paths and HTTPS origins, generates YAML without expressions from
+inputs, and binds the content by SHA-256 to a deterministic branch. The template
+separates build (`contents: read`, no OIDC) from deploy (`id-token: write`, no
+checkout or repository execution). Actions and `ozalctl` are pinned by SHA; the
+publisher uses the published ref `900003e224c785f698ec015945b43fb2456753fd`.
+Pin changes require reviewing the template and its regressions.
 
-`githubapp.AppStatus` informa además si la instalación cubre todos los
-repositorios y su página de ajustes (sólo un enlace `https://github.com`); el
-listado de repositorios lo agrega en la página 1 cuando la instalación
-coincide con la configurada, y lo omite si GitHub no responde. GitHub siempre
-vuelve a `/applications`; la consola guarda por pestaña (`sessionStorage`,
-sólo una ruta conocida) si el operador salió de Integrations y el router lo
-devuelve ahí antes de procesar el código o la instalación.
+`githubapp.AppStatus` also reports whether the installation covers all
+repositories and its settings page (only a `https://github.com` link); the
+repository listing adds it on page 1 when the installation matches the
+configuration, and omits it if GitHub does not answer. GitHub always returns to
+`/applications`; the console stores per tab (`sessionStorage`, one known route)
+whether the operator left Integrations, and the router returns there before
+processing the code or installation.
 
-El shell admin deriva repo/owner/ref/workflow del proyecto guardado, vuelve a
-comprobar la instalación y el digest antes de una escritura, y exige un plan
-revisado y la herramienta `publishing`. El guardado de confianza y la propuesta
-vuelven a comprobar la sesión tras el descubrimiento de repositorios: una
-revocación o caducidad durante esa consulta impide iniciar la escritura.
-Registra intent de auditoría antes de
-llamar al adaptador; un fallo del audit requerido impide escribir. El adaptador
-`githubapp.OpenWorkflow` pide un token de un solo repo y verifica otra vez sus
-IDs/nombre, fija el commit base, exige que archivo y rama no existan y usa
-create-ref + create-content sin SHA de reemplazo + create-PR. No sigue redirects,
-filtra errores del proveedor y nunca reintenta ni limpia una escritura incierta.
-`github.workflow_proposed` solo se emite tras recibir un PR válido; no significa
-deploy ni cambio de configuración. La desconexión o una mutación concurrente
-posterior al despacho no deshacen una petición ya enviada a GitHub.
+The admin shell derives repo/owner/ref/workflow from the saved project, checks
+the installation and digest again before a write, and requires a reviewed plan
+and the `publishing` tool. Saving trust and the proposal check the session again
+after repository discovery: a revocation or expiry during that query prevents
+the write. It records audit intent before calling the adapter; a required-audit
+failure prevents the write. `githubapp.OpenWorkflow` requests a one-repo token,
+verifies its IDs/name again, fixes the base commit, requires the file and branch
+not to exist, and uses create-ref + create-content without a replacement SHA +
+create-PR. It does not follow redirects, filters provider errors and never
+retries or cleans an uncertain write. `github.workflow_proposed` is emitted only
+after a valid PR; it does not mean deploy or a configuration change. Disconnect
+or a concurrent mutation after dispatch does not undo a request already sent to
+GitHub.
 
-Regresiones de generación, scopes, retirada/movimiento del repo, permisos,
-plan alterado/config antigua, audit requerido, archivo/rama existente y fallos
-parciales viven en `internal/pages/workflow`, `internal/githubapp` e
+Regressions for generation, scopes, repository removal or movement, permissions,
+altered plan or stale config, required audit, existing file/branch and partial
+failures live in `internal/pages/workflow`, `internal/githubapp` and
 `internal/admin`. `OZAL_WORKFLOW_BROWSER=1 go test ./internal/admin -run
-TestWorkflowBrowserAcceptance -count=1 -v` ejecuta el SPA embebido y los handlers
-reales en loopback, con I/O GitHub y datos de deployments simulados. Requiere
-`agent-browser`, `CHROME` y las bibliotecas del navegador; `OZAL_BROWSER_ARGS`
-permite configurar sus argumentos locales. `OZAL_WORKFLOW_ARTIFACTS` guarda
-capturas privadas. No acredita una instalación de App ni un PR/build real.
+TestWorkflowBrowserAcceptance -count=1 -v` runs the embedded SPA and real
+handlers on loopback with simulated GitHub I/O and deployment data. It requires
+`agent-browser`, `CHROME` and the browser libraries; `OZAL_BROWSER_ARGS` lets you
+configure local arguments. `OZAL_WORKFLOW_ARTIFACTS` stores private captures. It
+does not prove a real App installation, PR or build.
 
-Conexión desde la consola: `githubapp.Manifest` es puro (origen sin ruta,
-cuenta validada, App privada sin webhooks ni eventos y solo los cuatro
-permisos). El `state` del manifest es aleatorio, de un solo uso, ligado al
-actor de la sesión y vence en una hora; un código con otro `state` no llega a
-GitHub. La conversión vuelve a exigir `publishing` tras la llamada de red,
-escribe la clave con `O_EXCL` y 0600, guarda solo la referencia `file:` y
-descarta los secretos OAuth/webhook. `installation_id: 0` significa App creada
-sin instalar: `installationToken` la rechaza. La instalación se obtiene con el
-JWT de la App (`GET /app`, `/app/installations`, exactamente una); el cliente
-no puede nombrarla. La vista previa del asistente y el PR usan
-`publishingPlan`, así el digest revisado es el aplicado.
-`OZAL_WORKFLOW_BROWSER=1 go test ./internal/admin -run
-TestGitHubWizardBrowserAcceptance -count=1 -v` recorre panel de conexión,
-regreso de la instalación, elección de repo, revisión del workflow y un único
-guardado con confianza y PR, con GitHub simulado y axe en cuatro anchos.
+Connecting from the console: `githubapp.Manifest` is pure (origin without path,
+validated account, private App without webhooks or events and only the four
+permissions). The manifest `state` is random, one-use, bound to the session actor
+and expires in one hour; a code with another `state` does not reach GitHub. The
+conversion checks `publishing` again after the network call, writes the key with
+`O_EXCL` and 0600, stores only the `file:` reference and discards OAuth/webhook
+secrets. `installation_id: 0` means an App created without an installation:
+`installationToken` rejects it. The installation is obtained with the App JWT
+(`GET /app`, `/app/installations`, exactly one); the client cannot name it. The
+wizard preview and the PR use `publishingPlan`, so the reviewed digest is the one
+applied. `OZAL_WORKFLOW_BROWSER=1 go test ./internal/admin -run
+TestGitHubWizardBrowserAcceptance -count=1 -v` covers the connect panel, return
+from the installation, repository choice, workflow review and a single save
+with trust and PR, with simulated GitHub and axe at four widths.
 
-La migración explícita de un publicador existente usa
-`config.PlanProjectTrust` (núcleo puro) y un endpoint exclusivo del socket
-administrativo. No amplía la autoridad de los tokens web ni el flujo de
-descubrimiento por App. Requiere exactamente un publicador GitHub, mantiene los
-otros deployers y aplica por `Manager.PutProject` con el digest revisado:
-validación, persistencia y snapshot pasan por el mismo bloqueo del edge que las
-ediciones de consola. El CLI guarda antes un archivo nuevo 0600 con sólo los
-metadatos GitHub anteriores y confirma luego la confianza activa. Un resultado
-de red indeterminado requiere reconciliación; no dispara una reversión ciega.
+Explicit migration of an existing publisher uses `config.PlanProjectTrust` (pure
+core) and an endpoint exclusive to the admin socket. It does not expand web-token
+or App-discovery authority. It requires exactly one GitHub publisher, keeps the
+other deployers and applies through `Manager.PutProject` with the reviewed
+digest: validation, persistence and snapshot go through the same edge lock as
+console edits. The CLI first saves a new 0600 file with only the previous GitHub
+metadata, then confirms active trust. An indeterminate network result requires
+reconciliation; it does not trigger a blind rollback.
 
-OIDC exige issuer/JWKS/RS256, audiencia, vida breve, IDs de repo/propietario,
-ref, workflow y eventos autorizados (`push`/`workflow_dispatch`). La ref de
-`pull_request_target` no autoriza por sí sola un despliegue. Replay por `jti`
-se guarda de forma durable; GET de estado no consume el permiso de upload.
-Ver [deployauth](../internal/pages/deployauth) y
-[deployapi](../internal/pages/deployapi) para códigos y endpoints exactos.
+OIDC requires issuer/JWKS/RS256, audience, short life, repo/owner IDs, ref,
+workflow and allowed events (`push`/`workflow_dispatch`). A
+`pull_request_target` ref does not by itself authorize a deployment. Replay by
+`jti` is stored durably; a status GET does not consume the upload permission.
+See [deployauth](../internal/pages/deployauth) and
+[deployapi](../internal/pages/deployapi) for exact codes and endpoints.
 
-La API `GET /_/api/updates/status` requiere la herramienta de operador
-`updates` y lee un archivo local fijo junto a la DB de estado. Devuelve
-`checked_at`, versiones, `result`, fase y nodos (si es una pareja); `reason` lo
-genera la API, sin reenviar errores arbitrarios del proceso. El archivo debe
-ser regular y menor de 64 KiB; si aún no existe, el resultado es `unknown`;
-archivos inválidos dan 503. Los resultados de consulta (`current`, `available`,
-`unversioned`) vencen a las 24 horas; `updating` vence a la hora. Un
-reporte vencido se entrega como `result: unknown`, `stale: true` y
-`last_result`, sin conservar versiones, fase o nodos que podrían confundirse
-con el estado actual. Los resultados terminales (`updated`, `rolled_back`,
-`failed`, `intervention_required`) quedan como historia. `POST` en el mismo recurso solo acepta un registro
-de estado acotado por el socket Unix local, para que `ozalctl` informe el avance;
-rechaza cualquier comando, path, rol o resultado desconocido. Ningún endpoint
-inicia una actualización. El timer de ejemplo solo consulta releases y el
-corte de Edge + conector lo coordina `ozalctl` desde la máquina del operador.
-`ozalctl edge pair-preflight` inspecciona ambos hosts por SSH sin modificar
-estado; la aplicación vuelve a inspeccionarlos bajo los locks de ambos nodos.
+Artifact handling authenticates, rate-limits and records the required intent
+**before consuming the body**. Regular files, count and size limits, no
+links/traversal, internal or secret paths rejected, an immutable manifest and
+atomic activation. Site rollback activates a retained artifact; it changes no
+DNS or database. `_headers` and `_redirects` are validated and applied but are
+not served as public files.
 
-### Servicio de releases y configuración — contrato objetivo 2026-10-30
+The operator reuses `internal/ctl/artifact`: it packs a bounded snapshot with
+`pages.Pack`, validates with `pages.Extract`, rejects private names, links and
+known credential patterns before requesting OIDC. `internal/ctl/publish.CI`
+separates the `TokenSource` port from the Actions HTTPS adapter; it denies
+authenticated redirects, bounds responses and never retries an uncertain upload.
+Public acceptance compares stable asset bytes and rejects the SPA fallback on
+unknown paths. The workflow uses Go commands; `scripts/pages` keeps only
+compatibility wrappers.
 
-La consola ya usa la API privada del edge para aplicaciones, identidades y
-estado. El cliente de releases consulta GitHub o un catálogo firmado por
-plataforma y restringe los hosts de descarga. El cliente y el ejecutor local
-están implementados en el árbol; el servicio público de `ozal.dev`, sus claves
-y su publicación no están desplegados ni aceptados. `GET /_/api/updates/status`
-informa un resultado anterior; `GET /_/api/updates/plan` y
-`POST /_/api/updates/jobs` sí consultan/inician un trabajo, pero solo si el
-host configuró el ejecutor. No confundir el reporte histórico con una
-comprobación en vivo.
+`internal/install` contains plans and filesystem/systemd adapters; the unit is
+embedded and matches the documented example. The staging test installs the real
+ELF under a prefix without accounts, root permissions or a running service.
+Release scripts only translate arguments to the trusted Go binary named by
+`OZAL_BIN`. `internal/cloudflare` contains pure plans and `certs` the HTTP
+adapter; mutations are per hostname/rule, with a private backup and a read
+before/after. Tests use local providers and authorize no real infrastructure
+change.
 
-Contrato objetivo para un servicio público de metadatos bajo `ozal.dev`:
+Trust snapshots of an upload in progress can outlive a disconnect; do not
+pretend that canceling from the browser reverts the server. An intent without an
+outcome means an unknown result, not success or a proven rollback. Secret
+references are not resolved back into config. Previews, generated PRs and real CI
+have their own tasks and acceptance.
 
-- `GET /api/v1/releases/{channel}/{os}/{arch}` devuelve JSON con `schema`,
+<a id="servicio-de-releases-y-configuración--contrato-objetivo-2026-10-30"></a>
+## Release service and configuration contract
+
+The console already uses the edge's private API for applications, identities and
+state. The release client queries GitHub or a signed per-platform catalog and
+restricts download hosts. Status and acceptance are tracked in `REL-019` and
+`REL-020`; this section defines the contract, not a deployed service.
+
+Target metadata service under `ozal.dev`:
+
+- `GET /api/v1/releases/{channel}/{os}/{arch}` returns JSON with `schema`,
   `channel`, `sequence`, `generated_at`, `expires_at`, `version`, `commit`,
   `published_at`, `prerelease`, `notes_url`, `migrations`, `min_version`, `os`,
-  `arch`, `archive_url`, `archive_sha256`, `archive_size`, `checksums_url` y
-  `signature_url`. La firma desprendida del documento se sirve en la misma URL
-  con sufijo `.sig`. No incluye secretos, identificadores de instalación ni
-  instrucciones ejecutables; las URLs usan HTTPS y hosts de descarga
-  explícitamente permitidos.
-- `GET /api/v1/announcements?lang={locale}` devuelve avisos públicos con
-  `id`, `published_at`, `title`, `body`, `severity` y `url`. Los avisos son
-  informativos: no cambian configuración ni se ejecutan como comandos.
-- El documento del catálogo y los checksums se firman con Ed25519. Cada
-  instalación conserva una clave pública fijada localmente y verifica firma,
-  hash, plataforma, secuencia, vencimiento y versión antes de instalar; TLS o
-  una respuesta de `ozal.dev` no reemplazan esa prueba.
-- Las consultas son anónimas, de solo lectura y sin telemetría. No se mandan
-  versión instalada, host, IP reenviada, usuario ni configuración. Cachear el
-  catálogo público es aceptable; el estado privado local continúa `no-store`.
-- Si `ozal.dev` no responde, login, políticas, rutas y tráfico ya configurados
-  continúan. La consola distingue un fallo remoto de un fallo al leer el
-  reporte local. No se instala automáticamente.
+  `arch`, `archive_url`, `archive_sha256`, `archive_size`, `checksums_url` and
+  `signature_url`. The detached signature of the document is served at the same
+  URL with a `.sig` suffix. It contains no secrets, installation identifiers or
+  executable instructions; URLs use HTTPS and explicitly allowed download hosts.
+- `GET /api/v1/announcements?lang={locale}` returns public notices with `id`,
+  `published_at`, `title`, `body`, `severity` and `url`. Notices are
+  informational: they change no configuration and are not executed as commands.
+- The catalog document and checksums are signed with Ed25519. Each installation
+  keeps a public key pinned locally and verifies signature, hash, platform,
+  sequence, expiry and version before installing; TLS or a response from
+  `ozal.dev` does not replace that proof.
+- Queries are anonymous, read-only and telemetry-free. Do not send the installed
+  version, host, forwarded IP, user or configuration. Caching the public catalog
+  is acceptable; private local state remains `no-store`.
+- If `ozal.dev` does not respond, login, policies, routes and already configured
+  traffic continue. The console distinguishes a remote failure from a failure to
+  read the local report. Nothing installs automatically.
 
-Este contrato no es una API desplegada: dominio operativo, publicación,
-claves y automatización de anuncios aún no están implementados ni aceptados.
-El edge web no recibe credenciales del servicio ni capacidad de ejecutar
-comandos; solo el ejecutor root-owned separado descarga e instala un plan que
-un operador revisó.
+This contract is not a deployed API: the operational domain, publication, keys
+and announcement automation are still pending. The web edge receives no service
+credentials and no command execution; only the separate root-owned executor
+downloads and installs a plan reviewed by an operator.
 
-La experiencia de consola usa un toast breve, no una página de configuración:
-cuando el reporte local confirma una versión disponible y tiene menos de 24
-horas, muestra su número y permite cerrar el aviso por el resto de la sesión.
-La consola consulta solo el reporte local (al abrirse y cada cinco minutos) y
-pide el plan al ejecutor local; el navegador no llama a `ozal.dev` ni descarga
-el binario. El permiso `updates` controla esta notificación; `updates.install`,
-una prueba de passkey reciente y el perfil del ejecutor controlan la
-instalación.
-El corte coordinado y los permisos del host siguen en `REL-019`; el servicio
-remoto, su clave y la entrega de avisos quedan pendientes. La instalación
-individual no se aplica al edge de túnel.
+The implemented format adds explicit OS/architecture, commit, artifact
+hash/size, catalog sequence and expiry, release notes, migrations and
+compatibility constraints. The catalog document is signed with the same Ed25519
+key pinned in each installation, and its checksums are verified again; a
+checksum signature alone does not prove that a channel is current or that its
+compatibility rules hold. Key rotation, minimum client version and local state
+against rollback are part of that format. An old date or version, an invalid
+signature, the wrong platform and an untrusted clock have explicit outcomes.
+[TUF](https://theupdateframework.io/docs/metadata/) is a reference for expiry,
+roles and trust; this implementation is not TUF and does not claim full
+resistance to key compromise. `ozal.dev` sees the connection's source IP; it
+needs no installation identifier or configuration in the query, and the
+service's log minimisation and retention must be defined.
 
-#### Actualizar desde la consola o la CLI sin SCP
+Publication and trust: a commit is the source of a candidate, not an order to
+update every installation. CI builds from a fixed ref, applies the gate,
+generates per-platform files and signs before announcing them. Propose `stable`
+and `preview` channels chosen by the operator, with unique ascending semver
+versions within the channel, full commit and immutable artifacts. Do not order
+only by `+<commit>`: build metadata does not change semver precedence. Never
+announce `preview` as stable or replace an artifact under the same version.
+Changing channel or downgrading requires an explicit decision, distinct from the
+automatic rollback of the current job.
 
-**Requisito del mantenedor, 2026-10-31:** poder gestionar una actualización
-visualmente y por comando; la VM de prueba descarga la versión por HTTPS desde
-el canal publicado. No debe necesitar el checkout, Go, Node ni una copia SCP
-desde la máquina de desarrollo. `REL-020` posee catálogo y experiencia;
-`REL-019` conserva verificación, ejecución privilegiada y compatibilidad de
-parejas. Lo siguiente describe lo implementado en el árbol y lo que sigue sin
-aceptación; no es una API desplegada ni un botón probado contra una VM limpia.
+The `ozal.dev` catalog can be static JSON generated by CI, without a database or
+remote execution service. Files can live in GitHub Releases or managed storage
+under the domain; always download with size, time and redirect limits to exact
+allowed hosts. The public runtime serves only metadata/files and never receives
+the signing key. The domain name provides a stable address; authenticity comes
+from the public key pinned in each installation through a trusted channel. Do
+not accept a new key only because the queried catalog delivered it.
 
-**Punto de partida comprobado en el código:**
+<a id="actualizar-desde-la-consola-o-la-cli-sin-scp"></a>
+### Updating from the console or the CLI
 
-| Parte | Disponible hoy | Falta para este recorrido |
-|---|---|---|
-| Descubrimiento | `cmd/ozal/update.go` consulta GitHub o un catálogo firmado por plataforma; `internal/release` decide por semver, verifica la firma del catálogo, vencimiento, secuencia, OS/arquitectura y checksums Ed25519. La consulta ya no descarga el archivo completo. `ozal.dev` está en los hosts permitidos. | Desplegar el servicio y el catálogo bajo `ozal.dev`, con claves y publicación automatizada; aceptar una descarga real. |
-| Binario por plataforma | El catálogo y el updater usan `runtime.GOOS/GOARCH`; el formato incluye hash y tamaño por artefacto. | Publicar y aceptar un release ARM64 firmado en la VM. El coordinador de parejas actual solo admite Linux/amd64; no trasladar esa suposición al host independiente. |
-| Reemplazo | `internal/upgrade` prepara `.next`, comprueba hash, valida config, detiene la unidad, respalda/migra DB, conserva `.bak-*`, reemplaza, inicia y comprueba salud; el ejecutor separado, el journal y el lock compartido están implementados. | Streaming a staging, presupuesto de espacio y prueba del ejecutable de `MainPID` implementados localmente; falta aceptar una aplicación/login reales y reconciliación tras `SIGKILL`/corte de energía. |
-| Consola | Toast, plan revisable, diálogo de fases/resultado, step-up de passkey, permiso `updates.install`, auditoría y endpoints del ejecutor. | Aceptación en navegador y VM limpia; no hay canal público ni clave desplegada. |
+`ozal update` implements the contract in the current tree. `-catalog URL` plus
+`-channel stable|preview` verifies a per-platform signed JSON catalog (detached
+Ed25519 signature, expiry, channel, OS/architecture, sequence, commit, archive
+hash and size) and `-state FILE` stores the **highest verified sequence and
+version**, even when the check installs nothing. `-plan FILE` writes the review
+with installed and candidate versions, platform, size, migrations, notes and
+hash; `-expect` and `-expect-sha256` refuse to install if the catalog changed,
+and a reviewed version that is already installed finishes without touching
+anything. A check without `-apply` does not download the whole archive.
 
-**Publicación y confianza.** Un commit es la fuente de una candidata, no una
-orden de actualizar cada instalación. CI construye desde un ref fijo, aplica el
-gate, genera archivos por plataforma y firma antes de anunciarlos. Proponer
-canales `stable` y `preview` elegidos por el operador, con versiones semver
-únicas y ascendentes dentro del canal, commit completo y artefactos inmutables.
-No usar solo `+<commit>` para ordenar: los metadatos de build no cambian la
-precedencia semver. Nunca anunciar `preview` como estable ni reemplazar un
-artefacto bajo la misma versión. Cambiar canal o retroceder de versión requiere
-una decisión explícita, distinta del rollback automático del trabajo actual.
+`-lock FILE` takes a non-blocking flock shared by the CLI, the executor and
+`ozal upgrade`. The child receives the descriptor through `ExtraFiles`, checks
+that it belongs to the same regular file and keeps the same open file
+description: if the parent dies during installation, the child keeps the flock.
+Each process closes its descriptor without `LOCK_UN`; exclusion ends when the
+last one closes. The descriptor is not accidentally inherited by migrations or
+`systemctl`. Invalid descriptors or descriptors from another file are rejected
+before reading the configuration. The regression kills the parent, verifies that
+a second process is still blocked and checks release when the child exits. A
+second concurrent update fails explicitly instead of competing for `.next`,
+migration or rollback. The lock is not a security boundary against root: it is
+exclusion to avoid corrupting an installation.
 
-El catálogo de `ozal.dev` puede ser JSON estático generado por CI, sin una base
-de datos ni servicio de ejecución remota. Los archivos pueden estar en GitHub
-Releases o en almacenamiento administrado bajo el dominio; descargar siempre
-con límites de tamaño, tiempo y redirecciones a hosts exactos permitidos. El
-runtime público sirve únicamente metadatos/archivos y nunca recibe la clave de
-firma. El nombre del dominio aporta una dirección estable; la autenticidad la
-prueba la clave pública fijada en cada instalación por un canal confiable.
-No aceptar una clave nueva solo porque la entrega el catálogo consultado.
+The executor (`ozal update-executor`) is a subcommand of the same binary started
+by `ozal-update-executor.service`, separate from `ozal.service`. It runs as root,
+reads a root-owned profile and offers only three operations over a private Unix
+socket: check the signed catalog, install the reviewed plan and read the durable
+job. The profile fixes socket, group, unit, binary, configuration, database,
+account, key, catalog base URL, channel, state, plan, jobs and lock. It rejects a
+profile, key, binary or binary directory writable by group or other accounts
+and, when running as root, requires those files and directories to be owned by
+root; a compromised `ozal` must not become root by replacing the executable.
 
-El formato implementado añade OS/arquitectura explícitos, commit,
-hash/tamaño de artefacto, secuencia y expiración del catálogo, notas del
-release, migraciones y restricciones de compatibilidad. El documento del
-catálogo va firmado con la misma clave Ed25519 fijada en cada instalación, y
-sus checksums se verifican otra vez; la firma de checksums por sí sola no
-acredita que un canal esté actualizado ni sus reglas de compatibilidad. Definir
-la rotación de claves, la versión mínima del cliente y el estado local contra
-retrocesos forma parte de ese formato. Fecha o versión vieja, firma inválida,
-plataforma errónea y reloj no confiable tienen resultados explícitos. [TUF](https://theupdateframework.io/docs/metadata/) es referencia
-para expiración, roles y confianza; esta implementación no es TUF ni declara
-resistencia completa al compromiso de claves. `ozal.dev` ve la IP de origen de
-la conexión; no necesita identificador de instalación ni configuración en la
-consulta, y se debe definir minimización/retención de logs del servicio.
+The executor routes are not a generic dispatcher: they accept no paths, commands,
+units, shell arguments or client URLs. A plan expires after ten minutes, is
+consumed once, and the updater rechecks catalog, version and hash under the lock
+before stopping the service. Jobs live in a JSON journal per ID with phases
+(`reviewing`, `staging`, `verifying`, `installing`, `complete`) and outcomes
+(`updated`, `rolled_back`, `failed`, `intervention_required`). An executor
+restart marks the job as requiring intervention, unless another updater still
+holds the lock; in that case it does not overwrite it. The web service still runs
+without root.
 
-**Una operación compartida por UI y comando.** `ozal update` implementa el
-contrato en el árbol actual. `-catalog URL -channel stable|preview` verifica un
-catálogo JSON firmado por plataforma (firma Ed25519 desprendida, vencimiento,
-canal, OS/arquitectura, secuencia, commit, hash y tamaño del archivo) y
-`-state FILE` guarda la **mayor secuencia y versión verificadas**, aunque la
-consulta no instale. `-plan FILE` escribe la revisión con versión instalada y
-candidata, plataforma, tamaño, migraciones, notas y hash; `-expect` y
-`-expect-sha256` se niegan a instalar si el catálogo cambió, y una versión
-revisada que ya está instalada termina sin tocar nada. Una consulta sin
-`-apply` no descarga el archivo completo.
+Console permissions: `updates` remains a read permission. Installing requires a
+separate `updates.install` tool that existing sessions do not inherit: a host
+login without a tool list receives the default set without it, and the first
+administrator (host bootstrap) receives all. `POST /_/api/updates/jobs` accepts
+only an administrator session opened with a passkey and a passkey proof less
+than five minutes old; it rejects `admin.token`, the host socket and logins
+without a passkey account. If the proof expired, the console calls
+`POST /_/api/admin/step-up/begin|finish`, which verifies an assertion from the
+same administrator and does not open a new session. Every accepted attempt goes
+through `recordMutationIntent` with the actor and emits `update.started`; host
+errors are not forwarded to the console.
 
-`-lock FILE` toma un flock no bloqueante compartido por la CLI, el ejecutor y
-`ozal upgrade`. El hijo recibe el descriptor por `ExtraFiles`, comprueba que
-corresponde al mismo archivo regular y conserva la misma descripción de archivo
-abierta: si el padre muere durante la instalación, el hijo mantiene el flock.
-Cada proceso cierra su descriptor sin `LOCK_UN`; la exclusión termina cuando
-cierra el último. El descriptor no se hereda accidentalmente a migraciones ni
-a `systemctl`. Descriptores inválidos o de otro archivo se rechazan antes de
-leer la configuración. La prueba de regresión mata al padre, comprueba que un
-segundo proceso sigue bloqueado y verifica la liberación al terminar el hijo. La
-segunda actualización concurrente falla explícitamente en vez de competir por
-`.next`, la migración o el rollback. El lock no es una frontera de seguridad
-frente a root: es exclusión para no corromper una instalación.
-
-El ejecutor implementado (`ozal update-executor`) es un subcomando del mismo
-binario iniciado por `ozal-update-executor.service`, separado de
-`ozal.service`. Corre como root, lee un perfil root-owned y ofrece solo tres
-operaciones por un socket Unix privado: revisar el catálogo firmado, instalar
-el plan revisado y leer el trabajo durable. El perfil fija socket, grupo,
-unidad, binario, configuración, DB, cuenta, clave, URL base del catálogo, canal,
-estado, plan, trabajos y lock. Rechaza un perfil, clave, binario o directorio
-del binario escribibles por grupo u otras cuentas y, al correr como root, exige
-que esos archivos y directorios sean de root; un `ozal` comprometido no debe
-poder convertirse en root reemplazando el ejecutable.
-
-Las rutas del ejecutor no son un despachador genérico: no aceptan paths,
-comandos, unidades, argumentos de shell ni URLs del cliente. Un plan vence a
-los diez minutos, se consume una sola vez y el updater vuelve a comprobar
-catálogo, versión y hash bajo el lock antes de detener el servicio. Los
-trabajos quedan en un journal JSON por ID con fases (`reviewing`, `staging`,
-`verifying`, `installing`, `complete`) y resultados (`updated`, `rolled_back`,
-`failed`, `intervention_required`). Un reinicio del ejecutor marca el trabajo
-como intervención necesaria, salvo que otro updater todavía tenga el lock; en
-ese caso no lo pisa. El servicio web sigue sin root.
-
-**Permisos de la consola.** El permiso `updates` sigue siendo de consulta.
-Instalar exige una herramienta separada `updates.install` que las sesiones
-existentes no heredan: un host login sin lista de herramientas recibe el
-conjunto por defecto sin ella, y el primer administrador (bootstrap del host)
-sí recibe todas. Además, `POST /_/api/updates/jobs` acepta únicamente una
-sesión de administrador abierta con passkey y con una prueba de passkey de
-menos de cinco minutos; rechaza el `admin.token`, el socket del host y los
-logins sin cuenta de passkey. Si la prueba caducó, la consola pide
-`POST /_/api/admin/step-up/begin|finish`, que verifica una aserción del mismo
-administrador y no abre una sesión nueva. Cada intento aceptado pasa por
-`recordMutationIntent` con el actor y emite `update.started`; los errores del
-host no se reenvían a la consola.
-
-Secuencia implementada, tanto para el botón como para la CLI:
+Implemented sequence for both the button and the CLI:
 
 ```text
-Comprobar catálogo → revisar versión y consecuencias → confirmar plan
-  → lock de instalación → descargar a staging privado → verificar firma/hash
-  → validar config y compatibilidad → preparar recuperación → detener Ozal
-  → migrar si corresponde → reemplazar binario → iniciar
-  → comprobar salud de admin y hash del ejecutable de MainPID → actualizado
-                             fallo → restaurar binario y DB previa si migró
-                                   → comprobar restauración
-                                   → revertido o intervención necesaria
+Check catalog → review version and consequences → confirm plan
+  → installation lock → download to private staging → verify signature/hash
+  → validate config and compatibility → prepare recovery → stop Ozal
+  → migrate if needed → replace binary → start
+  → check admin health and the MainPID executable hash → updated
+                             failure → restore binary and previous DB if migrated
+                                   → verify restoration
+                                   → rolled back or intervention required
 ```
 
-La descarga a staging escribe por bloques de 32 KiB y calcula SHA-256 durante
-la transferencia; no acumula el archivo completo en el heap de Go. Solo extrae después
-de comprobar tamaño y hash autenticados; los fallos ordinarios eliminan el
-archivo parcial y el binario incompleto. Límites: 512 MiB para el archivo y
-el binario; descompresión acotada a 512 MiB más 16 MiB de cabeceras/otros
-archivos. Los metadatos pequeños conservan límites propios en memoria. El staging usa el
-temporal privado (`TMPDIR` o `/tmp`); puede estar en tmpfs, y el presupuesto
-contabiliza su filesystem, no la memoria total del host. Antes
-de instalar también se exige que `version -json` del candidato verificado
-identifique a Ozal y coincida con la versión revisada (se tolera el prefijo
-`v`; los metadatos de build deben coincidir).
+Staging writes 32 KiB blocks and computes SHA-256 during transfer; it does not
+hold the whole archive in the Go heap. It extracts only after checking
+authenticated size and hash; ordinary failures remove the partial file and the
+incomplete binary. Limits: 512 MiB for the archive and the binary; extraction is
+bounded to 512 MiB plus 16 MiB for headers and other files. Small metadata keeps
+its own in-memory limits. Staging uses the private temporary directory (`TMPDIR`
+or `/tmp`); it may be on tmpfs, and the budget counts its filesystem, not total
+host memory. Before installing it also requires `version -json` of the verified
+candidate to identify Ozal and match the reviewed version (a `v` prefix is
+tolerated; build metadata must match).
 
-El presupuesto comprueba espacio disponible (`statfs`, bloques disponibles al
-usuario) antes de descargar, antes de extraer y antes de crear `.next` o detener
-el servicio. Descarga: tamaño anunciado, o el límite de 512 MiB si GitHub no
-informa tamaño. Extracción: tamaño del binario indicado por la cabecera tar.
-Instalación: tamaño nuevo más tamaño anterior en el filesystem del binario;
-tres veces la suma de DB y WAL en el de la base, para snapshot, migración y restauración.
-Las necesidades que comparten dispositivo se suman y se deja una reserva de
-64 MiB por filesystem, no por archivo. Un fallo al consultar capacidad o un
-presupuesto insuficiente se rechaza explícitamente. Esto no reserva bloques:
-cuotas, otros escritores y crecimiento de una migración pueden causar ENOSPC
-más tarde; no equivale a una prueba de disco lleno o corte de energía.
+The budget checks available space (`statfs`, user-available blocks) before
+downloading, before extracting and before creating `.next` or stopping the
+service. Download: announced size, or the 512 MiB limit if GitHub does not
+report one. Extraction: binary size from the tar header. Installation: new size
+plus previous size on the binary filesystem; three times the sum of database and
+WAL on the database filesystem, for snapshot, migration and restoration. Needs
+that share a device are added and 64 MiB are reserved per filesystem, not per
+file. A capacity query failure or an insufficient budget is rejected explicitly.
+This does not reserve blocks: quotas, other writers and migration growth can
+still cause ENOSPC; it is not a full-disk or power-loss test.
 
-Tras iniciar, la salud de admin y el estado activo no bastan: se obtiene el
-`MainPID` de systemd y se compara SHA-256 de `/proc/<pid>/exe` con el candidato.
-Se comprueba que PID e inode no cambien durante la lectura. Así se prueba la
-imagen exacta de la versión revisada, incluso con builds del mismo número.
-El rollback verifica igualmente el hash anterior; si solo vuelve la salud
-pero no se acredita la imagen, queda como intervención necesaria. Un `-apply`
-ya corriente también verifica el proceso antes de dar éxito sin cambios; una
-consulta sin `-apply` sigue siendo solo metadatos. No hay endpoint nuevo de
-versión ni exposición de información del proceso en el listener público.
-El updater que inicia la operación aplica también el presupuesto antes de
-invocar al candidato, captura el hash anterior y verifica por su cuenta las
-imágenes instaladas/en ejecución tras éxito o rollback. No confía solamente
-en el código de salida de un `upgrade` de una versión anterior: si el
-candidato afirma éxito o reversión pero esa prueba falla, el resultado durable
-es `intervention_required`, sin afirmar una restauración que no se comprobó.
-La aplicación protegida y el login reales siguen pendientes de aceptación.
-Mantener el enlace
-`/usr/local/bin/ozal` hacia la ruta instalada; el reemplazo ocurre en el destino
-verificado, con rename en el mismo filesystem, preservando propietario y
-permisos. Configuración, runtime, claves, certificados y datos de Pages no se
-regeneran ni se sustituyen por defaults del release. Registrar el checkpoint y
-la política de compatibilidad de DB; revertir solo el binario no es seguro si
-hubo migraciones. No prometer rollback manual posterior sobre una DB que ya
-recibió nuevas escrituras: necesita su propia política de pérdida de datos y
-restauración. Fallos de disco, rollback y falta de espacio se reportan como
-tales, conservando evidencia para recuperación.
+After starting, admin health and active state are not enough: the updater reads
+`MainPID` from systemd and compares the SHA-256 of `/proc/<pid>/exe` with the
+candidate. It checks that PID and inode do not change during the read. This
+proves the exact reviewed image, even with builds of the same version. Rollback
+verifies the previous hash the same way; if only health returns but the image is
+not proven, the result is intervention required. An already-current `-apply`
+also verifies the process before reporting success without changes; a check
+without `-apply` remains metadata only. There is no new version endpoint and no
+process information exposed on the public listener. The updater that starts the
+operation also applies the budget before invoking the candidate, captures the
+previous hash and verifies installed/running images after success or rollback. It
+does not trust only the exit code of an older `upgrade`: if the candidate claims
+success or rollback but that proof fails, the durable result is
+`intervention_required`, without claiming an unverified restoration. Real
+protected application and login acceptance remain pending.
 
-**Experiencia visual implementada en el árbol:** el toast existente abre
-“Revisar actualización”, un diálogo con versión instalada y candidata, canal,
-plataforma, tamaño, notas, aviso de migración y el botón “Actualizar”. Si falta
-la prueba de passkey, la pide y reintenta una vez. Muestra fase e ID, un texto
-estable por fase y un resultado inequívoco: actualizado, restaurado, fallido o
-intervención necesaria; no hay porcentajes inventados ni éxito por enviar una
-solicitud. Durante el reinicio muestra “Esperando que Ozal vuelva” y sigue
-consultando el journal por ID; cerrar el diálogo no cancela el trabajo. Si la
-sesión se perdió, pide volver a entrar. Sin conexión se distingue “no pude
-consultar” de “ya está actualizado”; el tráfico normal sigue.
+Keep the `/usr/local/bin/ozal` link to the installed path; replacement happens at
+the verified destination, with a rename on the same filesystem, preserving owner
+and permissions. Configuration, runtime, keys, certificates and Pages data are
+not regenerated or replaced by release defaults. Record the checkpoint and the
+database compatibility policy; reverting only the binary is unsafe after
+migrations. Do not promise a later manual rollback over a database that already
+received new writes: it needs its own data-loss and restoration policy. Disk
+failures, rollback and lack of space are reported as such, preserving evidence
+for recovery.
 
-El journal separa el estado del trabajo de la versión instalada en vivo. La
-prueba de imagen del proceso está implementada localmente; la aceptación real
-en navegador/VM y la reconciliación tras `SIGKILL` o corte de energía siguen
-pendientes. El flujo individual no se aplica al edge de túnel.
+Console experience: the existing toast opens "Review update", a dialog with the
+installed and candidate versions, channel, platform, size, notes, migration
+warning and the "Update" button. If the passkey proof is missing, it requests it
+and retries once. It shows the phase and ID, one stable text per phase and an
+unambiguous result: updated, restored, failed or intervention required; there
+are no invented percentages or success for submitting a request. During restart
+it shows "Waiting for Ozal to return" and keeps polling the journal by ID;
+closing the dialog does not cancel the job. If the session was lost, it asks the
+operator to sign in again. Offline, it distinguishes "could not check" from
+"already updated"; normal traffic continues.
 
-**Aceptación:** dos versiones publicadas desde commits fijos y firmadas para
-Linux/arm64, instalación A en VM limpia y actualización a B por la consola;
-repetir desde A mediante CLI sin checkout ni SCP. Probar firma/hash alterados,
-plataforma errónea, catálogo viejo/vencido, red cortada, doble confirmación,
-config incompatible, permisos/espacio insuficientes, fallo al iniciar B,
-restauración y reconciliación tras interrupción. Verificar estado persistente,
-binario realmente ejecutado, login y app permitida/denegada. Parejas mantienen
-el coordinador `REL-019`: no aplicar el flujo individual al edge de túnel;
-ampliar y aceptar plataformas por nodo antes de ofrecerlo allí.
+The journal separates job state from the live installed version. Browser/VM
+acceptance and reconciliation after `SIGKILL` or power loss remain in the
+tracker. The single-host flow does not apply to the tunnel edge.
 
-Autenticar/limitar/registrar intent requerido **antes de consumir el body**.
-Archivos regulares, límites de cantidad/tamaño, no enlaces/traversal, rutas
-internas/secretos rechazados, manifest inmutable y activación atómica. Site
-rollback activa un artefacto retenido, no cambia DNS ni DB. `_headers` y
-`_redirects` se validan/aplican pero no se sirven como archivos públicos.
+Acceptance: two published versions from fixed commits, signed for Linux/arm64,
+installation A on a clean VM and update to B from the console; repeat from A
+through the CLI without a checkout or SCP. Test altered signature/hash, wrong
+platform, old/expired catalog, dropped network, double confirmation,
+incompatible config, insufficient permissions/space, failure to start B,
+restoration and reconciliation after interruption. Verify persistent state, the
+binary actually running, login and an allowed/denied app. Pairs keep the
+`REL-019` coordinator: do not apply the single-host flow to the tunnel edge;
+expand and accept platforms per node before offering it there.
 
-El operador reutiliza `internal/ctl/artifact`: empaqueta una instantánea
-acotada con `pages.Pack`, valida con `pages.Extract`, rechaza nombres privados,
-enlaces y patrones conocidos de credenciales antes de solicitar OIDC.
-`internal/ctl/publish.CI` separa el puerto `TokenSource` del adaptador HTTPS de
-Actions; niega redirects autenticados, limita respuestas y nunca reintenta una
-subida incierta. La aceptación pública compara bytes de un asset estable y
-rechaza fallback SPA en rutas desconocidas. El workflow usa comandos Go;
-`scripts/pages` conserva sólo wrappers de compatibilidad.
+<a id="auditoria"></a>
+## Audit
 
-`internal/install` contiene planes y adaptadores de filesystem/systemd; el unit
-se embebe y coincide con el ejemplo documentado. La prueba de staging instala
-el ELF real bajo un prefijo sin cuentas, permisos root ni servicio en ejecución.
-Los scripts de release sólo traducen argumentos al Go confiable indicado por
-`OZAL_BIN`. `internal/cloudflare` contiene planes puros y `certs` el adaptador
-HTTP; las mutaciones son por hostname/regla específica, con backup privado y
-lectura antes/después. Las pruebas usan proveedores locales y no autorizan
-cambios reales de infraestructura.
+Activity (`events.Broker`) is bounded and can lose events. The durable JSONL
+journal has sequence/hash/prev, an exclusive lock, private permissions and
+persistence according to mode. `required` waits for append+sync before forwarding
+or mutating; failure is 503. `best_effort` accepts loss and reports it through an
+independent channel.
 
-Snapshots de confianza de un upload en curso pueden sobrevivir al disconnect;
-no fingir que cancelarlo desde el navegador revierte el servidor. Un intent sin
-outcome significa resultado desconocido, no éxito ni rollback probado.
-Refs de secretos no se resuelven de vuelta al config. Previews, PRs generados
-y CI real tienen tareas/aceptación propias.
+Format v1: each record includes `v`, `log_id`, `seq`, `time`, `type`, safe fields
+and `prev`/`hash`. Exact bytes are hashed, not a universal canonical JSON. Domain
+`ozal-audit-v1\x00`, big-endian uint64 sequence, decoded prev, big-endian uint64
+length and compact JSON without the final hash field. The code in
+[audit](../internal/audit) and its tests fix the interoperable encoding. Do not
+log cookies, secrets, bodies, challenges or raw errors.
 
-## Auditoria
+An Ed25519 checkpoint signs payload v1 with domain
+`ozal-audit-checkpoint-v1\x00` and order `v, log_id, seq, hash, time, key_id`.
+A checkpoint and a public key pinned outside the host's authority are required;
+the tool verifies signature/chain, not that independence by itself. Do not call
+it public transparency or protection against a compromised root.
 
-Activity (`events.Broker`) es acotado y puede perder eventos. El journal durable
-JSONL tiene secuencia/hash/prev, lock exclusivo, permisos privados y persistencia
-según modo. `required` espera append+sync antes de reenviar o mutar; fallo 503.
-`best_effort` admite pérdida y la informa por un canal independiente.
+A durable administrative intent records an attempt, not a commit. Publishing
+adds an outcome without a common transaction across database, files and JSONL;
+if the result is stored but the append fails, do not undo content by pretending
+atomicity. Login/certificate/tunnel coverage and rotation/cadence/retention are
+checked by active tasks, not inferred from a list of desired events.
 
-Formato v1: cada record incluye `v`, `log_id`, `seq`, `time`, `type`, campos
-seguros y `prev`/`hash`. Se hashéan bytes exactos, no JSON canónico universal.
-Dominio `ozal-audit-v1\x00`, secuencia uint64 big endian, prev decodificado,
-longitud uint64 big endian y JSON compacto sin el campo hash final. El código
-de [audit](../internal/audit) y sus tests fijan la codificación interoperable.
-No registrar cookies, secretos, cuerpos, desafíos ni errores crudos.
+An incomplete tail is not repaired at startup: stop the writer, run
+`audit repair` in plan mode and then `-apply`, and check the chain. Interior
+corruption or an invalid hash is not accepted as a repairable truncated tail.
+Offline verification and checkpoints respect the lock.
+[Security](security.md#audit-and-privacy).
 
-Checkpoint Ed25519 firma payload v1 con dominio
-`ozal-audit-checkpoint-v1\x00` y orden `v, log_id, seq, hash, time, key_id`.
-Se necesita checkpoint y clave pública fijada fuera de la autoridad del host;
-la herramienta verifica firma/cadena, no acredita esa independencia por sí sola.
-No llamarlo transparencia pública ni protección contra un root comprometido.
+<a id="propuestas-pendientes"></a>
+## Open proposals
 
-Intent administrativo durable registra intento, no commit. Publicación agrega
-outcome sin una transacción común entre DB, archivos y JSONL; si el resultado
-se guarda pero falla el append, no deshacer contenido fingiendo atomicidad.
-La cobertura de login/certificados/túnel y la rotación/cadencia/retención se
-comprueban con las tareas activas, no se infieren de una lista de eventos deseados.
+<a id="identidad-sin-contraseña-y-alternativas-mfa"></a>
+### Passwordless identity and MFA alternatives
 
-Un tail incompleto no se repara al arrancar: detener writer, ejecutar
-`audit repair` en modo plan y después `-apply`, comprobar cadena. Corrupción
-interior o hash inválido no se acepta como tail truncado reparable. Verificación
-y checkpoints offline respetan el lock. [Seguridad](security.md#auditoria-y-privacidad).
+**Maintainer decision 2026-10-31 (option A): Ozal remains passwordless.** Without
+WebAuthn or an OIDC provider under a trust contract, Ozal does not promise MFA.
+First access is solved with guidance and host access, not with a new method.
+TOTP comes after the MVP and only as a single-factor method. Tasks: `ID-017`
+(authenticator guidance and first access), `ID-018` (explicit MFA policy),
+`ID-019` (single-factor TOTP) and `ID-020` (own authenticator, idea). Status is
+tracked there.
 
-## Propuestas pendientes
+Before the ceremony, in the console, login, enrolment and devices, explain what
+works: system or browser passkey, password manager, security key and, when the
+browser offers it, the phone. Capability detection
+([W3C](https://www.w3.org/TR/webauthn-3/)) only orders or highlights options: it
+never hides or blocks the ceremony, and if the browser does not answer or answers
+partially, all are shown. A `NotAllowedError` or a cancelled ceremony offers the
+same guidance. Do not promise that every browser or manager offers a specific
+option.
 
-### Identidad sin contraseña y alternativas MFA
+First access from the host: while no administrator exists, the console explains
+that `console login` gives temporary host-authorized access and that the
+persistent account needs a passkey; an unfinished `console enrol` link does not
+leave the installation without a way out. The temporary session creates no
+account and does not demonstrate MFA; recovery remains host-only (`UI-004`).
+Administrative and visitor identities stay separate.
 
-**Decisión del mantenedor 2026-10-31 (opción A): Ozal sigue sin contraseñas.**
-Sin WebAuthn ni un proveedor OIDC con contrato de confianza no se promete MFA.
-El primer acceso se resuelve con guía y acceso desde el host, no con un método
-nuevo. TOTP queda después del MVP y solo como método de un factor. Tareas:
-`ID-017` (guía de autenticadores y primer acceso), `ID-018` (política MFA
-explícita), `ID-019` (TOTP de un factor) e `ID-020` (autenticador propio, idea).
-Nada de esto está implementado.
+Real phone-by-QR test: with RP ID `ozal.localhost` through the SSH tunnel and on
+the public login. Until that result exists, the guide does not present the QR as
+the solution for Linux. `ozal.localhost` over SSH resolves to the machine opening
+the tunnel, not to the phone; the phone only acts as an authenticator for that
+browser. The administrative listener stays on loopback.
 
-**Observación:** la instalación de prueba en una VM Linux ARM64 permitió
-iniciar el servicio y entrar a la consola con `console login`. En el equipo
-cliente, Firefox y Chromium pidieron una llave de seguridad y no se completó el
-registro de la primera passkey (`console enrol`). Ambas ceremonias exigen
-credencial residente y verificación del usuario
-([gate](../internal/passkey/gate.go), [consola](../internal/admin/identities.go)).
-Linux de escritorio no trae un autenticador de plataforma: sin gestor de
-contraseñas con passkeys, cuenta de navegador con passkeys o llave, el navegador
-solo ofrece la llave o, según navegador, el teléfono por QR (hybrid). La
-consola no detecta ese caso ni lo explica. Esto no demuestra incompatibilidad
-general de esos navegadores, y la VM no es el bloqueo: la ceremonia ocurre en el
-navegador y autenticador del cliente. La aceptación real sigue pendiente
-(`REL-012`, `UI-006`).
+**Separate block: explicit MFA policy (`ID-018`).** A route may require MFA or
+phishing resistance. A passkey counts only with user verification checked in the
+ceremony. An OIDC session does not prove which factors the provider used: it
+counts only if its issuer has a configured contract (accepted `acr`/`amr` values
+and their meaning); without a contract or a claim, it is not MFA. `policy
+explain` names the reason. This depends on the issuer separation of `ID-014`.
 
-**Requisito de MFA:** al menos dos factores de categorías distintas
-(conocimiento, posesión, inherencia). Una passkey con verificación del usuario
-combina posesión con PIN o biometría. TOTP, un código por correo o una
-aprobación push son, por sí solos, posesión. El PIN o la biometría que
-desbloquean una aplicación TOTP no cuentan si Ozal no recibe evidencia. Los
-códigos manuales pueden retransmitirse en un ataque de phishing; no equivalen a
-WebAuthn. Ver [NIST: factores](https://pages.nist.gov/800-63-4/sp800-63/model/)
-y [resistencia al phishing](https://pages.nist.gov/800-63-4/sp800-63b.html).
+**After the MVP:**
 
-**Por qué A:** sin un cliente propio, el único segundo factor verificable que
-acompaña a TOTP es un secreto memorizado comprobado por el servidor, es decir,
-una contraseña (opción B, descartada). La otra vía técnica es un autenticador
-criptográfico multifactor propio o integrado, con clave en el dispositivo y
-activación local ([NIST](https://pages.nist.gov/800-63-4/sp800-63b.html));
-exige construir o integrar un cliente y queda como idea (`ID-020`): no una
-extensión de passkeys ni un gestor propio, sino un autenticador de dispositivo
-del agente de Ozal con la clave en TPM o Secure Enclave, ligado a la CA privada
-y al acceso a infraestructura. Para quien no tiene autenticador se sugieren
-gestores existentes, incluidos libres y autohospedables, sin depender de uno.
+- **Single-factor TOTP (`ID-019`).** It is not an extension of an
+  `access.methods` value: it requires enrolment from an authenticated session or
+  an invitation, a secret protected at rest, a bounded clock window, attempt
+  limits, rejection of reused codes, sessions with their own `amr`, revocation
+  and recovery. It is valid only on routes that explicitly accept it, never on
+  the console or where MFA is required (`ID-018`).
+- **Email.** A message port and configurable SMTP (`ID-002`), a self-hosted relay
+  or a chosen provider, with no built-in SMTP server. `ID-001` does not change:
+  email only starts passkey enrolment. Using it for recurring login still needs a
+  maintainer decision.
+- **OIDC.** Delegated login to a provider (`ID-007`) and Ozal as a provider
+  (`ID-004`) remain separate; adding a method does not implement `ID-004`.
+- **Okta-style push**, outside the MVP. Before treating it as a factor, decide
+  client and transport, enrolment and revocation, a request-bound short-lived
+  challenge, fatigue, PIN/biometric verification, the evidence Ozal receives and
+  recovery. Telegram is an integration, not an authenticator. Okta distinguishes
+  push with and without user verification
+  ([documentation](https://help.okta.com/oie/en-us/content/topics/identity-engine/password-optional/mfa-for-passwordless.htm)).
 
-**MVP:**
+**Product wording:** "No passwords; MFA with passkeys (your device plus
+fingerprint or PIN)". Publish what the client team needs (system or browser
+passkey, manager, key, phone when the browser offers it, or the organization's
+identity provider) and show per route the level of each method: phishing
+resistant (passkey), according to the issuer contract (OIDC) and one factor (TOTP
+or email, when they exist). Do not claim MFA for single-factor methods,
+equivalence between TOTP and passkeys, Telegram as MFA, or phishing resistance
+outside WebAuthn.
 
-- **Guía de autenticadores (`ID-017`).** Antes de la ceremonia, en consola,
-  login, enrolamiento y dispositivos, explicar qué sirve: passkey del sistema o
-  del navegador, gestor de contraseñas, llave de seguridad y, cuando el
-  navegador lo ofrezca, el teléfono. La detección de capacidades
-  ([W3C](https://www.w3.org/TR/webauthn-3/)) solo
-  ordena o destaca opciones: nunca las oculta ni bloquea la ceremonia, y si el
-  navegador no responde o responde de forma incompleta se muestran todas. Un
-  `NotAllowedError` o una ceremonia cancelada ofrece la misma guía. No prometer
-  que todos los navegadores o gestores ofrezcan una opción concreta.
-- **Primer acceso desde el host (`ID-017`).** Mientras no exista administrador,
-  la consola explica que `console login` da acceso temporal autorizado desde el
-  host y que la cuenta persistente necesita una passkey; el enlace de
-  `console enrol` que no se completa no deja la instalación sin salida. La sesión
-  temporal no crea cuenta ni demuestra MFA, y la recuperación sigue siendo solo
-  del host (`UI-004`). Identidades administrativas y de visitantes siguen
-  separadas.
-- **Prueba real del teléfono por QR (`ID-017`).** Con RP ID `ozal.localhost` a
-  través del túnel SSH y en el login público. Hasta tener ese resultado, la guía
-  no presenta el QR como la solución para Linux. `ozal.localhost` por SSH
-  resuelve al equipo que abre el túnel, no al teléfono; el teléfono solo actúa
-  como autenticador de ese navegador. El listener administrativo sigue en
-  loopback.
+**Acceptance:** clean VM, first administrator and recovery, a real browser
+without a platform authenticator, phone by QR, enrolment and revocation,
+insufficient and allowed methods, a real OIDC provider if enabled, restart, and
+allowed/denied access without logging credentials. Virtual authenticators and a
+health response do not replace those tests.
 
-**Bloque separado: política MFA explícita (`ID-018`).** Una ruta puede exigir
-MFA o resistencia al phishing. Passkey cuenta solo con verificación del usuario
-comprobada en la ceremonia. Una sesión OIDC no prueba qué factores usó el
-proveedor: cuenta solo si su emisor tiene un contrato configurado (valores de
-`acr`/`amr` aceptados y su significado); sin contrato o sin afirmación, no es
-MFA. `policy explain` nombra el motivo. Depende de la separación por emisor de
-`ID-014`.
+<a id="alta-login-cli-y-recuperación-revisión-2026-10-31"></a>
+### Enrolment, login, CLI and recovery contract
 
-**Después del MVP:**
+This contract covers enrolment, login, CLI access and recovery. It does not
+expand scope: what is not in the MVP block remains a proposal.
 
-- **TOTP de un factor (`ID-019`).** No es extender un valor de
-  `access.methods`: requiere enrolamiento desde una sesión autenticada o una
-  invitación, secreto protegido en reposo, ventana de reloj acotada, límite de
-  intentos, rechazo de códigos repetidos, sesiones con `amr` propio, revocación
-  y recuperación. Solo vale en rutas que lo acepten expresamente, nunca en la
-  consola ni donde se exija MFA (`ID-018`).
-- **Correo.** Puerto de mensajes y SMTP configurable (`ID-002`), relay propio o
-  proveedor elegido, sin servidor SMTP incorporado. `ID-001` no cambia: el
-  correo solo inicia el enrolamiento de una passkey. Usarlo para iniciar sesión
-  de forma recurrente sigue pendiente de decisión del mantenedor.
-- **OIDC.** Login delegado en un proveedor (`ID-007`) y Ozal como proveedor
-  (`ID-004`) siguen separados; añadir un método no implementa `ID-004`.
-- **Push estilo Okta**, fuera del MVP. Antes de tratarlo como factor hay que
-  decidir cliente y transporte, enrolamiento y revocación, desafío ligado a la
-  solicitud y de corta duración, fatiga, verificación de PIN/biometría,
-  evidencia que recibe Ozal y recuperación. Telegram es integración, no
-  autenticador. Okta distingue push con y sin verificación del usuario
-  ([documentación](https://help.okta.com/oie/en-us/content/topics/identity-engine/password-optional/mfa-for-passwordless.htm)).
+- **Resident credential and MFA are different requirements.** Ozal requires both
+  ([gate](../internal/passkey/gate.go),
+  [console](../internal/admin/identities.go)). The resident credential allows
+  account discovery without typing an identifier; user verification supplies
+  the second factor. An authenticator capable of MFA without resident credentials
+  is not weak: it is outside the identifierless login choice.
+- **Leaving the lockout is not completing access.** The guidance (`ID-017`)
+  explains the exits; it authenticates nobody. `NotAllowedError` groups
+  cancellation, timeout and absence of an authenticator on purpose, so Ozal
+  cannot claim which one occurred; other errors (`SecurityError` for domain or
+  RP ID, `InvalidStateError` for an already registered passkey, `NotSupportedError`)
+  do allow their own message.
+- **Enrolment is separate from login.** An enrolment or recovery link expires,
+  works once and authorizes registering a passkey; it is not a factor. Expiry and
+  `passkey.registered`/`user.recovered` alerts reduce the risk of a stolen link,
+  but do not prevent another person from using it first.
+- **Where factors are verified.** Passkey with UV: Ozal checks the signature
+  (possession) and the UV bit asserted by the authenticator (local PIN or
+  biometrics). OIDC does not imply MFA automatically: a provider may
+  authenticate with MFA, but Ozal recognizes it only with reliable evidence under
+  a per-issuer contract (`ID-018`). `console login`, links, TOTP, email, device
+  cookies and API keys are at most possession.
+- **Recovery is an alternative authority.** Finishing with a new passkey does not
+  prove that the person recovering is the previous holder: whoever controls the
+  mechanism can replace the credentials. Recovery explicitly trusts the issuer
+  (the host operator through the socket and, for administrators, another
+  administrator with the target's tools from the console), replaces credentials
+  and invalidates previous sessions. Replacement and revocation complete
+  together. Administrator recovery revokes passkeys and retires other recovery
+  links in the same transaction and closes in-memory sessions after commit.
+  Visitor recovery (`user invite -recover`) does the same in the transaction that
+  inserts the new passkey (`SEC-023`). Before the prompt,
+  `POST /_/auth/enrol/info` validates the link without consuming it and returns
+  only `recovery` (no identity or token), with exact Origin, a bounded JSON POST
+  and `no-store`. The page waits for that response and, for recovery, explains
+  passkey replacement, session closure and invalidation of other links; the
+  button says **Replace my passkeys**. An error allows retrying the query but
+  never opens the prompt automatically. `Enrol` returns whether a recovery was
+  confirmed from the transaction that consumes the link: only then is
+  `user.recovered` emitted, with the subject in `actor` and
+  `synced`/`device_bound` in `code`, instead of `passkey.registered`. A storage
+  failure emits no success and keeps previous access. The console names the
+  recovery and its consequences; the alert bridge delivers it when configured,
+  without links or internal errors. It is the existing structured stream, not an
+  atomic SQLite write or a delivery guarantee: a gap between commit and emission
+  can lose the event and the alert queue is bounded. The signed journal coverage
+  is not expanded here (`AUD-001`/`AUD-002`).
+- **CLI, outside this block.** If approved, it is a delegated credential, never a
+  web session or MFA. With a local browser, authorization code + PKCE with a
+  loopback redirect ([RFC 8252](https://www.rfc-editor.org/rfc/rfc8252)): PKCE
+  binds code redemption to the requester, not to the machine; binding the token to
+  a client key is an additional measure (DPoP). Without a browser, Device
+  Authorization Grant ([RFC 8628](https://www.rfc-editor.org/rfc/rfc8628)):
+  approval requires a recent passkey, but does not remove consent phishing (the
+  victim can approve a request started by someone else); context, minimum scopes
+  and a short lifetime reduce it. The device name declared by the client is
+  shown as unverified. It builds on `ID-016`.
 
-**Presentación del producto:** "Sin contraseñas; MFA con passkeys (tu
-dispositivo más huella o PIN)". Publicar qué necesita el equipo cliente
-(passkey del sistema o navegador, gestor, llave, teléfono cuando el navegador
-lo ofrezca, o el proveedor de identidad de la organización) y mostrar por ruta
-el nivel de cada método: resistente al phishing (passkey), según contrato del
-emisor (OIDC) y un factor (TOTP o correo, cuando existan). No afirmar MFA para
-métodos de un factor, equivalencia de TOTP con passkey, Telegram como MFA ni
-resistencia al phishing fuera de WebAuthn.
+**Limit that remains:** a client without a compatible WebAuthn authenticator and
+without OIDC under a contract has no everyday passwordless access with MFA.
+Without client software or a password, the server verifies possession only. Its
+exits are obtaining an authenticator, using the organization's provider under
+contract, accepting one factor on specific routes (`ID-019`, pending decision,
+never on the console) or an own authenticator (`ID-020`, idea).
 
-**Aceptación:** VM limpia, primer administrador y recuperación, navegador real
-sin autenticador de plataforma, teléfono por QR, enrolamiento y revocación,
-métodos insuficientes y permitidos, proveedor OIDC real si se activa, reinicio,
-y acceso permitido/denegado sin registrar credenciales. Los autenticadores
-virtuales y una respuesta de salud no sustituyen esas pruebas.
+**MVP block:** real acceptance of `ID-021` with explicit `admin.login_host`;
+distinguished errors and a second passkey suggested after the first enrolment in
+`ID-017`; recovery documented as host authority with `SEC-023` resolved. Out:
+CLI, own agent, push and new factors.
 
-#### Alta, login, CLI y recuperación (revisión 2026-10-31)
+**Block acceptance:** binary on a clean Linux VM without a domain
+(`ozal.localhost` through the tunnel) and with an HTTPS domain; restart between
+steps. Real clients: Firefox and Chromium on Linux without an authenticator (see
+the guide, leave the dialog and know what to do, even if they do not complete
+access), Linux with KeePassXC, Bitwarden over HTTPS and on localhost (explained
+failure), macOS, Windows Hello, phone by QR and a FIDO2 key with PIN. Scenarios:
+first administrator, cancellation, second authenticator, revocation that closes
+sessions, total loss with recovery (previous passkeys and sessions stop working),
+expired/reused/foreign-origin link, and no secret in public URLs, logs or events.
 
-Contrato tras analizar la prueba en la VM y su revisión. No amplía el alcance:
-lo que no está en el bloque MVP queda como propuesta.
+<a id="passkeys-de-administrador-en-el-host-de-login-https-id-021"></a>
+### Administrator passkeys on the HTTPS login host (`ID-021`)
 
-- **Credencial residente y MFA son requisitos distintos.** Ozal exige ambos
-  ([gate](../internal/passkey/gate.go), [consola](../internal/admin/identities.go)).
-  La residente permite descubrir la cuenta sin escribir un identificador; la
-  verificación del usuario aporta el segundo factor. Un autenticador capaz de
-  MFA sin credenciales residentes no es débil: queda fuera por la elección de
-  login sin identificador.
-- **Salir del bloqueo no es completar el acceso.** La guía (`ID-017`) explica
-  las salidas; no autentica a nadie. `NotAllowedError` agrupa cancelación,
-  tiempo vencido y ausencia de autenticador a propósito, así que Ozal no puede
-  afirmar cuál ocurrió; otros errores (`SecurityError` por dominio o RP ID,
-  `InvalidStateError` por passkey ya registrada, `NotSupportedError`) sí admiten
-  un mensaje propio.
-- **Alta separada del login.** Un enlace de alta o de recuperación vence, sirve
-  una vez y autoriza registrar una passkey; no es un factor. Vencimiento y
-  alertas `passkey.registered` y `user.recovered` reducen el riesgo de un enlace
-  robado, pero no impiden que otra persona lo use primero.
-- **Dónde se verifican los factores.** Passkey con UV: Ozal comprueba la firma
-  (posesión) y el bit UV que afirma el autenticador (PIN o biometría local).
-  OIDC no implica MFA automáticamente: un proveedor puede autenticar con MFA,
-  pero Ozal solo lo reconoce con evidencia confiable bajo un contrato por
-  emisor (`ID-018`). `console login`, enlaces, TOTP, correo, cookies de
-  dispositivo y API keys son, como mucho, posesión.
-- **Recuperación es una autoridad alternativa.** Terminar con una passkey
-  nueva no demuestra que quien recupera sea el titular anterior: quien
-  controla el mecanismo puede sustituir las credenciales. La recuperación
-  confía explícitamente en quien la emite (el operador del host por el socket
-  y, para administradores, también otro administrador con las herramientas
-  del destino desde la consola), sustituye las credenciales e invalida las
-  sesiones anteriores. Sustitución y revocación se completan juntas. Estado
-  2026-10-31: la recuperación de administradores revoca passkeys y retira
-  otros enlaces de recuperación en la misma transacción y cierra las sesiones
-  en memoria tras el commit. La de visitantes (`user invite -recover`) solo
-  agregaba una passkey; desde `SEC-023` revoca las anteriores, cierra las
-  sesiones (guardadas en la base) y retira otros enlaces de recuperación en
-  la misma transacción que inserta la nueva.
-  Antes del prompt, `POST /_/auth/enrol/info` valida el enlace sin consumirlo
-  y devuelve únicamente `recovery` (sin identidad ni token), con Origin exacto,
-  POST JSON acotado y `no-store`. La página espera esa respuesta y, si es
-  recuperación, explica la sustitución de passkeys, el cierre de sesiones y
-  la invalidación de otros enlaces; el botón dice **Replace my passkeys**.
-  Un error permite volver a consultar, nunca abre automáticamente el prompt.
-  `Enrol` devuelve si se confirmó una recuperación desde la transacción que
-  consume el enlace: solo entonces se emite `user.recovered`, con el sujeto
-  en `actor` y `synced`/`device_bound` en `code`, en lugar de
-  `passkey.registered`. Un fallo de almacenamiento no emite éxito y conserva
-  el acceso anterior. La consola nombra la recuperación y sus consecuencias;
-  el puente de alertas existente la entrega si está configurado, sin incluir
-  enlaces ni errores internos. Es el stream estructurado existente, no una
-  escritura atómica con SQLite ni una garantía de entrega: un corte entre el
-  commit y la emisión puede perder el evento y la cola de alertas es acotada.
-  No se amplía aquí la cobertura del journal firmado (`AUD-001`/`AUD-002`).
-- **CLI, fuera de este bloque.** Si se aprueba, es una credencial delegada,
-  nunca una sesión web ni MFA. Con navegador local, authorization code + PKCE
-  con redirección a loopback ([RFC 8252](https://www.rfc-editor.org/rfc/rfc8252)):
-  PKCE liga el canje del código a quien lo pidió, no a la máquina; ligar el
-  token a una clave del cliente es una medida adicional (DPoP). Sin navegador,
-  Device Authorization Grant ([RFC 8628](https://www.rfc-editor.org/rfc/rfc8628)):
-  la aprobación exige passkey reciente, pero no elimina el phishing de
-  consentimiento (la víctima puede aprobar una solicitud iniciada por otro);
-  contexto, alcances mínimos y vigencia corta lo reducen. El nombre de equipo
-  que declara el cliente se muestra como no verificado. Se apoya en `ID-016`.
+The private console lives at `http://ozal.localhost`. WebAuthn is designed for
+HTTPS with a real domain, and many authenticators do not accept the localhost
+exception: the Bitwarden extension does not offer passkeys on localhost, so
+Firefox fell back to its security-key dialog; KeePassXC accepts it only with
+*Allow using localhost with passkeys*. This is not about adapting to one manager:
+moving the ceremony to HTTPS removes that known localhost limitation, but does
+not guarantee every authenticator works; browser, extension, system and transport
+still matter, and combinations are validated in acceptance. A passkey bound to
+the real domain also does not depend on the port or the tunnel's local name.
+`admin.login_host` remains explicit until that acceptance is complete.
 
-**Límite que se conserva:** un cliente sin autenticador WebAuthn compatible y
-sin OIDC con contrato no tiene acceso cotidiano sin contraseña con MFA. Sin
-software de cliente ni contraseña, el servidor solo verifica posesión. Sus
-salidas son conseguir un autenticador, usar el proveedor de su organización
-bajo contrato, aceptar un factor en rutas concretas (`ID-019`, decisión
-pendiente, nunca en la consola) o un autenticador propio (`ID-020`, idea).
+With `auth.passkeys.login_url` on HTTPS, the administrator ceremony runs on the
+login host and the console receives the session through a one-use code, as in
+`ID-015`. The console and its listener stay on loopback.
 
-**Bloque MVP:** aceptación real de `ID-021` con `admin.login_host` explícito;
-errores distinguidos y segunda passkey sugerida tras el primer alta en
-`ID-017`; recuperación documentada como autoridad del host con `SEC-023`
-resuelto. Fuera: CLI, agente propio, push y factores nuevos.
-
-**Aceptación del bloque:** binario en VM Linux limpia sin dominio
-(`ozal.localhost` por túnel) y con dominio HTTPS; reinicio entre pasos.
-Clientes reales: Firefox y Chromium en Linux sin autenticador (ven la guía,
-salen del diálogo y saben qué hacer, aunque no completen el acceso), Linux con
-KeePassXC, Bitwarden en HTTPS y en localhost (fallo explicado), macOS, Windows
-Hello, teléfono por QR y llave FIDO2 con PIN. Escenarios: primer
-administrador, cancelación, segundo autenticador, revocación que cierra
-sesiones, pérdida total con recuperación (las passkeys y sesiones anteriores
-dejan de servir), enlace vencido, reusado y de otro origen, y ningún secreto
-en URLs públicas, logs ni eventos.
-
-#### Passkeys de administrador en el host de login HTTPS (`ID-021`)
-
-**Hallazgo 2026-10-31 (prueba en la VM):** la consola privada vive en
-`http://ozal.localhost`. WebAuthn está pensado para HTTPS con dominio real y
-muchos autenticadores no aceptan la excepción de localhost: la extensión de
-Bitwarden no ofrece passkeys en localhost, así que Firefox cayó a su diálogo de
-llave; KeePassXC lo acepta solo con *Allow using localhost with passkeys*. No
-se trata de adaptarse a un gestor: mover la ceremonia a HTTPS elimina esa
-limitación conocida de localhost, pero no garantiza que todo autenticador
-funcione; siguen influyendo navegador, extensión, sistema y transporte
-disponible, y las combinaciones se validan en la aceptación. Una passkey ligada
-al dominio real tampoco depende del puerto ni del nombre local del túnel.
-`admin.login_host` sigue explícito hasta completar esa aceptación.
-
-**Estado 2026-10-31:** implementado detrás de `admin.login_host` (rutas
-`/_/auth/admin`, `/_/api/admin/remote/start|finish`); falta la aceptación con un
-dominio real. Diferencias con el boceto: el `tx` va en la query (sirve para
-responder como ruta desconocida sin él y es inútil sin el verificador) y la
-página pide un clic, porque algunos navegadores exigen un gesto para la
-ceremonia.
-
-**Propuesta aceptada para diseño:** con `auth.passkeys.login_url` en HTTPS, la
-ceremonia del administrador ocurre en el host de login y la consola recibe la
-sesión por un código de un solo uso, como en `ID-015`. La consola y su listener
-siguen en loopback.
-
-```
-pestaña consola (loopback)           edge                 host de login (HTTPS)
-  V = 256 bits en memoria de la pestaña
-  POST /_/api/admin/remote/start {H(V)} --> tx T (10 min, H(V), origen loopback)
-  navega a https://auth…/_/admin/login?tx=T -------------> ceremonia de admin
-                                                           (directorio de admins)
-  <---------- 302 http://ozal.localhost:PUERTO/overview#admin_code=C (60 s, un uso)
-  POST /_/api/admin/remote/finish {C, V} --> C ligado a T y H(V) → sesión de consola
+```text
+console tab (loopback)              edge                login host (HTTPS)
+  V = 256 bits in tab memory
+  POST /_/api/admin/remote/start {H(V)} --> tx T (10 min, H(V), loopback origin)
+  navigate to https://auth…/_/admin/login?tx=T -------------> admin ceremony
+                                                              (admin directory)
+  <---------- 302 http://ozal.localhost:PORT/overview#admin_code=C (60 s, one use)
+  POST /_/api/admin/remote/finish {C, V} --> C bound to T and H(V) → console session
 ```
 
-- **Sin superficie pública nueva por sí sola:** `/_/admin/login` solo atiende un
-  `tx` creado por el listener loopback; sin él responde lo mismo que una ruta
-  desconocida. Límite de intentos como el resto de `/_/auth/*`.
-- **El código no sirve sin `V`**, que solo tiene la pestaña que empezó (papel
-  del verificador PKCE). Va en el fragmento: no llega a servidores, registros
-  ni `Referer`. El retorno solo acepta `ozal.localhost`, `localhost` o el
-  nombre compatible, con cualquier puerto del túnel; nunca un host externo.
-- **Identidades separadas:** credenciales del directorio de administradores,
-  handle propio y página propia. Una passkey de visitante no abre la consola
-  ni una de administrador crea sesión de visitante (`UI-007`).
-- **Enrolamiento e invitaciones:** `console enrol` e invitaciones imprimen el
-  enlace en el host de login cuando está configurado; sin dominio HTTPS, el
-  primer acceso sigue siendo `ozal.localhost` o el host login, presentado como
-  paso normal de instalación. Recuperación sigue siendo solo del host.
-- **Compatibilidad:** las passkeys de `ozal.localhost` siguen sirviendo; el
-  administrador agrega una en el dominio desde su menú. Activación explícita
-  (`admin.login_host`) hasta la aceptación; después, predeterminada cuando hay
-  host de login HTTPS.
-- **Pruebas:** código reutilizado, vencido, de otra pestaña o sin `V`; `tx`
-  inexistente en el host público; retorno a host externo; passkey de visitante
-  en la ceremonia de admin y viceversa; step-up de consola; eventos de login
-  con método. **Aceptación:** VM o VPS con dominio, Firefox en Linux con
-  Bitwarden, Mac con iCloud o teléfono, y el host público sin `tx` sin revelar
-  la existencia de la consola.
+- **No new public surface by itself:** `/_/admin/login` only answers a `tx`
+  created by the loopback listener; without it, it answers like an unknown path.
+  Attempt limits match the rest of `/_/auth/*`.
+- **The code is useless without `V`**, which only the tab that started has (the
+  PKCE verifier role). It travels in the fragment: it does not reach servers,
+  logs or `Referer`. The return accepts only `ozal.localhost`, `localhost` or
+  the compatible name, with any tunnel port; never an external host.
+- **Separate identities:** administrator-directory credentials, own handle and
+  own page. A visitor passkey does not open the console, and an administrator
+  passkey does not create a visitor session (`UI-007`).
+- **Enrolment and invitations:** `console enrol` and invitations print the link
+  on the login host when configured; without an HTTPS domain, first access
+  remains `ozal.localhost` or the login host, presented as a normal installation
+  step. Recovery remains host-only.
+- **Compatibility:** `ozal.localhost` passkeys keep working; the administrator
+  adds one on the domain from the menu. Activation is explicit
+  (`admin.login_host`) until acceptance; afterwards it becomes the default when
+  an HTTPS login host is configured.
+- **Tests:** reused, expired, other-tab or missing-`V` code; non-existent `tx`
+  on the public host; return to an external host; visitor passkey in the admin
+  ceremony and vice versa; console step-up; login events with method.
+  **Acceptance:** VM or VPS with a domain, Firefox on Linux with Bitwarden, Mac
+  with iCloud or phone, and the public host without `tx` not revealing the
+  console's existence.
 
-**Visitantes sin instalar nada:** en Firefox o Brave sin autenticador propio, la
-vía de menor fricción es el proveedor OIDC (`ID-007`, Google, Microsoft o
-GitHub), que ya convive con las passkeys y aporta su propio MFA según el
-contrato de `ID-018`. Su aceptación con un proveedor real pasa a ser prioridad
-del recorrido de identidad. El teléfono queda como opción secundaria.
+**Visitors without installing anything:** in Firefox or Brave without their own
+authenticator, the lowest-friction path is the OIDC provider (`ID-007`, Google,
+Microsoft or GitHub), which already coexists with passkeys and contributes its
+own MFA under the `ID-018` contract. Its acceptance with a real provider is a
+priority for the identity journey. The phone remains a secondary option.
 
-Shield challenge (`SHD-003`) sigue propuesto: posición antes de identificar,
-nonce de uso único, token ligado a host/acción/expiración, clearance firmado,
-replay/tamper tests, accesibilidad y fallback explícito; log-only antes de
-enforce. No demuestra humanidad ni protección DDoS. Una futura CA privada,
-SSO para apps, Merkle/witnesses, AI y multi-edge no son capacidades actuales
-por figurar en la dirección del producto. Diseño detallado al aprobar la implementación, dentro
-de esta guía o su contrato canónico, sin crear otra hoja de ruta.
+Shield challenge (`SHD-003`) remains proposed: position before identify,
+single-use nonce, token bound to host/action/expiry, signed clearance,
+replay/tamper tests, accessibility and an explicit fallback; log-only before
+enforce. It demonstrates neither humanity nor DDoS protection. A future private
+CA, app SSO, Merkle/witnesses, AI and multi-edge are not current capabilities
+because they appear in the product direction. Detailed design waits for
+implementation approval, inside this guide or its canonical contract, without
+creating another roadmap.
 
-## Criterio de desarrollo y stack
+<a id="criterio-de-desarrollo-y-stack"></a>
+## Development and stack criteria
 
-La consola usa la identidad Umbral/Marfil de Ozal con la misma tipografía y
-paleta del sitio. El shell autenticado es una barra tipográfica en desktop y
-un directorio modal propio en móvil: conserva herramientas, URLs y foco al
-navegar; Escape cierra el menú y Tab queda contenido. El arco marca el espacio
-activo sin inventar estado de servicio. Overview usa nombres de rutas en HTML
-para conservar legibilidad al redimensionar, separa estado del conector de una
-prueba de app y muestra historial limitado a eventos retenidos, con listas de
-sitios/cambios propias para móvil. Sin sesión solo se descarga el acceso y su
-marca; no se exponen navegación, aplicaciones ni datos administrativos.
+The console uses Ozal's Umbral/Marfil identity with the same typography and
+palette as the site. The authenticated shell is a typographic bar on desktop and
+a modal directory on mobile: it keeps tools, URLs and focus while navigating;
+Escape closes the menu and Tab stays contained. The arch marks the active space
+without inventing service state. Overview uses route names in HTML to stay
+readable when resized, separates connector state from an app test and shows
+history limited to retained events, with site/change lists for mobile. Without a
+session only the access screen and its mark are downloaded; navigation,
+applications and administrative data are not exposed.
 
-Evaluación de 2026-10-27: mantener Go, Svelte/Vite, SQLite y stdlib. Go encaja
-con red/TLS y distribución binaria; la consola se compila a archivos estáticos,
-sin Node en runtime. Reutilizar WebAuthn/OIDC/JOSE/yamux evita implementar sus
-primitivas. SQLite local evita otro servicio; multi-edge con estado compartido
-o contención medida puede justificar otra base, no suponerlo por anticipación.
+The stack decision lives in [stack.md](architecture/stack.md). Keep Go,
+Svelte/Vite, SQLite and stdlib: Go fits network/TLS and binary distribution; the
+console compiles to static files with no Node at runtime; WebAuthn, OIDC, JOSE
+and yamux are reused instead of reimplementing their primitives; local SQLite
+avoids another service. Multi-edge with shared state or measured contention may
+justify another database; do not assume it in advance.
 
-Consolidar CI frontend (`REL-014`), presupuestos del túnel, capacidad real,
-recuperación y aceptación por otro operador. La CI frontend se estaba corrigiendo
-en el trabajo concurrente; seguir el tracker para su resultado. La autorización
-pura, snapshots y regresiones de revocación son fortalezas; paquetes de proxy,
-config/admin aún concentran responsabilidades. Extraerlas al tocarlas, no
-reescribir todo el árbol. Esta evaluación no es una auditoría línea a línea.
+Consolidate frontend CI, tunnel budgets, real capacity, recovery and acceptance by
+another operator. Pure authorization, snapshots and revocation regressions are
+strengths; proxy, config and admin still concentrate responsibilities. Extract
+them when touched, not in a whole-tree rewrite. This is not a line-by-line audit.
 
-## Verificacion
+<a id="verificacion"></a>
+## Verification
 
-### Revisión estática de seguridad, capacidad y código sin uso
-
-Observaciones de la revisión parcial iniciada el 31/10/2026 sobre `fe64140` y
-el árbol local. Se inspeccionaron rutas de identidad, proxy, archivos estáticos,
-publicación, sesiones, túneles, eventos y chequeos de salud. La inspección no
-modificó código, no probó servicios en ejecución ni reprodujo ataques; no es
-una auditoría exhaustiva, una medición de capacidad ni evidencia de explotación.
-Los candidatos de seguridad no tienen severidad confirmada y requieren una
-fixture aislada con datos ficticios. Las correcciones se siguen en
-[TO_IMPLEMENT](TO_IMPLEMENT.md), sin reabrir cierres históricos por analogía.
-
-| Observación y certeza | Evidencia de código y condición | Validación/corrección mínima propuesta |
-|---|---|---|
-| `SEC-021`: posible publicación de un archivo oculto por alias interno; pendiente de reproducción. | [static.Resolve](../internal/static/resolve.go) rechaza nombres ocultos solicitados; [static.open](../internal/static/handler.go) usa `os.OpenInRoot`, que permite enlaces internos. Una raíz estática local con un enlace visible hacia un archivo oculto dentro de la raíz podría servirlo. [Las pruebas](../internal/static/handler_test.go) cubren `.env` directo y enlaces fuera de la raíz, no ese alias. Pages [rechaza enlaces al extraer](../internal/pages/entry.go); no atribuirle el mismo camino. | Fixture con un archivo oculto de contenido ficticio y alias visible; pedir el alias y exigir 404 sin fuga. Si se confirma, decidir y aplicar una política de enlaces/rutas ocultas sin introducir una carrera de resolución; preservar archivos normales y `.well-known`. No buscar secretos reales ni afirmar que exista ese enlace en producción. |
-| `SEC-022`: posible secreto de una app en logs; depende de cómo esa app forma sus URLs y de quién puede leer los logs. | [proxy.forward](../internal/proxy/proxy.go) omite query pero registra `req.URL.Path` íntegro. Un enlace de recuperación/invitación con token en el path puede acabar en logs. No se observó un token real ni se comprobó acceso de terceros a logs. | Logger capturado con una ruta ficticia que lleva un token; definir logging mínimo, omisión o redacción por contrato de ruta. Nunca asumir que solo el query contiene credenciales. |
-| `BUG-015`: actividad visible puede describir una petición bloqueada como acceso permitido; confirmado por trazado estático, sin reproducción nueva. | [emitAccessEvent](../internal/proxy/proxy.go) publica el evento recibido al fallar un append obligatorio y devuelve 503 antes de upstream. Para `AccessAllowed`, [accessSummary](../web/console/src/lib/overview.ts) lo cuenta en “Who got in / let in”. La [prueba de bloqueo](../internal/proxy/proxy_test.go) no comprueba el sink. El acceso sigue fallando cerrado. | Capturar sink con appender que falla, comprobar 503 y cero envíos upstream; emitir resultado diferenciado de auditoría fallida y evitar que UI lo cuente como entrada. No confundir decisión de política con ejecución efectiva. |
-| `BUG-016`: posible expiración anticipada de una sesión por host activa; necesita revisar contrato y prueba temporal. | [CreateLinked en memoria](../internal/auth/session.go) y [SQLite](../internal/store/sqlite/sessions.go) fijan un límite con el vencimiento del padre al emitir. Actualizar actividad del padre no mueve ese límite. Los tests de [memoria](../internal/auth/host_sessions_test.go) y [SQLite](../internal/store/sqlite/host_sessions_test.go) mantienen vivo el padre pero no consultan al hijo después del límite inicial. | Reloj controlado: crear padre/hijo, usar hijo antes del idle, volver a usarlo después del vencimiento inicial y antes del absoluto. Determinar si es TTL deliberado o defecto del idle; documentar el contrato antes de cambiarlo. No ampliar nunca el límite absoluto ni permitir un padre revocado. |
-| Capacidad de túneles: límites comprobados en código, impacto sin medir. | [Edge.Serve](../internal/tunnel/tunnel.go) retiene una de 16 plazas durante toda la sesión aunque la etiqueta diga handshake. [connectorTransport](../internal/tunnel/transport.go) comparte 32 solicitudes entre conectores y conserva la plaza hasta cerrar body/upgrade; conexiones largas pueden ocuparlas todas. El tracker ya registra separar presupuestos bajo `TUN-002`/`ARCH-010`. | Medir solicitudes cortas y largas entre dos conectores antes de decidir cuotas por sesión/conector/ruta. Preservar límites globales y no hacer pruebas de saturación contra servicios compartidos. |
-| Arranque/recarga: primera ronda de salud síncrona; sin benchmark. | [Checker.Start](../internal/healthcheck/checker.go) espera la ronda inicial con hasta 16 workers y timeout HTTP de 3 s; [construir el snapshot](../internal/routemanager/manager.go) la espera. Muchas URLs lentas aumentan el tiempo de preparación. | Laboratorio con upstreams ficticios lentos y varios tamaños de catálogo; medir arranque/recarga y tráfico del snapshot anterior antes de cambiar el contrato de disponibilidad inicial. `LAB-001`. |
-| Broker: asignaciones/contención candidatas a optimización, no cuello medido. | [Broker.Emit](../internal/events/broker.go) copia 200 eventos bajo mutex por cada evento tras llenar el historial. La memoria está acotada, pero el coste se repite en el request path. | Benchmark de asignaciones y concurrencia; evaluar un buffer circular con igualdad del replay, secuencias y cancelación. `LAB-001`. |
-| Código productivo solo referenciado por pruebas; candidatos a limpieza, no lista completa de dead code. | [stripCookie](../internal/proxy/proxy.go) es usado por tests/fuzz, mientras producción usa `stripAccessCookies`. [Checker.probe](../internal/healthcheck/checker.go) solo tiene llamadas de tests; producción usa `probeAll`/`probeTarget`. | Trasladar pruebas al recorrido real preservando invariantes y luego decidir eliminación o helper de test. No borrar compatibilidad legacy ni APIs por aparecer poco en búsquedas. No se ejecutó un analizador completo de símbolos inalcanzables. |
-
-Orden recomendado de validación: alias oculto, exactitud del evento de acceso y
-contrato de expiración por host; después presupuesto de túneles y mediciones de
-recarga/broker. Logs se revisan con el contrato de cada aplicación. Ni este
-orden ni una prueba local implican despliegue o exposición pública autorizados.
+`scripts/verify.sh` is the gate before reporting a change as complete. It runs
+gofmt, `go vet`, race tests, both builds, short fuzz targets, optional
+staticcheck/govulncheck, the console type check/rebuild consistency check,
+passkey page tests and site tests when their toolchains are installed. Focused
+checks:
 
 ```sh
-scripts/verify.sh
-go test -race ./internal/auth ./internal/proxy ./internal/tunnel
-node scripts/demo/product-acceptance.mjs
-node scripts/demo/passkey-acceptance.mjs
-OZAL_BIN=/ruta/binario node scripts/demo/update-acceptance.mjs  # requiere agent-browser; mockea las respuestas de update, no prueba procedencia ni MFA real
-node scripts/demo/host-sessions-acceptance.mjs
-CHROME=/ruta/chrome node scripts/demo/https-host-sessions-acceptance.mjs
-node scripts/demo/site-check.mjs
-python3 scripts/smoke-tunnel-configured.py --binary /ruta/binario-de-prueba
-python3 scripts/rehearse-coordinated-upgrade.py \
-  --previous /ruta/binario-anterior --candidate /ruta/binario-candidato
+go test -race ./...
+go test -race ./internal/auth -run TestName
+go test ./internal/config -fuzz FuzzName
 ```
 
-`update-acceptance.mjs` comprueba el diálogo en escritorio y móvil, Escape y
-retorno del foco, axe y la reanudación del polling al volver a abrir un trabajo
-pendiente. Usa un edge desechable y respuestas HTTP de updates simuladas;
-no instala artefactos ni acredita MFA o actualización real en la VM. La
-autorización y el ejecutor se verifican en los tests Go correspondientes.
+Browser and integration fixtures used by the project:
 
-El ensayo `REL-013/017` requiere dos binarios confiables a ambos lados del
-cambio ALPN `bd06c29`; por ejemplo, `e762012` como anterior y el ref candidato
-comprometido como nuevo. Construye cada ref por separado desde `git archive`
-con `go build -buildvcs=false`, registrando ref y SHA-256; no modifica Git ni
-descarga releases. El anterior elegido es una referencia de protocolo, **no**
-una afirmación de qué binario corre hoy en el piloto. Para reproducir el corte
-real usa también su ref/artefacto exacto cuando se haya inventariado.
+```sh
+node scripts/demo/product-acceptance.mjs
+node scripts/demo/passkey-acceptance.mjs
+OZAL_BIN=/path/binary node scripts/demo/update-acceptance.mjs
+node scripts/demo/host-sessions-acceptance.mjs
+CHROME=/path/chrome node scripts/demo/https-host-sessions-acceptance.mjs
+node scripts/demo/site-check.mjs
+python3 scripts/smoke-tunnel-configured.py --binary /path/test-binary
+python3 scripts/rehearse-coordinated-upgrade.py \
+  --previous /path/previous-binary --candidate /path/candidate-binary
+```
 
-Solo usa loopback y estado generado en un directorio temporal privado. Prueba
-pareja anterior, ambas mezclas (502 sostenido), pareja candidata, publicación
-antes/después, restore de SQLite a ruta nueva, runtime y Pages del checkpoint,
-pareja restaurada y nueva actualización después de revertir. Comprueba que una
-app protegida pide login, la página de login responde y las cabeceras/cookies
-falsificadas no alcanzan el origen. No prueba una autenticación de navegador,
-systemd/SSH, backup de claves reales, ACME ni publicación pública. El tiempo
-medido es recuperación del fixture; no es RTO del servidor. El gate habitual
-no necesita artefactos históricos: este ensayo se ejecuta explícitamente antes
-de un cambio de protocolo, además de `scripts/verify.sh`.
+`update-acceptance.mjs` checks the dialog on desktop and mobile, Escape and focus
+return, axe and polling resumption when a pending job is reopened. It uses a
+disposable edge and simulated update HTTP responses; it installs no artifacts and
+proves neither MFA nor a real VM update. Authorization and the executor are
+covered by their Go tests.
 
-Ejecución local 2026-10-29: anterior `e762012` (SHA-256 prefijo
-`49d2879737df`) y candidato `8f20fbe` (`e792b95aad57`) pasan el ciclo completo.
-No había migraciones pendientes entre esos refs; no acredita una migración del
-esquema instalado en el piloto. Un control con dos builds distintos del
-protocolo anterior falla en la comprobación de rechazo de la mezcla, como debe.
-El plan SSH sin `-apply` observa por separado `switchboard-preview` con hash
-`0ca4c91d7277116e…`; el build reproducible de `ozalctl` para `8f20fbe` tiene hash
-`14fde470bab6f666…` (flags de distribución distintos del build local del ensayo).
-No se instaló ni copió estado del servidor durante estas comprobaciones.
+Fixtures need their own dependencies and browser; use `OZAL_BIN` and `CHROME`
+where required and read the script for prerequisites. They run local fixtures;
+localhost HTTP does not prove public HTTPS or other browsers. Do not install
+extra tools implicitly for an example.
 
-Ampliación 2026-10-29 con artefactos instalados. El ensayo canónico con el
-binario real del preview (`0ca4c91d…`, commit `da3d0e6`) como anterior y el
-candidato construido desde `8f20fbe` (`10d76ecb…`, `go build -buildvcs=false`)
-pasa pareja, rechazo de ambas mezclas, restore de SQLite/runtime/Pages y
-nueva actualización; no hay migraciones pendientes entre esos dos refs. El
-segundo ensayo usa el tunnel edge y el conector realmente instalados
-(`b5cba887…` y `b2761ed3…`, procedencia `9701fa4`): pareja anterior, rechazo
-persistente de ambas mezclas, pareja candidata, restauración del snapshot
-previo y reactualización. Ese esquema sí tiene **ocho migraciones pendientes**
-(008–015) y `migrate up -backup` crea el respaldo previo. El checkpoint y la
-restauración del conector (identidad, cadena, clave/certificado, unidades,
-binario) se probaron en un directorio descartable. Los hashes de candidato
-dependen de las flags: `14fde470…` corresponde al build reproducible de
-`ozalctl`, no a este build de `cmd/ozal`.
+The coordinated upgrade rehearsal requires two trusted binaries on both sides of
+the ALPN change. Build each ref separately from `git archive` with
+`go build -buildvcs=false`, recording ref and SHA-256; it does not modify Git or
+download releases. The chosen "previous" is a protocol reference, **not** a claim
+about what runs on the pilot today. Use loopback and state generated in a
+private temporary directory. Test previous pair, both mixtures (persistent 502),
+candidate pair, publication before/after, SQLite restore to a new path, runtime
+and Pages from the checkpoint, restored pair and a new update after rollback.
+Check that a protected app asks for login, the login page responds and forged
+headers/cookies never reach the origin. It does not test browser authentication,
+systemd/SSH, real key backup, ACME or public publication. Measured time is fixture
+recovery, not the server's RTO. The normal gate does not need historical
+artifacts: this rehearsal runs explicitly before a protocol change, in addition
+to `scripts/verify.sh`.
 
-Límites: ambos ensayos usan PKI/estado sintéticos y loopback; no prueban
-systemd/SSH, ACME, DNS, login real ni aceptación pública. El estado privado
-del edge se capturó después, en la ventana quiescida del mismo día (ver
-`administration.md`), y la pareja `8f20fbe` quedó instalada; estos ensayos no
-lo prueban. Los dos edges no tienen auditoría durable configurada, así que no
-hay cadena/checkpoint que archivar. El ensayo no usó la identidad de producción
-del conector.
+The HTTPS host-session acceptance (`ID-015`) requires Linux, Go, `agent-browser`
+with `--ca-cert` support, `certutil` (package `libnss3-tools`) and the
+`playwright-core` already pinned in `scripts/demo`. It builds a test executable
+from `cmd/ozal`, uses the production autocert configuration with preloaded local
+leaves, real routing, WebAuthn and a migrated SQLite database. All listeners use
+ephemeral loopback ports; the fixture administration exists only in `_test.go`.
+Close stdin to stop it and remove temporary state/certificates. The CA is imported
+only into that agent-browser session's temporary NSS store; it does not change
+the user's trust and does not ignore TLS errors. The test checks that Chrome first
+rejects the untrusted CA and, after trusting it, accepts login and two apps on
+different sites: host-only `Secure`, `HttpOnly`, `SameSite=Lax` cookies, browser
+binding, code audience, stolen and consumed code, denied policy, cookies removed
+before the upstream, logout at both ends, disabled user, revocation and parent
+expiry. Expiry is triggered only in fixture rows; production rules are not
+shortened. It includes a mobile viewport with touch and keeps the shared cookie of
+a host under `cookie_domain`. Mobile emulation does not prove a real phone. Two
+tabs on the same host start handoffs at once and redeem their codes in reverse
+order: each keeps its destination and clears only its binding cookie. The driver
+aborts an intercepted navigation before redeeming the code, without creating
+artificial documents or blocking favicons. It also checks that a binding copied
+with `Path=/` does not reach the upstream. Go regressions reproduce the original
+conflict and prove that one failed redemption does not stop the other, together
+with cookie filtering on direct and connector routes.
 
-Los demos necesitan sus dependencias y navegador; usa `OZAL_BIN` y
-`CHROME` cuando corresponda, consulta el script para prerrequisitos. Ejecutan
-fixtures locales; HTTP localhost no acredita HTTPS público ni otros navegadores.
-No instales herramientas adicionales implícitamente por un ejemplo.
+The normal `TestDirectHTTPSProfileWithoutCloudflare` validates the direct
+template and serves a cached certificate with verified TLS trust. These tests
+**do not issue or renew public certificates**, do not prove DNS propagation or
+firewall, do not start the full distribution binary and do not close
+`ID-015`/`ARCH-010`. External acceptance still requires a public CA, another
+network, a phone, renewal, restart and recovery; the stage B public connector
+keeps its separate task.
 
-La aceptación HTTPS de ID-015 requiere Linux, Go, `agent-browser` con soporte
-`--ca-cert`, `certutil` (paquete `libnss3-tools`) y el `playwright-core` ya fijado
-en `scripts/demo`. Compila un ejecutable de test de `cmd/ozal`, usa la
-configuración autocert de producción con hojas locales precargadas, el routing
-real, WebAuthn y SQLite migrado. Todos los listeners usan puertos efímeros en
-loopback; la administración del fixture existe solo en `_test.go`. Cierra stdin
-para detenerlo y borra estado/certificados temporales al terminar. La CA solo
-se importa en el NSS temporal de esa sesión de agent-browser; no se modifica
-la confianza del usuario y no se ignoran errores TLS.
+For browser QA: 1440/1024/390/320 px, keyboard, focus/Escape, cancellation
+without mutation, errors/retry, stale data and logout without residual data. Test
+passkeys per device, loss/revocation, callbacks and cross-host handoff. On the
+public site check without JS, a failed WASM load and Save-Data. Store captures in
+a temporary/ignored directory, not in product documentation.
 
-Comprueba que Chrome rechaza primero la CA no confiable y, tras confiar en ella,
-acepta login y dos apps de sitios distintos: cookies host-only `Secure`,
-`HttpOnly`, `SameSite=Lax`, binding del navegador, audiencia del código, código
-robado y consumido, política denegada, cookies retiradas antes del upstream,
-logout en ambos extremos, usuario deshabilitado, revocación y expiración del
-padre. La expiración se provoca solo en filas del fixture; no se acortan reglas
-de producción. Incluye viewport móvil con toque y conserva la sesión compartida
-de un host bajo `cookie_domain`. Emulación móvil no acredita un teléfono real.
-Dos pestañas del mismo host inician handoffs a la vez y canjean sus códigos en
-orden inverso: cada una conserva su destino y solo borra su cookie de vínculo.
-El driver aborta la navegación interceptada antes de canjear el código, sin
-crear documentos artificiales ni bloquear favicons. Comprueba además que un
-binding copiado con `Path=/` tampoco llega al upstream. Las regresiones Go
-reproducen el conflicto original y prueban que fallar un canje no impide al
-otro terminar, junto al filtrado de cookies en rutas directas y por conector.
+For failures: own state, ephemeral ports, fictitious secrets, restart/kill, slow
+or 5xx origin, expiry, full/read-only disk, clock and recovery. Keep the minimum
+commands/results/versions in the task closure; do not repeat chronological
+reports. Fixture tests do not prove real DNS/provider, release signatures or an
+external restore.
 
-El test normal `TestDirectHTTPSProfileWithoutCloudflare` valida la plantilla
-directa y sirve un certificado desde caché con confianza TLS comprobada. Estos
-ensayos **no emiten ni renuevan certificados públicos**, no prueban propagación
-DNS ni firewall, no arrancan el binario de distribución completo y no cierran
-ID-015/ARCH-010. La aceptación exterior sigue requiriendo CA pública, otra red,
-teléfono, renovación, reinicio y recuperación; el conector público de etapa B
-conserva su tarea separada.
-
-Para browser QA: 1440/1024/390/320 px, teclado, foco/Escape, cancelación sin
-mutación, errores/retry, datos viejos y logout sin datos residuales. Probar
-passkeys por dispositivo, pérdida/revocación, callbacks y handoff entre hosts.
-En sitio público comprobar sin JS, carga fallida de WASM y Save-Data. Capturas
-en directorio temporal/ignorado, no en la documentación del producto.
-
-Para fallos: estado propio, puertos efímeros, secretos ficticios, restart/kill,
-origen lento/5xx, expiración, disco lleno/read-only, reloj y recuperación.
-Conservar comandos/resultados/versiones mínimos en el cierre de la tarea;
-no repetir informes cronológicos. Tests de fixtures no acreditan DNS/proveedor
-real, firma de releases ni restore exterior.
-
-Benchmark de ejemplo, con el host quieto y entorno constante:
+Example benchmark, on a quiet host with a constant environment:
 
 ```sh
 GOMAXPROCS=1 go test -run '^$' -bench 'Benchmark(Authorize|Fresh|Proxy)' \
@@ -1026,13 +878,26 @@ go test -run '^$' -bench '^BenchmarkLimiter' -benchmem ./internal/ratelimit
 go test -run '^$' -bench '^BenchmarkWriterAppendGrouped' -benchmem ./internal/audit
 ```
 
-Los benchmarks de proxy usan transporte sintético. La medición histórica
-2026-10-25 comparó ~16 µs/op sin auditoría con ~9 ms/op de auditoría requerida
-serial en ese host: muestra el costo de persistencia, no throughput ni p99
-públicos. Medir listener/TLS, SQLite, auditoría y túnel juntos con almacenamiento
-representativo, saturación y carga sostenida antes de declarar capacidad.
+Proxy benchmarks use a synthetic transport. The 2026-10-25 historical
+measurement compared about 16 µs/op without audit with about 9 ms/op for serial
+required audit on that host: it shows the cost of persistence, not public
+throughput or p99. Measure listener/TLS, SQLite, audit and tunnel together with
+representative storage, saturation and sustained load before declaring capacity.
 
-Propiedades/fuzz y mutation deben detectar cambios de reglas, no copiar la
-implementación. El harness diferencial requiere Caddy/nginx instalado; tests
-que omiten esa dependencia no acreditan interoperabilidad. `LAB-*` conserva
-los experimentos pendientes y sus límites.
+Property/fuzz and mutation tests must detect rule changes, not copy the
+implementation. The differential harness requires Caddy/nginx installed; tests
+that skip that dependency do not prove interoperability. `LAB-*` keeps the
+pending experiments and their limits.
+
+<a id="revisión-estática-de-seguridad-capacidad-y-código-sin-uso"></a>
+### Static security, capacity and unused-code review
+
+The 2026-10-31 source review is tracked as `SEC-021`, `SEC-022`, `BUG-015` and
+`BUG-016` in [TO_IMPLEMENT](TO_IMPLEMENT.md). It inspected identity, proxy,
+static files, publishing, sessions, tunnels, events and health checks. It did not
+modify code, run services or reproduce attacks; it is not a complete audit, a
+capacity measurement or evidence of exploitation. The security candidates have
+no confirmed severity and require an isolated fixture with fictitious data.
+Corrections are tracked in [TO_IMPLEMENT](TO_IMPLEMENT.md), without reopening
+historical closures by analogy. A local test does not authorize deployment or
+public exposure.
