@@ -3,7 +3,7 @@
 // OZAL_BIN=... [OUT=DIR] node scripts/demo/redirect-acceptance.mjs
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
@@ -11,9 +11,12 @@ import { request } from "node:http";
 import { chromium } from "playwright-core";
 import { startDemoEdge, DOMAIN } from "./edge.mjs";
 const exec = promisify(execFile);
-const binary = process.env.OZAL_BIN, out = process.env.OUT;
+const binary = process.env.OZAL_BIN;
 if (!binary) throw new Error("Set OZAL_BIN to the built binary");
 const root = await mkdtemp(join(tmpdir(), "ozal-redirect-"));
+const requestedOut = process.env.OUT;
+const out = requestedOut || await mkdtemp(join(tmpdir(), "ozal-redirect-captures-"));
+await mkdir(out, { recursive: true });
 const edge = await startDemoEdge({ binary, dir: join(root, "edge"), adminSocket: true, dynamicPorts: true });
 const browser = await chromium.launch({ executablePath: process.env.CHROME ?? "/home/saint/.agent-browser/browsers/chrome-156.0.8078.80/chrome", args: ["--no-sandbox"] });
 const errors = [];
@@ -34,7 +37,7 @@ try {
   await page.getByText("Redirects to ozal.dev").waitFor();
   await page.getByText("Everyone: they are sent to the new address").waitFor();
   await page.getByText("both land on the same page at the new address", { exact: false }).waitFor();
-  if (out) await page.screenshot({ path: join(out, "redirect-review.png") });
+  await page.screenshot({ path: join(out, "redirect-review.png") });
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Save application" }).click();
   await page.getByRole("button", { name: "Confirm and save" }).click();
@@ -45,11 +48,13 @@ try {
   assert.equal(res.headers.location, "https://ozal.dev/docs/install?lang=es");
   await page.goto(edge.consoleURL + "/applications");
   await page.getByText("Redirects to ozal.dev").first().waitFor();
-  if (out) await page.screenshot({ path: join(out, "redirect-list.png"), fullPage: true });
+  await page.screenshot({ path: join(out, "redirect-list.png"), fullPage: true });
   assert.deepEqual(errors, []);
   console.log("PASS redirect: created in the console, answered 301 with the path and query kept");
 } finally {
   await browser.close();
   await edge.stop?.();
+  await rm(root, { recursive: true, force: true });
+  if (!requestedOut) await rm(out, { recursive: true, force: true });
 }
 process.exit(0);

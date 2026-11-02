@@ -101,6 +101,12 @@ try {
   await phone.page.locator("#main-content h1", { hasText: "Overview" }).waitFor();
   assert.equal(await phone.credentials(), 1, "the second device did not receive a passkey");
   assert.equal((await admins()).find((admin) => admin.email === "react-owner@acme.dev").passkeys, 2);
+  const reusedDeviceLink = await device();
+  await reusedDeviceLink.page.goto(deviceLink);
+  await reusedDeviceLink.page.getByRole("alert").waitFor();
+  assert.equal(await reusedDeviceLink.page.getByRole("button", { name: "Create my passkey" }).isDisabled(), true, "a consumed device link offered passkey creation again");
+  assert.equal(await reusedDeviceLink.credentials(), 0, "a consumed device link enrolled another passkey");
+  await reusedDeviceLink.context.close();
   await laptop.page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await laptop.page.getByRole("heading", { name: "Add a second passkey" }).waitFor({ state: "hidden" });
 
