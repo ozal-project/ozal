@@ -98,6 +98,24 @@ To test the installer without root or systemd, use the staging directory:
 accounts. A real installation requires root and systemd. If it fails after creating
 files, keep the state for inspection and do not overwrite it.
 
+## Remove a Linux installation
+
+`ozal uninstall` prints a plan by default. With `-apply`, it stops and disables
+the Ozal systemd units, then removes their unit files, installed binaries and
+recognized binary rollback files.
+Configuration and persistent state remain in `/etc/ozal` and `/var/lib/ozal`.
+Add `-purge-state` only when those files and data should also be permanently
+removed. The dedicated `ozal` account and group are retained.
+
+```sh
+sudo ozal uninstall                         # review the plan
+sudo ozal uninstall -apply                  # remove units and binaries; keep data
+sudo ozal uninstall -apply -purge-state     # also remove configuration and data
+```
+
+For a staged installation, pass its root with `-root DIR`; staging never calls
+systemd and can be used to rehearse either removal mode.
+
 ## macOS and Windows
 
 On macOS, verify the archive with `shasum -a 256`, extract the binary into its own

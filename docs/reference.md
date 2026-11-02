@@ -24,6 +24,7 @@ complete local installation. Both refuse to overwrite.
 ozal install binary -archive FILE.tar.gz -sha256 TRUSTED_HEX -destination NEW_FILE [-apply]
 ozal install service [-binary VERIFIED_ELF | -archive FILE.tar.gz -sha256 TRUSTED_HEX] [-target URL] [-group members] [-root STAGING_DIR] [-apply]
 ozal install service -print-unit
+ozal uninstall [-apply] [-purge-state] [-root STAGING_DIR]
 
 ozalctl site check -dir DIST
 ozalctl site pack -dir DIST -out NEW_ARCHIVE

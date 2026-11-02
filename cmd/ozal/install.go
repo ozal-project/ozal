@@ -53,3 +53,18 @@ func runInstall(ctx context.Context, args []string, out io.Writer) error {
 	}
 	return install.Service(ctx, out, install.LinuxHost{}, install.ServiceRequest{Binary: *binary, Archive: *archive, SHA256: *checksum, Root: *root, Target: *target, Group: *group, Apply: *apply})
 }
+
+func runUninstall(ctx context.Context, args []string, out io.Writer) error {
+	fs := flag.NewFlagSet("uninstall", flag.ContinueOnError)
+	fs.SetOutput(out)
+	root := fs.String("root", "", "staging root; remove staged files without systemd changes")
+	apply := fs.Bool("apply", false, "remove the listed Ozal installation")
+	purge := fs.Bool("purge-state", false, "also permanently remove /etc/ozal and /var/lib/ozal")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("unexpected uninstall arguments")
+	}
+	return install.Uninstall(ctx, out, install.LinuxHost{}, install.UninstallRequest{Root: *root, Apply: *apply, PurgeState: *purge})
+}

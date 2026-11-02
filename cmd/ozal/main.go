@@ -71,6 +71,7 @@ func subcommands() map[string]func(context.Context, []string, io.Writer) error {
 		"upgrade":         runUpgrade,
 		"update":          runUpdate,
 		"update-executor": runUpdateExecutor,
+		"uninstall":       runUninstall,
 		"release":         runRelease,
 		"connector":       runConnector,
 		"migrate":         runMigrate,

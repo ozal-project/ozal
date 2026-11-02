@@ -142,3 +142,88 @@ func TestBinaryRejectsCorruptGzipFooterBeforePublishing(t *testing.T) {
 		t.Fatal("invalid binary became visible")
 	}
 }
+
+func TestUninstallPlanAndStagedRemovalPreserveStateUnlessPurged(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "stage")
+	for _, path := range []string{"etc/systemd/system/ozal.service", "etc/ozal/config.json", "var/lib/ozal/state.db", "usr/local/lib/ozal/ozal", "usr/local/lib/ozal/ozal.bak-0123456789ab", "usr/local/lib/ozal/ozal.upgrade.log"} {
+		full := filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("sample"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	binDir := filepath.Join(root, "usr/local/bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("/usr/local/lib/ozal/ozal", filepath.Join(binDir, "ozal")); err != nil {
+		t.Fatal(err)
+	}
+	if err := Uninstall(context.Background(), io.Discard, nil, UninstallRequest{Root: root}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "usr/local/lib/ozal/ozal")); err != nil {
+		t.Fatal("plan changed installation", err)
+	}
+	if err := Uninstall(context.Background(), io.Discard, nil, UninstallRequest{Root: root, Apply: true}); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"etc/systemd/system/ozal.service", "usr/local/bin/ozal", "usr/local/lib/ozal"} {
+		if _, err := os.Lstat(filepath.Join(root, path)); !os.IsNotExist(err) {
+			t.Fatalf("installer artifact %s remains: %v", path, err)
+		}
+	}
+	for _, path := range []string{"etc/ozal/config.json", "var/lib/ozal/state.db"} {
+		if _, err := os.Stat(filepath.Join(root, path)); err != nil {
+			t.Fatalf("default uninstall removed preserved state %s: %v", path, err)
+		}
+	}
+	if err := Uninstall(context.Background(), io.Discard, nil, UninstallRequest{Root: root, Apply: true, PurgeState: true}); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"etc/ozal", "var/lib/ozal"} {
+		if _, err := os.Lstat(filepath.Join(root, path)); !os.IsNotExist(err) {
+			t.Fatalf("purged state %s remains: %v", path, err)
+		}
+	}
+}
+
+func TestUninstallRefusesUnrelatedCommandFile(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "usr/local/bin/ozal")
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("unrelated"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := Uninstall(context.Background(), io.Discard, nil, UninstallRequest{Root: root, Apply: true}); err == nil {
+		t.Fatal("removed a non-installer command file")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatal("unrelated file was changed", err)
+	}
+}
+
+func TestUninstallRefusesUnknownBinaryArtifactsBeforeRemovingAnything(t *testing.T) {
+	root := t.TempDir()
+	for _, path := range []string{"etc/systemd/system/ozal.service", "usr/local/lib/ozal/ozal", "usr/local/lib/ozal/operator-data"} {
+		full := filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("test"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := Uninstall(context.Background(), io.Discard, nil, UninstallRequest{Root: root, Apply: true}); err == nil {
+		t.Fatal("accepted an unrecognized binary-directory file")
+	}
+	for _, path := range []string{"etc/systemd/system/ozal.service", "usr/local/lib/ozal/ozal", "usr/local/lib/ozal/operator-data"} {
+		if _, err := os.Stat(filepath.Join(root, path)); err != nil {
+			t.Fatalf("changed installation before refusing unknown file %s: %v", path, err)
+		}
+	}
+}
