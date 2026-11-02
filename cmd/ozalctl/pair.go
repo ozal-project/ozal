@@ -22,6 +22,7 @@ import (
 
 	"github.com/ozal-project/ozal/internal/ctl"
 	"github.com/ozal-project/ozal/internal/ctl/sshexec"
+	"github.com/ozal-project/ozal/internal/pairhelper"
 	"github.com/ozal-project/ozal/internal/release"
 )
 
@@ -46,6 +47,8 @@ type pairSSHNode struct {
 	backup       string
 	dbBackup     string
 	previousHash string
+	helper       bool
+	releaseRef   string
 }
 
 var pairAccountName = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
@@ -69,6 +72,18 @@ func (n *pairSSHNode) root(ctx context.Context, command string) error {
 	}
 	if code != 0 {
 		return fmt.Errorf("remote root operation exited %d", code)
+	}
+	return nil
+}
+
+func (n *pairSSHNode) helperAction(ctx context.Context, request pairhelper.Request) error {
+	data, err := json.Marshal(request)
+	if err != nil {
+		return err
+	}
+	_, err = n.remote.Run(ctx, "sudo -n /usr/local/sbin/ozal-pair-helper", bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("restricted pair helper action %q failed: %w", request.Action, err)
 	}
 	return nil
 }
@@ -195,6 +210,9 @@ func (n *pairSSHNode) CheckPreflight(ctx context.Context, state ctl.PairState) e
 			"test -S " + ctl.Quote(n.socket),
 			"curl --silent --show-error --fail --max-time 2 --unix-socket " + ctl.Quote(n.socket) + " http://localhost/_/healthz >/dev/null",
 		}
+		if n.helper {
+			return n.helperAction(ctx, pairhelper.Request{Action: "preflight"})
+		}
 		return n.root(ctx, "sudo sh -c "+ctl.Quote(strings.Join(checks, " && ")))
 	}
 	if err := n.checkUploadDirectory(ctx, n.stage); err != nil {
@@ -257,6 +275,7 @@ func systemdIdentity(raw string) (map[string]string, error) {
 }
 
 func (n *pairSSHNode) Stage(ctx context.Context, bin ctl.Binary, want string) error {
+	n.releaseRef = bin.Commit
 	if _, err := n.run(ctx, "umask 077; mkdir -p "+ctl.Quote(n.stage), nil); err != nil {
 		return err
 	}
@@ -291,6 +310,9 @@ func (n *pairSSHNode) Checkpoint(ctx context.Context, state ctl.PairState) error
 	}
 	n.backup = n.binary + ".pair-" + n.job + ".bak"
 	n.previousHash = state.SHA256
+	if n.helper {
+		return n.helperAction(ctx, pairhelper.Request{Action: "checkpoint", Job: n.job, SHA256: state.SHA256})
+	}
 	if n.role == "connector" {
 		command := "set -eu; test ! -e " + ctl.Quote(n.backup) + " && test ! -L " + ctl.Quote(n.backup) + "; cp -p " + ctl.Quote(n.binary) + " " + ctl.Quote(n.backup) + "; test \"$(sha256sum " + ctl.Quote(n.backup) + " | cut -d' ' -f1)\" = " + ctl.Quote(state.SHA256)
 		return n.command(ctx, command, nil)
@@ -308,6 +330,9 @@ func (n *pairSSHNode) Checkpoint(ctx context.Context, state ctl.PairState) error
 
 func (n *pairSSHNode) Stop(ctx context.Context) error {
 	if n.role == "edge" {
+		if n.helper {
+			return n.helperAction(ctx, pairhelper.Request{Action: "stop"})
+		}
 		return n.root(ctx, n.serviceCommand("stop"))
 	}
 	return n.command(ctx, n.serviceCommand("stop"), nil)
@@ -315,6 +340,12 @@ func (n *pairSSHNode) Stop(ctx context.Context) error {
 
 func (n *pairSSHNode) Install(ctx context.Context, want string) error {
 	if n.role == "edge" {
+		if n.helper {
+			if err := n.helperAction(ctx, pairhelper.Request{Action: "install", Job: n.job, SHA256: want, Ref: n.releaseRef}); err != nil {
+				return err
+			}
+			return nil
+		}
 		_, staged := ctl.StageFile(ctl.Edge{Stage: n.stage})
 		code, err := n.remote.Terminal(ctx, ctl.PairUpgradeCommand(ctl.Edge{Unit: n.unit, ServiceUser: n.user, Binary: n.binary, Config: n.config, StateDB: n.db, Keep: n.keep}, staged, want))
 		if err != nil {
@@ -330,6 +361,9 @@ func (n *pairSSHNode) Install(ctx context.Context, want string) error {
 
 func (n *pairSSHNode) Start(ctx context.Context) error {
 	if n.role == "edge" {
+		if n.helper {
+			return n.helperAction(ctx, pairhelper.Request{Action: "start"})
+		}
 		if err := n.root(ctx, "sudo systemctl reset-failed "+ctl.Quote(n.unit)+" && "+n.serviceCommand("start")); err != nil {
 			return err
 		}
@@ -349,6 +383,9 @@ func (n *pairSSHNode) Ready(ctx context.Context, expectedHash string) error {
 		return errors.New("installed binary hash does not match the coordinated version")
 	}
 	if n.role == "edge" {
+		if n.helper {
+			return n.helperAction(ctx, pairhelper.Request{Action: "ready", Job: n.job, SHA256: expectedHash})
+		}
 		if err := n.root(ctx, "sudo systemctl is-active --quiet "+ctl.Quote(n.unit)); err != nil {
 			return err
 		}
@@ -363,6 +400,9 @@ func (n *pairSSHNode) Restore(ctx context.Context, state ctl.PairState) error {
 		pattern := path.Join(path.Dir(n.binary), ".ozal-restore.XXXXXX")
 		command := "set -eu; test -f " + ctl.Quote(n.binary) + " && test ! -L " + ctl.Quote(n.binary) + "; test -f " + ctl.Quote(n.backup) + " && test ! -L " + ctl.Quote(n.backup) + "; tmp=$(mktemp " + ctl.Quote(pattern) + "); trap 'rm -f \"$tmp\"' EXIT; cp " + ctl.Quote(n.backup) + " \"$tmp\"; chmod 755 \"$tmp\"; mv -f \"$tmp\" " + ctl.Quote(n.binary)
 		return n.command(ctx, command, nil)
+	}
+	if n.helper {
+		return n.helperAction(ctx, pairhelper.Request{Action: "restore", Job: n.job})
 	}
 	pattern := path.Join(path.Dir(n.binary), ".ozal-restore.XXXXXX")
 	command := "set -eu; test -f " + ctl.Quote(n.binary) + " && test ! -L " + ctl.Quote(n.binary) + "; test -f " + ctl.Quote(n.backup) + " && test ! -L " + ctl.Quote(n.backup) + "; tmp=$(mktemp " + ctl.Quote(pattern) + "); trap 'rm -f \"$tmp\"' EXIT; cp -p " + ctl.Quote(n.backup) + " \"$tmp\"; mv -f \"$tmp\" " + ctl.Quote(n.binary)
@@ -385,6 +425,9 @@ func (n *pairSSHNode) Report(ctx context.Context, p ctl.PairProgress) error {
 	raw, err := json.Marshal(p)
 	if err != nil {
 		return err
+	}
+	if n.helper {
+		return n.helperAction(ctx, pairhelper.Request{Action: "report", Progress: raw})
 	}
 	request := "curl --silent --show-error --max-time 5 --unix-socket " + ctl.Quote(n.socket) + " -H 'Content-Type: application/json' --data-binary " + ctl.Quote(string(raw)) + " -o /dev/null -w '%{http_code}' http://localhost/_/api/updates/status"
 	accepted := "202"
@@ -437,7 +480,7 @@ func (b signedPairBuilder) Build(ctx context.Context, ref string) (ctl.Binary, e
 
 func edgePairNode(c *common, job, connector string) *pairSSHNode {
 	e := c.target.Edge
-	return &pairSSHNode{remote: c.remote, name: c.name + "-edge", role: "edge", unit: e.Unit, user: e.ServiceUser, serviceGroup: e.ServiceGroup, binary: e.Binary, stage: e.Stage, lock: e.Lock, config: e.Config, db: e.StateDB, keep: e.Keep, socket: e.Socket, job: job, peer: connector}
+	return &pairSSHNode{remote: c.remote, name: c.name + "-edge", role: "edge", unit: e.Unit, user: e.ServiceUser, serviceGroup: e.ServiceGroup, binary: e.Binary, stage: e.Stage, lock: e.Lock, config: e.Config, db: e.StateDB, keep: e.Keep, socket: e.Socket, job: job, peer: connector, helper: e.PairHelper}
 }
 
 func connectorPairNode(c *common, job string) *pairSSHNode {
@@ -455,7 +498,7 @@ func edgePairPreflight(args []string) int {
 	if c.target.Connector == nil {
 		return finish(errors.New("target.connector is required for a coordinated preflight"))
 	}
-	if !isTerminal(os.Stdin) {
+	if !isTerminal(os.Stdin) && !c.target.Edge.PairHelper {
 		return finish(errors.New("pair-preflight requires an interactive terminal for read-only sudo checks on the edge"))
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -473,6 +516,7 @@ func edgePairUpgrade(args []string) int {
 	api := fs.String("api", "https://api.github.com/repos/ozal-project/ozal", "release API")
 	apply := fs.Bool("apply", false, "do it (default: print the plan)")
 	force := fs.Bool("force", false, "allow moving from an unversioned development build")
+	drill := fs.Bool("rollback-drill", false, "after the candidate is verified, restore the previous pair on purpose")
 	c, ok := setup(fs, args)
 	if !ok {
 		return 2
@@ -484,7 +528,7 @@ func edgePairUpgrade(args []string) int {
 		fmt.Fprintln(os.Stderr, "ozalctl: -ref signed-tag and -public-key are required")
 		return 2
 	}
-	if *apply && !isTerminal(os.Stdin) {
+	if *apply && !isTerminal(os.Stdin) && !c.target.Edge.PairHelper {
 		return finish(errors.New("-apply requires an interactive terminal for sudo on the edge"))
 	}
 	key, err := os.ReadFile(*publicKey)
@@ -500,6 +544,6 @@ func edgePairUpgrade(args []string) int {
 	builder := signedPairBuilder{api: *api, key: key, client: &http.Client{Timeout: 5 * time.Minute}}
 	edge := edgePairNode(c, job, c.target.Connector.Name)
 	connector := connectorPairNode(c, job)
-	err = ctl.UpdatePair(ctx, os.Stdout, builder, edge, connector, ctl.PairUpdateRequest{Ref: *ref, Owner: c.owner, JobID: job, Apply: *apply, Force: *force})
+	err = ctl.UpdatePair(ctx, os.Stdout, builder, edge, connector, ctl.PairUpdateRequest{Ref: *ref, Owner: c.owner, JobID: job, Apply: *apply, Force: *force, RollbackDrill: *drill})
 	return finish(err)
 }

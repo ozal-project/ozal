@@ -53,6 +53,9 @@ type Edge struct {
 	// `ozal` command runs from any directory.
 	CommandLink string `json:"command_link,omitempty"`
 	Keep        int    `json:"keep,omitempty"`
+	// PairHelper enables the root-owned, action-limited helper for coordinated
+	// updates. It must be provisioned separately on the edge host.
+	PairHelper bool `json:"pair_helper,omitempty"`
 	// Socket is the edge's admin Unix socket. `edge config` reads the
 	// digest in effect there as root, with no token.
 	Socket string `json:"socket,omitempty"`
