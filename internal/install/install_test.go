@@ -144,7 +144,11 @@ func TestBinaryRejectsCorruptGzipFooterBeforePublishing(t *testing.T) {
 }
 
 func TestUninstallPlanAndStagedRemovalPreserveStateUnlessPurged(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "stage")
+	tempRoot, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(tempRoot, "stage")
 	for _, path := range []string{"etc/systemd/system/ozal.service", "etc/ozal/config.json", "var/lib/ozal/state.db", "usr/local/lib/ozal/ozal", "usr/local/lib/ozal/ozal.bak-0123456789ab", "usr/local/lib/ozal/ozal.upgrade.log"} {
 		full := filepath.Join(root, path)
 		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
