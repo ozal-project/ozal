@@ -264,10 +264,12 @@ edge database; if it cannot confirm recovery, it reports intervention required.
 Progress is reported through the local socket and is available at `GET
 /_/api/updates/status` for sessions with the `updates` tool. `GET
 /_/api/connectors/{name}/ready` is a host-only probe used by the coordinator. The
-progress POST is tolerated as a 404 only before the candidate installs that route;
-if the edge is back and the endpoint does not exist, the job is rolled back. The
-final phases are saved when the edge returns. A 503 or any other error stops the
-job before the cutover or triggers its rollback. `ozalctl edge pair-upgrade`
+progress POST is tolerated as a 404 or 405 only before the candidate edge starts,
+because older admin muxes may route an unknown POST through a GET-only fallback.
+Once the candidate starts, only 202 is accepted; a missing or method-rejected
+status endpoint triggers paired rollback. The final phases are saved when the
+edge returns. A 503 or any other error stops the job before the cutover or
+triggers its rollback. `ozalctl edge pair-upgrade`
 without `-apply` only downloads and verifies the artifact: it does not contact the
 hosts. Before applying, run:
 

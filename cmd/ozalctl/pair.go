@@ -389,7 +389,9 @@ func (n *pairSSHNode) Report(ctx context.Context, p ctl.PairProgress) error {
 	request := "curl --silent --show-error --max-time 5 --unix-socket " + ctl.Quote(n.socket) + " -H 'Content-Type: application/json' --data-binary " + ctl.Quote(string(raw)) + " -o /dev/null -w '%{http_code}' http://localhost/_/api/updates/status"
 	accepted := "202"
 	if p.Result == "current" || p.Phase == "staging" || p.Phase == "checkpointing" || p.Phase == "stopping" {
-		accepted += "|404"
+		// Older admin muxes may answer 405 through a GET-only fallback when
+		// the progress POST route is not installed yet.
+		accepted += "|404|405"
 	}
 	command := "if code=$(" + request + "); then case \"$code\" in " + accepted + ") exit 0;; *) echo \"update status API returned $code\" >&2; exit 1;; esac; else echo 'update status API did not answer' >&2; exit 1; fi"
 	return n.root(ctx, "sudo sh -c "+ctl.Quote(command))

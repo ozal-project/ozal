@@ -28,15 +28,17 @@ func (r *pairRemoteStub) Terminal(_ context.Context, command string) (int, error
 	return r.termCode, nil
 }
 
-func TestPairStatusToleratesLegacy404OnlyBeforeCandidateAPIIsRunning(t *testing.T) {
+func TestPairStatusToleratesLegacyMissingOrMethodNotAllowedBeforeCandidateAPIIsRunning(t *testing.T) {
 	for _, test := range []struct {
 		name     string
 		progress ctl.PairProgress
 		want     string
 	}{
-		{name: "before cutover", progress: ctl.PairProgress{CheckedAt: "2026-10-30T00:00:00Z", Installed: "v0.1.0", Latest: "v0.2.0", Result: "updating", JobID: "job-1", Phase: "stopping"}, want: "202|404"},
+		{name: "staging", progress: ctl.PairProgress{CheckedAt: "2026-10-30T00:00:00Z", Installed: "v0.1.0", Latest: "v0.2.0", Result: "updating", JobID: "job-1", Phase: "staging"}, want: "202|404|405"},
+		{name: "checkpointing", progress: ctl.PairProgress{CheckedAt: "2026-10-30T00:00:00Z", Installed: "v0.1.0", Latest: "v0.2.0", Result: "updating", JobID: "job-1", Phase: "checkpointing"}, want: "202|404|405"},
+		{name: "before stopping", progress: ctl.PairProgress{CheckedAt: "2026-10-30T00:00:00Z", Installed: "v0.1.0", Latest: "v0.2.0", Result: "updating", JobID: "job-1", Phase: "stopping"}, want: "202|404|405"},
 		{name: "candidate running", progress: ctl.PairProgress{CheckedAt: "2026-10-30T00:00:00Z", Installed: "v0.1.0", Latest: "v0.2.0", Result: "updating", JobID: "job-1", Phase: "starting"}, want: "202"},
-		{name: "already current", progress: ctl.PairProgress{CheckedAt: "2026-10-30T00:00:00Z", Installed: "v0.2.0", Latest: "v0.2.0", Result: "current", JobID: "job-1", Phase: "complete"}, want: "202|404"},
+		{name: "already current", progress: ctl.PairProgress{CheckedAt: "2026-10-30T00:00:00Z", Installed: "v0.2.0", Latest: "v0.2.0", Result: "current", JobID: "job-1", Phase: "complete"}, want: "202|404|405"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			remote := &pairRemoteStub{}
