@@ -216,3 +216,16 @@ func TestProbeAllBoundsConcurrencyAcrossTargets(t *testing.T) {
 		t.Fatalf("aggregate status = %+v, want checked and healthy", status)
 	}
 }
+
+func (c *Checker) probe(ctx context.Context, r config.Route) {
+	targets := r.UpstreamTargets()
+	if len(targets) == 0 {
+		return
+	}
+	c.mu.Lock()
+	c.routeTargets[r.Host] = targets
+	c.mu.Unlock()
+	for _, target := range targets {
+		c.probeTarget(ctx, r, target)
+	}
+}

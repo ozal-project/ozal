@@ -129,7 +129,7 @@ func TestDuplicateAuthorizationAndSpoofedClientIPDoNotBypassChecks(t *testing.T)
 	now := time.Now()
 	opts.IPLimiter = ratelimit.NewLimiter(1, 1, time.Hour, ratelimit.WithNow(func() time.Time { return now }))
 	h, _ = New(opts)
-	trusted := pipeline.Trust(h)
+	trusted := pipeline.TrustWithProxies(nil)(h)
 	for i, ip := range []string{"198.51.100.1", "198.51.100.2"} {
 		probe = &probeBody{}
 		req = httptest.NewRequest("POST", "http://deploy.example"+uploadPath, probe)

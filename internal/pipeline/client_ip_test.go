@@ -236,3 +236,8 @@ func TestLegacyVisitorHeaderSpellingsAreStrippedAsClientInput(t *testing.T) {
 		}
 	}
 }
+
+// Trust is the first stage with no trusted forwarding peers.
+func Trust(next http.Handler) http.Handler {
+	return TrustWithProxies(nil)(next)
+}

@@ -15,6 +15,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ozal-project/ozal/internal/tunnel"
 )
 
 func writeCert(t *testing.T, dir string) string {
@@ -134,4 +136,10 @@ func TestConnectorEnrollRejectsPrivateKeyFile(t *testing.T) {
 	if _, err := fingerprintFromPEM(key); err == nil {
 		t.Fatal("a private key file was accepted as a certificate")
 	}
+}
+
+// fingerprintFromPEM fingerprints a certificate file.
+func fingerprintFromPEM(path string) (tunnel.Fingerprint, error) {
+	_, fp, err := readConnectorCert(path)
+	return fp, err
 }

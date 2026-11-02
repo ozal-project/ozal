@@ -40,22 +40,6 @@ type Decision struct {
 	Reason  string
 }
 
-// Authorizer decides whether an already-authenticated Principal may reach a
-// route governed by policy. It has no side effects and no knowledge of
-// HTTP, sessions, or OIDC — CodeAuthenticationRequired is deliberately not
-// producible by an Authorizer: the caller only reaches this decision once
-// Authenticate has already confirmed a Principal exists.
-type Authorizer interface {
-	Authorize(p Principal, context policycontext.Context, policy config.AccessPolicy) Decision
-}
-
-// PolicyAuthorizer is the default, pure Authorizer implementation.
-type PolicyAuthorizer struct{}
-
-func (PolicyAuthorizer) Authorize(p Principal, context policycontext.Context, policy config.AccessPolicy) Decision {
-	return AuthorizeWithContext(p, context, policy)
-}
-
 // Authorize evaluates:
 //
 //	(email allowed OR domain allowed OR no identity allowlist configured)

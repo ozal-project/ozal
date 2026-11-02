@@ -34,3 +34,10 @@ func FuzzStripCookie(f *testing.F) {
 		}
 	})
 }
+
+// stripCookie returns a Cookie header value without the named cookie, keeping
+// the other pairs in order. It returns "" when nothing is left; the caller
+// decides whether that means removing the header.
+func stripCookie(header, name string) string {
+	return stripCookies(header, func(cookieName string) bool { return cookieName == name })
+}

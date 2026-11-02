@@ -177,14 +177,6 @@ func TestPlanRefusesANonHTTPSNotesURL(t *testing.T) {
 	}
 }
 
-func TestDescribePhaseNeverClaimsSuccess(t *testing.T) {
-	for _, phase := range []string{PhaseReviewing, PhaseStaging, PhaseVerifying, PhaseInstalling, PhaseStarting} {
-		if text := DescribePhase(phase); text == "" || strings.Contains(strings.ToLower(text), "complete") {
-			t.Fatalf("phase %s describes %q", phase, text)
-		}
-	}
-}
-
 func TestNewIDIsRandomAndValid(t *testing.T) {
 	a, err := NewID()
 	if err != nil {

@@ -224,7 +224,6 @@ export async function fetchPublishing(token: string, signal?: AbortSignal): Prom
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
-export const fetchProjects = async (token: string, signal?: AbortSignal): Promise<Project[]> => (await fetchPublishing(token, signal)).projects ?? [];
 
 export class PagesDisabledError extends Error {}
 
