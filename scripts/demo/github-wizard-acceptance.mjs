@@ -6,7 +6,7 @@ import { mkdir } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import assert from "node:assert/strict";
 const exec = promisify(execFile);
-const session = `ozal-github-wizard-${process.pid}`;
+let session = `ozal-github-wizard-${process.pid}`;
 const target = process.env.OZAL_WORKFLOW_URL;
 if (!target) throw new Error("Run with OZAL_WORKFLOW_BROWSER=1 go test ./internal/admin -run TestGitHubWizardBrowserAcceptance -v");
 const artifactDir = process.env.OZAL_WORKFLOW_ARTIFACTS ? resolve(process.env.OZAL_WORKFLOW_ARTIFACTS) : null;
@@ -79,6 +79,9 @@ try {
   await audit("saved");
   step = "connect GitHub";
   await ab("close");
+  // agent-browser cannot reopen a session it has just closed, so the
+  // connect step starts a fresh browser under its own session name.
+  session = `${session}-connect`;
   await ab("open", process.env.OZAL_CONNECT_URL);
   await ab("wait", "--text", "Add application");
   await button("Add application");
