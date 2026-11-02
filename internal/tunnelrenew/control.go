@@ -82,7 +82,7 @@ func renew(ctx context.Context, hosts Hosts, home, directory string, force bool,
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	ca := filepath.Join(home, ".local/share/switchboard-tunnel-ca")
+	ca := filepath.Join(home, ".local/share/ozal-tunnel-ca")
 	caInfo, err := certificate(filepath.Join(ca, "ca.crt"))
 	if err != nil {
 		return err
@@ -135,7 +135,7 @@ func renew(ctx context.Context, hosts Hosts, home, directory string, force bool,
 }
 
 func Run(ctx context.Context, hosts Hosts, home string, force, initialize bool, out io.Writer) error {
-	directory := filepath.Join(home, ".local/share/switchboard-tunnel-renew")
+	directory := filepath.Join(home, ".local/share/ozal-tunnel-renew")
 	if err := os.MkdirAll(directory, 0700); err != nil {
 		return err
 	}

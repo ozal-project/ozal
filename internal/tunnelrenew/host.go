@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -61,7 +62,7 @@ func (a Agent) base() string {
 	if a.Dir != "" {
 		return a.Dir
 	}
-	return filepath.Join(a.Home, ".local/share/switchboard-tunnel-"+a.Role)
+	return filepath.Join(a.Home, ".local/share/ozal-tunnel-"+a.Role)
 }
 
 func (a Agent) config() string {
@@ -75,7 +76,7 @@ func (a Agent) binary() string {
 	if a.Binary != "" {
 		return a.Binary
 	}
-	return filepath.Join(a.base(), "switchboard")
+	return filepath.Join(a.base(), "ozal")
 }
 
 // restartCommand is what the agent runs to restart its role's service.
@@ -84,7 +85,7 @@ func (a Agent) restartCommand() []string {
 		// Exactly the sudoers rule's command: no flags of sudo's own beyond -n.
 		return []string{"sudo", "-n", "/usr/bin/systemctl", "restart", a.Unit}
 	}
-	return []string{"systemctl", "--user", "restart", "switchboard-tunnel-" + a.Role + ".service"}
+	return []string{"systemctl", "--user", "restart", "ozal-tunnel-" + a.Role + ".service"}
 }
 
 var versionPattern = regexp.MustCompile(`^identities/[0-9a-f]{32}$`)
@@ -281,14 +282,35 @@ func (a Agent) Handle(ctx context.Context, request Request) (Reply, error) {
 	return reply, errors.New("unsupported host action")
 }
 
-type Pilot struct{ Home string }
+// Pilot reaches the edge's renewal agent over SSH and serves the connector
+// locally. The deployment supplies every host detail: the SSH target and key,
+// the exact edge command (which the edge's sudoers rule names, so the SSH
+// account can run that agent and nothing else as the tunnel's account) and
+// the file whose digest proves the tunnel serves the expected content.
+type Pilot struct {
+	Home, SSHTarget, SSHKey, EdgeAgent, ProbeFile string
+}
 
-// PilotEdgeAgent is the command the pilot's controller runs on the edge over
-// SSH (postura 2, 2026-10-22): the edge binary as the tunnel's service
-// account, with fixed arguments. The edge's sudoers rule names exactly this
-// command, so octavio's shell can run the agent and nothing else as that
-// account.
-const PilotEdgeAgent = "sudo -n -u switchboard-tunnel /usr/local/lib/switchboard-tunnel-edge/switchboard tunnel renew-agent -role edge -dir /var/lib/switchboard-tunnel-edge -config /etc/switchboard-tunnel-edge/config.integrated.json -unit switchboard-tunnel-edge"
+// Validate refuses a pilot with a missing host detail before any call.
+func (p Pilot) Validate() error {
+	switch {
+	case p.SSHTarget == "" || strings.HasPrefix(p.SSHTarget, "-"):
+		return errors.New("edge SSH target is required")
+	case !filepath.IsAbs(p.SSHKey):
+		return errors.New("edge SSH key must be an absolute path")
+	case strings.TrimSpace(p.EdgeAgent) == "":
+		return errors.New("edge agent command is required")
+	case !filepath.IsAbs(p.ProbeFile):
+		return errors.New("probe file must be an absolute path")
+	}
+	return nil
+}
+
+// sshArgs is the edge call's argv after "ssh": strict host keys, only the
+// configured key, and the agent command after the destination.
+func (p Pilot) sshArgs() []string {
+	return []string{"-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-o", "StrictHostKeyChecking=yes", "-o", "IdentitiesOnly=yes", "-i", p.SSHKey, "--", p.SSHTarget, p.EdgeAgent}
+}
 
 func (p Pilot) Call(ctx context.Context, role string, request Request) (Reply, error) {
 	if role == "connector" {
@@ -301,7 +323,7 @@ func (p Pilot) Call(ctx context.Context, role string, request Request) (Reply, e
 	if err != nil {
 		return Reply{}, err
 	}
-	output, err := command(ctx, data, "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-o", "StrictHostKeyChecking=yes", "-o", "IdentitiesOnly=yes", "-i", filepath.Join(p.Home, ".ssh/id_ed25519_hetzner_homelab"), "octavio@10.8.0.1", PilotEdgeAgent)
+	output, err := command(ctx, data, "ssh", p.sshArgs()...)
 	if err != nil {
 		return Reply{}, err
 	}
@@ -316,7 +338,7 @@ func (p Pilot) Healthy(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 50*time.Second)
 	defer cancel()
 	for {
-		data, err := os.ReadFile(filepath.Join(p.Home, "projects/portfolio/dist/index.html"))
+		data, err := os.ReadFile(p.ProbeFile)
 		if err != nil {
 			return err
 		}

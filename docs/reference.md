@@ -71,6 +71,20 @@ trust, enroll connectors or automate the rollover. Use `connector` for enrollmen
 `tunnel renew` for the existing operational flow. These commands do not require any
 historical scripts.
 
+```text
+ozal tunnel renew -edge-ssh USER@HOST -edge-key SSH_KEY -edge-agent 'EDGE_COMMAND' -probe-file FILE [-force] [-init]
+```
+
+`tunnel renew` runs on the connector host. Its CA lives in
+`~/.local/share/ozal-tunnel-ca`, the connector identities in
+`~/.local/share/ozal-tunnel-connector` (user unit `ozal-tunnel-connector.service`),
+and its journal and lock in `~/.local/share/ozal-tunnel-renew`. The edge is reached
+over SSH with strict host keys and only `-edge-key`; `-edge-agent` is the exact
+remote command, normally `sudo -n -u ACCOUNT BINARY tunnel renew-agent -role edge
+-dir DIR -config CONFIG -unit UNIT`, which the edge's sudoers rule names. After a
+restart the edge must serve `-probe-file` at `/` through the tunnel. All four are
+required.
+
 ## Base configuration
 
 Example of a public local HTTP proxy, without login:
