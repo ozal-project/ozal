@@ -6,7 +6,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/ozal-project/ozal/internal/updateexec"
 	"github.com/ozal-project/ozal/internal/updatejob"
@@ -49,5 +51,9 @@ type installedUpdateRunner struct {
 func (r installedUpdateRunner) Run(ctx context.Context, args []string, log io.Writer) error {
 	cmd := exec.CommandContext(ctx, r.binary, append([]string{"update"}, args...)...)
 	cmd.Stdout, cmd.Stderr = log, log
+	// The candidate is executed before installation, so staging must be on an
+	// executable filesystem. The profile has already validated this root-owned
+	// binary directory; the host's /tmp may be mounted noexec.
+	cmd.Env = append(os.Environ(), "TMPDIR="+filepath.Dir(r.binary))
 	return cmd.Run()
 }

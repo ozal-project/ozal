@@ -333,6 +333,10 @@ account, key, catalog base URL, channel, state, plan, jobs and lock. It rejects 
 profile, key, binary or binary directory writable by group or other accounts
 and, when running as root, requires those files and directories to be owned by
 root; a compromised `ozal` must not become root by replacing the executable.
+The executor retains `NoNewPrivileges` and grants only ambient `CAP_SETUID` so
+the upgrader can start migrations as the service account. The UID transition
+clears that capability before the migration binary executes; the migration
+process remains unprivileged.
 
 The executor routes are not a generic dispatcher: they accept no paths, commands,
 units, shell arguments or client URLs. A plan expires after ten minutes, is
@@ -374,11 +378,14 @@ hold the whole archive in the Go heap. It extracts only after checking
 authenticated size and hash; ordinary failures remove the partial file and the
 incomplete binary. Limits: 512 MiB for the archive and the binary; extraction is
 bounded to 512 MiB plus 16 MiB for headers and other files. Small metadata keeps
-its own in-memory limits. Staging uses the private temporary directory (`TMPDIR`
-or `/tmp`); it may be on tmpfs, and the budget counts its filesystem, not total
-host memory. Before installing it also requires `version -json` of the verified
-candidate to identify Ozal and match the reviewed version (a `v` prefix is
-tolerated; build metadata must match).
+its own in-memory limits. The systemd executor sets `TMPDIR` to the installed
+binary directory, which is root-owned, writable by the executor and executable
+even when `/tmp` is mounted `noexec`. A direct `ozal update` command uses
+`TMPDIR` or `/tmp`; it must point to a private writable directory on an
+executable filesystem. Staging may be on tmpfs, and the budget counts its
+filesystem, not total host memory. Before installing it also requires
+`version -json` of the verified candidate to identify Ozal and match the
+reviewed version (a `v` prefix is tolerated; build metadata must match).
 
 The budget checks available space (`statfs`, user-available blocks) before
 downloading, before extracting and before creating `.next` or stopping the
