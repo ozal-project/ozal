@@ -185,10 +185,6 @@ func TestAuthorize(t *testing.T) {
 	}
 }
 
-func TestPolicyAuthorizerImplementsAuthorizer(t *testing.T) {
-	var _ Authorizer = PolicyAuthorizer{}
-}
-
 func TestAuthorizeWithContextPreservesCurrentPolicyBehavior(t *testing.T) {
 	context := policycontext.Build(policycontext.Input{
 		ObservedAt:      time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC),

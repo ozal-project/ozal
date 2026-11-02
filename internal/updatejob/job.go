@@ -510,27 +510,6 @@ func (p Plan) Expired(now time.Time) bool {
 	return age > ReviewTTL || age < -time.Minute
 }
 
-// DescribePhase is the short text the console can show without inventing
-// progress. It is stable for tests and translations.
-func DescribePhase(phase string) string {
-	switch phase {
-	case PhaseReviewing:
-		return "Reviewing the signed release"
-	case PhaseStaging:
-		return "Downloading the verified archive"
-	case PhaseVerifying:
-		return "Checking the archive and the configuration"
-	case PhaseInstalling:
-		return "Installing and restarting Ozal"
-	case PhaseStarting:
-		return "Waiting for Ozal to come back"
-	case PhaseComplete:
-		return "Finished"
-	default:
-		return "Working"
-	}
-}
-
 // String is for logs: it does not include the reason, which may name a path.
 func (j Job) String() string {
 	return fmt.Sprintf("%s (%s/%s)", j.ID, j.Phase, j.Result)

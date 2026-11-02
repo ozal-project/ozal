@@ -65,6 +65,9 @@ fi
 if [[ -d web/console/node_modules ]]; then
   echo "[6b] console: type check and rebuild"
   before="$(find internal/admin/console -type f -exec sha256sum {} + | sort | sha256sum)"
+  npm --prefix web/console run react:check
+  react_build_output="$(npm --prefix web/console run react:build 2>&1)"
+  printf '%s\n' "$react_build_output" | node scripts/check-react-console-budget.mjs
   scripts/build-console.sh >/dev/null
   after="$(find internal/admin/console -type f -exec sha256sum {} + | sort | sha256sum)"
   if [[ "$before" != "$after" ]]; then

@@ -57,10 +57,9 @@ stages. Each stage is an `http.Handler` middleware (`func(next http.Handler)
 http.Handler`) or, for raw streams, the equivalent stream stage. Order is part
 of the security model and lives in one function.
 
-This is the target, not a claim that every stage is already a separate
-middleware. Today only `trust` exists in `internal/pipeline`; `identify`,
-`authorize`, `route` and `forward` still live inside the proxy's forwarding
-handler, and `shield` is planned (see `internal/pipeline/pipeline.go`).
+This logical order is the security contract even when multiple stages share a
+handler. Keep the authoritative stage order in one place; the current package
+ownership is listed in [AGENTS.md](../../AGENTS.md#code-map-current).
 
 | # | Stage | Responsibility | Core decision |
 |---|---|---|---|
@@ -101,7 +100,7 @@ cmd/ozal/          composition root, subcommands (edge, connect, share, validate
 internal/
   identity/               Principal, session types                      (core)
   policy/                 AccessPolicy, Authorize, Decision             (core)
-  rules/                  rules language: lexer, parser, evaluator      (core, Q2)
+  rules/                  rules language: lexer, parser, evaluator      (core)
   ratelimit/              token-bucket logic                            (core)
   routing/                routing table, snapshot, upstream selection   (core + snapshot)
   config/                 parse, validate, raw/resolved                 (core)
@@ -109,16 +108,15 @@ internal/
   httpedge/               listeners, TLS, reverse proxy                 (adapter)
   admin/                  control plane API and dashboard               (adapter)
   oidc/                   upstream OIDC login                           (adapter)
-  tunnel/                 agent ↔ edge transport                        (adapter, Q1)
-  store/sqlite/           persistent state                              (adapter, Q1)
-  notify/telegram/        notifications and approvals                   (adapter, Q1)
+  tunnel/                 agent ↔ edge transport                        (adapter)
+  store/sqlite/           persistent state                              (adapter)
+  notify/telegram/        notifications and approvals                   (adapter)
   events/                 event types and sinks                         (core types + adapters)
 ```
 
 The current package map is in
-[AGENTS.md](../../AGENTS.md#code-map-current); it is the authority while the
-target above remains a direction. In short: `auth` still combines principal,
-policy and OIDC; `proxy` + `pipeline` + `routing` cover the HTTP edge;
+[AGENTS.md](../../AGENTS.md#code-map-current). In short: `auth` combines
+principal, policy and OIDC; `proxy` + `pipeline` + `routing` cover the HTTP edge;
 `routemanager` owns the immutable routing snapshot; `passkey`, `pages`,
 `tunnel`, `certs` and `admin` are separate packages. `routing.Select` is the
 pure, health-aware upstream-index decision; the proxy advances a per-snapshot
@@ -130,12 +128,9 @@ Current contracts and their limits are grouped in [engineering](../engineering.m
 audit is separate from live activity; policy explain uses the real pure engine;
 certificates and tunnels own bounded, cancellable lifecycles. Identity contracts
 remain in [identity-login](identity-login.md) and [host-sessions](host-sessions.md).
-Shield challenge and additional app identity integrations remain proposals.
-The tracker owns acceptance and pending work; this package map is not a release
-promise or a duplicate implementation history.
-
-`LAB-*` learning labs are tracked in [TO_IMPLEMENT](../TO_IMPLEMENT.md); they
-are experiments and artifacts, not commitments.
+Every identity integration must use verified principals and the common
+authorization boundary. A new pipeline stage needs an explicit decision and
+event contract.
 
 ## Go rules that make the pattern real
 

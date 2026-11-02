@@ -42,12 +42,6 @@ func Chain(stages ...Stage) Stage {
 	}
 }
 
-// Trust is the first stage with no trusted forwarding peers. Use
-// TrustWithProxies to opt into CF-Connecting-IP from configured TCP peers.
-func Trust(next http.Handler) http.Handler {
-	return TrustWithProxies(nil)(next)
-}
-
 func stripIdentityHeaders(h http.Header) {
 	for name := range h {
 		if isIdentityHeader(name) {

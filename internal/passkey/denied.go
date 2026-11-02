@@ -37,7 +37,10 @@ func (g *Gate) ServeDenied(w http.ResponseWriter, r *http.Request, p auth.Princi
 	if err != nil {
 		return false
 	}
-	pageHeaders(w.Header())
+	// A same-origin logout POST redirects to the configured login origin. CSP
+	// checks form-action across redirects, so allow only that exact trusted
+	// origin in addition to this app host.
+	pageHeadersWithFormSources(w.Header(), "'self'", g.origin)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusForbidden)
 	if r.Method == http.MethodHead {

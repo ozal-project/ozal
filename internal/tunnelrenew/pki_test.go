@@ -20,7 +20,7 @@ import (
 
 func testCA(t *testing.T, home string, lifetime time.Duration) string {
 	t.Helper()
-	dir := filepath.Join(home, ".local/share/switchboard-tunnel-ca")
+	dir := filepath.Join(home, ".local/share/ozal-tunnel-ca")
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		t.Fatal(err)
 	}

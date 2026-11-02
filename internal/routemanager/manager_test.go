@@ -774,11 +774,11 @@ func TestConfigDigestNamesTheFileInEffect(t *testing.T) {
 	}
 	onDisk := func() string {
 		t.Helper()
-		digest, err := config.FileDigest(configPath)
+		data, err := os.ReadFile(configPath)
 		if err != nil {
 			t.Fatal(err)
 		}
-		return digest
+		return config.Digest(data)
 	}
 	first := onDisk()
 	if got := manager.ConfigDigest(); got != first || len(got) != 64 {

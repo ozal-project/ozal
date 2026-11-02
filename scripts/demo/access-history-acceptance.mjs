@@ -52,7 +52,7 @@ const api = async () => {
 };
 
 try {
-  edge = await startDemoEdge({ binary, dir: join(root, "edge"), adminSocket: true, auditAccess: true });
+  edge = await startDemoEdge({ binary, dir: join(root, "edge"), adminSocket: true, auditAccess: true, dynamicPorts: true });
   browser = await chromium.launch({ executablePath: chrome, args: ["--no-sandbox"] });
   const page = await (await browser.newContext({ viewport: { width: 1280, height: 900 } })).newPage();
 

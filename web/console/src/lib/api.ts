@@ -1,4 +1,4 @@
-import { admin, endSession } from "$lib/adminToken.svelte";
+import { sessionFetch } from "$lib/apiSession";
 
 // Typed views of the loopback admin API. The console never decides access:
 // verdicts always come from the server (auth.Explain).
@@ -118,10 +118,7 @@ const boundedSignal = (signal?: AbortSignal, ms = 15_000) => {
 // authedGet sends this tab's credential. Reads of the edge's state need one,
 // even on loopback; a 401 means it was revoked or the host changed the token.
 async function authedGet(url: string, signal?: AbortSignal, ms = 15_000): Promise<Response> {
-  const token = admin.token.trim();
-  const res = await fetch(url, { cache: "no-store", headers: token ? { Authorization: `Bearer ${token}` } : {}, signal: boundedSignal(signal, ms) });
-  if (res.status === 401 && token && admin.token.trim() === token) endSession();
-  return res;
+  return sessionFetch(url, {}, signal, ms);
 }
 
 async function getJSON<T>(url: string, signal?: AbortSignal, ms = 15_000): Promise<T> {
@@ -132,15 +129,11 @@ async function getJSON<T>(url: string, signal?: AbortSignal, ms = 15_000): Promi
 }
 
 async function postJSON<T>(url: string, body: unknown, signal?: AbortSignal, ms = 15_000): Promise<T> {
-  const token = admin.token.trim();
-  const res = await fetch(url, {
+  const res = await sessionFetch(url, {
     method: "POST",
-    cache: "no-store",
-    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-    signal: boundedSignal(signal, ms),
-  });
-  if (res.status === 401 && token && admin.token.trim() === token) endSession();
+  }, signal, ms);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(typeof data?.error === "string" ? data.error : `HTTP ${res.status}`, res.status, typeof data?.code === "string" ? data.code : undefined);
   return data as T;
@@ -231,7 +224,6 @@ export async function fetchPublishing(token: string, signal?: AbortSignal): Prom
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
-export const fetchProjects = async (token: string, signal?: AbortSignal): Promise<Project[]> => (await fetchPublishing(token, signal)).projects ?? [];
 
 export class PagesDisabledError extends Error {}
 

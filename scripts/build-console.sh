@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds the Svelte admin console into internal/admin/console, which the Go
+# Builds the React admin console into internal/admin/console, which the Go
 # binary embeds. Node is a build-time tool only; commit the output.
 set -euo pipefail
 

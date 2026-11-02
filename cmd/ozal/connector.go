@@ -215,9 +215,3 @@ func readConnectorCert(path string) ([]byte, tunnel.Fingerprint, error) {
 	fp, err := tunnel.FingerprintFromPEM(data)
 	return data, fp, err
 }
-
-// fingerprintFromPEM fingerprints a certificate file.
-func fingerprintFromPEM(path string) (tunnel.Fingerprint, error) {
-	_, fp, err := readConnectorCert(path)
-	return fp, err
-}

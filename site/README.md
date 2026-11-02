@@ -40,10 +40,10 @@ console-style window: compact choices, the request's path through Ozal and the a
 with its stages. The walkthrough is five real console screens behind native radio tabs
 that advance on their own while on screen (paused on hover, handed to the visitor on the
 first click or key, off under reduced motion; no video; `scripts/demo/tour.mjs`
-regenerates the stills by signing in with a host login). Below it: one card and a status
-tag per capability ("In use" on the author's server, "Tested" by automated tests,
-"Unreleased" on main). There is no roadmap page; the trackers stay in `docs/`. The
-public source is linked; release downloads stay unadvertised until Ozal artifacts exist.
+regenerates the stills by signing in with a host login). Below it, capability
+cards summarize Ozal's access, identity, policy and publication surfaces. The
+site presents capabilities without a public roadmap. The public source is
+linked; release downloads stay unadvertised until Ozal artifacts exist.
 Automatic site publication requires repository variable `OZAL_SITE_DEPLOY_ENABLED=true`,
 set only after the edge trusts the new repository owner and workflow.
 
@@ -57,7 +57,7 @@ pieces carry the machine-readable layer:
   `Claude-SearchBot`, `Claude-User`, `PerplexityBot`, `Perplexity-User`), so
   Ozal can appear in answers. Training collectors (`GPTBot`, `ClaudeBot`,
   `Google-Extended`, `Applebot-Extended`, `CCBot`) are disallowed: appearing
-  in answers does not need them (owner decision 2026-11-01). Cloudflare prepends its Content
+  in answers does not need them. Cloudflare prepends its Content
   Signals preamble to the origin file, so the live response starts with that
   comment block and then this one.
 - `public/sitemap.xml` lists the canonical URL; `robots.txt` references it.

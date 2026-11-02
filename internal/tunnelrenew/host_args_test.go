@@ -34,10 +34,10 @@ func TestEdgeConnectorChangesGoThroughTheAdminSocket(t *testing.T) {
 
 func TestAgentLayouts(t *testing.T) {
 	user := Agent{Home: filepath.Join("home", "u"), Role: "connector"}
-	if got := user.restartCommand(); !slices.Equal(got, []string{"systemctl", "--user", "restart", "switchboard-tunnel-connector.service"}) {
+	if got := user.restartCommand(); !slices.Equal(got, []string{"systemctl", "--user", "restart", "ozal-tunnel-connector.service"}) {
 		t.Fatalf("user unit restart = %q", got)
 	}
-	if user.config() != filepath.Join("home", "u", ".local/share/switchboard-tunnel-connector", "config.integrated.json") {
+	if user.config() != filepath.Join("home", "u", ".local/share/ozal-tunnel-connector", "config.integrated.json") {
 		t.Fatalf("user config = %q", user.config())
 	}
 	system := Agent{Role: "edge", Dir: "/var/lib/e", Config: "/etc/e/config.json", Binary: "/usr/local/lib/e/ozal", Unit: "ozal-tunnel-edge"}
@@ -47,5 +47,31 @@ func TestAgentLayouts(t *testing.T) {
 	}
 	if system.base() != "/var/lib/e" || system.config() != "/etc/e/config.json" || system.binary() != "/usr/local/lib/e/ozal" {
 		t.Fatalf("system layout = %q %q %q", system.base(), system.config(), system.binary())
+	}
+}
+
+// The deployment names the edge host; the binary carries no host, key or
+// command of its own, and an incomplete pilot fails before any SSH call.
+func TestPilotTakesEveryHostDetailFromTheDeployment(t *testing.T) {
+	pilot := Pilot{Home: "/home/u", SSHTarget: "ops@edge.example", SSHKey: "/home/u/.ssh/edge", EdgeAgent: "sudo -n -u ozal-tunnel /usr/local/lib/ozal-tunnel-edge/ozal tunnel renew-agent -role edge", ProbeFile: "/srv/site/index.html"}
+	if err := pilot.Validate(); err != nil {
+		t.Fatalf("complete pilot refused: %v", err)
+	}
+	want := []string{"-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-o", "StrictHostKeyChecking=yes", "-o", "IdentitiesOnly=yes", "-i", "/home/u/.ssh/edge", "--", "ops@edge.example", pilot.EdgeAgent}
+	if got := pilot.sshArgs(); !slices.Equal(got, want) {
+		t.Fatalf("ssh args = %q\nwant      %q", got, want)
+	}
+	for name, broken := range map[string]func(*Pilot){
+		"no target":      func(p *Pilot) { p.SSHTarget = "" },
+		"option target":  func(p *Pilot) { p.SSHTarget = "-oProxyCommand=x" },
+		"relative key":   func(p *Pilot) { p.SSHKey = ".ssh/edge" },
+		"no agent":       func(p *Pilot) { p.EdgeAgent = "  " },
+		"relative probe": func(p *Pilot) { p.ProbeFile = "index.html" },
+	} {
+		p := pilot
+		broken(&p)
+		if p.Validate() == nil {
+			t.Errorf("%s: incomplete pilot accepted", name)
+		}
 	}
 }

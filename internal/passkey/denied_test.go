@@ -46,8 +46,8 @@ func TestRefusalOffersExplicitPostToSignOutBeforeTryingAnotherAccount(t *testing
 			t.Errorf("the account-switch action lacks %q", want)
 		}
 	}
-	if !strings.Contains(rec.Header().Get("Content-Security-Policy"), "form-action 'self'") {
-		t.Fatal("the logout form is not constrained to this host")
+	if csp := rec.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "form-action 'self' "+loginOrigin+";") {
+		t.Fatalf("the logout form does not allow only this host and the configured login redirect: %q", csp)
 	}
 }
 

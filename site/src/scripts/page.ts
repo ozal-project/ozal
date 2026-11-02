@@ -9,7 +9,7 @@ if (!matchMedia("(prefers-reduced-motion: reduce)").matches && "IntersectionObse
       observer.unobserve(entry.target);
     }
   }, { threshold: 0.1 });
-  document.querySelectorAll<HTMLElement>(".try-copy > *, .section-intro > *, .works li, .timeline li, .map, .how > *, .walk-tabs, .availability > *, .flow > li, .zone-card").forEach((node) => {
+  document.querySelectorAll<HTMLElement>(".try-copy > *, .section-intro > *, .works li, .map, .how > *, .walk-tabs, .availability > *, .flow > li, .zone-card").forEach((node) => {
     // Siblings arrive one after another instead of as a block.
     const i = node.parentElement ? [...node.parentElement.children].indexOf(node) : 0;
     node.style.setProperty("--i", String(Math.min(i, 8)));

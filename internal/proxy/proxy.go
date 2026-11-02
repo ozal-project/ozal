@@ -529,13 +529,6 @@ func emitAccessEvent(w http.ResponseWriter, r *http.Request, cfg options, event 
 	return true
 }
 
-// stripCookie returns a Cookie header value without the named cookie, keeping
-// the other pairs in order. It returns "" when nothing is left; the caller
-// decides whether that means removing the header.
-func stripCookie(header, name string) string {
-	return stripCookies(header, func(cookieName string) bool { return cookieName == name })
-}
-
 // stripAccessCookies also removes scoped handoff bindings if a client sends
 // them outside their browser-enforced path, including the legacy shared name.
 func stripAccessCookies(header string) string {

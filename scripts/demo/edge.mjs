@@ -32,17 +32,24 @@ const page = (title, blurb) => `<!doctype html><meta charset="utf-8"><title>${ti
 <main style="text-align:center"><p style="color:#8b8b95;font-size:13px;letter-spacing:.08em;text-transform:uppercase">demo app</p>
 <h1 style="margin:.2em 0;font-size:2.6rem">${title}</h1><p style="color:#b4b4bb">${blurb}</p></main>`;
 
-function upstream(app) {
-  return new Promise((ok) => {
-    const server = createServer((req, res) => {
-      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(page(app.title, app.blurb));
-    }).listen(app.port, "127.0.0.1", () => ok(server));
+function upstream(app, dynamicPorts = false) {
+  const server = createServer((req, res) => {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    res.end(page(app.title, app.blurb));
   });
+  return new Promise((ok, fail) => server.once("error", fail).listen(dynamicPorts ? 0 : app.port, "127.0.0.1", () => ok(server)));
 }
 
-async function admin(token, method, path, body, headers = {}) {
-  const res = await fetch(`http://127.0.0.1:${ADMIN_PORT}${path}`, {
+async function freePort() {
+  const server = createServer();
+  await new Promise((ok, fail) => server.once("error", fail).listen(0, "127.0.0.1", ok));
+  const { port } = server.address();
+  await new Promise((ok, fail) => server.close((error) => error ? fail(error) : ok()));
+  return port;
+}
+
+async function admin(token, method, path, body, headers = {}, adminPort = ADMIN_PORT) {
+  const res = await fetch(`http://127.0.0.1:${adminPort}${path}`, {
     method,
     headers: { Authorization: `Bearer ${token}`, ...(body && !(body instanceof Uint8Array) ? { "Content-Type": "application/json" } : {}), ...headers },
     body: body instanceof Uint8Array ? body : body ? JSON.stringify(body) : undefined,
@@ -60,35 +67,58 @@ function archive(dir, files) {
 }
 
 // extraRoutes are appended to the demo routes, for scripts that need a host
-// the demo does not have (an app on another domain, for instance). auditAccess
-// keeps access decisions in a durable journal, so the console's history
-// survives edge.restart().
-export async function startDemoEdge({ binary, dir = join(homedir(), ".cache", "ozal-demo"), adminSocket = false, adminLoginHost = false, extraRoutes = [], auditAccess = false } = {}) {
+// the demo does not have (an app on another domain, for instance). A function
+// receives the allocated listener ports for routes that use dynamicPorts.
+// auditAccess keeps access decisions in a durable journal, so the console's
+// history survives edge.restart().
+// Acceptance scripts use dynamicPorts; the standalone demo keeps stable ports.
+export async function startDemoEdge({ binary, dir = join(homedir(), ".cache", "ozal-demo"), adminSocket = false, adminLoginHost = false, extraRoutes = [], auditAccess = false, dynamicPorts = false } = {}) {
   if (!binary || !existsSync(binary)) throw new Error("pass the ozal binary (--binary)");
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(join(dir, "sites"), { recursive: true });
   const token = "demo-" + Math.random().toString(36).slice(2, 12);
-  const servers = await Promise.all(APPS.map(upstream));
+  const upstreamResults = await Promise.allSettled(APPS.map((app) => upstream(app, dynamicPorts)));
+  const servers = upstreamResults.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+  const upstreamFailure = upstreamResults.find((result) => result.status === "rejected");
+  if (upstreamFailure) {
+    await Promise.all(servers.map((server) => new Promise((resolve) => server.close(resolve))));
+    throw upstreamFailure.reason;
+  }
+  const closeUpstreams = () => Promise.all(servers.map((server) => new Promise((resolve) => server.close(resolve))));
+  const appPorts = Object.fromEntries(APPS.map((app, index) => [app.name, servers[index].address().port]));
+  const allocatedPorts = new Set(Object.values(appPorts));
+  const nextPort = async () => {
+    let port;
+    do { port = await freePort(); } while (allocatedPorts.has(port));
+    allocatedPorts.add(port);
+    return port;
+  };
+  const port = dynamicPorts ? await nextPort() : PORT;
+  const adminPort = dynamicPorts ? await nextPort() : ADMIN_PORT;
+  const deadPort = dynamicPorts ? await nextPort() : 19199;
+  const loginURL = `http://auth.${DOMAIN}:${port}`;
+  const additionalRoutes = typeof extraRoutes === "function"
+    ? extraRoutes({ port, adminPort, loginURL, upstreamPorts: appPorts })
+    : extraRoutes;
 
   const config = {
-    listen: `127.0.0.1:${PORT}`,
-    admin: { listen: `127.0.0.1:${ADMIN_PORT}`, token: "env:SB_DEMO_TOKEN", ...(adminSocket ? { socket: join(dir, "admin.sock") } : {}), ...(adminLoginHost ? { login_host: true } : {}) },
-    auth: { cookie_domain: DOMAIN, passkeys: { rp_id: DOMAIN, login_url: LOGIN, display_name: "Acme" } },
+    listen: `127.0.0.1:${port}`,
+    admin: { listen: `127.0.0.1:${adminPort}`, token: "env:SB_DEMO_TOKEN", ...(adminSocket ? { socket: join(dir, "admin.sock") } : {}), ...(adminLoginHost ? { login_host: true } : {}) },
+    auth: { cookie_domain: DOMAIN, passkeys: { rp_id: DOMAIN, login_url: loginURL, display_name: "Acme" } },
     pages: { dir: join(dir, "sites"), keep: 10 },
     ...(auditAccess ? { audit: { dir: join(dir, "audit"), include: ["access"] } } : {}),
     routes: [
-      ...APPS.map((a) => ({ host: `${a.name}.${DOMAIN}:${PORT}`, target: `http://127.0.0.1:${a.port}`, health_path: "/", access: a.access })),
-      { host: `blog.${DOMAIN}:${PORT}`, site: "blog" },
-      { host: `docs.${DOMAIN}:${PORT}`, site: "docs" },
+      ...APPS.map((a) => ({ host: `${a.name}.${DOMAIN}:${port}`, target: `http://127.0.0.1:${appPorts[a.name]}`, health_path: "/", access: a.access })),
+      { host: `blog.${DOMAIN}:${port}`, site: "blog" },
+      { host: `docs.${DOMAIN}:${port}`, site: "docs" },
       // Nothing listens here: the console should say so.
-      { host: `reports.${DOMAIN}:${PORT}`, target: "http://127.0.0.1:19199", health_path: "/" },
-      ...extraRoutes,
+      { host: `reports.${DOMAIN}:${port}`, target: `http://127.0.0.1:${deadPort}`, health_path: "/" },
+      ...additionalRoutes,
     ],
   };
   writeFileSync(join(dir, "config.json"), JSON.stringify(config, null, 2));
   const env = { ...process.env, SB_DEMO_TOKEN: token };
   // A fresh database must be migrated before the edge will start.
-  execFileSync(binary, ["migrate", "-db", join(dir, "state.db")], { env, stdio: "pipe" });
   let child;
   const boot = async () => {
     child = spawn(binary, ["-config", join(dir, "config.json"), "-db", join(dir, "state.db")], { env, stdio: ["ignore", "pipe", "pipe"] });
@@ -96,7 +126,7 @@ export async function startDemoEdge({ binary, dir = join(homedir(), ".cache", "o
     child.stdout.on("data", (d) => (log += d));
     child.stderr.on("data", (d) => (log += d));
     for (let i = 0; ; i++) {
-      try { if ((await fetch(`http://127.0.0.1:${ADMIN_PORT}/_/healthz`)).ok) break; } catch { /* not up yet */ }
+      try { if ((await fetch(`http://127.0.0.1:${adminPort}/_/healthz`)).ok) break; } catch { /* not up yet */ }
       if (i > 100 || child.exitCode !== null) throw new Error("the edge did not start:\n" + log.slice(-800));
       await new Promise((r) => setTimeout(r, 100));
     }
@@ -107,17 +137,32 @@ export async function startDemoEdge({ binary, dir = join(homedir(), ".cache", "o
     child.kill("SIGTERM");
     await exited;
   };
-  await boot();
+  try {
+    execFileSync(binary, ["migrate", "-db", join(dir, "state.db")], { env, stdio: "pipe" });
+    await boot();
+  } catch (error) {
+    if (child && child.exitCode === null) {
+      const exited = new Promise((resolve) => child.once("exit", resolve));
+      child.kill("SIGTERM");
+      await exited;
+    }
+    await closeUpstreams();
+    throw error;
+  }
 
   const edge = {
     token,
     dir,
-    consoleURL: `http://127.0.0.1:${ADMIN_PORT}`,
-    appURL: (name) => `http://${name}.${DOMAIN}:${PORT}/`,
-    deploy: (site, files) => admin(token, "POST", `/_/api/sites/${site}/deployments`, archive(join(dir, "pack", site), files), { "Content-Type": "application/gzip" }),
-    invite: (email, name) => admin(token, "POST", "/_/api/people/invite", { email, name, groups: [], return_to: "", ttl_minutes: 60 }),
+    port,
+    adminPort,
+    loginURL,
+    upstreamPorts: appPorts,
+    consoleURL: `http://127.0.0.1:${adminPort}`,
+    appURL: (name) => `http://${name}.${DOMAIN}:${port}/`,
+    deploy: (site, files) => admin(token, "POST", `/_/api/sites/${site}/deployments`, archive(join(dir, "pack", site), files), { "Content-Type": "application/gzip" }, adminPort),
+    invite: (email, name) => admin(token, "POST", "/_/api/people/invite", { email, name, groups: [], return_to: "", ttl_minutes: 60 }, {}, adminPort),
     // A visitor with no session knocks on a protected app: a real refusal event.
-    knock: (name) => fetch(`http://127.0.0.1:${PORT}/`, { headers: { Host: `${name}.${DOMAIN}:${PORT}` }, redirect: "manual" }),
+    knock: (name) => fetch(`http://127.0.0.1:${port}/`, { headers: { Host: `${name}.${DOMAIN}:${port}` }, redirect: "manual" }),
     // The same edge process again, with its state, config and journal.
     async restart() {
       await halt();
@@ -125,7 +170,7 @@ export async function startDemoEdge({ binary, dir = join(homedir(), ".cache", "o
     },
     async stop() {
       await halt();
-      await Promise.all(servers.map((s) => new Promise((r) => s.close(r))));
+      await closeUpstreams();
     },
   };
 

@@ -24,6 +24,7 @@ complete local installation. Both refuse to overwrite.
 ozal install binary -archive FILE.tar.gz -sha256 TRUSTED_HEX -destination NEW_FILE [-apply]
 ozal install service [-binary VERIFIED_ELF | -archive FILE.tar.gz -sha256 TRUSTED_HEX] [-target URL] [-group members] [-root STAGING_DIR] [-apply]
 ozal install service -print-unit
+ozal uninstall [-apply] [-purge-state] [-root STAGING_DIR]
 
 ozalctl site check -dir DIST
 ozalctl site pack -dir DIST -out NEW_ARCHIVE
@@ -70,6 +71,20 @@ correctly marked, and have more than 37 days of validity. Creating a CA does not
 trust, enroll connectors or automate the rollover. Use `connector` for enrollment and
 `tunnel renew` for the existing operational flow. These commands do not require any
 historical scripts.
+
+```text
+ozal tunnel renew -edge-ssh USER@HOST -edge-key SSH_KEY -edge-agent 'EDGE_COMMAND' -probe-file FILE [-force] [-init]
+```
+
+`tunnel renew` runs on the connector host. Its CA lives in
+`~/.local/share/ozal-tunnel-ca`, the connector identities in
+`~/.local/share/ozal-tunnel-connector` (user unit `ozal-tunnel-connector.service`),
+and its journal and lock in `~/.local/share/ozal-tunnel-renew`. The edge is reached
+over SSH with strict host keys and only `-edge-key`; `-edge-agent` is the exact
+remote command, normally `sudo -n -u ACCOUNT BINARY tunnel renew-agent -role edge
+-dir DIR -config CONFIG -unit UNIT`, which the edge's sudoers rule names. After a
+restart the edge must serve `-probe-file` at `/` through the tunnel. All four are
+required.
 
 ## Base configuration
 
@@ -393,9 +408,9 @@ act outside it; no permission to list zones is needed. Each change is an asynchr
 the adapter waits for it to finish before treating the record as created or deleted, and an
 Action that never finishes counts as an unknown result. Deletion removes only the record it
 created (the API identifies them by value inside the RRSet). The TTL is fixed at 60 s, the
-minimum. **Pending verification in a real zone:** the official spec does not state how TXT
-records are written; they are sent quoted, and that decision lives in one place
-(`hetznerTXTValue`). Until that test, use the provider in staging.
+minimum. **Known limit:** the official API specification does not state how TXT records
+must be written. Ozal sends them quoted. Test the provider against a staging zone before
+relying on it for production certificates.
 
 #### Delegating the challenge by CNAME (any DNS provider)
 

@@ -463,15 +463,6 @@ func Digest(data []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// FileDigest is Digest of the file at path as it is on disk now.
-func FileDigest(path string) (string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", fmt.Errorf("read config: %w", err)
-	}
-	return Digest(data), nil
-}
-
 // Parse decodes and validates a configuration document. Unknown fields are
 // rejected so a misspelled security or routing option cannot be ignored.
 func Parse(data []byte) (*Config, error) {

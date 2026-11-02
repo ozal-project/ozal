@@ -187,19 +187,6 @@ enqueue:
 	wg.Wait()
 }
 
-func (c *Checker) probe(ctx context.Context, r config.Route) {
-	targets := r.UpstreamTargets()
-	if len(targets) == 0 {
-		return
-	}
-	c.mu.Lock()
-	c.routeTargets[r.Host] = targets
-	c.mu.Unlock()
-	for _, target := range targets {
-		c.probeTarget(ctx, r, target)
-	}
-}
-
 func (c *Checker) probeTarget(ctx context.Context, r config.Route, target string) {
 	c.mu.RLock()
 	generation := c.failures[r.Host][target]

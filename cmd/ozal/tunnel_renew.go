@@ -16,6 +16,10 @@ func runTunnelRenew(ctx context.Context, args []string, out io.Writer) error {
 	fs.SetOutput(out)
 	force := fs.Bool("force", false, "renew both leaves now, including service restarts")
 	initialize := fs.Bool("init", false, "initialize identity pointers without changing services")
+	sshTarget := fs.String("edge-ssh", "", "SSH destination of the edge host (user@host)")
+	sshKey := fs.String("edge-key", "", "absolute path of the SSH key for the edge host")
+	edgeAgent := fs.String("edge-agent", "", "exact remote command that runs `ozal tunnel renew-agent -role edge` on the edge")
+	probeFile := fs.String("probe-file", "", "absolute path of a file the tunnel serves at /, compared by digest after a restart")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -26,7 +30,11 @@ func runTunnelRenew(ctx context.Context, args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return tunnelrenew.Run(ctx, tunnelrenew.Pilot{Home: home}, home, *force, *initialize, out)
+	pilot := tunnelrenew.Pilot{Home: home, SSHTarget: *sshTarget, SSHKey: *sshKey, EdgeAgent: *edgeAgent, ProbeFile: *probeFile}
+	if err := pilot.Validate(); err != nil {
+		return err
+	}
+	return tunnelrenew.Run(ctx, pilot, home, *force, *initialize, out)
 }
 
 func runTunnelRenewAgent(ctx context.Context, args []string, out io.Writer) error {

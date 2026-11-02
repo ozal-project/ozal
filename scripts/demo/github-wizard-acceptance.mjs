@@ -6,7 +6,7 @@ import { mkdir } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import assert from "node:assert/strict";
 const exec = promisify(execFile);
-const session = `ozal-github-wizard-${process.pid}`;
+let session = `ozal-github-wizard-${process.pid}`;
 const target = process.env.OZAL_WORKFLOW_URL;
 if (!target) throw new Error("Run with OZAL_WORKFLOW_BROWSER=1 go test ./internal/admin -run TestGitHubWizardBrowserAcceptance -v");
 const artifactDir = process.env.OZAL_WORKFLOW_ARTIFACTS ? resolve(process.env.OZAL_WORKFLOW_ARTIFACTS) : null;
@@ -45,7 +45,7 @@ try {
   await ab("wait", "--text", "What are you putting online?");
   await ab("wait", "--text", "octavia/website");
   assert.equal(await evaluate("location.search"), "", "GitHub's parameters stayed in the address");
-  assert.equal(await evaluate("document.querySelector('input[name=\"app-kind\"][value=\"github\"]')?.checked"), true, "wizard did not reopen on GitHub");
+  assert.equal(await evaluate("document.querySelector('input[name=\"application-kind\"][value=\"github\"]')?.checked"), true, "wizard did not reopen on GitHub");
   await audit("repositories");
   step = "choose repository";
   await ab("find", "text", "octavia/website", "click");
@@ -67,7 +67,7 @@ try {
   const content = await evaluate("document.querySelector('pre[aria-label=\"Generated workflow\"]')?.textContent");
   assert(content.includes("https://www.example.test") && content.includes("id-token: write"), "review did not show the generated workflow");
   await audit("review");
-  await evaluate("document.querySelector('dialog[open] input[type=checkbox]').click()");
+  await evaluate("document.querySelector('dialog[open] input[type=checkbox], [role=dialog] input[type=checkbox]').click()");
   await button("Save application");
   await ab("wait", "--text", "Save this application?");
   assert((await text()).includes("a pull request adding its workflow is opened"), "confirmation does not mention the pull request");
@@ -79,6 +79,9 @@ try {
   await audit("saved");
   step = "connect GitHub";
   await ab("close");
+  // agent-browser cannot reopen a session it has just closed, so the
+  // connect step starts a fresh browser under its own session name.
+  session = `${session}-connect`;
   await ab("open", process.env.OZAL_CONNECT_URL);
   await ab("wait", "--text", "Add application");
   await button("Add application");
@@ -89,7 +92,8 @@ try {
   console.log("GitHub wizard browser acceptance passed: connect panel, install return, repository choice, workflow review, one save with trust and PR; axe 0 at 1440/1024/390/320.");
 } catch (error) {
   // What the operator saw helps more than the timeout; it holds no credential.
-  console.error(await text().catch(() => ""));
+  console.error(JSON.stringify(await evaluate("({path: location.pathname, title: document.title})").catch(() => null)));
+  console.error(JSON.stringify({ pageErrors: await ab("errors").catch((cause) => String(cause)), console: await ab("console").catch((cause) => String(cause)) }));
   throw error;
 } finally {
   await ab("close").catch(() => {});

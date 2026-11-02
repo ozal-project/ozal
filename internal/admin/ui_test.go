@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io/fs"
 	"net/http"
-	"path"
 	"strings"
 	"testing"
 	"time"
@@ -87,20 +86,35 @@ func TestConsoleHomeAndAssets(t *testing.T) {
 	handler := New(&fakeManager{cfg: config.Config{Admin: config.Admin{Token: readToken}}}, broker, WithEvents(broker))
 
 	// Every client route gets the app shell with the strict CSP.
+	// Radix floating UI needs runtime style attributes; these exact directives
+	// keep inline <style> elements and scripts blocked.
 	for _, path := range []string{"/", "/overview", "/activity", "/routes", "/simulator", "/people", "/groups", "/administrators", "/integrations"} {
 		rec := request(handler, http.MethodGet, path, "", "")
 		csp := rec.Header().Get("Content-Security-Policy")
+		directives := make(map[string]string)
+		for _, directive := range strings.Split(csp, ";") {
+			fields := strings.Fields(directive)
+			if len(fields) > 0 {
+				directives[fields[0]] = strings.Join(fields[1:], " ")
+			}
+		}
 		if rec.Code != 200 || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/html") ||
-			!strings.Contains(csp, "script-src 'self'") || strings.Contains(csp, "unsafe") ||
+			directives["script-src"] != "'self'" ||
+			directives["style-src"] != "'self'" ||
+			directives["style-src-attr"] != "'unsafe-inline'" ||
 			// Forms may only reach GitHub, for the App manifest.
 			!strings.Contains(csp, "form-action https://github.com;") {
 			t.Fatalf("console %s: %d %v", path, rec.Code, rec.Header())
+		}
+		for directive, value := range directives {
+			if directive != "style-src-attr" && strings.Contains(value, "unsafe") {
+				t.Fatalf("console %s has unsafe %s: %q", path, directive, value)
+			}
 		}
 		if strings.Contains(rec.Body.String(), "<script>") {
 			t.Fatalf("console %s has an inline script", path)
 		}
 	}
-
 	// The CSP allows fonts from this origin only. A font that Vite inlined as a
 	// data: URI is blocked by the browser, so none may be embedded in the CSS.
 	for _, css := range mustGlob(t, "console/assets/*.css") {
@@ -118,22 +132,17 @@ func TestConsoleHomeAndAssets(t *testing.T) {
 	// The page references only the sign-in entry; the console itself is a
 	// separate chunk loaded after authentication.
 	index := request(handler, http.MethodGet, "/activity", "", "")
-	asset := ""
+	var referenced []string
 	for _, a := range assets {
 		name := "/" + strings.TrimPrefix(a, "console/")
-		if strings.HasPrefix(path.Base(a), "Console-") {
-			if strings.Contains(index.Body.String(), name) {
-				t.Fatalf("index preloads the console chunk %s before sign-in", name)
-			}
-			continue
-		}
 		if strings.Contains(index.Body.String(), name) {
-			asset = name
+			referenced = append(referenced, name)
 		}
 	}
-	if asset == "" {
-		t.Fatalf("console index references none of its built scripts %v", assets)
+	if len(referenced) != 1 {
+		t.Fatalf("console index must reference only the sign-in entry before authentication; found %v", referenced)
 	}
+	asset := referenced[0]
 	rec := request(handler, http.MethodGet, asset, "", "")
 	if rec.Code != 200 || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/javascript") ||
 		!strings.Contains(rec.Header().Get("Cache-Control"), "immutable") || rec.Header().Get("X-Content-Type-Options") != "nosniff" {

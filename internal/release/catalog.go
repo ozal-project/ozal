@@ -10,7 +10,6 @@ import (
 	"net/netip"
 	"net/url"
 	"path"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -386,6 +385,3 @@ func ParseCatalogURL(catalogURL string) (string, error) {
 	}
 	return u.String() + CatalogSignatureSuffix, nil
 }
-
-// FormatSequence is used in log lines without exposing arbitrary catalog text.
-func FormatSequence(sequence int64) string { return strconv.FormatInt(sequence, 10) }

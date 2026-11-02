@@ -14,6 +14,10 @@ Type=simple
 User=root
 Group=root
 ExecStart=/usr/local/lib/ozal/ozal update-executor -profile /etc/ozal/update-executor.json
+# Stage candidates beside the installed executable. Some hosts mount /tmp with
+# noexec; the updater must run the verified candidate before it can replace
+# the installed binary.
+Environment=TMPDIR=/usr/local/lib/ozal
 # /run/ozal-update is outside the edge's RuntimeDirectory, so removing the
 # edge's socket does not remove the executor's. The profile opens the socket
 # to the service account's group (0660) for the console API to read.
@@ -27,6 +31,9 @@ TimeoutStopSec=15min
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true
+# The upgrader uses this only to start the verified migration as the service
+# account. The capability is cleared when that child changes to a non-root UID.
+AmbientCapabilities=CAP_SETUID
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=yes

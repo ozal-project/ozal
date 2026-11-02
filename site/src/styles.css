@@ -385,8 +385,6 @@
   .compare code { font-family: var(--font-mono); font-size: .9em; overflow-wrap: anywhere; }
   #how { margin-top: 112px; }
 }
-@media (max-width:1100px) {
-}
 @media (max-width:800px) {
   #how { margin-top: 88px; }
   .compare > div { padding: 18px 20px; }
@@ -402,24 +400,11 @@
   .works-in-use::before { background: var(--color-ok); }
   .works-unreleased::before { background: var(--color-wait); }
   .scope-note { margin-top: 20px; padding: 0; background: none; }
-  .timeline { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 32px; }
-  .timeline li { border-top: 2px solid var(--color-tile-3); padding-top: 18px; }
-  .timeline .current { border-top-color: var(--color-brand); }
-  .timeline-when { color: var(--color-muted); }
-  .timeline .current .timeline-when { color: var(--color-brand); }
-  .timeline h3 { font-size: 1.25rem; font-weight: 500; letter-spacing: -.02em; margin-top: 6px; }
-  .timeline h3 + p { margin-top: 6px; color: var(--color-ink-2); }
   .engine-technical .code { font-size: .8125rem; line-height: 1.5; max-height: 220px; overflow: auto; }
   .engine-technical h3 { font-size: .875rem; font-weight: 500; color: var(--color-muted); }
 }
-@media (max-width:1100px) {
-  .timeline { grid-template-columns: repeat(2,minmax(0,1fr)); }
-}
 @media (max-width:800px) {
   .works { grid-template-columns: 1fr; }
-}
-@media (max-width:480px) {
-  .timeline { grid-template-columns: 1fr; gap: 20px; }
 }
 
 /* Page motion. The first screen arrives with CSS alone; everything below is
@@ -474,11 +459,9 @@
   @keyframes step-copy { from { opacity: 0; transform: translateX(-12px); } }
   @keyframes step-shot { from { opacity: 0; transform: translateY(10px) scale(.985); } }
 
-  /* Things that are live breathe: what runs today and the current release. */
-  .works-in-use::before, .timeline .current .timeline-when::before { animation: breathe 2.6s ease-in-out infinite; }
-  .timeline .current .timeline-when::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 8px; border-radius: 50%; background: var(--color-brand); vertical-align: 1px; }
+  /* What runs today breathes. */
+  .works-in-use::before { animation: breathe 2.6s ease-in-out infinite; }
   .works-in-use::before { --glow: var(--color-ok); }
-  .timeline .current .timeline-when::before { --glow: var(--color-brand); }
   @keyframes breathe { 0%,100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--glow) 55%, transparent); } 60% { box-shadow: 0 0 0 6px transparent; } }
 
   /* Roadmap meters fill from zero. */
@@ -714,7 +697,7 @@ html { scroll-padding-top: 96px; }
   .chip:hover { border-color: var(--color-depth); }
 }
 
-/* What works today as cards with a state pill; the plan as a year-long rail. */
+/* What works today as cards with a state pill. */
 @layer components {
   .works { grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; column-gap: 12px; border-top: 0; }
   .works li { display: flex; flex-direction: column; gap: 8px; padding: 22px; border: 1px solid var(--color-tile-2); border-bottom: 1px solid var(--color-tile-2); border-radius: 14px; background: var(--color-tile); }
@@ -728,28 +711,10 @@ html { scroll-padding-top: 96px; }
   .works li.works-next .works-tag::before { background: transparent; border: 1px solid var(--color-muted); }
   .works-legend { margin-top: 20px; }
 
-  .rail { position: relative; height: 2px; margin-bottom: 26px; border-radius: 1px; background: var(--color-tile-3); }
-  .rail-fill { position: absolute; inset: 0 auto 0 0; width: calc(var(--done) * 100%); background: linear-gradient(90deg, var(--color-depth), var(--color-signal)); border-radius: 1px; }
-  .rail-now { position: absolute; top: 50%; left: calc(var(--done) * 100%); width: 12px; height: 12px; translate: -50% -50%; border-radius: 50%; background: var(--color-signal); box-shadow: 0 0 0 5px color-mix(in srgb, var(--color-signal) 22%, transparent); }
-  .timeline { gap: 12px; }
-  .timeline > li { border-top: 0; padding: 22px; border-radius: 14px; background: var(--color-tile); border: 1px solid var(--color-tile-2); }
-  .timeline > li.current { border-color: color-mix(in srgb, var(--color-signal) 45%, transparent); background: linear-gradient(180deg, color-mix(in srgb, var(--color-signal) 8%, var(--color-tile)), var(--color-tile) 65%); }
-  .timeline .current .timeline-when { color: var(--color-signal); }
-  .timeline .current .timeline-when::before { background: var(--color-signal); }
-  .timeline-v { font-family: var(--font-mono); font-size: .875rem; color: var(--color-muted); margin-right: 4px; }
-  .timeline-items { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
-  .timeline-items li { padding: 3px 9px; border-radius: 999px; border: 1px solid var(--color-tile-3); font-size: .75rem; color: var(--color-muted); }
-  .timeline .current .timeline-items li { color: var(--color-ink-2); }
 }
 @media (max-width:1100px) {
   .works { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .rail { display: none; }
 }
 @media (max-width:480px) {
   .works { grid-template-columns: 1fr; }
-}
-@media (prefers-reduced-motion:no-preference) {
-  .rail-fill { transform-origin: left; animation: meter-fill 1.4s .2s cubic-bezier(.22,1,.36,1) both; }
-  .rail-now { animation: breathe 2.6s ease-in-out infinite; --glow: var(--color-signal); }
-  .timeline .current .timeline-when::before { --glow: var(--color-signal); }
 }

@@ -1,10 +1,5 @@
 # Native login: passkeys, sessions and step-up
 
-**Status:** design. Passkeys, invitations, recovery, step-up, device-bound
-passkeys and the session-hardening columns are implemented; approvals, the
-OIDC provider and later phases are planned. This is not a release promise.
-Check the release notes of the version you run.
-
 Related: [identity integration](../engineering.md#identity-and-applications) (how an
 application trusts the gateway), [design](design.md) (the `identify` stage),
 [tunnel visitor contract](../engineering.md#tunnels), [stack](stack.md)
@@ -12,17 +7,12 @@ application trusts the gateway), [design](design.md) (the `identify` stage),
 
 ## What this decides
 
-How a visitor proves who they are **to Ozal itself**, without Google or
-another external provider, and how that proof is kept safe for the rest of the
-session. It does not decide how an application trusts the result (see the
-identity integration contract), and it does not make Ozal an OIDC provider for
-other apps (see [the provider section](#what-the-provider-is-and-what-it-is-not)).
-
-**Tension to resolve first.** The architecture lists "a user directory" as a
-non-goal. Native login needs a minimal one: users, their passkeys, nothing
-else (no passwords, no profiles, no self sign-up). Accepting this design
-narrows that non-goal to "no general-purpose directory or IdP"; rejecting it
-keeps Ozal on external providers only.
+How a visitor proves who they are **to Ozal itself** with a native passkey and
+how that proof is kept safe for the rest of the session. An installation can
+also use a configured upstream OIDC provider. This document does not decide
+how an application trusts the result (see the
+identity integration contract), or define Ozal as an OIDC issuer (see
+[the provider boundary](#oidc-provider-boundary)).
 
 ## Principles
 
@@ -31,8 +21,7 @@ keeps Ozal on external providers only.
 2. **Nothing secret at rest:** the database holds public keys and hashes of
    session IDs and invitation tokens. A stolen `state.db` logs nobody in.
 3. **The login is not the end:** the session is the next target (cookie
-   theft), so it is short, rotated, re-proven for sensitive routes and, where
-   the browser supports it, bound to the device (DBSC).
+   theft), so it is short, rotated and re-proven for sensitive routes.
 4. **The operator's shell is the root of trust:** recovery happens only
    through the CLI on the host (`ozal user invite -recover`). Whoever has that
    shell already owns the deployment; no weaker path (email, support questions,
@@ -209,10 +198,6 @@ A route's `access` gains two optional fields:
 | Rotation | On login, step-up, privilege change | A pre-login cookie never becomes a session |
 | Cookie | `sb_session`, `Secure`, `HttpOnly`, `SameSite=Lax`, `cookie_domain` | Never forwarded upstream |
 | Revocation | Disabling a user or revoking a passkey deletes its sessions at once | Not "when they expire" |
-| DBSC (planned) | Offered to browsers that support it (Chrome on Windows today) | A copied cookie without the device key stops working within minutes |
-
-DBSC is opportunistic: browsers without it keep a normal session. A route can
-later require it, accepting that Firefox and Safari users cannot reach that route.
 
 ## Threats
 
@@ -220,44 +205,24 @@ later require it, accepting that Firefox and Safari users cannot reach that rout
 |---|---|---|
 | Phishing page | The browser signs only for the real origin; a look-alike domain gets no passkey | None for passkeys; social engineering of the operator is out of band |
 | Stolen database | Public keys and SHA-256 hashes only | Metadata (names, emails) is exposed |
-| Stolen session cookie (infostealer) | Short lifetime, step-up on sensitive routes, DBSC where supported, revocation | Without DBSC a cookie is usable until it expires or is revoked |
+| Stolen session cookie (infostealer) | Short lifetime, step-up on sensitive routes, revocation | A cookie remains usable until it expires or is revoked |
 | Replay of a login response | Single-use, short-lived challenge bound to the pre-login cookie | — |
 | Cloned authenticator | Sign-count check + alert | Synced passkeys report 0 and cannot be checked this way |
 | Intercepted enrolment link | 15 min, single use, fragment + POST, alert on every new passkey | A link stolen inside 15 min is a real risk: send it over a channel you trust |
-| Login CSRF / open redirect | POST + Origin check; `rd` is a server-side record limited to configured hosts | — |
+| Login CSRF / open redirect | POST + Origin check; `return_to` is checked against configured hosts | — |
 | Account recovery abuse | Only the operator's shell can recover | Losing every device and the host means rebuilding the user |
 | Brute force / challenge flooding | Existing `/_/auth/*` rate limit; capped challenge store | — |
 | Compromised host | Out of scope: root on the host owns everything | Stated explicitly |
 
-## Phases
+## Identity boundaries
 
-1. **Passkeys:** implemented. Model, CLI invite/recover/revoke, Flows 1–2,
-   session columns, events and alerts, then private acceptance with a protected
-   connector route and no external provider.
-2. **Policy and session hardening:** implemented for `max_auth_age`,
-   `require_device_bound`, the session columns and device management. Session
-   rotation and DBSC remain opportunistic.
-3. **Approvals:** planned. Telegram number matching for admin changes and
-   break-glass, always after a passkey session, never instead of one.
-4. **Provider:** planned. Ozal as OIDC provider with `acr`/`amr`, PKCE and
-   DPoP-bound tokens; device flow for `ozal login`.
-5. **Upstreams and signals:** planned. Keep Google/OIDC; add atproto login;
-   CAEP/SSF to revoke sessions on external signals.
+Ozal authenticates a person with a passkey or a configured upstream OIDC
+provider. Routes can constrain accepted methods through `access.methods`.
+Applications trust identity headers only on requests that arrive through the
+Ozal proxy. This contract covers authentication to Ozal and its sessions; an
+application-facing OIDC issuer has a separate protocol and trust boundary.
 
-## Design decisions
-
-| # | Decision | Recommended |
-|---|---|---|
-| 1 | Native user directory (narrows the architecture's non-goal) | Yes, minimal: users + passkeys only |
-| 2 | Who can join | Operator invitation only; no self sign-up |
-| 3 | Synced passkeys | Allowed by default; device-bound required per route |
-| 4 | Recovery | Host CLI only (admin unix socket) |
-| 5 | Session lifetimes | 12 h idle, 7 days absolute, 15 min step-up for admin |
-| 6 | RP ID and login host | A parent domain you control, with a login host below it |
-| 7 | Alert on new passkey | Yes, Telegram when configured, always an event |
-| 8 | DBSC | Phase 2, opportunistic |
-
-## Current implementation
+## Implementation details
 
 Code: `internal/passkey` (gate, ceremonies, pages), `internal/store/sqlite`
 (`identity.go`, migrations `004_create_passkey_users` through
@@ -284,7 +249,7 @@ differs from the text above:
 - **Ceremonies** (challenges) live in memory, single use, 5 minutes, capped at
   10 000; a restart costs a visitor one retry.
 
-## Acceptance (phase 1)
+## Security invariants
 
 - An invited user enrols with a passkey; the link cannot be reused, works only
   within 15 minutes and survives a link preview unused.
@@ -297,68 +262,35 @@ differs from the text above:
 - Every step appears in the activity feed; no token, challenge or cookie is
   logged.
 
-## The journey, built and planned
+## Enrollment and authentication flow
 
-Passkey login, invitations, recovery, step-up and device management are
-available. Approvals, email delivery and the OIDC provider are not.
+1. An operator creates an invitation. Ozal stores only a hash of its one-time
+   token and places the token in the URL fragment, where servers and link
+   previews do not receive it.
+2. The visitor starts enrollment. The edge checks that the invitation is unused
+   and within 15 minutes, stores the passkey's public key, consumes the token
+   and starts a session.
+3. The visitor returns to the configured `return_to` host, or sees explicit
+   links to protected applications.
+4. At sign-in, the visitor chooses a configured authentication method. The edge
+   verifies a passkey response for the current origin, rejects replays, and
+   provides verified identity to the proxied application.
+5. A route that requires recent proof triggers step-up. `max_auth_age_minutes`
+   and `require_device_bound` are evaluated by `auth.Fresh`.
+6. A signed-in person can add or revoke their passkeys at `/_/auth/devices`.
+   Recovery after losing every device is performed by the operator through the
+   host CLI and ends the previous sessions.
 
-**Built:**
+Session `Max-Age` ends at the earlier of 12 hours without use and 7 days after
+login.
 
-1. The operator runs `user invite -email … -group … -return-to <protected URL>`
-   on the host: it creates the user and a one-time token (only its hash is
-   stored) and prints `…/_/auth/enrol?return_to=…#TOKEN`.
-2. The operator sends the link by hand.
-3. The visitor opens it. The token is in the fragment, so no server or link
-   preview sees it, and nothing is consumed until the button is pressed.
-4. *Create passkey* → the device makes a key pair behind Face ID/PIN; the edge
-   checks the token (unused, within 15 minutes), stores only the public key,
-   burns the token and starts a session.
-5. The page returns to `return_to` if it is a protected host; otherwise it
-   lists the protected sites as explicit links.
-6. Later: no session → the login page; the visitor picks the passkey; the edge
-   verifies the signature (this origin, user verified, no replay) and the app
-   receives `X-Auth-Request-User` and `X-Auth-Request-Email`.
-7. Routes that ask for a recent proof trigger step-up; `max_auth_age_minutes`
-   and `require_device_bound` are enforced by `auth.Fresh`.
-8. The login page offers every configured method (passkey or an upstream OIDC
-   provider such as Google or Okta) and never picks one for the visitor; a
-   route can require one through `access.methods`.
-9. A signed-in person can add or revoke their own passkeys from
-   `/_/auth/devices`; every addition alerts.
-10. Recovery after losing every device stays `user invite -recover` on the
-    host; it replaces the previous passkeys and ends their sessions (`SEC-023`).
+## OIDC provider boundary
 
-The invitation is still sent by hand; email delivery is planned. Session expiry
-is implemented: `Max-Age` ends sessions at the earlier of 12 h without use and
-7 days after login.
-
-**Planned:**
-
-- The invitation is emailed; the email carries a code (primary, finishes in the
-  tab the visitor started in) and a link (fallback). Email bootstraps a passkey
-  once; it never signs in on its own afterwards and never recovers an account.
-- Telegram approvals for sensitive administrator changes and break-glass,
-  always after a passkey session and never instead of one.
-- Ozal as an OIDC provider and a device flow for `ozal login`.
-
-## What the provider is, and what it is not
-
-Being an OIDC provider means applications that speak OIDC (Grafana, Gitea, a
-mobile app, the CLI) can offer "Sign in with Ozal" instead of trusting the
-proxy's headers. The protocol part is well specified and bounded: discovery,
-JWKS with key rotation, authorization code + PKCE, token and userinfo endpoints,
-`acr`/`amr` claims, and the device flow for CLIs. Behind that endpoint the user
-still signs in with a passkey, so the tokens are as phishing-resistant as the login.
-
-What makes a product like Okta large is not OIDC: it is the catalog of
-pre-built integrations (OIDC, SAML, SCIM provisioning), lifecycle management,
-a risk engine, global availability and certifications, and an authenticator
-app (push, device trust). Ozal does not need its own phone app for the
-phishing-resistant part: the platform passkey (Apple Passwords, Google Password
-Manager, a security key) is the authenticator, and approvals for sensitive
-actions can use the existing Telegram notifier. TOTP apps (Google Authenticator)
-stay out of the login: their codes can be phished through a proxy page, which
-is the attack passkeys stop.
+This contract covers identity proof presented to Ozal. Upstream OIDC providers
+can authenticate a person to Ozal, while applications behind the proxy receive
+verified identity headers. An OIDC issuer for applications has a separate
+protocol, key-management and trust contract; proxy identity headers must not be
+treated as a substitute for that protocol on direct application connections.
 
 ## The portal
 

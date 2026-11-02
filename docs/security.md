@@ -97,4 +97,5 @@ promised, and unit tests do not establish them.
 
 For development and reproductions, use fixtures, fictitious credentials and
 disposable state. Do not test abuse or availability against production. Pending
-security and acceptance items remain in [TO_IMPLEMENT.md](TO_IMPLEMENT.md).
+security and acceptance items are tracked by the maintainer; see the
+[work status](TO_IMPLEMENT.md) note.
