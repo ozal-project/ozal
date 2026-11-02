@@ -124,12 +124,17 @@ try {
   await page.getByRole("combobox", { name: "Event category" }).selectOption("all");
   await count(2);
 
+  step = "account recovery event wording";
+  await publish("a-3", event("user.recovered", "operator@example.test", "person@example.test"));
+  await page.getByRole("row").filter({ hasText: "person@example.test" }).getByText("Account recovered").waitFor();
+  await count(3);
+
   step = "pause holds new events until resume";
   await page.getByRole("button", { name: "Pause" }).click();
-  await publish("a-3", event("access.allowed", "bob@example.test", "wiki.example.test"));
-  await count(2);
-  await page.getByRole("button", { name: "Resume" }).click();
+  await publish("a-4", event("access.allowed", "bob@example.test", "wiki.example.test"));
   await count(3);
+  await page.getByRole("button", { name: "Resume" }).click();
+  await count(4);
   await page.getByRole("row").filter({ hasText: "wiki.example.test" }).getByText("Access allowed").waitFor();
 
   step = "lost stream recovery resumes from last event ID";
@@ -140,11 +145,11 @@ try {
   const requests = await page.evaluate(() => window.__activityAcceptance.requests);
   assert(requests.length >= 2, "the event stream did not reconnect");
   assert.match(requests[0].authorization ?? "", /^Bearer .+/, "the event stream omitted bearer authentication");
-  assert.equal(requests.at(-1).lastEventId, "a-3", "reconnection did not send Last-Event-ID");
+  assert.equal(requests.at(-1).lastEventId, "a-4", "reconnection did not send Last-Event-ID");
 
   step = "bounded feed retains only the newest 500 events";
   const batch = Array.from({ length: 510 }, (_, index) => {
-    const seq = 4 + index;
+    const seq = 5 + index;
     return `id: a-${seq}\ndata: ${JSON.stringify({ type: "access.allowed", actor: `person-${seq}@example.test`, host: "wiki.example.test", time: new Date().toISOString() })}\n\n`;
   }).join("");
   await page.evaluate((chunk) => window.__activityAcceptance.publishBatch(chunk), batch);
@@ -159,7 +164,7 @@ try {
   const cspViolations = await page.evaluate(() => window.__activityCSPViolations);
   assert.deepEqual(cspViolations, [], `browser reported CSP violations: ${JSON.stringify(cspViolations)}`);
   assert.deepEqual(errors, [], `browser reported errors: ${JSON.stringify(errors)}`);
-  console.log("React activity acceptance passed: live SSE fixture, deduplication, category/search filters, pause/resume, lost/reconnected state with Last-Event-ID, 500-event retention, and no horizontal overflow at four widths.");
+  console.log("React activity acceptance passed: live SSE fixture, account-recovery wording, deduplication, category/search filters, pause/resume, lost/reconnected state with Last-Event-ID, 500-event retention, and no horizontal overflow at four widths.");
 } catch (error) {
   console.error(`React activity acceptance failed during ${step}: ${error.message}`);
   if (activeCSP) console.error(JSON.stringify(activeCSP));

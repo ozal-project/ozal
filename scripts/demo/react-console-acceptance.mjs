@@ -187,7 +187,14 @@ try {
   await browser("wait", "--fn", "document.querySelector('[aria-label=\"React preview acceptance\"]')?.getAttribute('aria-expanded') === 'true'");
   await browser("press", "Escape");
   await browser("wait", "--fn", "document.querySelector('[aria-label=\"React preview acceptance\"]')?.getAttribute('aria-expanded') === 'false' && document.activeElement?.getAttribute('aria-label') === 'React preview acceptance'");
-  console.log("React preview acceptance passed: production build, CSP parity, local-edge API proxy, host-issued login, reduced-motion behavior, 11 page routes, two aliases, unknown-route fallback, session resume, axe/overflow at 1440/1024/390/320px, and shell keyboard focus behavior.");
+
+  step = "expired session returns to sign-in with clear wording";
+  const expiredClock = Date.now() + 24 * 60 * 60 * 1000;
+  await browser("eval", `Date.now = () => ${expiredClock}`);
+  await browser("wait", "--text", "Your session ended. Sign in again.");
+  assert.equal(await evaluate("[...document.querySelectorAll('[role=status]')].some((element) => element.textContent.trim() === 'Your session ended. Sign in again.')"), true, "expired session did not return to sign-in with the expected status");
+
+  console.log("React preview acceptance passed: production build, CSP parity, local-edge API proxy, host-issued login, reduced-motion behavior, 11 page routes, two aliases, unknown-route fallback, session resume and expiry wording, axe/overflow at 1440/1024/390/320px, and shell keyboard focus behavior.");
 } catch (error) {
   console.error(`React preview acceptance failed during ${step}: ${error.message}`);
   try {

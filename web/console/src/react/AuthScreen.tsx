@@ -74,6 +74,7 @@ export function AuthScreen() {
     <section className="auth-card" aria-labelledby="auth-title">
       <h1 id="auth-title" className="text-lg font-semibold">{enrol ? "Create your passkey" : mode === "host" ? "Host login" : enrolled === false ? "Set up the first administrator" : "Sign in"}</h1>
       {enrol ? <EnrolPanel token={enrol} loginHost={loginHost} /> : mode === "host" ? <HostPanel /> : enrolled === false ? <>
+        {notice && <p className="text-muted-foreground mt-1 mb-4 text-sm" role="status">{notice}</p>}
         <p className="text-muted-foreground mt-1 mb-4 text-sm">Paste the setup link the installer printed.</p>
         <form className="flex items-center gap-2" onSubmit={submitPasted}>
           <Label htmlFor={`${id}-setup`} className="sr-only">Setup link</Label><Input id={`${id}-setup`} value={pasted} onChange={(event) => setPasted(event.target.value)} autoComplete="off" spellCheck={false} placeholder="http://ozal.localhost:…#enrol=…" />

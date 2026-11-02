@@ -89,9 +89,10 @@ try {
   const planID = "a".repeat(32);
   const jobID = "b".repeat(32);
   const plan = { id: planID, checked_at: now, installed: "v0.1.0", latest: "v0.2.0", channel: "stable", platform: "linux/arm64", result: "available", archive_sha256: "c".repeat(64), size: 20 * 1024 * 1024, migrations: true, notes_url: "https://ozal.dev/releases/v0.2.0" };
+  let planResponse = plan;
   const job = { id: jobID, channel: "stable", from: "v0.1.0", to: "v0.2.0", phase: "staging", result: "pending", started_at: now, updated_at: now };
   const done = { ...job, phase: "complete", result: "updated", finished_at: now };
-  let started = false;
+  let latestJob = null;
   let latestReads = 0;
   let jobReads = 0;
   const updateRequests = [];
@@ -103,26 +104,46 @@ try {
   });
   await page.route("**/_/api/updates/jobs/latest", (route) => {
     latestReads++;
-    if (started) return route.fulfill({ json: job });
+    if (latestJob) return route.fulfill({ json: latestJob });
     return route.fulfill({ status: 404, json: { error: "no update job has run" } });
   });
-  await page.route("**/_/api/updates/plan", (route) => route.fulfill({ json: plan }));
+  await page.route("**/_/api/updates/plan", (route) => route.fulfill({ json: planResponse }));
   await page.route("**/_/api/updates/jobs", async (route) => {
     if (route.request().method() !== "POST") return route.continue();
     const request = route.request();
     updateRequests.push({ body: request.postDataJSON(), authorization: (await request.allHeaders()).authorization });
     if (updateRequests.length === 1) return route.fulfill({ status: 403, json: { error: "confirm this installation with your passkey", code: "passkey_required" } });
-    started = true;
-    return route.fulfill({ status: 202, json: job });
+    latestJob = updateRequests.length > 2
+      ? { ...job, phase: "failed", result: "intervention_required" }
+      : job;
+    return route.fulfill({ status: 202, json: latestJob });
   });
   await page.route(`**/_/api/updates/jobs/${jobID}`, async (route) => {
     jobReads++;
-    return route.fulfill({ json: jobReads < 2 ? job : done });
+    latestJob = jobReads < 2 ? job : done;
+    return route.fulfill({ json: latestJob });
   });
+
+  step = "current and unreachable catalog states are explained";
+  await page.getByRole("button", { name: "Review update" }).click();
+  const dialog = page.getByRole("dialog", { name: "Update Ozal" });
+  await dialog.getByText("linux/arm64").waitFor();
+  await dialog.getByText("Cancel").click();
+  await dialog.waitFor({ state: "hidden" });
+  planResponse = { ...plan, result: "current" };
+  await page.getByRole("button", { name: "Review update" }).click();
+  await dialog.getByText("Ozal is up to date.").waitFor();
+  await dialog.getByText("Close").click();
+  await dialog.waitFor({ state: "hidden" });
+  planResponse = { ...plan, result: "unavailable", reason: "The signed release catalog could not be reached." };
+  await page.getByRole("button", { name: "Review update" }).click();
+  await dialog.getByText("The signed release catalog could not be reached.").waitFor();
+  await dialog.getByText("Close").click();
+  await dialog.waitFor({ state: "hidden" });
+  planResponse = plan;
 
   step = "review release and require an actual passkey step-up";
   await page.getByRole("button", { name: "Review update" }).click();
-  const dialog = page.getByRole("dialog", { name: "Update Ozal" });
   await dialog.getByText("linux/arm64").waitFor();
   await dialog.getByText("This release may update the state database.").waitFor();
   await dialog.getByRole("button", { name: "Update to v0.2.0" }).click();
@@ -141,8 +162,20 @@ try {
   await dialog.getByText("You can close this dialog. The update continues on the host.").waitFor();
   await dialog.getByText("is installed and answering.").waitFor({ timeout: 10_000 });
   assert(latestReads >= 2, "reopening did not read the current job from the host API");
+
+  step = "intervention-required state gives host-side guidance";
+  const nextLogin = await exec(binary, ["console", "login", "-config", join(edge.dir, "config.json"), "-name", "React Update Owner", "-tools", "updates,updates.install", "-url", previewURL]);
+  const nextLoginURL = nextLogin.stdout.split("\n").find((line) => line.startsWith("http"));
+  assert(nextLoginURL, "the host printed no second one-use login URL");
+  await page.goto(nextLoginURL);
+  await page.getByRole("heading", { name: "Overview" }).waitFor();
+  await page.getByRole("button", { name: "Review update" }).click();
+  await dialog.getByText("linux/arm64").waitFor();
+  await dialog.getByRole("button", { name: "Update to v0.2.0" }).click();
+  await dialog.getByText("Ozal could not verify the running version. Use the host console to check the service before retrying.").waitFor();
+
   assert.deepEqual(errors, [], "uncaught browser errors occurred");
-  console.log("React update acceptance passed: reviewed plan, real-edge passkey step-up, exactly one retry on the same plan/session, pending-job close/reopen and completion. Update executor responses were fixtures.");
+  console.log("React update acceptance passed: current/unreachable catalog states, reviewed plan, real-edge passkey step-up, exactly one retry on the same plan/session, pending-job close/reopen/completion, and intervention-required host guidance. Update executor responses were fixtures.");
 } catch (error) {
   console.error(`React update acceptance failed at ${step}: ${error.message}`);
   process.exitCode = 1;

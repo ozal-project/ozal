@@ -144,8 +144,36 @@ try {
   assert.equal(await mobileMenu.evaluate((dialog) => dialog.open), true, "closing passkey management also closed the mobile directory");
   await laptop.page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "React Owner");
   await mobileMenu.getByRole("button", { name: "Close menu" }).click();
+  step = "a disabled administrator cannot sign in with an existing passkey";
+  const invited = await fetch(`${edge.consoleURL}/_/api/admins/invite`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${edge.token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ email: "disabled-admin@acme.dev", name: "Disabled Admin", tools: ["administrators"] }),
+  });
+  if (!invited.ok) throw new Error(`administrator invite failed: ${invited.status} ${await invited.text()}`);
+  const invitation = await invited.json();
+  const disabledAdmin = await device();
+  await disabledAdmin.page.goto(`${previewURL}/#enrol=${encodeURIComponent(invitation.token)}`);
+  await disabledAdmin.page.getByText("Invited as").waitFor();
+  await disabledAdmin.page.getByRole("button", { name: "Create my passkey" }).click();
+  await disabledAdmin.page.locator("#main-content h1", { hasText: "Overview" }).waitFor();
+  assert.equal(await disabledAdmin.credentials(), 1, "the invited administrator passkey was not saved");
+  const invitedAccount = (await admins()).find((admin) => admin.email === "disabled-admin@acme.dev");
+  assert(invitedAccount?.id, "the invited administrator was missing from the directory");
+  const disabled = await fetch(`${edge.consoleURL}/_/api/admins/${encodeURIComponent(invitedAccount.id)}/disable`, {
+    method: "POST", headers: { Authorization: `Bearer ${edge.token}` },
+  });
+  if (!disabled.ok) throw new Error(`disabling the invited administrator failed: ${disabled.status} ${await disabled.text()}`);
+  await disabledAdmin.page.goto(`${previewURL}/overview`);
+  await disabledAdmin.page.getByRole("button", { name: "Sign in with passkey" }).waitFor();
+  await disabledAdmin.page.getByRole("button", { name: "Sign in with passkey" }).click();
+  const rejected = disabledAdmin.page.getByRole("alert");
+  await rejected.waitFor();
+  assert.match(await rejected.textContent(), /passkey|administrator|access/i, "disabled-account sign-in did not explain why access was refused");
+  assert.equal(await disabledAdmin.page.locator("#main-content h1").count(), 0, "the disabled administrator opened the console");
+
   assert.deepEqual(failures, [], "uncaught browser errors occurred");
-  console.log("React passkey acceptance passed: bootstrap enrolment, one-use URL cleanup, backup notice, account device link, second-device enrolment, passkey inventory and reviewed removal, passkey sign-out/sign-in, mobile passkey dialog and focus return.");
+  console.log("React passkey acceptance passed: bootstrap enrolment, one-use URL cleanup and reuse rejection, backup notice, second-device enrolment, inventory and reviewed removal, passkey sign-out/sign-in, mobile dialog focus, and refusal of sign-in for a disabled administrator.");
 } catch (error) {
   console.error(`React passkey acceptance failed at ${step}: ${error.message}`);
   process.exitCode = 1;
