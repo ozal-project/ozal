@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/ozal-project/ozal/internal/ctl"
@@ -146,8 +145,7 @@ func (r Runner) install(ctx context.Context, q Request) error {
 	if err != nil || !keyInfo.Mode().IsRegular() || keyInfo.Mode().Perm()&0o022 != 0 {
 		return errors.New("pinned release key must be a regular root-owned file, not writable by group or others")
 	}
-	keyStat, ok := keyInfo.Sys().(*syscall.Stat_t)
-	if !ok || keyStat.Uid != 0 {
+	if !OwnedByRoot(keyInfo) {
 		return errors.New("pinned release key must be owned by root")
 	}
 	keyBytes, err := os.ReadFile(ReleasePublicKeyPath)
