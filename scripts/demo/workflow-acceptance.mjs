@@ -57,7 +57,7 @@ try {
   await ab("wait", "--text", "Open this pull request?");
   assert.equal(await evaluate("document.activeElement?.textContent?.trim()"), "Cancel");
   await ab("press", "Escape");
-  assert.equal(await evaluate("document.querySelectorAll('[role=dialog]').length"), 1, "Escape did not close only the confirmation");
+  assert.equal(await evaluate("document.querySelectorAll('dialog[open], [role=dialog]').length"), 1, "Escape did not close only the confirmation");
   await ab("wait", "--fn", "document.activeElement?.textContent?.trim() === 'Review pull request'");
   // Change an input after preview: the old review must no longer be usable.
   step = "edited preview";

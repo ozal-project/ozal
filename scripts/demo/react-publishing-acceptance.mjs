@@ -20,7 +20,7 @@ if (!binary || !chrome) throw new Error("Set OZAL_BIN and CHROME");
 
 const root = await mkdtemp(join(tmpdir(), "ozal-react-publishing-"));
 const reactEnv = { ...process.env, OZAL_REACT_OUT_DIR: join(root, "react-dist") };
-let edge, preview, browser, step = "start";
+let edge, preview, browser, page, step = "start";
 const errors = [];
 const workflowCalls = [];
 
@@ -54,7 +54,12 @@ try {
   await waitForPreview(previewURL);
   browser = await chromium.launch({ executablePath: chrome, args: ["--no-sandbox"] });
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-  const page = await context.newPage();
+  await context.addInitScript(() => {
+    const violations = [];
+    Object.defineProperty(window, "__cspViolations", { value: violations });
+    addEventListener("securitypolicyviolation", (event) => violations.push({ directive: event.effectiveDirective, blocked: event.blockedURI, sample: event.sample }));
+  });
+  page = await context.newPage();
   page.on("pageerror", (error) => errors.push(error.message));
 
   const project = {
@@ -91,22 +96,28 @@ try {
   await dialog.getByText("Add .github/workflows/deploy.yml to octo/demo").waitFor();
   assert.equal(workflowCalls.length, 1, "preview should be the only request before final confirmation");
 
-  await dialog.getByRole("button", { name: "Review pull request" }).click();
-  await dialog.getByRole("region", { name: "Confirm pull request" }).waitFor();
+  step = "open final pull request confirmation";
+  await dialog.getByRole("button", { name: "Review pull request" }).click({ timeout: 5000 });
+  const confirmation = page.getByRole("dialog", { name: "Open this pull request?" });
+  await confirmation.waitFor();
   assert.equal(workflowCalls.length, 1, "opening the confirmation stage sent a GitHub write request");
-  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await confirmation.getByRole("button", { name: "Cancel" }).click();
   assert.equal(workflowCalls.length, 1, "cancelling the final confirmation sent a GitHub write request");
 
-  await dialog.getByRole("button", { name: "Review pull request" }).click();
-  await dialog.getByRole("button", { name: "Open pull request" }).click();
+  step = "reopen final pull request confirmation after cancellation";
+  await dialog.getByRole("button", { name: "Review pull request" }).click({ timeout: 5000 });
+  await page.getByRole("dialog", { name: "Open this pull request?" }).getByRole("button", { name: "Open pull request" }).click();
   await dialog.getByText("Pull request created.").waitFor();
   assert.equal(workflowCalls.length, 2, "explicit confirmation did not create exactly one pull request");
   assert.deepEqual(workflowCalls[0], { directory: ".", output: "dist", hostname: "demo.example.com", page: 1 });
   assert.deepEqual(workflowCalls[1], { directory: ".", output: "dist", hostname: "demo.example.com", page: 1, expected: "d".repeat(64), digest: "e".repeat(64), apply: true });
+  const cspViolations = await page.evaluate(() => window.__cspViolations);
+  assert.deepEqual(cspViolations, [], `CSP violations occurred while using modal dialogs: ${JSON.stringify(cspViolations)}`);
   assert.deepEqual(errors, [], "uncaught browser errors occurred");
   console.log("React publishing acceptance passed: workflow preview, explicit final review, cancellation without a write, then one confirmed pull request. GitHub responses were fixtures.");
 } catch (error) {
   console.error(`React publishing acceptance failed at ${step}: ${error.message}`);
+  if (page) console.error(JSON.stringify(await page.evaluate(() => ({ dialogs: [...document.querySelectorAll("dialog")].map((dialog) => ({ open: dialog.open, name: dialog.getAttribute("aria-label"), text: dialog.innerText.slice(0, 500) })), body: document.body.innerText.slice(-1200) })).catch(() => null)));
   process.exitCode = 1;
 } finally {
   await browser?.close();

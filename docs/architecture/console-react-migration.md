@@ -34,6 +34,9 @@ Use React function components and hooks, `react-router`, Radix primitives
 following the shadcn/ui pattern, and `lucide-react`. Keep Vite, the `$lib` alias,
 and the strict TypeScript settings in `tsconfig.json`. Do not add state,
 data-fetching or form libraries without a concrete need and a stack entry.
+Use the browser's native `<dialog>` for modal confirmation and `<select>` for
+simple choices. Radix dropdown menus remain non-modal so scroll locking does
+not inject an inline stylesheet blocked by the console CSP.
 
 The frontend uses `react`, `react-dom`, `react-router`,
 `@radix-ui/*` as used by the copied primitives, `lucide-react`, `clsx`,
@@ -115,6 +118,8 @@ OZAL_BIN=/path/to/ozal CHROME=/path/to/chrome node scripts/demo/react-passkey-ac
 OZAL_BIN=/path/to/ozal CHROME=/path/to/chrome node scripts/demo/react-update-acceptance.mjs
 OZAL_BIN=/path/to/ozal CHROME=/path/to/chrome node scripts/demo/react-publishing-acceptance.mjs
 OZAL_BIN=/path/to/ozal CHROME=/path/to/chrome node scripts/demo/react-sites-acceptance.mjs
+OZAL_BIN=/path/to/ozal CHROME=/path/to/chrome node scripts/demo/react-activity-acceptance.mjs
+OZAL_BIN=/path/to/ozal CHROME=/path/to/chrome node scripts/demo/react-connectors-acceptance.mjs
 node scripts/demo/product-acceptance.mjs
 node scripts/demo/passkey-acceptance.mjs
 OZAL_BIN=/path/binary node scripts/demo/update-acceptance.mjs
@@ -153,12 +158,24 @@ real installation, live-edge, or public acceptance.
 Go edge. It exercises workflow preview, the final pull-request confirmation,
 cancellation without a write, and one confirmed request carrying the reviewed
 digest. GitHub responses are fixtures, so it does not establish GitHub App or
-repository acceptance.
+repository acceptance. It also fails if opening the modal violates the console
+CSP.
 
 `react-sites-acceptance.mjs` uses the production preview and a disposable Go
 edge. It verifies recovery after Pages becomes available, review of the mapped
 hostname before rollback, cancellation without a mutation, and the updated live
 deployment after confirmation. Site and rollback responses are fixtures.
+
+`react-activity-acceptance.mjs` drives the Activity screen with a controlled
+event stream. It checks event delivery and deduplication, category and text
+filters, pause/resume, reconnect with `Last-Event-ID`, the 500-event retention
+bound, responsive overflow and CSP violations. The event stream is a browser
+fixture, not evidence of an installed edge.
+
+`react-connectors-acceptance.mjs` checks bearer-protected registry states,
+certificate expiry, safe command validation, all five enrolment steps, observed
+progress, revocation guidance and responsive overflow against a disposable
+edge with connector fixtures.
 
 Also check by hand: Windows-style MIME behavior is covered by `consoleTypes`;
 the CSP header on `index.html` and on a hashed asset; an old hashed asset is

@@ -236,3 +236,5 @@
 .app-row:hover { background: color-mix(in oklab, var(--muted) 45%, transparent); }
 .app-row:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 .edge-live { --lamp: var(--signal); }
+
+.ozal-modal::backdrop { background: rgb(0 0 0 / 60%); }

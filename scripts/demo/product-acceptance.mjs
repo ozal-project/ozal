@@ -65,6 +65,7 @@ try {
   await ab("open", url);
   await ab("wait", "--text", "Acceptance operator");
   assert.equal(await evaluate("location.hash"), "", "one-use credential remained in the URL");
+  await ab("eval", "window.__cspViolations = []; addEventListener('securitypolicyviolation', (event) => window.__cspViolations.push({ directive: event.effectiveDirective, blocked: event.blockedURI })); true");
   step = "keyboard navigation and add existing application";
   await tabTo("/applications");
   await ab("press", "Enter");
@@ -74,26 +75,32 @@ try {
   await ab("find", "role", "button", "click", "--name", "Refresh configuration", "--exact");
   step = "refresh Applications configuration";
   await ab("wait", "--fn", "document.querySelector('#main-content')?.textContent?.includes('private ·')");
+  step = "add existing backend application";
   await ab("find", "role", "button", "click", "--name", "Add application", "--exact");
   await ab("fill", "#app-target", `http://127.0.0.1:${edge.upstreamPorts.grafana}`);
+  step = "application wizard address and access steps";
   await ab("find", "role", "button", "click", "--name", "Next", "--exact");
   await ab("fill", "#app-host", `extra.demo.localhost:${edge.port}`);
   await ab("find", "role", "button", "click", "--name", "Next", "--exact");
   await ab("fill", "#app-groups", "ops");
   await ab("fill", "#app-invite", "invited-in-flow@example.test");
   await ab("find", "role", "button", "click", "--name", "Review", "--exact");
+  step = "review application and acknowledge consequence";
   await ab("wait", "--text", "I checked what serves it");
   await ab("find", "role", "checkbox", "check", "--name", "I checked what serves it and who can open it. I will try it before moving a live address.", "--exact");
-  await ab("wait", "--fn", "document.querySelector('[role=\"dialog\"] input[type=\"checkbox\"]')?.checked === true");
+  await ab("wait", "--fn", "document.querySelector('dialog[open] input[type=\"checkbox\"], [role=\"dialog\"] input[type=\"checkbox\"]')?.checked === true");
   await ab("find", "role", "button", "click", "--name", "Save application", "--exact");
+  step = "confirm application save";
+  await ab("wait", "--text", "Save this application?");
   await ab("find", "role", "button", "click", "--name", "Confirm and save", "--exact");
+  step = "wait for saved application state";
   await ab("wait", "--text", "Saved. Point its DNS here");
   step = "connection check after saving";
   // The address resolves to this machine: the one-time probe must come back
   // through the public listener, and the invitation link is offered to copy.
   await ab("wait", "--text", "reached this edge");
   await ab("wait", "--text", "invited-in-flow@example.test");
-  assert.equal(await evaluate("[...document.querySelectorAll('[role=\"dialog\"] button')].some((b) => b.textContent.includes('Copy link'))"), true, "the invitation link was not offered");
+  assert.equal(await evaluate("[...document.querySelectorAll('dialog[open] button, [role=\"dialog\"] button')].some((b) => b.textContent.includes('Copy link'))"), true, "the invitation link was not offered");
   await auditPage([[390, 844], [1440, 1000]]);
   await ab("find", "role", "button", "click", "--name", "Done", "--exact");
   const setup = await api("GET", "/_/api/setup");
@@ -108,7 +115,7 @@ try {
   const archive = join(root, "artifact.tar.gz"); await exec("tar", ["-czf", archive, "-C", pack, "."]);
   await ab("find", "role", "button", "click", "--name", `More actions for blog.demo.localhost:${edge.port}`, "--exact");
   await ab("find", "role", "menuitem", "click", "--name", "Publish a new version");
-  await ab("upload", '[role="dialog"] input[type="file"]', archive);
+  await ab("upload", 'dialog[open] input[type="file"], [role="dialog"] input[type="file"]', archive);
   await ab("find", "role", "button", "click", "--name", "Review publication", "--exact");
   await ab("find", "role", "button", "click", "--name", "Publish artifact", "--exact");
   await ab("wait", "--text", "is live. Check its content");
@@ -121,7 +128,7 @@ try {
   step = "new static website from uploaded files";
   await ab("find", "role", "button", "click", "--name", "Add application", "--exact");
   await ab("find", "role", "radio", "click", "--name", "A static website");
-  await ab("upload", '[role="dialog"] input[type="file"]', archive);
+  await ab("upload", 'dialog[open] input[type="file"], [role="dialog"] input[type="file"]', archive);
   await ab("find", "role", "button", "click", "--name", "Next", "--exact");
   await ab("fill", "#app-host", `fresh.demo.localhost:${edge.port}`);
   await ab("find", "role", "button", "click", "--name", "Next", "--exact");
@@ -129,7 +136,7 @@ try {
   await ab("find", "role", "button", "click", "--name", "Review", "--exact");
   await ab("wait", "--text", "uploads artifact.tar.gz");
   await ab("find", "role", "checkbox", "check", "--name", "I checked what serves it and who can open it. I will try it before moving a live address.", "--exact");
-  await ab("wait", "--fn", "document.querySelector('[role=\"dialog\"] input[type=\"checkbox\"]')?.checked === true");
+  await ab("wait", "--fn", "document.querySelector('dialog[open] input[type=\"checkbox\"], [role=\"dialog\"] input[type=\"checkbox\"]')?.checked === true");
   await ab("find", "role", "button", "click", "--name", "Save application", "--exact");
   await ab("find", "role", "button", "click", "--name", "Confirm and save", "--exact");
   await ab("wait", "--text", "Saved. Point its DNS here");
@@ -153,7 +160,7 @@ try {
   await ab("press", "Tab");
   assert.equal(await evaluate("document.activeElement?.getAttribute('aria-label')"), "Close", "dialog focus did not wrap to its close control");
   await ab("press", "Escape");
-  assert.equal(await evaluate("document.querySelectorAll('[role=\"dialog\"]').length"), 1, "Escape did not close only the membership review");
+  assert.equal(await evaluate("document.querySelectorAll('dialog[open], [role=\"dialog\"]').length"), 1, "Escape did not close only the membership review");
   await ab("wait", "--fn", "document.activeElement?.textContent?.trim() === 'Review change'");
   people = await api("GET", "/_/api/people");
   assert.deepEqual(people.users.find((p) => p.email === "new-operator-test@example.test").groups, ["ops"], "Escape changed membership");
@@ -200,7 +207,7 @@ try {
   await failNextRequest("/_/api/status");
   await ab("find", "role", "button", "click", "--name", "Refresh sites", "--exact");
   await ab("wait", "--text", "Hostname mappings could not be refreshed");
-  assert.equal(await evaluate("document.querySelector('[role=\"dialog\"]') === null"), true);
+  assert.equal(await evaluate("document.querySelector('dialog[open], [role=\"dialog\"]') === null"), true);
   await ab("find", "role", "button", "click", "--name", "Refresh sites", "--exact");
   await ab("wait", "--fn", "!document.body.innerText.includes('Hostname mappings could not be refreshed')");
   await auditPage([[1440, 1000], [390, 844]]);
@@ -303,6 +310,8 @@ try {
   assert.equal(await evaluate("(async () => (await fetch('/_/events')).status)()"), 401, "anonymous event stream remained available");
   for (const path of ["/_/status", "/_/api/status", "/_/overview"]) assert.equal(await evaluate(`(async () => (await fetch(${JSON.stringify(path)})).status)()`), 401, `anonymous ${path} remained available`);
   assert.equal(await evaluate("(async () => (await fetch('/_/healthz')).status)()"), 200, "readiness probe unavailable");
+  const cspViolations = await evaluate("window.__cspViolations");
+  assert.deepEqual(cspViolations, [], `CSP violations occurred while using menus and dialogs: ${JSON.stringify(cspViolations)}`);
   console.log("Product console: host login, URL cleanup, app add/remove review, artifact upload/rollback, membership keyboard/cancel/save, Projects and Connector error recovery, Sites rollback, all console pages at four widths with axe OK");
   console.log(`Screenshots: ${root}`);
 } catch (error) {

@@ -67,7 +67,7 @@ try {
   const content = await evaluate("document.querySelector('pre[aria-label=\"Generated workflow\"]')?.textContent");
   assert(content.includes("https://www.example.test") && content.includes("id-token: write"), "review did not show the generated workflow");
   await audit("review");
-  await evaluate("document.querySelector('[role=dialog] input[type=checkbox]').click()");
+  await evaluate("document.querySelector('dialog[open] input[type=checkbox], [role=dialog] input[type=checkbox]').click()");
   await button("Save application");
   await ab("wait", "--text", "Save this application?");
   assert((await text()).includes("a pull request adding its workflow is opened"), "confirmation does not mention the pull request");
