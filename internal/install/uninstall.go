@@ -51,7 +51,7 @@ func uninstallBinaryArtifacts(root string) ([]string, error) {
 }
 
 func Uninstall(ctx context.Context, out io.Writer, host UninstallHost, r UninstallRequest) error {
-	if runtime.GOOS != "linux" {
+	if runtime.GOOS != "linux" && r.Root == "" {
 		return errors.New("the systemd uninstaller supports Linux only")
 	}
 	if r.Root != "" && (!filepath.IsAbs(r.Root) || filepath.Clean(r.Root) == string(filepath.Separator)) {
