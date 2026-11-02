@@ -16,7 +16,8 @@
         "socket_group": "ozal-admin",
         "admin": "127.0.0.1:9090",
         "sites_token": "~/.config/ozalctl/edge-1.sites.token",
-        "keep": 3
+        "keep": 3,
+        "pair_helper": false
       },
       "connector": {
         "ssh": { "target": "ozal@connector.example.net", "key": "~/.ssh/id_ed25519" },

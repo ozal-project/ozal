@@ -174,3 +174,37 @@ func TestUpdatePairRefusesDowngradeAndUnversionedBuildWithoutForce(t *testing.T)
 		})
 	}
 }
+
+func TestUpdatePairRollbackDrillRestoresBothAfterVerifiedCandidate(t *testing.T) {
+	edge, connector, trace, bin := pairFixture()
+	err := UpdatePair(context.Background(), io.Discard, pairBuilder{bin}, edge, connector, PairUpdateRequest{Ref: "v0.2.0", Owner: "operator", JobID: "job-1", Apply: true, RollbackDrill: true})
+	if err != nil {
+		t.Fatalf("UpdatePair() drill error = %v", err)
+	}
+	joined := strings.Join(*trace, ",")
+	verified := strings.Index(joined, "connector.ready")
+	restored := strings.Index(joined, "edge.restore")
+	if verified < 0 || restored < verified {
+		t.Fatalf("drill restored before the candidate was verified: %v", *trace)
+	}
+	for _, want := range []string{"connector.restore", "edge.report-rolled_back-complete"} {
+		if !strings.Contains(joined[restored:], want) {
+			t.Errorf("drill trace %v lacks %s after the restore", *trace, want)
+		}
+	}
+	if strings.Contains(joined, "report-updated-complete") {
+		t.Errorf("drill reported the candidate as the final state: %v", *trace)
+	}
+}
+
+func TestUpdatePairRollbackDrillReportsInterventionWhenRestoreFails(t *testing.T) {
+	edge, connector, trace, bin := pairFixture()
+	connector.fail["restore"] = errors.New("checkpoint unavailable")
+	err := UpdatePair(context.Background(), io.Discard, pairBuilder{bin}, edge, connector, PairUpdateRequest{Ref: "v0.2.0", Owner: "operator", JobID: "job-1", Apply: true, RollbackDrill: true})
+	if err == nil || !strings.Contains(err.Error(), "operator intervention") {
+		t.Fatalf("error = %v, want intervention-required drill result", err)
+	}
+	if !strings.Contains(strings.Join(*trace, ","), "edge.report-intervention_required-rolling_back") {
+		t.Errorf("drill failure was not reported: %v", *trace)
+	}
+}

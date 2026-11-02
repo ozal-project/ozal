@@ -77,6 +77,7 @@ func subcommands() map[string]func(context.Context, []string, io.Writer) error {
 		"migrate":         runMigrate,
 		"notify":          runNotify,
 		"policy":          runPolicy,
+		"pair-helper":     runPairHelper,
 		"site":            runSite,
 		"schema":          runSchema,
 		"setup":           runSetup,
@@ -88,6 +89,14 @@ func subcommands() map[string]func(context.Context, []string, io.Writer) error {
 }
 
 func main() {
+	if filepath.Base(os.Args[0]) == "ozal-pair-helper" {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		if err := runPairHelper(ctx, os.Args[1:], os.Stdout); err != nil {
+			log.Fatalf("pair-helper: %v", err)
+		}
+		return
+	}
 	if len(os.Args) > 1 {
 		if os.Args[1] == "--version" || os.Args[1] == "-version" {
 			if err := runVersion(context.Background(), nil, os.Stdout); err != nil {

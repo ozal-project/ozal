@@ -113,7 +113,10 @@ type PairUpdateRequest struct {
 	JobID string
 	Apply bool
 	Force bool // allow moving from an unversioned development build
-	Now   func() time.Time
+	// RollbackDrill restores the previous pair on purpose once the candidate
+	// is verified, proving the paired rollback on the real nodes.
+	RollbackDrill bool
+	Now           func() time.Time
 }
 
 // UpdatePair builds one candidate and transitions the pair as a unit. Both
@@ -262,6 +265,14 @@ func UpdatePair(ctx context.Context, out io.Writer, builder Builder, edge, conne
 			return rollbackPair(ctx, out, edge, connector, previous, progress, now, fmt.Errorf("verify %s: %w", node.Name(), err))
 		}
 	}
+	if req.RollbackDrill {
+		step("rollback drill: restore the previous pair on purpose")
+		if err := restorePair(ctx, out, edge, connector, previous, progress, now); err != nil {
+			return fmt.Errorf("rollback drill: paired rollback requires operator intervention: %w", err)
+		}
+		step("rollback drill complete: %s and %s run their previous versions again", edge.Name(), connector.Name())
+		return nil
+	}
 	progress = pairProgress(now, req.JobID, bin.Commit, edge, connector, previous, want, "updated", "complete", "updated")
 	if err := edge.Report(ctx, progress); err != nil {
 		return fmt.Errorf("both nodes are updated and ready, but the status API did not accept the final report: %w", err)
@@ -290,6 +301,15 @@ func pairProgress(now func() time.Time, jobID, latest string, edge, connector Pa
 
 func rollbackPair(ctx context.Context, out io.Writer, edge, connector PairNode, previous map[string]PairState, progress PairProgress, now func() time.Time, cause error) error {
 	fmt.Fprintln(out, "==> paired update failed; restoring both nodes")
+	if err := restorePair(ctx, out, edge, connector, previous, progress, now); err != nil {
+		return fmt.Errorf("%w; paired rollback requires operator intervention: %w", cause, err)
+	}
+	return fmt.Errorf("%w; paired rollback succeeded", cause)
+}
+
+// restorePair returns both nodes to their checkpointed versions and verifies
+// them; a nil result means both previous versions are running and ready.
+func restorePair(ctx context.Context, out io.Writer, edge, connector PairNode, previous map[string]PairState, progress PairProgress, now func() time.Time) error {
 	var failures []error
 	rollbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Minute)
 	defer cancel()
@@ -317,14 +337,14 @@ func rollbackPair(ctx context.Context, out io.Writer, edge, connector PairNode, 
 	if len(failures) > 0 {
 		progress = pairProgress(now, progress.JobID, progress.Latest, edge, connector, previous, "", "intervention_required", "rolling_back", "failed")
 		_ = edge.Report(rollbackCtx, progress)
-		return fmt.Errorf("%w; paired rollback requires operator intervention: %w", cause, errors.Join(failures...))
+		return errors.Join(failures...)
 	}
 	progress = pairProgress(now, progress.JobID, progress.Latest, edge, connector, previous, "", "rolled_back", "complete", "rolled_back")
 	if err := edge.Report(rollbackCtx, progress); err != nil {
 		fmt.Fprintf(out, "    both previous versions are ready; status report failed: %v\n", err)
 	}
 	fmt.Fprintln(out, "    both previous versions restored and ready")
-	return fmt.Errorf("%w; paired rollback succeeded", cause)
+	return nil
 }
 
 func validSHA256(value string) bool {

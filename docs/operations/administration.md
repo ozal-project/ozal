@@ -271,7 +271,11 @@ status endpoint triggers paired rollback. The final phases are saved when the
 edge returns. A 503 or any other error stops the job before the cutover or
 triggers its rollback. `ozalctl edge pair-upgrade`
 without `-apply` only downloads and verifies the artifact: it does not contact the
-hosts. Before applying, run:
+hosts. With `-rollback-drill`, an applied update restores both previous versions
+and their checkpointed edge database on purpose once the candidate is verified,
+then checks that both are ready again. Use it to rehearse the rollback on the real
+pair; edge state written while the candidate ran is set aside, not kept, and a
+normal `-apply` afterwards performs the update. Before applying, run:
 
 ```sh
 ozalctl edge pair-preflight [-targets FILE] [-target NAME]
@@ -286,6 +290,31 @@ reservation: `pair-upgrade -apply` repeats the inspection under both locks.
 `edge.service_group` in the target fixes the expected group; if it is omitted, it
 is discovered from the unit and used when restoring SQLite. It does not deploy or
 migrate a VPS by itself.
+
+For unattended pair updates, an edge can use the restricted pair helper instead
+of interactive root commands. Build the Ozal binary containing the helper, create
+an edge profile at `/etc/ozal/pair-helper.json` from the edge's unit, service
+identity, installed paths, socket, staging path and connector name, then install
+it with `scripts/install-pair-helper.sh`, passing the pinned release public key.
+The helper downloads the requested tag from the fixed Ozal GitHub release API,
+verifies its detached Ed25519 signature and archive checksum, and confirms the
+binary hash matches the coordinator before running it as root. The installer
+verifies the helper binary hash and runs the read-only preflight before granting
+access. It creates the locked
+`ozal-pair` account, installs one Ed25519 key with SSH forwarding and PTY
+disabled, and grants passwordless sudo for that helper executable with no
+arguments. The key can run commands as the unprivileged `ozal-pair` account for
+inspection and staging; it cannot get a root shell or run other sudo commands.
+
+The helper profile must be root-owned, mode `0600`, and use
+`/var/lib/ozal-pair/stage` as its staging directory. The target's edge SSH entry
+must use `ozal-pair@HOST` and the matching private key; set `edge.pair_helper` to
+`true`, `edge.stage` to `/var/lib/ozal-pair/stage`, and `edge.lock` beneath
+`/var/lib/ozal-pair/locks`. The connector target remains its own SSH account.
+The helper accepts only bounded JSON actions, ignores the user-writable staged
+executable, and binds service names and filesystem paths to the root-owned
+profile. Each successful edge install also replaces the helper with the same
+signed candidate, keeping its protocol version current.
 
 Before the maintenance window, fill in this record with observed data, without
 secret values, and keep the operational evidence in a private location:
@@ -497,7 +526,7 @@ token file.
 ```sh
 go build -o ./ozalctl ./cmd/ozalctl  # separate binary on the operator machine
 ozalctl edge upgrade [-ref REF] [-apply]
-ozalctl edge pair-upgrade -ref vX.Y.Z -public-key FILE [-force] [-apply]
+ozalctl edge pair-upgrade -ref vX.Y.Z -public-key FILE [-force] [-rollback-drill] [-apply]
 ozalctl edge config -base FILE [-cloudflare-ranges] [-apply]
 ozalctl site publish -site NAME -dir DIST [-host HOST] [-apply]
 ozalctl app alias -from HOST -to HOST [-manual-dns] [-wait 90s] [-apply]
