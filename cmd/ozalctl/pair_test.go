@@ -144,3 +144,15 @@ func TestPairPreflightRunsReadOnlyHostChecks(t *testing.T) {
 		}
 	}
 }
+
+func TestPairHelperInstallRemovesTheStagedCandidate(t *testing.T) {
+	remote := &pairRemoteStub{runResult: func(string) (string, error) { return "", nil }}
+	node := &pairSSHNode{remote: remote, role: "edge", helper: true, stage: "/var/lib/ozal-pair/stage", job: "pair-20261102T173850Z-5399444b627e9f01", releaseRef: "v0.2.0"}
+	if err := node.Install(context.Background(), strings.Repeat("a", 64)); err != nil {
+		t.Fatal(err)
+	}
+	_, staged := ctl.StageFile(ctl.Edge{Stage: node.stage})
+	if len(remote.commands) != 2 || !strings.Contains(remote.commands[0], "ozal-pair-helper") || remote.commands[1] != "rm -f "+ctl.Quote(staged) {
+		t.Fatalf("helper install did not remove the staged candidate after installing: %q", remote.commands)
+	}
+}
