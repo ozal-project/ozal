@@ -233,7 +233,11 @@ try {
   await ab("find", "role", "button", "click", "--name", `More actions for ${appHost}`, "--exact");
   await ab("find", "role", "menuitem", "click", "--name", "Remove");
   await ab("wait", "--text", "Remove this application hostname?");
+  await ab("eval", "window.__dialogCancelEvents = 0; document.querySelector('dialog[open]').addEventListener('cancel', () => window.__dialogCancelEvents++)");
   await ab("press", "Escape");
+  const escapeState = await evaluate("({ open: !!document.querySelector('dialog[open]'), cancelEvents: window.__dialogCancelEvents, active: document.activeElement?.outerHTML?.slice(0, 160) })");
+  assert.equal(escapeState.open, false, `Escape did not close the confirmation dialog: ${JSON.stringify(escapeState)}`);
+  await ab("wait", "--fn", "document.querySelector('dialog[open]') === null");
   assert((await api("GET", "/_/api/setup")).routes.some((r) => r.host === appHost), "cancelling removal removed the route");
   await ab("find", "role", "button", "click", "--name", `More actions for ${appHost}`, "--exact");
   await ab("find", "role", "menuitem", "click", "--name", "Remove");
