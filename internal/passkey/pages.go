@@ -21,7 +21,14 @@ var assets embed.FS
 // script can run, nothing can frame the page (clickjacking a passkey
 // prompt), and the enrolment URL never leaks in a Referer.
 func pageHeaders(h http.Header) {
-	h.Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
+	pageHeadersWithFormSources(h, "'self'")
+}
+
+// pageHeadersWithFormSources keeps form destinations explicit. The refusal
+// page also allows the configured login origin because its same-origin logout
+// POST redirects there, and browsers apply form-action to that redirect too.
+func pageHeadersWithFormSources(h http.Header, sources ...string) {
+	h.Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; img-src 'self'; form-action "+strings.Join(sources, " ")+"; frame-ancestors 'none'; base-uri 'none'")
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("Referrer-Policy", "no-referrer")
 	h.Set("X-Frame-Options", "DENY")
