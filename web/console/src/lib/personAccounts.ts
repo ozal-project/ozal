@@ -33,3 +33,10 @@ export function passkeyName(key: { provider: string; label?: string }): { name: 
   const label = key.label?.trim();
   return label && label !== key.provider ? { name: label, provider: key.provider } : { name: key.provider, provider: null };
 }
+
+// appLabel names an application by the name the operator gave it, with the
+// address beside it; an unnamed one is its address.
+export function appLabel(host: string, names?: Record<string, string>): string {
+  const name = names?.[host]?.trim();
+  return name ? `${name} · ${host}` : host;
+}

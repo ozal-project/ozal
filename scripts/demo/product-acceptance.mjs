@@ -58,6 +58,8 @@ const api = async (method, path, body) => {
 try {
   edge = await startDemoEdge({ binary, dir: join(root, "edge"), adminSocket: true, dynamicPorts: true });
   await api("POST", "/_/api/people/invite", { email: "new-operator-test@example.test", groups: ["ops"] });
+  // A second group to move the first person into: the editor picks existing groups only.
+  await api("POST", "/_/api/people/invite", { email: "staff-member-test@example.test", groups: ["staff"] });
   step = "host operator login";
   const { stdout } = await exec(binary, ["console", "login", "-config", join(edge.dir, "config.json"), "-name", "Acceptance operator", "-url", edge.consoleURL]);
   const url = stdout.split("\n").find((line) => line.startsWith("http"));
@@ -148,7 +150,8 @@ try {
   await ab("click", 'a[href="/people"]');
   await ab("wait", "--text", "new-operator-test@example.test");
   await ab("find", "role", "button", "click", "--name", "Edit groups for new-operator-test@example.test", "--exact");
-  await ab("fill", "#person-groups", "staff");
+  await ab("find", "role", "checkbox", "click", "--name", "ops", "--exact");
+  await ab("find", "role", "checkbox", "click", "--name", "staff", "--exact");
   await ab("find", "role", "button", "click", "--name", "Review change", "--exact");
   await ab("press", "Escape");
   let people = await api("GET", "/_/api/people");

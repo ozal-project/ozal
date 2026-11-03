@@ -554,6 +554,11 @@ in Cloudflare (see above). Without a token the manual record is shown. A record 
 an existing site is never silently replaced. `POST /_/api/apps/{host}/dns` also creates the record of
 the sign-in host in `login_url`, which is not an application route.
 
+An application can carry a display name (1 to 60 characters) that the console and its
+invitations show beside the address: `PUT /_/api/apps/{host}/name` with `name` (empty clears
+it), under the applications tool. The name is kept in the state database, not in the
+configuration, and it is removed with the route. It never affects an access decision.
+
 ## Visitor IP
 
 `trusted_proxies` contains literal IPs/CIDRs of trusted peers. Empty means headers are not
