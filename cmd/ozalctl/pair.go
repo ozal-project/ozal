@@ -344,6 +344,12 @@ func (n *pairSSHNode) Install(ctx context.Context, want string) error {
 			if err := n.helperAction(ctx, pairhelper.Request{Action: "install", Job: n.job, SHA256: want, Ref: n.releaseRef}); err != nil {
 				return err
 			}
+			// The helper installs the signed release it fetched itself, so the
+			// staged copy is never moved into place. Remove it, or the next
+			// preflight refuses to start; a cleanup failure is not a reason to
+			// roll back an installed edge, and that preflight still reports it.
+			_, staged := ctl.StageFile(ctl.Edge{Stage: n.stage})
+			_, _ = n.run(ctx, "rm -f "+ctl.Quote(staged), nil)
 			return nil
 		}
 		_, staged := ctl.StageFile(ctl.Edge{Stage: n.stage})
