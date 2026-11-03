@@ -34,6 +34,8 @@ func WithPeople(store people) Option {
 func (h *Handler) registerPeople() {
 	h.mux.HandleFunc("GET /_/api/people", h.requireTool("people", h.listPeople))
 	h.mux.HandleFunc("GET /_/api/groups", h.requireTool("people", h.listGroups))
+	h.mux.HandleFunc("POST /_/api/groups", h.requireTool("people", h.createGroup))
+	h.mux.HandleFunc("DELETE /_/api/groups/{name}", h.requireTool("people", h.deleteGroup))
 	h.mux.HandleFunc("PUT /_/api/people/{email}/groups", h.requireTool("people", h.setPersonGroups))
 	h.mux.HandleFunc("POST /_/api/people/invite", h.requireTool("people", h.invitePerson))
 	h.mux.HandleFunc("POST /_/api/people/{email}/disable", h.requireTool("people", h.setPersonDisabled(true)))

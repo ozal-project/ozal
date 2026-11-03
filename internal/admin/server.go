@@ -59,6 +59,7 @@ type Handler struct {
 	remote                 *RemoteLogin
 	people                 people
 	appNames               appNames
+	groupCatalog           groupStore
 	connectors             connectors
 	pairing                pairing
 	updatesExecutor        updateExecutor

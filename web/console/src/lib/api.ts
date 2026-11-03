@@ -317,7 +317,17 @@ export const setDisabled = (token: string, email: string, disabled: boolean, sig
 export const revokePasskey = (token: string, email: string, id: string, signal?: AbortSignal) =>
   adminPost(token, `/_/api/people/${encodeURIComponent(email)}/passkeys/${encodeURIComponent(id)}/revoke`, undefined, signal);
 
-export type Group = { name: string; source: "local"; members: string[]; hosts: string[] };
+// defined: created on purpose in Groups, so it exists with no members too.
+export type Group = { name: string; source: "local"; members: string[]; hosts: string[]; defined?: boolean };
+export async function createGroup(token: string, name: string, signal?: AbortSignal): Promise<string> {
+  const body = await adminPost<{ name: string }>(token, "/_/api/groups", { name }, signal);
+  return body.name;
+}
+export async function deleteGroup(token: string, name: string, signal?: AbortSignal): Promise<void> {
+  const res = await fetch(`/_/api/groups/${encodeURIComponent(name)}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` }, signal: boundedSignal(signal) });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ?? `The group could not be deleted (HTTP ${res.status}).`);
+}
 export async function fetchGroups(token: string, signal?: AbortSignal): Promise<Group[]> {
   const res = await fetch("/_/api/groups", { cache: "no-store", headers: { Authorization: `Bearer ${token}` }, signal: boundedSignal(signal) });
   if (!res.ok) throw new Error(`Groups could not be read (HTTP ${res.status}).`);

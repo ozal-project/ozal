@@ -245,6 +245,7 @@ func main() {
 		managerOpts = append(managerOpts, routemanager.WithPasskeyDirectory(identity))
 		adminOpts = append(adminOpts, admin.WithPeople(identity))
 		adminOpts = append(adminOpts, admin.WithAppNames(sqlite.NewAppNames(db)))
+		adminOpts = append(adminOpts, admin.WithGroupCatalog(sqlite.NewGroupCatalog(db)))
 		// UI-007: administrators have their own passkeys, apart from users.
 		administrators := sqlite.NewAdmins(db)
 		adminOpts = append(adminOpts, admin.WithIdentities(administrators))
