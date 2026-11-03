@@ -60,6 +60,10 @@ func runConsole(ctx context.Context, args []string, out io.Writer) error {
 			Token string `json:"token"`
 		}
 		if err := c.do(ctx, http.MethodPost, "/_/api/admin/enrolments", map[string]string{"kind": kind, "email": *email}, &answer); err != nil {
+			if kind == "bootstrap" && isStatus(err, http.StatusConflict) {
+				fmt.Fprint(out, sshHint(os.Getenv("SSH_CONNECTION"), invokingUser(), base))
+				return errors.New(administratorExists(base))
+			}
 			return err
 		}
 		what := "create the first administrator"
@@ -115,6 +119,13 @@ func runConsole(ctx context.Context, args []string, out io.Writer) error {
 		return errors.New("unknown console command")
 	}
 	return nil
+}
+
+// administratorExists answers a second enrol: the first administrator is
+// made once, so point to where they sign in and keep recovery as the last resort.
+func administratorExists(base string) string {
+	return "an administrator already exists; sign in with their passkey at " + passkeyOrigin(base) + "/overview" +
+		" (someone who lost every passkey is recovered with: sudo ozal console recover -email ADMINISTRATOR)"
 }
 
 // splitTools turns "people, sites" into a list; the edge validates the names.
