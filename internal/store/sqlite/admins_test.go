@@ -75,3 +75,19 @@ func TestPasskeysCarryTheirLabel(t *testing.T) {
 		t.Fatalf("passkeys = %+v, %v", passkeys, err)
 	}
 }
+
+func TestAccessRequestsSettingIsOffByDefaultAndSurvivesToggling(t *testing.T) {
+	ctx := context.Background()
+	admins, _ := enrolledAdmin(t)
+	if on, err := admins.AccessRequests(ctx); err != nil || on {
+		t.Fatalf("fresh database: on=%v err=%v, want off", on, err)
+	}
+	for _, want := range []bool{true, false, true} {
+		if err := admins.SetAccessRequests(ctx, want); err != nil {
+			t.Fatal(err)
+		}
+		if on, err := admins.AccessRequests(ctx); err != nil || on != want {
+			t.Fatalf("after setting %v: on=%v err=%v", want, on, err)
+		}
+	}
+}

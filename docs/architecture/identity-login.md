@@ -123,6 +123,33 @@ Operator (host shell)          Ozal                           Visitor's browser
 - Every new passkey sends an alert. A passkey you did not add is the one
   signal that an enrolment link or a session was stolen.
 
+### Console administrators: first setup and access requests
+
+Administrators of the console are a separate directory from visitors. The
+sign-in page shows one primary action for the state of the installation:
+
+- **No administrator yet:** a numbered setup. The first administrator is created
+  with a one-use link that only the host's shell or the installer output can
+  read (`console enrol`), so nobody can get ahead of the operator. Once any
+  administrator exists the setup path is closed and `bootstrap` is refused.
+- **Administrators exist:** passkey sign-in. A host login stays as a secondary
+  path for whoever runs the server.
+- **Access requests (optional, off by default, stored as `admin_settings`):**
+  an administrator with the administrators tool can turn on a form that lets a
+  person ask for access. The public endpoints accept only same-origin posts,
+  validate name and email, and are bounded (at most 10 requests per 10 minutes
+  and 32 waiting). A request is held in memory and grants nothing. An email that
+  already is an administrator gets the same answer as any other, so the form
+  cannot be used to learn who is one. Approval is an operator-session action
+  only (not the admin token or the host socket), needs a passkey proof from the
+  last five minutes, and cannot grant a tool the approver's session lacks. It
+  creates the same one-use `invite` enrolment a manual invitation does, but
+  shortens it to 15 minutes and hands it only to the requester's browser, which
+  holds a random secret created with the request (only its hash is kept).
+  Turning the switch off, a restart, a denial or expiry end the request.
+  Every step emits an event (`admin.access_requested`, `admin.access_approved`,
+  `admin.access_denied`, `admin.access_requests_on|off`).
+
 ## Flow 2 — login
 
 ```

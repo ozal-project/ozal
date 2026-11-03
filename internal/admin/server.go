@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ozal-project/ozal/internal/adminid"
 	"github.com/ozal-project/ozal/internal/config"
 	"github.com/ozal-project/ozal/internal/events"
 	"github.com/ozal-project/ozal/internal/healthcheck"
@@ -36,6 +37,7 @@ type routeManager interface {
 // Handler serves the administrative dashboard and authenticated mutations.
 type Handler struct {
 	devices                *deviceBook
+	requests               *adminid.Requests
 	enrolCommand           string
 	github                 repositoryReader
 	githubKeyDir           string
@@ -72,7 +74,7 @@ func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 	if sink == nil {
 		sink = events.Discard
 	}
-	h := &Handler{operators: newOperatorSessions(), manager: manager, sink: sink, mux: http.NewServeMux(), ceremonies: newCeremonyBook(), devices: newDeviceBook()}
+	h := &Handler{operators: newOperatorSessions(), manager: manager, sink: sink, mux: http.NewServeMux(), ceremonies: newCeremonyBook(), devices: newDeviceBook(), requests: adminid.NewRequests()}
 	h.registerOperators()
 	h.mux.HandleFunc("GET /_/console.css", h.consoleCSS)
 	h.mux.HandleFunc("GET /_/fonts/manrope.ttf", h.consoleFont)

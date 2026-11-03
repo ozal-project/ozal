@@ -67,6 +67,10 @@ type identities interface {
 	RemovePasskey(ctx context.Context, accountID string, credentialID []byte) error
 	// RecordLogin stores a credential's new counter; it fails for a revoked one.
 	RecordLogin(ctx context.Context, credential webauthn.Credential) error
+	// AccessRequests reports whether the sign-in page accepts requests for
+	// administrator access (off until turned on); SetAccessRequests changes it.
+	AccessRequests(ctx context.Context) (bool, error)
+	SetAccessRequests(ctx context.Context, enabled bool) error
 }
 
 // WithIdentities enables passkey sign-in for administrators.
@@ -232,10 +236,16 @@ func (h *Handler) registerIdentities() {
 	h.mux.HandleFunc("POST /_/api/admin/enrol/finish", h.enrolFinish)
 	h.mux.HandleFunc("POST /_/api/admin/login/begin", h.adminLoginBegin)
 	h.mux.HandleFunc("POST /_/api/admin/login/finish", h.adminLoginFinish)
+	h.mux.HandleFunc("POST /_/api/admin/requests", h.requestAccess)
+	h.mux.HandleFunc("POST /_/api/admin/requests/status", h.accessRequestStatus)
 	h.mux.HandleFunc("POST /_/api/admin/remote/start", h.remoteStart)
 	h.mux.HandleFunc("POST /_/api/admin/remote/finish", h.remoteFinish)
 	h.mux.HandleFunc("GET /_/api/admins", h.requireTool("administrators", h.listAdmins))
 	h.mux.HandleFunc("POST /_/api/admins/invite", h.requireTool("administrators", h.inviteAdmin))
+	h.mux.HandleFunc("GET /_/api/admins/requests", h.requireTool("administrators", h.listAccessRequests))
+	h.mux.HandleFunc("PUT /_/api/admins/requests/settings", h.requireTool("administrators", h.setAccessRequests))
+	h.mux.HandleFunc("POST /_/api/admins/requests/{id}/approve", h.requireOperatorTool("administrators", h.approveAccessRequest))
+	h.mux.HandleFunc("POST /_/api/admins/requests/{id}/deny", h.requireTool("administrators", h.denyAccessRequest))
 	h.mux.HandleFunc("POST /_/api/admins/{id}/recover", h.requireTool("administrators", h.recoverAdmin))
 	h.mux.HandleFunc("POST /_/api/admins/{id}/disable", h.requireTool("administrators", h.setAdminDisabled(true)))
 	h.mux.HandleFunc("POST /_/api/admins/{id}/enable", h.requireTool("administrators", h.setAdminDisabled(false)))
@@ -299,6 +309,9 @@ func (h *Handler) adminState(w http.ResponseWriter, r *http.Request) {
 	}
 	if !enrolled && h.enrolCommand != "" {
 		state["enrol_command"] = h.enrolCommand
+	}
+	if enrolled && h.accessRequestsEnabled(r) {
+		state["access_requests"] = true
 	}
 	writeJSON(w, http.StatusOK, state)
 }
