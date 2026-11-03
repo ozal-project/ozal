@@ -18,26 +18,42 @@ the first tagged build and do not include features added later.
 
 ## 1. Verify the download
 
-Download the archive from the authorized release channel and get its checksum from
-a trusted source. A checksum that came from the same compromised source does not
-prove authenticity, and this guide does not claim a release signature.
+Each release publishes `checksums.txt`, the SHA-256 of every archive, and
+`checksums.txt.sig`, an Ed25519 signature of that file made with the Ozal release
+key. Verify the signature with the public key, then the archive with the checksums.
+A checksum alone, fetched from the same place as the archive, does not prove where
+the archive came from; the signature does, as long as you trust the key.
 
-GoReleaser builds Linux, macOS and Windows archives for amd64 and arm64, with
-SHA-256 checksums and an SBOM. Pick your operating system and architecture.
+The public key is [`ozal-release.pub`](ozal-release.pub) in this repository, the
+form `ozal update` reads. Its value is `mLezEy+Uo1RnvqjOAr5+RYoGjny1IxHYgfHdtra51B8=`;
+compare it with a copy you obtained another way before you rely on it. `openssl`
+needs it wrapped as a standard public key, which the first command below does.
+
+GoReleaser builds Linux, macOS and Windows archives for amd64 and arm64, with an
+SBOM for each. Pick your operating system and architecture.
 
 ```sh
-sha256sum ./ozal_VERSION_linux_amd64.tar.gz  # compare with EXPECTED_SHA256
+VERSION=0.1.0-alpha.10 ARCH=amd64   # or arm64
+base=https://github.com/ozal-project/ozal/releases/download/v$VERSION
+curl -fsSLO https://raw.githubusercontent.com/ozal-project/ozal/main/docs/operations/ozal-release.pub
+curl -fsSLO "$base/checksums.txt"
+curl -fsSLO "$base/checksums.txt.sig"
+curl -fsSLO "$base/ozal_${VERSION}_linux_${ARCH}.tar.gz"
+# Ed25519 key header (RFC 8410) followed by the 32-byte key from ozal-release.pub:
+{ printf '\060\052\060\005\006\003\053\145\160\003\041\000'; base64 -d ozal-release.pub; } |
+  openssl pkey -pubin -inform DER -out ozal-release.pem
+base64 -d checksums.txt.sig > checksums.sig.bin
+openssl pkeyutl -verify -pubin -inkey ozal-release.pem -rawin \
+  -in checksums.txt -sigfile checksums.sig.bin   # Signature Verified Successfully
+sha256sum -c --ignore-missing checksums.txt      # ozal_..._linux_ARCH.tar.gz: OK
 mkdir ./ozal-release
-# After verifying the archive and its regular member:
-tar -xzf ./ozal_VERSION_linux_amd64.tar.gz -C ./ozal-release ozal
+tar -xzf "./ozal_${VERSION}_linux_${ARCH}.tar.gz" -C ./ozal-release ozal
 ./ozal-release/ozal version
 ```
 
-If the channel is not trusted, list the archive before extracting it. Never run an
-extracted installer before checking the archive's checksum.
-
-The `ozal_VERSION_*` names are the Ozal package names. They do not mean an Ozal
-release is already published; check the release channel first.
+`openssl` 3.0 or later verifies Ed25519 signatures. If the channel is not trusted,
+list the archive before extracting it. Never run an extracted binary before the
+signature and the checksum both pass.
 
 ## 2. Install the binary without privileges
 
@@ -102,7 +118,12 @@ files, keep the state for inspection and do not overwrite it.
 
 `ozal uninstall` prints a plan by default. With `-apply`, it stops and disables
 the Ozal systemd units, then removes their unit files, installed binaries and
-recognized binary rollback files.
+recognized binary rollback files. It takes the update lock first and refuses while
+an update is running, with nothing changed. Releases up to 0.1.0-alpha.10 do not
+recognize the `update.lock` that updates leave in `/usr/local/lib/ozal` and stop
+with "contains files this uninstaller does not own"; on those, stop the units and
+remove that one file before uninstalling:
+`sudo systemctl stop ozal-update-executor.service ozal.service && sudo rm /usr/local/lib/ozal/update.lock`.
 Configuration and persistent state remain in `/etc/ozal` and `/var/lib/ozal`.
 Add `-purge-state` only when those files and data should also be permanently
 removed. The dedicated `ozal` account and group are retained.

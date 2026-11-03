@@ -110,7 +110,7 @@ and never installs a version equal to or older than the installed one. Drafts do
 not count; prereleases only with `-prerelease`.
 
 ```sh
-sudo install -m 0644 release.pub /etc/ozal/release.pub
+sudo install -m 0644 ozal-release.pub /etc/ozal/release.pub   # docs/operations/ozal-release.pub
 sudo /usr/local/lib/ozal/ozal update -public-key /etc/ozal/release.pub \
   -unit ozal -binary /usr/local/lib/ozal/ozal -config /etc/ozal/config.json \
   -db /var/lib/ozal/state.db -user ozal \

@@ -19,3 +19,6 @@ func (LinuxHost) Systemctl(context.Context, ...string) error {
 	return errors.New("systemd installation requires Linux")
 }
 func (LinuxHost) Healthy(context.Context) bool { return false }
+
+// LockUpdates has nothing to exclude: updates run on Linux only.
+func (LinuxHost) LockUpdates(string) (func(), error) { return func() {}, nil }
