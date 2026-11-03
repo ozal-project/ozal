@@ -723,6 +723,18 @@ func TestUpdateExpectInstalledVersionDoesNotInstallANewerCatalog(t *testing.T) {
 	}
 }
 
+// The reviewed tag carries a "v" while the installed binary reports its
+// version without one; re-running the reviewed command after it succeeded
+// must say so instead of failing as if the release had changed.
+func TestUpdateExpectTagMatchesTheInstalledVersionWithoutItsPrefix(t *testing.T) {
+	rig := newUpdateRig(t, "0.2.0")
+	catalogURL := rig.host.publishCatalog(t, rig.srv.URL, "v0.2.0", rig.key, []byte("installed"), nil)
+	out, err := rig.runCatalog(t, catalogURL, "-apply", "-expect", "v0.2.0", "-expect-sha256", strings.Repeat("a", 64))
+	if err != nil || len(rig.upgrades) != 0 || !strings.Contains(out, "already installed") {
+		t.Fatalf("err=%v upgrades=%d out=%s", err, len(rig.upgrades), out)
+	}
+}
+
 func TestUpdateRefusesASecondProcessWhileTheLockIsHeld(t *testing.T) {
 	rig := newUpdateRig(t, "0.1.0")
 	lock, err := updatelock.Acquire(filepath.Join(filepath.Dir(rig.status), "update.lock"))
