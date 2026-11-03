@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/ozal-project/ozal/internal/config"
 	"io"
 	"net"
 	"net/http"
@@ -65,7 +66,11 @@ func runConsole(ctx context.Context, args []string, out io.Writer) error {
 		if kind == "recover" {
 			what = "replace the passkeys of " + *email + " (the old ones stop working)"
 		}
-		fmt.Fprintf(out, "Open once within ten minutes in your browser to %s. Passkeys use ozal.localhost:\n%s/overview#enrol=%s\n", what, passkeyOrigin(base), url.QueryEscape(answer.Token))
+		cfg := config.Config{}
+		if loaded, err := config.Load(resolveConfigPath(*af.config)); err == nil {
+			cfg = *loaded
+		}
+		fmt.Fprintf(out, "Open once within ten minutes in your browser to %s. %s:\n%s/overview#enrol=%s\n", what, passkeyPlace(cfg), passkeyOrigin(base), url.QueryEscape(answer.Token))
 		fmt.Fprint(out, sshHint(os.Getenv("SSH_CONNECTION"), invokingUser(), base))
 	case "login":
 		if strings.TrimSpace(*name) == "" {
@@ -126,6 +131,17 @@ func splitTools(v string) []string {
 // passkeyOrigin rewrites loopback IPs and the legacy localhost name to
 // ozal.localhost: WebAuthn
 // binds a passkey to a domain name and refuses an IP address.
+// passkeyPlace says where the enrolment link creates the passkey: on the
+// HTTPS login host when admin.login_host is on, otherwise ozal.localhost.
+func passkeyPlace(cfg config.Config) string {
+	if cfg.Admin.LoginHost && cfg.Auth.Passkeys != nil {
+		if u, err := url.Parse(cfg.Auth.Passkeys.LoginURL); err == nil && u.Host != "" {
+			return "The passkey is created on " + u.Host + " and you return to the console"
+		}
+	}
+	return "Passkeys use ozal.localhost"
+}
+
 func passkeyOrigin(base string) string {
 	u, err := url.Parse(base)
 	if err != nil {

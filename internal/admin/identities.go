@@ -51,6 +51,8 @@ type identities interface {
 	CompleteEnrolment(ctx context.Context, tokenHash []byte, account adminid.Account, credential webauthn.Credential, label string) (adminid.Account, error)
 	// AccountByHandle returns an enabled administrator and active passkeys.
 	AccountByHandle(ctx context.Context, handle []byte) (adminid.Account, []webauthn.Credential, error)
+	// SignInCredentials lists the active passkeys of enabled administrators.
+	SignInCredentials(ctx context.Context) ([]webauthn.Credential, error)
 	// Accounts lists every administrator, enabled or not.
 	Accounts(ctx context.Context) ([]adminid.Summary, error)
 	// SetDisabled disables or enables one; disabling the last enabled
@@ -211,7 +213,7 @@ type webUser struct {
 }
 
 func (u *webUser) WebAuthnID() []byte                         { return u.account.Handle }
-func (u *webUser) WebAuthnName() string                       { return u.account.Email }
+func (u *webUser) WebAuthnName() string                       { return adminPasskeyName(u.account.Email) }
 func (u *webUser) WebAuthnDisplayName() string                { return u.account.Name }
 func (u *webUser) WebAuthnCredentials() []webauthn.Credential { return u.credentials }
 
@@ -596,18 +598,52 @@ func (h *Handler) adminLoginBegin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) beginLogin(w http.ResponseWriter, r *http.Request, rp *webauthn.WebAuthn, tx string) {
-	assertion, session, err := rp.BeginDiscoverableLogin(webauthn.WithUserVerification(protocol.VerificationRequired))
+	opts := []webauthn.LoginOption{webauthn.WithUserVerification(protocol.VerificationRequired)}
+	if allow := h.adminCredentialList(r.Context()); len(allow) > 0 {
+		opts = append(opts, webauthn.WithAllowedCredentials(allow))
+	}
+	assertion, session, err := rp.BeginDiscoverableLogin(opts...)
 	if err != nil {
 		h.failedSignIn(r, "begin_failed", err)
 		writeError(w, http.StatusInternalServerError, "sign-in could not start")
 		return
 	}
+	// The list only steers the browser past visitor passkeys of the same RP
+	// on the login host; finish still binds the credential to the account its
+	// user handle names. Kept in the session, the library would require one
+	// account to own every listed credential, breaking a second administrator.
+	session.AllowedCredentialIDs = nil
 	id, err := h.ceremonies.put(pendingCeremony{tx: tx, origin: r.Header.Get("Origin"), session: *session})
 	if err != nil {
 		writeError(w, http.StatusTooManyRequests, "too many sign-ins in progress; try again shortly")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ceremony": id, "options": assertion})
+}
+
+// maxAllowedCredentials bounds the list a sign-in sends; past it the browser
+// gets a plain discoverable request, as before.
+const maxAllowedCredentials = 64
+
+// adminCredentialList names the administrators' passkeys to the browser, so a
+// password manager holding a visitor passkey for the same domain does not
+// offer it here. Any failure falls back to a discoverable request.
+func (h *Handler) adminCredentialList(ctx context.Context) []protocol.CredentialDescriptor {
+	credentials, err := h.identities.SignInCredentials(ctx)
+	if err != nil || len(credentials) > maxAllowedCredentials {
+		return nil
+	}
+	allow := make([]protocol.CredentialDescriptor, 0, len(credentials))
+	for _, c := range credentials {
+		allow = append(allow, c.Descriptor())
+	}
+	return allow
+}
+
+// adminPasskeyName is the account name a passkey manager shows for an
+// administrator passkey, distinct from a visitor passkey with the same email.
+func adminPasskeyName(email string) string {
+	return email + " · Ozal console"
 }
 
 func (h *Handler) adminLoginFinish(w http.ResponseWriter, r *http.Request) {
