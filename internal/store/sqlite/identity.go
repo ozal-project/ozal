@@ -143,7 +143,7 @@ func (s *Identity) InvitedUser(ctx context.Context, tokenHash []byte) (passkey.U
 
 // Enrol implements passkey.Directory: the conditional UPDATE is what makes
 // an invitation single-use even when two browsers finish at once.
-func (s *Identity) Enrol(ctx context.Context, tokenHash []byte, userID string, credential webauthn.Credential) (bool, error) {
+func (s *Identity) Enrol(ctx context.Context, tokenHash []byte, userID string, credential webauthn.Credential, label string) (bool, error) {
 	encoded, err := json.Marshal(credential)
 	if err != nil {
 		return false, fmt.Errorf("encode credential: %w", err)
@@ -187,8 +187,8 @@ func (s *Identity) Enrol(ctx context.Context, tokenHash []byte, userID string, c
 		}
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO passkeys (credential_id, user_id, credential_json, backup_eligible, created_at, first_seen_pending) VALUES (?, ?, ?, ?, ?, 0)`,
-		credential.ID, userID, string(encoded), credential.Flags.BackupEligible, now,
+		`INSERT INTO passkeys (credential_id, user_id, credential_json, backup_eligible, created_at, first_seen_pending, label) VALUES (?, ?, ?, ?, ?, 0, ?)`,
+		credential.ID, userID, string(encoded), credential.Flags.BackupEligible, now, nullIfEmpty(label),
 	); err != nil {
 		return false, fmt.Errorf("insert passkey: %w", err)
 	}
@@ -296,7 +296,7 @@ func (s *Identity) Passkeys(ctx context.Context, email string) ([]passkey.Passke
 		return nil, err
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT credential_json, created_at, last_used_at, revoked_at FROM passkeys WHERE user_id = ? ORDER BY created_at, credential_id`,
+		`SELECT credential_json, created_at, last_used_at, revoked_at, label FROM passkeys WHERE user_id = ? ORDER BY created_at, credential_id`,
 		user.ID,
 	)
 	if err != nil {
@@ -309,11 +309,12 @@ func (s *Identity) Passkeys(ctx context.Context, email string) ([]passkey.Passke
 			encoded          string
 			created          int64
 			lastUsed, revoke sql.NullInt64
+			label            sql.NullString
 		)
-		if err := rows.Scan(&encoded, &created, &lastUsed, &revoke); err != nil {
+		if err := rows.Scan(&encoded, &created, &lastUsed, &revoke, &label); err != nil {
 			return nil, err
 		}
-		key := passkey.Passkey{UserID: user.ID, CreatedAt: time.Unix(created, 0), LastUsedAt: unixOrZero(lastUsed), RevokedAt: unixOrZero(revoke)}
+		key := passkey.Passkey{UserID: user.ID, Label: label.String, CreatedAt: time.Unix(created, 0), LastUsedAt: unixOrZero(lastUsed), RevokedAt: unixOrZero(revoke)}
 		if err := json.Unmarshal([]byte(encoded), &key.Credential); err != nil {
 			return nil, fmt.Errorf("decode passkey: %w", err)
 		}
@@ -377,7 +378,7 @@ func (s *Identity) ActivePasskeys(ctx context.Context, userID string) ([]passkey
 		return nil, err
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT credential_json, created_at, last_used_at FROM passkeys WHERE user_id = ? AND revoked_at IS NULL ORDER BY created_at, credential_id`,
+		`SELECT credential_json, created_at, last_used_at, label FROM passkeys WHERE user_id = ? AND revoked_at IS NULL ORDER BY created_at, credential_id`,
 		userID,
 	)
 	if err != nil {
@@ -390,11 +391,12 @@ func (s *Identity) ActivePasskeys(ctx context.Context, userID string) ([]passkey
 			encoded  string
 			created  int64
 			lastUsed sql.NullInt64
+			label    sql.NullString
 		)
-		if err := rows.Scan(&encoded, &created, &lastUsed); err != nil {
+		if err := rows.Scan(&encoded, &created, &lastUsed, &label); err != nil {
 			return nil, err
 		}
-		key := passkey.Passkey{UserID: userID, CreatedAt: time.Unix(created, 0), LastUsedAt: unixOrZero(lastUsed)}
+		key := passkey.Passkey{UserID: userID, Label: label.String, CreatedAt: time.Unix(created, 0), LastUsedAt: unixOrZero(lastUsed)}
 		if err := json.Unmarshal([]byte(encoded), &key.Credential); err != nil {
 			return nil, fmt.Errorf("decode passkey: %w", err)
 		}
@@ -405,18 +407,35 @@ func (s *Identity) ActivePasskeys(ctx context.Context, userID string) ([]passkey
 
 // AddPasskey implements passkey.Directory. The INSERT ... SELECT stores the
 // passkey only if the user is still enabled at that moment.
-func (s *Identity) AddPasskey(ctx context.Context, userID string, credential webauthn.Credential) error {
+func (s *Identity) AddPasskey(ctx context.Context, userID string, credential webauthn.Credential, label string) error {
 	encoded, err := json.Marshal(credential)
 	if err != nil {
 		return fmt.Errorf("encode credential: %w", err)
 	}
 	result, err := s.db.ExecContext(ctx,
-		`INSERT INTO passkeys (credential_id, user_id, credential_json, backup_eligible, created_at, first_seen_pending)
-		 SELECT ?, id, ?, ?, ?, 1 FROM users WHERE id = ? AND disabled_at IS NULL`,
-		credential.ID, string(encoded), credential.Flags.BackupEligible, s.now().Unix(), userID,
+		`INSERT INTO passkeys (credential_id, user_id, credential_json, backup_eligible, created_at, first_seen_pending, label)
+		 SELECT ?, id, ?, ?, ?, 1, ? FROM users WHERE id = ? AND disabled_at IS NULL`,
+		credential.ID, string(encoded), credential.Flags.BackupEligible, s.now().Unix(), nullIfEmpty(label), userID,
 	)
 	if err != nil {
 		return fmt.Errorf("insert passkey: %w", err)
+	}
+	if n, err := result.RowsAffected(); err != nil || n != 1 {
+		return passkey.ErrNotFound
+	}
+	return nil
+}
+
+// RenamePasskey implements passkey.Directory. The UPDATE matches only an
+// active passkey of an enabled user, so a name never lands on someone else's.
+func (s *Identity) RenamePasskey(ctx context.Context, userID string, credentialID []byte, label string) error {
+	result, err := s.db.ExecContext(ctx,
+		`UPDATE passkeys SET label = ? WHERE credential_id = ? AND user_id = ? AND revoked_at IS NULL
+		   AND user_id IN (SELECT id FROM users WHERE disabled_at IS NULL)`,
+		nullIfEmpty(label), credentialID, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("rename passkey: %w", err)
 	}
 	if n, err := result.RowsAffected(); err != nil || n != 1 {
 		return passkey.ErrNotFound

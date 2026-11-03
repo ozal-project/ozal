@@ -43,6 +43,7 @@ func (h *Handler) registerPeople() {
 type personPasskey struct {
 	ID       string    `json:"id"`
 	Provider string    `json:"provider"`
+	Label    string    `json:"label,omitempty"`
 	Synced   bool      `json:"synced"`
 	Created  time.Time `json:"created"`
 	LastUsed time.Time `json:"last_used,omitzero"`
@@ -57,6 +58,44 @@ type person struct {
 	Created  time.Time       `json:"created"`
 	Disabled time.Time       `json:"disabled,omitzero"`
 	Passkeys []personPasskey `json:"passkeys"`
+	// Administrator is the console account with the same email, if any.
+	// The two are separate accounts with their own passkeys and sessions;
+	// nothing links them but the address.
+	Administrator *personAdmin `json:"administrator,omitempty"`
+}
+
+// personAdmin says a visitor is also an administrator. The account's
+// details go only to a caller who may see administrators.
+type personAdmin struct {
+	Disabled bool      `json:"disabled,omitempty"`
+	ID       string    `json:"id,omitempty"`
+	Name     string    `json:"name,omitempty"`
+	Tools    []string  `json:"tools,omitempty"`
+	Passkeys int       `json:"passkeys,omitempty"`
+	LastUsed time.Time `json:"last_used,omitzero"`
+}
+
+// administratorsByEmail indexes the console accounts by lower-case email.
+// Without the administrators tool only the fact and the disabled state
+// remain.
+func (h *Handler) administratorsByEmail(r *http.Request) map[string]*personAdmin {
+	out := map[string]*personAdmin{}
+	if h.identities == nil {
+		return out
+	}
+	accounts, err := h.identities.Accounts(r.Context())
+	if err != nil {
+		return out
+	}
+	details := h.callerAllows(r, "administrators")
+	for _, a := range accounts {
+		view := &personAdmin{Disabled: !a.DisabledAt.IsZero()}
+		if details {
+			view.ID, view.Name, view.Tools, view.Passkeys, view.LastUsed = a.ID, a.Name, a.Tools, a.Passkeys, a.LastUsedAt
+		}
+		out[strings.ToLower(a.Email)] = view
+	}
+	return out
 }
 
 // listPeople is protected by the people tool, including on loopback.
@@ -67,6 +106,7 @@ func (h *Handler) listPeople(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "users could not be listed")
 		return
 	}
+	admins := h.administratorsByEmail(r)
 	out := make([]person, 0, len(users))
 	for _, u := range users {
 		keys, err := h.people.Passkeys(r.Context(), u.Email)
@@ -74,7 +114,7 @@ func (h *Handler) listPeople(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "passkeys could not be listed")
 			return
 		}
-		p := person{Email: u.Email, Subject: u.Subject(), Name: u.Name, Groups: u.Groups, Created: u.CreatedAt, Disabled: u.DisabledAt, Passkeys: []personPasskey{}}
+		p := person{Email: u.Email, Subject: u.Subject(), Name: u.Name, Groups: u.Groups, Created: u.CreatedAt, Disabled: u.DisabledAt, Passkeys: []personPasskey{}, Administrator: admins[strings.ToLower(u.Email)]}
 		if p.Groups == nil {
 			p.Groups = []string{}
 		}
@@ -82,6 +122,7 @@ func (h *Handler) listPeople(w http.ResponseWriter, r *http.Request) {
 			p.Passkeys = append(p.Passkeys, personPasskey{
 				ID:       hex.EncodeToString(k.Credential.ID),
 				Provider: passkey.ProviderName(k.Credential.Authenticator.AAGUID, k.Synced()),
+				Label:    k.Label,
 				Synced:   k.Synced(),
 				Created:  k.CreatedAt,
 				LastUsed: k.LastUsedAt,

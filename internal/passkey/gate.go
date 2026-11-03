@@ -1,7 +1,9 @@
 package passkey
 
 import (
+	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,6 +22,7 @@ import (
 	"github.com/ozal-project/ozal/internal/auth"
 	"github.com/ozal-project/ozal/internal/config"
 	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/useragent"
 )
 
 const (
@@ -253,6 +256,12 @@ type AdminLogin interface {
 	ServeAdminLogin(w http.ResponseWriter, r *http.Request) bool
 }
 
+// administrators is what the portal asks of the console's accounts when the
+// admin login implements it.
+type administrators interface {
+	IsAdministrator(ctx context.Context, email string) bool
+}
+
 // WithAdminLogin serves /_/auth/admin on the login host through admin.
 func (g *Gate) WithAdminLogin(admin AdminLogin) *Gate {
 	g.admin = admin
@@ -310,6 +319,8 @@ func (g *Gate) ServeAuthEndpoint(w http.ResponseWriter, r *http.Request) bool {
 		g.api(w, r, g.devicesAddFinish)
 	case "/_/auth/devices/revoke":
 		g.api(w, r, g.devicesRevoke)
+	case "/_/auth/devices/rename":
+		g.api(w, r, g.devicesRename)
 	case "/_/auth/passkey.js", "/_/auth/passkey.css", "/_/auth/geist-400.woff2", "/_/auth/geist-600.woff2":
 		serveAsset(w, r)
 	case "/_/auth/login/begin":
@@ -489,7 +500,7 @@ func (g *Gate) loginFinish(w http.ResponseWriter, r *http.Request) (any, *apiErr
 		g.emit(r, events.Event{Type: events.LoginFailed, Actor: subject, Code: "passkey_record_failed", Error: err.Error()})
 		return nil, &errLoginFailed
 	}
-	if apiErr := g.startSession(w, r, found.user, !credential.Flags.BackupEligible, credential.Flags.UserVerified, firstSeen); apiErr != nil {
+	if apiErr := g.startSession(w, r, found.user, *credential, firstSeen); apiErr != nil {
 		return nil, apiErr
 	}
 	g.emit(r, events.Event{Type: events.LoginSucceeded, Actor: subject, Code: "passkey"})
@@ -570,7 +581,7 @@ func (g *Gate) enrolFinish(w http.ResponseWriter, r *http.Request) (any, *apiErr
 		g.emit(r, events.Event{Type: events.LoginFailed, Actor: user.Subject(), Code: "enrol_invalid", Error: errorText(err)})
 		return nil, &errLoginFailed
 	}
-	recovered, err := g.dir.Enrol(r.Context(), pending.tokenHash, user.ID, *credential)
+	recovered, err := g.dir.Enrol(r.Context(), pending.tokenHash, user.ID, *credential, useragent.Label(r.UserAgent()))
 	if err != nil {
 		g.emit(r, events.Event{Type: events.LoginFailed, Actor: user.Subject(), Code: "enrol_store_failed", Error: err.Error()})
 		if errors.Is(err, ErrInvitationInvalid) {
@@ -591,7 +602,7 @@ func (g *Gate) enrolFinish(w http.ResponseWriter, r *http.Request) (any, *apiErr
 		reason = "previous passkeys revoked, previous sessions ended and other recovery links retired"
 	}
 	g.emit(r, events.Event{Type: eventType, Actor: user.Subject(), Code: kind, Reason: reason})
-	if apiErr := g.startSession(w, r, user, !credential.Flags.BackupEligible, credential.Flags.UserVerified, true); apiErr != nil {
+	if apiErr := g.startSession(w, r, user, *credential, true); apiErr != nil {
 		return nil, apiErr
 	}
 	return g.finished(pending.returnTo), nil
@@ -600,8 +611,11 @@ func (g *Gate) enrolFinish(w http.ResponseWriter, r *http.Request) (any, *apiErr
 // --- sessions, cookies and ceremonies ------------------------------------
 
 // startSession issues a new session ID (never reusing one that existed
-// before the login) and ends the session the browser had, if any.
-func (g *Gate) startSession(w http.ResponseWriter, r *http.Request, user User, deviceBound, userVerified, deviceFirstSeen bool) *apiError {
+// before the login) and ends the session the browser had, if any. The
+// session remembers the browser and the passkey, so its owner can tell it
+// apart from their others.
+func (g *Gate) startSession(w http.ResponseWriter, r *http.Request, user User, credential webauthn.Credential, deviceFirstSeen bool) *apiError {
+	userVerified := credential.Flags.UserVerified
 	if previous, err := r.Cookie(auth.SessionCookieName); err == nil {
 		g.sessions.Delete(r.Context(), previous.Value)
 	}
@@ -614,9 +628,11 @@ func (g *Gate) startSession(w http.ResponseWriter, r *http.Request, user User, d
 		Groups:          user.Groups,
 		AuthTime:        g.now(),
 		Method:          auth.MethodPasskey,
-		DeviceBound:     deviceBound,
+		DeviceBound:     !credential.Flags.BackupEligible,
 		UserVerified:    &userVerified,
 		DeviceFirstSeen: &firstSeenEvidence,
+		Client:          useragent.Label(r.UserAgent()),
+		Passkey:         hex.EncodeToString(credential.ID),
 	})
 	if errors.Is(err, auth.ErrStoreFull) {
 		g.emit(r, events.Event{Type: events.LoginFailed, Actor: user.Subject(), Code: "session_store_full"})

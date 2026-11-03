@@ -97,6 +97,7 @@ type browser struct {
 	cookies map[string]string
 	origin  string       // the Origin header its fetches send
 	session *http.Cookie // the last session cookie set, with its attributes
+	agent   string       // the User-Agent its fetches send, if any
 }
 
 func (h *harness) browser() *browser {
@@ -109,6 +110,9 @@ func (b *browser) post(t *testing.T, path string, body any) (*httptest.ResponseR
 	req := httptest.NewRequest(http.MethodPost, loginOrigin+path, bytes.NewReader(encoded))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Origin", b.origin)
+	if b.agent != "" {
+		req.Header.Set("User-Agent", b.agent)
+	}
 	for name, value := range b.cookies {
 		req.AddCookie(&http.Cookie{Name: name, Value: value})
 	}

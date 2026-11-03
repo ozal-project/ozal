@@ -26,7 +26,7 @@ func TestFirstSeenPasskeyIsConsumedOnceAcrossConcurrentLogins(t *testing.T) {
 		t.Fatal(err)
 	}
 	credential := webauthn.Credential{ID: []byte("new-passkey-credential-id")}
-	if err := identity.AddPasskey(ctx, invitation.User.ID, credential); err != nil {
+	if err := identity.AddPasskey(ctx, invitation.User.ID, credential, ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -83,7 +83,7 @@ func TestFirstSeenMigrationLeavesExistingCredentialsKnownOld(t *testing.T) {
 		t.Fatalf("existing passkey firstSeen=%t err=%v; migration must not relabel it new", firstSeen, err)
 	}
 	newCredential := webauthn.Credential{ID: []byte("new-passkey-credential")}
-	if err := identity.AddPasskey(ctx, invitation.User.ID, newCredential); err != nil {
+	if err := identity.AddPasskey(ctx, invitation.User.ID, newCredential, ""); err != nil {
 		t.Fatal(err)
 	}
 	if firstSeen, err := identity.RecordLogin(ctx, newCredential); err != nil || !firstSeen {

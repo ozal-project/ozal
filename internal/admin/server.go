@@ -486,6 +486,16 @@ func (h *Handler) requireBearer(next http.HandlerFunc) http.HandlerFunc {
 // requireTool admits the admin token, the host socket, or an operator session
 // whose host login granted this tool. A session without it gets 403, so a
 // login for one area never reaches another.
+// callerAllows reports whether the request, already admitted by bearer,
+// may use tool: the host socket and the admin token hold every tool, an
+// administrator session only its own.
+func (h *Handler) callerAllows(r *http.Request, tool string) bool {
+	if grant, ok := r.Context().Value(operatorKey{}).(operatorGrant); ok {
+		return grant.allows(tool)
+	}
+	return true
+}
+
 func (h *Handler) requireTool(tool string, next http.HandlerFunc) http.HandlerFunc {
 	return h.bearer(next, false, tool)
 }

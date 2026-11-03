@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"encoding/hex"
 	"time"
 
@@ -9,7 +10,7 @@ import (
 )
 
 func (s *Sessions) ListOwned(ctx context.Context, subject string) ([]auth.SessionInfo, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id_hash, created_at, last_seen_at, expires_at, amr FROM sessions WHERE subject = ? AND parent_hash IS NULL ORDER BY created_at DESC, id_hash`, subject)
+	rows, err := s.db.QueryContext(ctx, `SELECT id_hash, created_at, last_seen_at, expires_at, amr, client, passkey_id FROM sessions WHERE subject = ? AND parent_hash IS NULL ORDER BY created_at DESC, id_hash`, subject)
 	if err != nil {
 		return nil, err
 	}
@@ -19,14 +20,16 @@ func (s *Sessions) ListOwned(ctx context.Context, subject string) ([]auth.Sessio
 		var id []byte
 		var created, seen, issued int64
 		var method string
-		if err := rows.Scan(&id, &created, &seen, &issued, &method); err != nil {
+		var client sql.NullString
+		var passkeyID []byte
+		if err := rows.Scan(&id, &created, &seen, &issued, &method, &client, &passkeyID); err != nil {
 			return nil, err
 		}
 		expiry := s.expiresAt(time.Unix(created, 0), time.Unix(seen, 0), time.Unix(issued, 0))
 		if !s.now().Before(expiry) {
 			continue
 		}
-		out = append(out, auth.SessionInfo{ID: hex.EncodeToString(id), Created: time.Unix(created, 0), LastSeen: time.Unix(seen, 0), Expires: expiry, Method: method})
+		out = append(out, auth.SessionInfo{ID: hex.EncodeToString(id), Created: time.Unix(created, 0), LastSeen: time.Unix(seen, 0), Expires: expiry, Method: method, Client: client.String, Passkey: hex.EncodeToString(passkeyID)})
 	}
 	return out, rows.Err()
 }

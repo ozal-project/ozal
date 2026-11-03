@@ -72,8 +72,40 @@ try {
     assert.equal(res.status, unknown.status, `${path} answered differently from an unknown path`);
   }
 
+  step = "the same email as a visitor: a second account, never merged";
+  const visitor = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const portal = await visitor.newPage();
+  portal.on("pageerror", (e) => errors.push(e.message));
+  const visitorCDP = await visitor.newCDPSession(portal);
+  await visitorCDP.send("WebAuthn.enable");
+  await visitorCDP.send("WebAuthn.addVirtualAuthenticator", {
+    options: { protocol: "ctap2", transport: "internal", hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true },
+  });
+  await portal.goto((await edge.invite("olivia@acme.dev", "Olivia")).link);
+  await portal.locator("#action").click();
+  await portal.waitForSelector("#who:not([hidden])", { timeout: 20_000 });
+  await portal.goto(`${loginURL}/_/auth/me`);
+  const notice = portal.locator("#also-admin");
+  await notice.waitFor();
+  assert.match(await notice.textContent(), /olivia@acme\.dev · Ozal console/, "the portal says the console passkeys are separate");
+
+  step = "People shows the two accounts of one email";
+  await page.goto(`${consoleURL}/people`);
+  const row = page.locator("li", { hasText: "olivia@acme.dev" }).filter({ hasText: "Also an administrator" });
+  await row.waitFor();
+  await row.getByRole("button", { name: "Passkeys of olivia@acme.dev" }).click();
+  const accounts = page.getByRole("dialog", { name: "Two accounts" });
+  await accounts.waitFor();
+  await accounts.getByText("Visitor · signs in to your applications").waitFor();
+  const console_ = accounts.getByRole("region", { name: "Administrator account" });
+  await console_.getByText("Console passkeys").waitFor();
+  await console_.getByText("1 passkey").waitFor();
+  await console_.getByText("No backup console passkey").waitFor();
+  if (process.env.SHOTS) await page.screenshot({ path: join(process.env.SHOTS, "people-two-accounts.png") });
+  await page.keyboard.press("Escape");
+
   assert.deepEqual(errors, [], "no uncaught browser errors");
-  console.log("Administrator passkeys on the login host: first administrator enrols there, the console receives the session, sign-in again by the same route, the passkey's RP is the login domain, and the login host hides the ceremony without a transaction");
+  console.log("Administrator passkeys on the login host: first administrator enrols there, the console receives the session, sign-in again by the same route, the passkey's RP is the login domain, the login host hides the ceremony without a transaction, and the same email as a visitor is a separate account shown on both sides");
 } catch (error) {
   console.error(`Login-host acceptance failed at ${step}: ${error.message}`);
   if (process.env.SB_DEBUG) for (const c of browser?.contexts() ?? []) for (const p of c.pages()) console.error(`--- ${p.url()}\n` + (await p.locator("body").innerText().catch(() => "")).slice(0, 800));

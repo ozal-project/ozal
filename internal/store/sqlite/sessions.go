@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -75,6 +76,14 @@ func (s *Sessions) Create(ctx context.Context, principal auth.Principal) (string
 	if principal.Method == auth.MethodPasskey && principal.DeviceFirstSeen != nil {
 		deviceFirstSeen = *principal.DeviceFirstSeen
 	}
+	var passkeyID any
+	if principal.Passkey != "" {
+		raw, err := hex.DecodeString(principal.Passkey)
+		if err != nil {
+			return "", fmt.Errorf("session passkey id: %w", err)
+		}
+		passkeyID = raw
+	}
 	now := s.now()
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -95,10 +104,11 @@ func (s *Sessions) Create(ctx context.Context, principal auth.Principal) (string
 		return "", auth.ErrStoreFull
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO sessions (id_hash, subject, email, email_verified, groups_json, created_at, expires_at, last_seen_at, auth_time, amr, device_bound, user_verified, device_first_seen)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO sessions (id_hash, subject, email, email_verified, groups_json, created_at, expires_at, last_seen_at, auth_time, amr, device_bound, user_verified, device_first_seen, client, passkey_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		hash[:], principal.Subject, principal.Email, principal.EmailVerified, groups,
 		now.Unix(), now.Add(s.lifetime.Absolute).Unix(), now.Unix(), storedAuthTime(principal.AuthTime), principal.Method, principal.DeviceBound, userVerified, deviceFirstSeen,
+		nullIfEmpty(principal.Client), passkeyID,
 	); err != nil {
 		return "", fmt.Errorf("insert session: %w", err)
 	}
@@ -167,8 +177,8 @@ func (s *Sessions) CreateLinked(ctx context.Context, parentID, audience string) 
 		expires = limit
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO sessions (id_hash, subject, email, email_verified, groups_json, created_at, expires_at, last_seen_at, auth_time, amr, device_bound, user_verified, device_first_seen, audience, parent_hash)
-		 SELECT ?, subject, email, email_verified, groups_json, ?, ?, ?, auth_time, amr, device_bound, user_verified, device_first_seen, ?, id_hash FROM sessions WHERE id_hash = ?`,
+		`INSERT INTO sessions (id_hash, subject, email, email_verified, groups_json, created_at, expires_at, last_seen_at, auth_time, amr, device_bound, user_verified, device_first_seen, client, passkey_id, audience, parent_hash)
+		 SELECT ?, subject, email, email_verified, groups_json, ?, ?, ?, auth_time, amr, device_bound, user_verified, device_first_seen, client, passkey_id, ?, id_hash FROM sessions WHERE id_hash = ?`,
 		hash[:], now.Unix(), expires.Unix(), now.Unix(), audience, parentHash[:],
 	); err != nil {
 		return "", auth.Principal{}, fmt.Errorf("insert host session: %w", err)
@@ -220,13 +230,15 @@ func (s *Sessions) lookup(ctx context.Context, db querier, hash []byte) (row, bo
 		deviceBound     int64
 		userVerified    sql.NullInt64
 		deviceFirstSeen sql.NullInt64
+		client          sql.NullString
+		passkeyID       []byte
 		audience        string
 		parent          []byte
 	)
 	err := db.QueryRowContext(ctx,
-		`SELECT subject, email, email_verified, groups_json, expires_at, created_at, last_seen_at, auth_time, amr, device_bound, user_verified, device_first_seen, audience, parent_hash FROM sessions WHERE id_hash = ?`,
+		`SELECT subject, email, email_verified, groups_json, expires_at, created_at, last_seen_at, auth_time, amr, device_bound, user_verified, device_first_seen, client, passkey_id, audience, parent_hash FROM sessions WHERE id_hash = ?`,
 		hash,
-	).Scan(&subject, &email, &verified, &groupsJSON, &expiresUnix, &createdUnix, &seenUnix, &authUnix, &method, &deviceBound, &userVerified, &deviceFirstSeen, &audience, &parent)
+	).Scan(&subject, &email, &verified, &groupsJSON, &expiresUnix, &createdUnix, &seenUnix, &authUnix, &method, &deviceBound, &userVerified, &deviceFirstSeen, &client, &passkeyID, &audience, &parent)
 	if errors.Is(err, sql.ErrNoRows) {
 		return row{}, false, nil
 	}
@@ -259,6 +271,8 @@ func (s *Sessions) lookup(ctx context.Context, db querier, hash []byte) (row, bo
 			DeviceBound:     deviceBound == 1,
 			UserVerified:    verifiedByAuthenticator,
 			DeviceFirstSeen: firstSeenCredential,
+			Client:          client.String,
+			Passkey:         hex.EncodeToString(passkeyID),
 		},
 		created:  time.Unix(createdUnix, 0),
 		lastSeen: time.Unix(seenUnix, 0),
@@ -376,4 +390,13 @@ func encodeGroups(groups []string) (string, error) {
 		return "", fmt.Errorf("encode session groups: %w", err)
 	}
 	return string(encoded), nil
+}
+
+// nullIfEmpty stores an absent hint as NULL, which the column's length
+// check allows.
+func nullIfEmpty(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
 }

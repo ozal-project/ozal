@@ -557,6 +557,7 @@ node scripts/demo/product-acceptance.mjs
 node scripts/demo/passkey-acceptance.mjs
 OZAL_BIN=/path/binary node scripts/demo/update-acceptance.mjs
 node scripts/demo/host-sessions-acceptance.mjs
+node scripts/demo/visitor-passkeys-acceptance.mjs
 CHROME=/path/chrome node scripts/demo/https-host-sessions-acceptance.mjs
 node scripts/demo/site-check.mjs
 python3 scripts/smoke-tunnel-configured.py --binary /path/test-binary

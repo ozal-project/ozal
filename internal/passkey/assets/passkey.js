@@ -454,13 +454,30 @@ function setupDevices(button) {
     document.getElementById("who").hidden = false;
     list.replaceChildren(...data.passkeys.map((key) => {
       const item = el("li");
-      const title = el("span", "provider", key.provider);
+      // The owner's name for it, else where it lives; the provider stays on
+      // the second line when the two differ.
+      const name = key.label || key.provider;
+      const title = el("span", "provider", name);
       // The badge opens the second line, so a long provider name never wraps around it.
       const meta = el("span", "meta");
-      meta.append(
-        el("span", key.synced ? "badge" : "badge bound", key.synced ? "Synced" : "This device only"),
-        el("span", "", "Added " + ago(key.created) + (key.last_used ? " · last used " + ago(key.last_used) : " · not used yet")),
-      );
+      // Enrolment signs in without recording a use, so the passkey behind
+      // this sign-in never reads "not used yet".
+      const used = key.last_used ? " · last used " + ago(key.last_used) : key.current ? "" : " · not used yet";
+      const details = ["Added " + ago(key.created) + used];
+      if (key.label && key.label !== key.provider) details.unshift(key.provider);
+      if (key.last_client) details.push(key.last_client);
+      meta.append(el("span", key.synced ? "badge" : "badge bound", key.synced ? "Synced" : "This device only"));
+      if (key.current) meta.append(el("span", "badge current", "Used for this sign-in"));
+      const renameButton = el("button", "rename-button", "Rename");
+      renameButton.type = "button";
+      renameButton.setAttribute("aria-label", "Rename the " + name + " passkey");
+      meta.append(el("span", "details", details.join(" · ")));
+      const form = renameForm(key, name, renameButton);
+      renameButton.addEventListener("click", () => {
+        renameButton.hidden = true;
+        form.hidden = false;
+        form.input.focus();
+      });
       // The provider's logo; its name is already the title, so the image is decoration.
       const icon = el("img", "icon");
       icon.src = "/_/auth/icons/" + (key.icon || "key") + ".svg";
@@ -470,12 +487,12 @@ function setupDevices(button) {
       remove.type = "button";
       remove.disabled = data.passkeys.length === 1;
       remove.title = remove.disabled ? "Your only passkey cannot be removed" : "";
-      remove.setAttribute("aria-label", "Remove the " + key.provider + " passkey");
+      remove.setAttribute("aria-label", "Remove the " + name + " passkey");
       const ask = el("span", "confirm");
       ask.hidden = true;
       remove.addEventListener("click", () => askInline(remove, ask,
-        "Remove the " + key.provider + " passkey? You will be signed out everywhere.", "Remove", () => revoke(key.id).catch(fail)));
-      item.append(title, remove, meta, icon, ask);
+        "Remove the " + name + " passkey? You will be signed out everywhere.", "Remove", () => revoke(key.id).catch(fail)));
+      item.append(title, remove, meta, icon, ask, form, renameButton);
       return item;
     }));
     const nav = document.getElementById("sites");
@@ -486,6 +503,48 @@ function setupDevices(button) {
       return a;
     }));
     nav.hidden = sites.length === 0;
+  }
+
+  // renameForm edits a passkey's name in place: Enter or Save keeps it,
+  // Escape or Cancel leaves it as it was.
+  function renameForm(key, name, opener) {
+    const form = el("form", "rename");
+    form.hidden = true;
+    const input = el("input");
+    input.type = "text";
+    input.value = name;
+    input.maxLength = 60;
+    input.autocomplete = "off";
+    input.setAttribute("aria-label", "Name for this passkey");
+    const save = el("button", "save", "Save");
+    save.type = "submit";
+    const cancel = el("button", "link-button", "Cancel");
+    cancel.type = "button";
+    const close = () => {
+      form.hidden = true;
+      input.value = name;
+      opener.hidden = false;
+      opener.focus();
+    };
+    cancel.addEventListener("click", close);
+    form.addEventListener("keydown", (event) => { if (event.key === "Escape") close(); });
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const label = input.value.trim();
+      if (!label || label === name) return close();
+      save.disabled = true;
+      try {
+        await post("/_/auth/devices/rename", { id: key.id, label });
+        show("Renamed to " + label + ".", "ok");
+        await load();
+      } catch (error) {
+        save.disabled = false;
+        fail(error);
+      }
+    });
+    form.append(input, save, cancel);
+    form.input = input;
+    return form;
   }
 
   async function revoke(id) {
@@ -539,6 +598,13 @@ function setupMe() {
     document.getElementById("email").textContent = data.email;
     document.getElementById("who").hidden = false;
     document.getElementById("manage").hidden = !data.passkeys;
+    const admin = document.getElementById("also-admin");
+    if (admin) {
+      admin.hidden = !data.also_admin;
+      admin.textContent = data.also_admin
+        ? `This email is also an administrator. Console passkeys are separate: your password manager saves them as “${data.email} · Ozal console”, and you manage them from the console. Use the other one here.`
+        : "";
+    }
     apps.replaceChildren(...data.apps.map((app) => {
       const a = document.createElement("a");
       a.href = app.url;
@@ -561,10 +627,16 @@ function setupMe() {
     const data = await post("/_/auth/me/sessions", {});
     list.replaceChildren(...data.sessions.map((session) => {
       const li = document.createElement("li");
+      // The browser it came from names it; older sessions did not record one.
       const text = document.createElement("p");
-      text.textContent = `${session.current ? "This session" : "Other session"} · ${session.method} · last used ${new Date(session.last_seen).toLocaleString()} · expires ${new Date(session.expires).toLocaleString()}`;
+      const where = document.createElement("strong");
+      where.textContent = (session.client || "A browser") + (session.current ? " · this browser" : "");
+      const when = document.createElement("span");
+      const method = session.method === "passkey" ? "Passkey" : "Provider";
+      when.textContent = `${method} · ${session.current ? "active now" : "last used " + ago(session.last_seen)} · ends ${new Date(session.expires).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+      text.append(where, when);
       const button = document.createElement("button");
-      button.type = "button"; button.className = "link-button"; button.textContent = "End session";
+      button.type = "button"; button.className = "link-button"; button.textContent = session.current ? "Sign out" : "End";
       const ask = document.createElement("span");
       ask.hidden = true;
       button.addEventListener("click", () => askInline(button, ask,

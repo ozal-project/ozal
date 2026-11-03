@@ -1,4 +1,5 @@
 import { sessionFetch } from "$lib/apiSession";
+import type { PersonAdmin } from "$lib/personAccounts";
 
 // Typed views of the loopback admin API. The console never decides access:
 // verdicts always come from the server (auth.Explain).
@@ -251,8 +252,10 @@ export async function rollback(token: string, site: string, id: string, signal?:
 }
 
 // People and passkeys (operator side of ID-003/ID-008).
-export type PersonPasskey = { id: string; provider: string; synced: boolean; created: string; last_used?: string; revoked?: string };
-export type Person = { email: string; subject?: string; name?: string; groups: string[]; created: string; disabled?: string; passkeys: PersonPasskey[] };
+export type PersonPasskey = { id: string; provider: string; label?: string; synced: boolean; created: string; last_used?: string; revoked?: string };
+// administrator is the console account with the same email; its details come
+// only to a caller with the administrators tool.
+export type Person = { email: string; subject?: string; name?: string; groups: string[]; created: string; disabled?: string; passkeys: PersonPasskey[]; administrator?: PersonAdmin };
 export type People = { enabled: boolean; users: Person[]; protected_hosts: string[] };
 export type Invitation = { email: string; link: string; expires_at: string };
 
