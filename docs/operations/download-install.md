@@ -102,7 +102,13 @@ The installer creates `/usr/local/bin/ozal` as a link to the installed binary. T
 keeps `ozal upgrade` working from any directory. Administration commands use
 `/etc/ozal/config.json` unless a `config.json` exists in the current directory.
 
-When it finishes, it prints the next steps:
+Without `-apply` it prints the plan: every file, link, account, unit and listener it
+would create, and the trial route. That route sends `http://localhost:8888` to
+`-target` and admits only people in `-group` (default `members`). Until an
+application listens on the target, people who pass that check get an error from the
+gateway.
+
+When it finishes, it repeats the trial route and prints the next steps:
 
 1. Open an SSH tunnel to the console.
 2. Create the first administrator with a one-time link: `sudo ozal console enrol`.
@@ -116,7 +122,8 @@ files, keep the state for inspection and do not overwrite it.
 
 ## Remove a Linux installation
 
-`ozal uninstall` prints a plan by default. With `-apply`, it stops and disables
+`ozal uninstall` prints a plan by default: the units, command link and binary files
+it found, and whether configuration and state are kept. With `-apply`, it stops and disables
 the Ozal systemd units, then removes their unit files, installed binaries and
 recognized binary rollback files. It takes the update lock first and refuses while
 an update is running, with nothing changed. Releases up to 0.1.0-alpha.10 do not

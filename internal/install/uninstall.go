@@ -100,7 +100,9 @@ func Uninstall(ctx context.Context, out io.Writer, host UninstallHost, r Uninsta
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	fmt.Fprintf(out, "Remove Ozal units and binaries; purge configuration and persistent state=%t (apply=%t, staging=%t).\n", r.PurgeState, r.Apply, r.Root != "")
+	if err := writeUninstallPlan(out, r, binaryArtifacts); err != nil {
+		return err
+	}
 	if !r.Apply {
 		return nil
 	}
@@ -172,5 +174,50 @@ func Uninstall(ctx context.Context, out io.Writer, host UninstallHost, r Uninsta
 		_ = host.Systemctl(ctx, "reset-failed", "ozal.service", "ozal-update.service", "ozal-update.timer", "ozal-update-executor.service")
 	}
 	fmt.Fprintln(out, "Ozal service and binaries removed. The ozal account and group were retained.")
+	return nil
+}
+
+// writeUninstallPlan names the units and files found, and what happens to
+// configuration and state, before anything is removed.
+func writeUninstallPlan(out io.Writer, r UninstallRequest, binaryArtifacts []string) error {
+	fmt.Fprintf(out, "Uninstall plan (apply=%t, staging=%t):\n", r.Apply, r.Root != "")
+	if r.Root != "" {
+		fmt.Fprintf(out, "  every path below is under %s; systemd is not called\n", r.Root)
+	}
+	unitAction := "stop, disable and remove"
+	if r.Root != "" {
+		unitAction = "remove"
+	}
+	var units []string
+	for _, unit := range serviceUnits {
+		if _, err := os.Lstat(mapped(r.Root, "/etc/systemd/system/"+unit)); err == nil {
+			units = append(units, unit)
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+	}
+	if len(units) == 0 {
+		fmt.Fprintln(out, "  units: none found")
+	} else {
+		fmt.Fprintf(out, "  %s %s (/etc/systemd/system)\n", unitAction, strings.Join(units, ", "))
+	}
+	if _, err := os.Lstat(mapped(r.Root, "/usr/local/bin/ozal")); err == nil {
+		fmt.Fprintln(out, "  remove /usr/local/bin/ozal (command link)")
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if len(binaryArtifacts) > 0 {
+		names := make([]string, 0, len(binaryArtifacts))
+		for _, path := range binaryArtifacts {
+			names = append(names, filepath.Base(path))
+		}
+		fmt.Fprintf(out, "  remove /usr/local/lib/ozal: %s\n", strings.Join(names, ", "))
+	}
+	if r.PurgeState {
+		fmt.Fprintln(out, "  remove permanently /etc/ozal and /var/lib/ozal: configuration, admin token, state database, passkeys and sites")
+	} else {
+		fmt.Fprintln(out, "  keep /etc/ozal and /var/lib/ozal (add -purge-state to remove them permanently)")
+	}
+	fmt.Fprintln(out, "  keep the ozal account and group")
 	return nil
 }
