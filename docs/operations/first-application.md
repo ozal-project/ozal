@@ -115,6 +115,14 @@ started from it, that address answers like an unknown route.
   email with a subset of your tools (never more than you have). The invitation works
   once, for 24 hours. Administrators are not application users: a visitor's passkey
   does not open the console.
+- **Access requests (off by default).** Under **Administrators**, **Access requests**
+  can show a "Request access" form on the sign-in page. A person gives a name and an
+  email; nothing is granted. The request waits in the console until an administrator
+  with the Administrators tool reviews it, confirms with a passkey and picks the
+  tools (never more than their own). The one-time link then goes only to the browser
+  that asked. The name and email are unverified, so approve only people you
+  recognize. Waiting requests live in memory for a day and are cleared when you turn
+  the switch off or the edge restarts.
 - **Emergency path.** `console login` and the admin token remain for emergencies and
   automation. See [operator session](#operator-session) below.
 

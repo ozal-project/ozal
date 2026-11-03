@@ -34,6 +34,36 @@ func (s *Admins) Enrolled(ctx context.Context) (bool, error) {
 	return n > 0, nil
 }
 
+const settingAccessRequests = "access_requests"
+
+// AccessRequests reports whether the sign-in page accepts requests for
+// administrator access. It is off until an administrator turns it on.
+func (s *Admins) AccessRequests(ctx context.Context) (bool, error) {
+	var value string
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM admin_settings WHERE name = ?`, settingAccessRequests).Scan(&value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read access requests setting: %w", err)
+	}
+	return value == "on", nil
+}
+
+// SetAccessRequests turns access requests on or off.
+func (s *Admins) SetAccessRequests(ctx context.Context, enabled bool) error {
+	value := "off"
+	if enabled {
+		value = "on"
+	}
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT INTO admin_settings (name, value) VALUES (?, ?) ON CONFLICT (name) DO UPDATE SET value = excluded.value`,
+		settingAccessRequests, value); err != nil {
+		return fmt.Errorf("store access requests setting: %w", err)
+	}
+	return nil
+}
+
 // IssueEnrolment stores a one-use token hash. A new recovery link replaces any
 // older unused one for the same account (the latest link wins); other kinds
 // keep older unused tokens until they expire.

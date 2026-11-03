@@ -7,6 +7,7 @@ import { adminState, enrolInfo, enrolWithPasskey, explainPasskeyError, signInWit
 import { choices, type Choice } from "$lib/passkeyChoices";
 import { hostLoginCommand } from "$lib/hostCommand";
 import { startLoginHost } from "$lib/loginHost";
+import { checkAccessRequest, pollEveryMs, submitAccessRequest, type AccessTicket } from "$lib/accessRequests";
 import { Logo } from "./Logo";
 
 const toolList = [
@@ -27,7 +28,8 @@ function CopyText({ value, label }: { value: string; label: string }) {
 
 export function AuthScreen() {
   const { start, notice, enrol, setEnrol } = useSession();
-  const [mode, setMode] = useState<"passkey" | "host">("passkey");
+  const [mode, setMode] = useState<"passkey" | "host" | "request">("passkey");
+  const [accessRequests, setAccessRequests] = useState(false);
   const [enrolled, setEnrolled] = useState<boolean | null | undefined>();
   const [enrolCommand, setEnrolCommand] = useState("sudo ozal console enrol");
   const [loginHost, setLoginHost] = useState("");
@@ -46,6 +48,7 @@ export function AuthScreen() {
       setEnrolled(state ? state.enrolled : null);
       if (state?.enrol_command) setEnrolCommand(state.enrol_command);
       if (state?.login_host) setLoginHost(state.login_host);
+      setAccessRequests(!!state?.access_requests);
       if (!state) setMode("host");
     }).catch(() => { if (!controller.signal.aborted) { setEnrolled(null); setMode("host"); } });
     return () => controller.abort();
@@ -69,22 +72,37 @@ export function AuthScreen() {
     setPasted(""); setPasteError(""); setEnrol(token);
   };
 
+  const linkClass = "text-muted-foreground hover:text-foreground underline-offset-4 hover:underline";
+  const authLinks = () => {
+    if (mode === "host") return enrolled !== null && <button className={linkClass} onClick={() => setMode("passkey")}>{enrolled === false ? "Back to setup" : "Back to sign in"}</button>;
+    if (mode === "request") return <button className={linkClass} onClick={() => setMode("passkey")}>Back to sign in</button>;
+    return <>
+      {enrolled && accessRequests && <button className={linkClass} onClick={() => setMode("request")}>New here? Request access</button>}
+      <button className={linkClass} onClick={() => setMode("host")}>{enrolled === false ? "Use a host login instead" : "Run the server? Use a host login"}</button>
+    </>;
+  };
+
   return <main className="auth-shell"><div className="auth-column w-full max-w-md">
     <header className="auth-mark"><Logo size={72} entrance /><div><p className="auth-name">ozal</p><p className="auth-sub">Private console</p></div></header>
     <section className="auth-card" aria-labelledby="auth-title">
-      <h1 id="auth-title" className="text-lg font-semibold">{enrol ? "Create your passkey" : mode === "host" ? "Host login" : enrolled === false ? "Set up the first administrator" : "Sign in"}</h1>
-      {enrol ? <EnrolPanel token={enrol} loginHost={loginHost} /> : mode === "host" ? <HostPanel /> : enrolled === false ? <>
+      <h1 id="auth-title" className="text-lg font-semibold">{enrol ? "Create your passkey" : mode === "host" ? "Host login" : mode === "request" ? "Request access" : enrolled === false ? "Set up the first administrator" : "Sign in"}</h1>
+      {enrol ? <EnrolPanel token={enrol} loginHost={loginHost} /> : mode === "host" ? <HostPanel /> : mode === "request" && accessRequests ? <RequestPanel /> : enrolled === false ? <>
         {notice && <p className="text-muted-foreground mt-1 mb-4 text-sm" role="status">{notice}</p>}
-        <p className="text-muted-foreground mt-1 mb-4 text-sm">Paste the setup link the installer printed.</p>
-        <form className="flex items-center gap-2" onSubmit={submitPasted}>
-          <Label htmlFor={`${id}-setup`} className="sr-only">Setup link</Label><Input id={`${id}-setup`} value={pasted} onChange={(event) => setPasted(event.target.value)} autoComplete="off" spellCheck={false} placeholder="http://ozal.localhost:…#enrol=…" />
-          <Button type="submit" size="sm" disabled={!pasted.trim()}>Continue</Button>
-        </form>
-        {pasteError && <p className="text-destructive mt-2 text-xs" role="alert">{pasteError}</p>}
-        <p className="text-muted-foreground mt-4 text-xs leading-relaxed">The administrator account needs a passkey. If this computer cannot create one yet, a host login lets you in for a while without creating the account.</p>
-        <details className="mt-5 text-sm"><summary className="text-muted-foreground hover:text-foreground cursor-pointer">Lost the link?</summary><p className="text-muted-foreground mt-2 mb-2 text-xs">Run this on the server for a new one:</p><code className="block break-all text-xs">{enrolCommand}</code><CopyText value={enrolCommand} label="Copy enrol command" /></details>
+        <p className="text-muted-foreground mt-1 mb-4 text-sm">Nobody has an account on this console yet. The first administrator is created with a one-time setup link that only someone with access to the server can read, so nobody can get ahead of you.</p>
+        <ol className="mb-5 grid gap-4 text-sm">
+          <li><p className="font-medium">1. Get the setup link</p><p className="text-muted-foreground mt-1 text-xs leading-relaxed">The installer printed it when it finished. If it is gone or expired (it lasts 15 minutes), run this on the server for a new one:</p><code className="mt-2 block break-all text-xs">{enrolCommand}</code><div className="mt-2"><CopyText value={enrolCommand} label="Copy command" /></div></li>
+          <li><p className="font-medium">2. Paste it here</p>
+            <form className="mt-2 flex items-center gap-2" onSubmit={submitPasted}>
+              <Label htmlFor={`${id}-setup`} className="sr-only">Setup link</Label><Input id={`${id}-setup`} value={pasted} onChange={(event) => setPasted(event.target.value)} autoComplete="off" spellCheck={false} placeholder="http://ozal.localhost:…#enrol=…" />
+              <Button type="submit" size="sm" disabled={!pasted.trim()}>Continue</Button>
+            </form>
+            {pasteError && <p className="text-destructive mt-2 text-xs" role="alert">{pasteError}</p>}
+          </li>
+          <li><p className="font-medium">3. Create your passkey</p><p className="text-muted-foreground mt-1 text-xs leading-relaxed">You become the administrator with every tool. After that, this page only offers sign-in: setup never appears again.</p></li>
+        </ol>
+        <p className="text-muted-foreground text-xs leading-relaxed">This computer cannot create a passkey? A host login lets you in for a while without creating the account.</p>
       </> : enrolled ? <>
-        {notice && !error ? <p className="text-muted-foreground mt-1 text-sm" role="status">{notice}</p> : <p className="text-muted-foreground mt-1 text-sm">Welcome back.</p>}
+        {notice && !error ? <p className="text-muted-foreground mt-1 text-sm" role="status">{notice}</p> : <p className="text-muted-foreground mt-1 text-sm">Administrators sign in with their passkey.</p>}
         {error && <p className="text-destructive mt-3 text-sm" role="alert">{error}</p>}
         <Button className="mt-6 w-full" onClick={() => void passkey()} disabled={waiting || !localHost}>{waiting ? "Waiting for your device…" : "Sign in with passkey"}</Button>
         {stuck && <div className="mt-3 flex flex-wrap gap-2">{(Object.keys(choices) as Choice[]).map((choice) => <Button key={choice} variant="outline" size="sm" onClick={() => void passkey(choices[choice].hints)}>{choices[choice].label}</Button>)}</div>}
@@ -92,7 +110,7 @@ export function AuthScreen() {
       </> : <p className="text-muted-foreground mt-2 text-sm" role="status">Checking…</p>}
       {!localHost && !enrol && mode === "passkey" && enrolled !== undefined && <p className="border-warning/40 bg-warning/[0.06] mt-4 rounded-md border px-3 py-2 text-xs" role="status">Open this console as <span className="font-mono">ozal.localhost:{location.port || "9091"}</span>: passkeys do not work on an IP address.</p>}
     </section>
-    {!enrol && enrolled !== undefined && <div className="auth-links text-xs">{mode === "host" ? enrolled !== null && <button className="text-muted-foreground hover:text-foreground underline-offset-4 hover:underline" onClick={() => setMode("passkey")}>{enrolled === false ? "Back to setup" : "Sign in with passkey"}</button> : <><button className="text-muted-foreground hover:text-foreground underline-offset-4 hover:underline" onClick={() => setMode("host")}>{enrolled === false ? "Use a host login instead" : "Use a host login"}</button></>}</div>}
+    {!enrol && enrolled !== undefined && <div className="auth-links text-xs">{authLinks()}</div>}
   </div></main>;
 }
 
@@ -102,7 +120,7 @@ function HostPanel() {
   const allTools = picked.length === toolList.length;
   const command = hostLoginCommand(location.origin, allTools ? undefined : picked);
   return <>
-    <p className="text-muted-foreground mt-1 mb-4 text-sm">Run one command on the server and open the link it prints. The link works once and lasts 5 minutes.</p>
+    <p className="text-muted-foreground mt-1 mb-4 text-sm">For whoever runs this server, when you cannot sign in with a passkey. Run one command on the server and open the link it prints. The link works once and lasts 5 minutes. It is not an account: the login is recorded under your server user name.</p>
     {notice && <p className="border-border bg-muted/40 mb-4 rounded-md border px-3 py-2 text-sm" role="status">{notice}</p>}
     <p className="text-muted-foreground mb-2 text-sm">On the server, run:</p>
     <code className="block break-all text-xs" data-testid="host-login-command">{command}</code>
@@ -112,6 +130,62 @@ function HostPanel() {
     </details>
     <p className="text-muted-foreground mt-3 text-xs">The login is recorded under your user name on the server. If <code className="font-mono">ozal</code> is not found, use the full path to the binary and add <code className="font-mono">-config /path/to/config.json</code>. Over SSH the command also prints how to forward the port.</p>
   </>;
+}
+
+// RequestPanel is how a person with no account asks to become an
+// administrator. Asking grants nothing: an administrator reviews it, and the
+// approval comes back to this browser only, which holds the ticket.
+function RequestPanel() {
+  const { setEnrol } = useSession();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [ticket, setTicket] = useState<AccessTicket | null>(null);
+  const [phase, setPhase] = useState<"form" | "waiting" | "denied" | "gone">("form");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const id = useId();
+
+  useEffect(() => {
+    if (!ticket || phase !== "waiting") return;
+    const controller = new AbortController();
+    let timer = 0;
+    const poll = async () => {
+      try {
+        const outcome = await checkAccessRequest(ticket, controller.signal);
+        if (controller.signal.aborted) return;
+        if (outcome.state === "approved") { setEnrol(outcome.token); return; }
+        if (outcome.state === "denied" || outcome.state === "gone") { setPhase(outcome.state); return; }
+      } catch { if (controller.signal.aborted) return; }
+      timer = window.setTimeout(() => void poll(), pollEveryMs);
+    };
+    timer = window.setTimeout(() => void poll(), pollEveryMs);
+    return () => { controller.abort(); window.clearTimeout(timer); };
+  }, [ticket, phase, setEnrol]);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault(); if (busy) return;
+    setBusy(true); setError("");
+    try { setTicket(await submitAccessRequest(name.trim(), email.trim())); setPhase("waiting"); }
+    catch (cause) { setError((cause as Error).message); }
+    finally { setBusy(false); }
+  };
+
+  if (phase === "waiting") return <div className="mt-2 grid gap-3" role="status" aria-live="polite">
+    <p className="text-sm font-medium">Request sent. Waiting for an administrator.</p>
+    <p className="text-muted-foreground text-xs leading-relaxed">Keep this page open. When an administrator approves, you will be asked to create your passkey right here. Nothing is granted until then, and the request expires after a day.</p>
+  </div>;
+  if (phase === "denied" || phase === "gone") return <div className="mt-2 grid gap-3" role="status">
+    <p className="text-sm font-medium">{phase === "denied" ? "An administrator declined this request." : "This request expired or was already answered."}</p>
+    <p className="text-muted-foreground text-xs leading-relaxed">{phase === "denied" ? "If you think it was a mistake, ask an administrator directly." : "If you still need access, send a new request."}</p>
+    {phase === "gone" && <Button size="sm" variant="outline" onClick={() => { setTicket(null); setPhase("form"); }}>Send a new request</Button>}
+  </div>;
+  return <form className="mt-1 grid gap-4" onSubmit={(event) => void submit(event)}>
+    <p className="text-muted-foreground text-sm">Tell an administrator who you are. They choose whether to let you in and which tools you get. You create your passkey only after they approve.</p>
+    {error && <p className="text-destructive text-sm" role="alert">{error}</p>}
+    <div className="grid gap-1.5"><Label htmlFor={`${id}-name`}>Full name</Label><Input id={`${id}-name`} value={name} onChange={(event) => setName(event.target.value)} required maxLength={80} autoComplete="name" /></div>
+    <div className="grid gap-1.5"><Label htmlFor={`${id}-email`}>Email</Label><Input id={`${id}-email`} value={email} onChange={(event) => setEmail(event.target.value)} required type="email" maxLength={254} autoComplete="email" /><p className="text-muted-foreground text-xs">No message is sent. The administrator sees it as written, so use the one they know.</p></div>
+    <Button type="submit" disabled={busy || !name.trim() || !email.trim()}>{busy ? "Sending…" : "Send request"}</Button>
+  </form>;
 }
 
 function EnrolPanel({ token, loginHost }: { token: string; loginHost: string }) {
