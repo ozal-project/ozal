@@ -20,6 +20,7 @@ import (
 
 	"github.com/ozal-project/ozal/internal/adminid"
 	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/useragent"
 )
 
 // Administrative identity (UI-007): the people who run the console sign in
@@ -570,7 +571,7 @@ func (h *Handler) finishEnrol(w http.ResponseWriter, r *http.Request, rp *webaut
 	}
 	h.identityMu.Lock()
 	defer h.identityMu.Unlock()
-	account, err := h.identities.CompleteEnrolment(r.Context(), pending.tokenHash, pending.account, *credential, deviceLabel(r.UserAgent()))
+	account, err := h.identities.CompleteEnrolment(r.Context(), pending.tokenHash, pending.account, *credential, useragent.Label(r.UserAgent()))
 	if err != nil {
 		h.failedSignIn(r, "enrol_store_failed", err)
 		if errors.Is(err, adminid.ErrEnrolmentInvalid) || errors.Is(err, adminid.ErrAlreadyEnrolled) {
@@ -935,7 +936,7 @@ func (h *Handler) addPasskeyFinish(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "your session ended; sign in again")
 		return
 	}
-	if err := h.identities.AddPasskey(r.Context(), self, *credential, deviceLabel(r.UserAgent())); err != nil {
+	if err := h.identities.AddPasskey(r.Context(), self, *credential, useragent.Label(r.UserAgent())); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "the passkey could not be saved")
 		return
 	}
@@ -984,7 +985,7 @@ func (h *Handler) finishDevice(w http.ResponseWriter, r *http.Request, rp *webau
 		writeError(w, http.StatusUnauthorized, "that administrator is no longer active")
 		return
 	}
-	if err := h.identities.AddPasskey(r.Context(), account.ID, *credential, deviceLabel(r.UserAgent())); err != nil {
+	if err := h.identities.AddPasskey(r.Context(), account.ID, *credential, useragent.Label(r.UserAgent())); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "the passkey could not be saved")
 		return
 	}
@@ -1114,40 +1115,6 @@ func (h *Handler) callerPasskey(r *http.Request) (account, credential string) {
 		return "", ""
 	}
 	return h.operators.account(grant.ID), h.operators.credential(grant.ID)
-}
-
-// deviceLabel names where a passkey was made, from the browser's User-Agent:
-// "Firefox on Linux", "Chrome on Android". It is a hint for the person who
-// owns the passkey, never an authorization input.
-func deviceLabel(userAgent string) string {
-	browser := ""
-	for _, b := range []struct{ token, name string }{
-		{"Edg/", "Edge"}, {"OPR/", "Opera"}, {"Firefox/", "Firefox"}, {"FxiOS/", "Firefox"},
-		{"CriOS/", "Chrome"}, {"Chrome/", "Chrome"}, {"Safari/", "Safari"},
-	} {
-		if strings.Contains(userAgent, b.token) {
-			browser = b.name
-			break
-		}
-	}
-	system := ""
-	for _, o := range []struct{ token, name string }{
-		{"Android", "Android"}, {"iPhone", "iPhone"}, {"iPad", "iPad"}, {"Windows", "Windows"},
-		{"Mac OS X", "macOS"}, {"CrOS", "ChromeOS"}, {"Linux", "Linux"},
-	} {
-		if strings.Contains(userAgent, o.token) {
-			system = o.name
-			break
-		}
-	}
-	switch {
-	case browser != "" && system != "":
-		return browser + " on " + system
-	case browser != "":
-		return browser
-	default:
-		return system
-	}
 }
 
 // accountWithCredentials finds an enabled administrator by ID with their

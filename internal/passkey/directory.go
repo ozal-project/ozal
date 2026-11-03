@@ -48,6 +48,9 @@ func (u User) Subject() string { return SubjectPrefix + u.ID }
 type Passkey struct {
 	UserID     string
 	Credential webauthn.Credential
+	// Label is the owner's name for the passkey: where it was made until
+	// they rename it; "" for passkeys older than labels.
+	Label      string
 	CreatedAt  time.Time
 	LastUsedAt time.Time
 	RevokedAt  time.Time
@@ -68,7 +71,7 @@ type Directory interface {
 	// Enrol uses the invitation and stores the credential in one
 	// transaction, so a second enrolment with the same link fails. It returns
 	// whether recovery committed; errors must never report recovery success.
-	Enrol(ctx context.Context, tokenHash []byte, userID string, credential webauthn.Credential) (recovered bool, err error)
+	Enrol(ctx context.Context, tokenHash []byte, userID string, credential webauthn.Credential, label string) (recovered bool, err error)
 	// UserByHandle returns an enabled user and their active credentials.
 	UserByHandle(ctx context.Context, handle []byte) (User, []webauthn.Credential, error)
 	// ActiveUser returns an enabled user by ID.
@@ -84,7 +87,10 @@ type Directory interface {
 	// ActivePasskeys lists an enabled user's active passkeys, oldest first.
 	ActivePasskeys(ctx context.Context, userID string) ([]Passkey, error)
 	// AddPasskey stores another passkey for an enabled user.
-	AddPasskey(ctx context.Context, userID string, credential webauthn.Credential) error
+	AddPasskey(ctx context.Context, userID string, credential webauthn.Credential, label string) error
+	// RenamePasskey sets the label of one of the user's active passkeys; it
+	// returns ErrNotFound for a passkey that is not theirs or not active.
+	RenamePasskey(ctx context.Context, userID string, credentialID []byte, label string) error
 	// RevokeOwnPasskey revokes one of the user's active passkeys and ends
 	// all their sessions in one transaction. It returns ErrNotFound for a
 	// passkey that is not theirs or not active, and ErrLastPasskey for

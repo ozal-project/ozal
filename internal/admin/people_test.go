@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -9,8 +10,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-webauthn/webauthn/webauthn"
+	"github.com/ozal-project/ozal/internal/adminid"
 	"github.com/ozal-project/ozal/internal/config"
 	"github.com/ozal-project/ozal/internal/events"
 	"github.com/ozal-project/ozal/internal/store/sqlite"
@@ -162,7 +165,7 @@ func TestPeopleInviteListDisable(t *testing.T) {
 		t.Fatalf("users before passkey revoke = %+v, %v", users, err)
 	}
 	credential := webauthn.Credential{ID: []byte("1234567890abcdef")}
-	if err := identity.AddPasskey(context.Background(), users[0].ID, credential); err != nil {
+	if err := identity.AddPasskey(context.Background(), users[0].ID, credential, ""); err != nil {
 		t.Fatalf("add test passkey: %v", err)
 	}
 	if rec := request(handler, http.MethodPost, "/_/api/people/ana@example.com/passkeys/3132/revoke", "secret", ""); rec.Code != http.StatusOK {
@@ -231,5 +234,73 @@ func TestInviteTTLIsBounded(t *testing.T) {
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("ttl_minutes %s = %d, want 400", ttl, rec.Code)
 		}
+	}
+}
+
+// One email can be a visitor and an administrator: two accounts that only
+// share the address. People shows the link; the console account's details
+// go only to a caller who may see administrators.
+func TestPeopleShowsTheAdministratorWithTheSameEmail(t *testing.T) {
+	ctx := context.Background()
+	adminDB, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "admins.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { adminDB.Close() })
+	migrations, _ := sqlite.LoadMigrations(sqlite.Migrations())
+	if _, err := sqlite.Migrate(ctx, adminDB, migrations); err != nil {
+		t.Fatal(err)
+	}
+	admins := sqlite.NewAdmins(adminDB)
+	hash := sha256.Sum256([]byte("bootstrap"))
+	if err := admins.IssueEnrolment(ctx, adminid.EnrolmentRequest{Kind: "bootstrap"}, hash[:], time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	account := adminid.Account{ID: "0123456789abcdef0123456789abcdef", Handle: []byte("0123456789abcdef0123456789abcdef"), Email: "Ana@Example.com", Name: "Ana", Tools: []string{"people", "sites"}}
+	if _, err := admins.CompleteEnrolment(ctx, hash[:], account, webauthn.Credential{ID: []byte("console-passkey-credential")}, "Chrome on macOS"); err != nil {
+		t.Fatal(err)
+	}
+	handler, identity, _ := peopleHandler(t, WithIdentities(admins))
+	for _, email := range []string{"ana@example.com", "bob@example.com"} {
+		if _, err := identity.Invite(ctx, email, "", nil, false, time.Hour); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h := handler.(*Handler)
+	peopleOnly, _, err := h.operators.issue("People operator", false, "people")
+	if err != nil {
+		t.Fatal(err)
+	}
+	list := func(token string) map[string]map[string]any {
+		rec := request(h, http.MethodGet, "/_/api/people", token, "")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("people = %d %s", rec.Code, rec.Body)
+		}
+		var body struct {
+			Users []map[string]any `json:"users"`
+		}
+		_ = json.Unmarshal(rec.Body.Bytes(), &body)
+		out := map[string]map[string]any{}
+		for _, u := range body.Users {
+			out[u["email"].(string)] = u
+		}
+		return out
+	}
+
+	full := list("secret")
+	admin, _ := full["ana@example.com"]["administrator"].(map[string]any)
+	if admin == nil || admin["name"] != "Ana" || admin["passkeys"] != float64(1) || admin["id"] != account.ID {
+		t.Fatalf("administrator = %v, want the console account matched by email", full["ana@example.com"]["administrator"])
+	}
+	if _, ok := full["bob@example.com"]["administrator"]; ok {
+		t.Fatal("bob has no console account")
+	}
+
+	limited, _ := list(peopleOnly)["ana@example.com"]["administrator"].(map[string]any)
+	if limited == nil {
+		t.Fatal("without the administrators tool the link is still shown")
+	}
+	if len(limited) != 0 {
+		t.Fatalf("administrator = %v; without the administrators tool no account detail is shown", limited)
 	}
 }

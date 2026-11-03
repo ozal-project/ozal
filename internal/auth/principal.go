@@ -30,6 +30,11 @@ type Principal struct {
 	// account during registration or its first successful login. Nil means
 	// the method or an older credential did not record this history.
 	DeviceFirstSeen *bool
+	// Client names the browser the login came from ("Chrome on macOS") and
+	// Passkey is the hex ID of the credential that signed it. Both only help
+	// the owner tell sessions apart; no policy reads them.
+	Client  string
+	Passkey string
 }
 
 // Login methods recorded in a session (its amr); the same names as

@@ -338,3 +338,19 @@ func TestLoginHostAdministratorPasskeyHasItsOwnName(t *testing.T) {
 		t.Fatalf("user = %v, want the console name and the person's display name", user)
 	}
 }
+
+// The visitor portal learns only whether the visitor's own email is also an
+// administrator who signs in on the login host.
+func TestLoginHostSaysWhetherAnEmailIsAnAdministrator(t *testing.T) {
+	h, rl, _ := loginHostHandler(t, true)
+	token, _ := hostEnrolment(t, h, "bootstrap", "")
+	secret, challenge := verifier()
+	code, _ := loginHostCeremony(t, h, rl, newAuthenticator(t), map[string]any{"challenge": challenge, "token": token, "name": "Octavio", "email": "octavio@example.com"})
+	redeem(t, h, code, secret)
+
+	for email, want := range map[string]bool{"octavio@example.com": true, "Octavio@Example.com": true, "ana@example.com": false, "": false} {
+		if got := rl.IsAdministrator(context.Background(), email); got != want {
+			t.Errorf("IsAdministrator(%q) = %v, want %v", email, got, want)
+		}
+	}
+}

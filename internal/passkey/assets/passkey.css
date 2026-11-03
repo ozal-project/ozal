@@ -84,11 +84,29 @@ button:disabled { opacity: 0.55; cursor: progress; }
 .devices li { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 12px; align-items: start; padding: 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--raised); }
 .devices .icon { grid-column: 1; grid-row: 1 / span 2; box-sizing: content-box; width: 20px; height: 20px; padding: 8px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); }
 .devices .provider { grid-column: 2; font-weight: 700; line-height: 1.3; padding-top: 2px; }
-.devices .meta { grid-column: 2 / span 2; font-size: 0.82rem; color: var(--muted); }
+.devices .meta { grid-column: 2 / -1; font-size: 0.82rem; color: var(--muted); }
 .devices .badge { display: inline-block; margin-right: 8px; padding: 1px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 700; vertical-align: 1px; border: 1px solid var(--border); color: var(--muted); }
 .devices .badge.bound { border-color: color-mix(in srgb, var(--ok) 50%, transparent); color: var(--ok); }
 .devices li button { grid-column: 3; grid-row: 1; width: auto; padding: 4px 10px; border-radius: 8px; background: transparent; color: var(--err); border: 1px solid color-mix(in srgb, var(--err) 45%, transparent); font-size: 0.8rem; }
 .devices li button:disabled { opacity: 0.35; cursor: not-allowed; }
+.devices .badge.current { border-color: color-mix(in srgb, var(--fg) 40%, transparent); color: var(--fg); }
+.devices .meta .details { display: block; margin-top: 4px; }
+/* Rename sits beside Remove on the name's row: a quiet action, not a warning. */
+.devices li:has(.rename-button) { grid-template-columns: auto 1fr auto auto; }
+.devices li button.rename-button { grid-column: 3; grid-row: 1; color: var(--fg); border-color: var(--border); }
+.devices li:has(.rename-button) > button:not(.rename-button) { grid-column: 4; }
+.devices li .rename-button[hidden] { display: none; }
+/* Renaming happens in place, under the passkey it names. */
+.devices .rename { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 6px; }
+.devices .rename[hidden] { display: none; }
+.devices .rename input { flex: 1 1 12rem; min-width: 0; margin: 0; }
+.devices li .rename button.save { grid-column: auto; grid-row: auto; padding: 6px 12px; border: 0; background: var(--accent); color: var(--accent-fg); font-size: 0.85rem; }
+.devices li .rename .link-button { grid-column: auto; grid-row: auto; padding: 0; border: 0; color: var(--fg); }
+#sessions { list-style: none; padding: 0; margin: 12px 0; display: grid; gap: 8px; }
+#sessions li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: start; gap: 6px 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--raised); }
+#sessions li p { margin: 0; font-size: 0.82rem; color: var(--muted); }
+#sessions li strong { display: block; color: var(--fg); font-size: 0.92rem; }
+#sessions li .confirm { flex-basis: 100%; }
 /* An in-page question in place of a destructive button (no native confirm()). */
 .confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 6px 0 0; font-size: 0.88rem; }
 .confirm[hidden] { display: none; }

@@ -55,9 +55,21 @@ func TestIdentityNamespaceMigrationForcesOnlyExternalReauthentication(t *testing
 	if _, err := Migrate(ctx, db, migrations[:11]); err != nil {
 		t.Fatal(err)
 	}
+	// Rows as the schema of that time stores them; today's Create writes
+	// columns added later.
+	now := time.Now().Unix()
+	insert := func(id, subject, method string) {
+		sum := sha256.Sum256([]byte(id))
+		if _, err := db.ExecContext(ctx,
+			`INSERT INTO sessions (id_hash, subject, created_at, expires_at, last_seen_at, auth_time, amr) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			sum[:], subject, now, now+3600, now, now, method); err != nil {
+			t.Fatal(err)
+		}
+	}
+	native, legacy := "native-session-id", "legacy-session-id"
+	insert(native, "sb:ana", auth.MethodPasskey)
+	insert(legacy, "oidc:crafted.legacy", auth.MethodOIDC)
 	sessions := NewSessions(db, auth.Lifetime{Absolute: time.Hour})
-	native, _ := sessions.Create(ctx, auth.Principal{Subject: "sb:ana", Method: auth.MethodPasskey})
-	legacy, _ := sessions.Create(ctx, auth.Principal{Subject: "oidc:crafted.legacy", Method: auth.MethodOIDC})
 	if _, err := Migrate(ctx, db, migrations); err != nil {
 		t.Fatal(err)
 	}

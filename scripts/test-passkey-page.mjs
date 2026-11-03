@@ -16,7 +16,7 @@ function render(search, { oidc = "", webauthn = true, page = "login", fetch = ()
     addEventListener(ev, fn) { this.on[ev] = fn; }, focus() {}, setAttribute() {}, append(...c) { this.children.push(...c); }, replaceChildren(...c) { this.children = c; },
     querySelector(q) { return q === "a" ? this.children.find((c) => c.href) || null : null; },
   });
-  ["title", "intro", "action", "oidc", "status", "first-time", "username", "sites", "devices", "who", "email", "signout", "apps", "manage", "choices", "choice-list", "use-phone", "use-key", "recovery-warning", "sessions", "signout-all", "signout-all-confirm"].forEach(el);
+  ["title", "intro", "action", "oidc", "status", "first-time", "username", "sites", "devices", "who", "email", "signout", "apps", "manage", "choices", "choice-list", "use-phone", "use-key", "recovery-warning", "sessions", "signout-all", "signout-all-confirm", "also-admin"].forEach(el);
   const label = { hidden: false };
   const head = [];
   let ready;
@@ -355,4 +355,71 @@ assert.equal(shown.page.who(), "", "nothing about a person is shown without a se
   assert.deepEqual(assigned, ["/_/auth/login"]);
 }
 
-console.log("passkey pages: login, enrolment, recovery preflight, choices and devices OK");
+// Each passkey shows its owner's name, marks the one behind this sign-in,
+// and is renamed in place.
+{
+  const posts = [];
+  const keys = [
+    { ...key("aa11", true), provider: "Bitwarden", label: "Work laptop", current: true, last_client: "Chrome on macOS" },
+    { ...key("dd44", true), label: "" },
+  ];
+  const fetchRecord = (url, init) => {
+    posts.push([url, init && init.body]);
+    return Promise.resolve({ ok: true, json: () => Promise.resolve(url.endsWith("/list") ? { email: "ana@example.com", passkeys: keys, sites: [] } : { label: "Phone" }) });
+  };
+  page = render("", { page: "devices", fetch: fetchRecord });
+  await settle();
+  const [named, plain] = page.devices;
+  assert.equal(named.children[0].textContent, "Work laptop", "the owner's name is the title");
+  assert.equal(plain.children[0].textContent, "Apple Passwords", "without one, the provider names it");
+  const meta = named.children[2].children;
+  assert.equal(meta[1].textContent, "Used for this sign-in");
+  assert.match(meta[2].textContent, /^Bitwarden · Added .* · Chrome on macOS$/, "the provider and the last browser stay visible");
+  assert.doesNotMatch(meta[2].textContent, /not used yet/, "the passkey behind this sign-in is in use");
+  assert.match(plain.children[2].children.at(-1).textContent, /not used yet/);
+  assert.ok(!plain.children[2].children.some((c) => c.textContent === "Used for this sign-in"), "only the current passkey is marked");
+  const renameButton = plain.children[6];
+  const form = plain.children[5];
+  assert.equal(renameButton.textContent, "Rename");
+  assert.equal(form.hidden, true);
+  renameButton.on.click();
+  assert.equal(form.hidden, false, "Rename opens the field in place");
+  assert.equal(form.input.value, "Apple Passwords", "prefilled with the current name");
+  form.on.keydown({ key: "Escape" });
+  assert.equal(form.hidden, true, "Escape closes it");
+  assert.ok(!posts.some(([u]) => u.endsWith("/rename")), "closing renames nothing");
+  renameButton.on.click();
+  form.input.value = "  Phone ";
+  await form.on.submit({ preventDefault() {} });
+  const sent = posts.find(([u]) => u.endsWith("/_/auth/devices/rename"));
+  assert.deepEqual(JSON.parse(sent[1]), { id: "dd44", label: "Phone" }, "the trimmed name goes to the server");
+}
+
+// The portal names each session's browser and says when the email is also
+// an administrator, whose passkeys are separate.
+{
+  const sessions = { sessions: [
+    { id: "s1", current: true, method: "passkey", client: "Safari on iPhone", last_seen: "2026-11-02T20:00:00Z", expires: "2026-11-09T20:00:00Z" },
+    { id: "s2", current: false, method: "passkey", last_seen: "2026-11-01T20:00:00Z", expires: "2026-11-08T20:00:00Z" },
+  ] };
+  const me = (admin) => render("", {
+    page: "me", webauthn: false,
+    fetch: (url) => Promise.resolve({ ok: true, status: 200, json: async () => (url.endsWith("/sessions") ? sessions : { email: "ana@example.com", method: "passkey", passkeys: true, apps: [], also_admin: admin }) }),
+  });
+  page = me(true);
+  await settle();
+  const [current, other] = page.el("sessions").children;
+  assert.equal(current.children[0].children[0].textContent, "Safari on iPhone · this browser");
+  assert.match(current.children[0].children[1].textContent, /^Passkey · active now · ends /);
+  assert.equal(other.children[0].children[0].textContent, "A browser", "an older session without a browser still reads");
+  assert.equal(current.children[1].textContent, "Sign out");
+  assert.equal(other.children[1].textContent, "End");
+  const notice = page.el("also-admin");
+  assert.equal(notice.hidden, false);
+  assert.match(notice.textContent, /ana@example\.com · Ozal console/);
+  page = me(false);
+  await settle();
+  assert.equal(page.el("also-admin").hidden, true, "no notice for a visitor only");
+}
+
+console.log("passkey pages: login, enrolment, recovery preflight, choices, devices, rename and sessions OK");

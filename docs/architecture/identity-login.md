@@ -226,7 +226,7 @@ application-facing OIDC issuer has a separate protocol and trust boundary.
 
 Code: `internal/passkey` (gate, ceremonies, pages), `internal/store/sqlite`
 (`identity.go`, migrations `004_create_passkey_users` through
-`015_add_session_audience`), `ozal user`, config `auth.passkeys`. Where it
+`016_passkey_label_and_session_client`), `ozal user`, config `auth.passkeys`. Where it
 differs from the text above:
 
 - **Return address.** The login keeps the existing `return_to` parameter,
@@ -242,8 +242,17 @@ differs from the text above:
   host and each route sets `access.methods`. `auth.passkeys` requires `-db`:
   users, passkeys and sessions share one database, so revoking a passkey and
   ending its sessions is one transaction.
-- **Devices.** A signed-in person can list, add and revoke their own passkeys
-  from `/_/auth/devices`; adding one alerts through the configured notifier.
+- **Devices.** A signed-in person can list, add, rename and revoke their own
+  passkeys from `/_/auth/devices`; adding one alerts through the configured
+  notifier. Each passkey is named after the browser it was made in until its
+  owner renames it, and the one that signed the current session in is marked.
+  Each session records the browser it came from and the passkey that signed
+  it (migration 016). These are hints for the owner, never policy inputs.
+- **Two accounts, one email.** A visitor and a console administrator with the
+  same email are separate accounts with separate passkeys and sessions; Ozal
+  never merges them. The portal tells the visitor when their email is also an
+  administrator, and People shows the link, with the console account's
+  details only to callers who hold the administrators tool.
 - **Revocation** deletes the user's sessions, and every authenticated request
   also checks that the user is still enabled.
 - **Ceremonies** (challenges) live in memory, single use, 5 minutes, capped at
@@ -277,7 +286,8 @@ differs from the text above:
    provides verified identity to the proxied application.
 5. A route that requires recent proof triggers step-up. `max_auth_age_minutes`
    and `require_device_bound` are evaluated by `auth.Fresh`.
-6. A signed-in person can add or revoke their passkeys at `/_/auth/devices`.
+6. A signed-in person can add, rename or revoke their passkeys at
+   `/_/auth/devices`.
    Recovery after losing every device is performed by the operator through the
    host CLI and ends the previous sessions.
 

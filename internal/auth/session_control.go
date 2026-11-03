@@ -15,6 +15,8 @@ type SessionInfo struct {
 	LastSeen time.Time `json:"last_seen"`
 	Expires  time.Time `json:"expires"`
 	Method   string    `json:"method"`
+	Client   string    `json:"client,omitempty"`
+	Passkey  string    `json:"passkey,omitempty"`
 	Current  bool      `json:"current"`
 }
 

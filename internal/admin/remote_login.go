@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -318,6 +319,30 @@ func (h *Handler) remoteFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.startAdminSession(w, r, account, code.credentialID)
+}
+
+// IsAdministrator reports whether email belongs to an enabled administrator
+// who signs in on the login host. The gate asks it only for the signed-in
+// visitor's own email, so the visitor learns that their console passkeys
+// are separate; nobody can ask about another address.
+func (rl *RemoteLogin) IsAdministrator(ctx context.Context, email string) bool {
+	h := rl.handler.Load()
+	if h == nil || h.identities == nil || email == "" {
+		return false
+	}
+	if _, _, ok := h.loginSite(); !ok {
+		return false
+	}
+	accounts, err := h.identities.Accounts(ctx)
+	if err != nil {
+		return false
+	}
+	for _, a := range accounts {
+		if a.DisabledAt.IsZero() && strings.EqualFold(a.Email, email) {
+			return true
+		}
+	}
+	return false
 }
 
 // ServeAdminLogin answers the login host's /_/auth/admin paths. It returns

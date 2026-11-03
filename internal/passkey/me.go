@@ -39,6 +39,9 @@ type meView struct {
 	Method   string    `json:"method"`
 	Apps     []appView `json:"apps"`
 	Passkeys bool      `json:"passkeys"`
+	// AlsoAdmin says this email is also a console administrator, whose
+	// passkeys are separate from these.
+	AlsoAdmin bool `json:"also_admin,omitempty"`
 }
 
 // openableApps are the protected routes the principal's identity policy
@@ -84,10 +87,14 @@ func (g *Gate) meData(_ http.ResponseWriter, r *http.Request) (any, *apiError) {
 	if !ok {
 		return nil, &errSignedOut
 	}
-	return meView{
+	view := meView{
 		Email:    principal.Email,
 		Method:   principal.Method,
 		Apps:     g.openableApps(principal),
 		Passkeys: principal.Method == auth.MethodPasskey,
-	}, nil
+	}
+	if admins, ok := g.admin.(administrators); ok && principal.EmailVerified {
+		view.AlsoAdmin = admins.IsAdministrator(r.Context(), principal.Email)
+	}
+	return view, nil
 }
