@@ -232,8 +232,13 @@ func TestIntegratedTunnelRoutesReloadAndPreserveVisitorIP(t *testing.T) {
 	if response, _ := do(); response.StatusCode != http.StatusBadGateway {
 		t.Fatalf("disconnected route: %d", response.StatusCode)
 	}
-	if !recorder.Has(tunnel.TunnelDisconnected) {
-		t.Fatal("disconnect event missing")
+	// The edge forgets the session before it emits the event, so the event
+	// may land just after the connector reads as gone.
+	for !recorder.Has(tunnel.TunnelDisconnected) {
+		if time.Now().After(deadline) {
+			t.Fatal("disconnect event missing")
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 
