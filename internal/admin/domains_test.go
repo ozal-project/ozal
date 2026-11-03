@@ -131,4 +131,14 @@ func TestConnectionEndpointsOnlyTouchConfiguredHostnames(t *testing.T) {
 	if !sink.Has(events.DNSRecordCreated) {
 		t.Fatal("a created record emitted no event")
 	}
+
+	// The sign-in host is not a route, but it needs its record too.
+	cfg.Auth.Passkeys = &config.Passkeys{RPID: "example.com", LoginURL: "https://auth.example.com"}
+	manager.cfg = cfg
+	if rec := request(handler, http.MethodPost, "/_/api/apps/auth.example.com/dns", "secret", ""); rec.Code != 201 || domains.created[len(domains.created)-1] != "auth.example.com" {
+		t.Fatalf("login host record: %d %s (created %v)", rec.Code, rec.Body, domains.created)
+	}
+	if rec := request(handler, http.MethodPost, "/_/api/apps/other.example.com/dns", "secret", ""); rec.Code != 404 {
+		t.Fatalf("a name that is neither a route nor the login host: %d", rec.Code)
+	}
 }

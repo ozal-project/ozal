@@ -270,6 +270,33 @@ type ConfigRequest struct {
 	Stamp  string
 }
 
+// readLiveConfig reads the edge's root config as the SSH user. When the
+// config directory is closed to that user (root:service 0750), it copies the
+// file once as root into the user's own staging directory, mode 0600, reads
+// it and removes it: the operator already holds sudo, so nothing new is
+// exposed, and the copy never leaves the host.
+func readLiveConfig(ctx context.Context, remote Remote, e Edge, note func(string, ...any)) (string, error) {
+	live, err := remote.Run(ctx, "cat "+Quote(e.Config), nil)
+	if err == nil || e.Stage == "" {
+		return live, err
+	}
+	copied := strings.TrimRight(e.Stage, "/") + "/live-config.json"
+	note("the SSH user cannot read %s; copying it once as root (sudo may ask for the password)", e.Config)
+	if _, prepErr := remote.Run(ctx, "umask 077; mkdir -p "+Quote(e.Stage)+" && rm -f "+Quote(copied), nil); prepErr != nil {
+		return "", errors.Join(err, prepErr)
+	}
+	code, termErr := remote.Terminal(ctx, "sudo install -m 0600 -o \"$(id -u)\" -g \"$(id -g)\" "+Quote(e.Config)+" "+Quote(copied))
+	if termErr != nil || code != 0 {
+		return "", errors.Join(err, termErr, fmt.Errorf("copying the live config as root ended with status %d", code))
+	}
+	live, readErr := remote.Run(ctx, "cat "+Quote(copied), nil)
+	_, _ = remote.Run(ctx, "rm -f "+Quote(copied), nil)
+	if readErr != nil {
+		return "", readErr
+	}
+	return live, nil
+}
+
 // ApplyConfig plans and, with Apply, installs the root config on one edge.
 func ApplyConfig(ctx context.Context, out io.Writer, remote Remote, req ConfigRequest) error {
 	e := req.Target.Edge
@@ -280,7 +307,7 @@ func ApplyConfig(ctx context.Context, out io.Writer, remote Remote, req ConfigRe
 	}
 
 	step("read the live config")
-	live, err := remote.Run(ctx, "cat "+Quote(e.Config), nil)
+	live, err := readLiveConfig(ctx, remote, e, note)
 	if err != nil {
 		return err
 	}

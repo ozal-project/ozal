@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/url"
 
 	"github.com/ozal-project/ozal/internal/certs"
 	"github.com/ozal-project/ozal/internal/config"
@@ -41,6 +42,23 @@ func configuredHost(cfg config.Config, raw string) (string, bool) {
 	return "", false
 }
 
+// loginHostName accepts the sign-in host of login_url: it is not a route,
+// yet it needs the same DNS record as the applications it signs people into.
+func loginHostName(cfg config.Config, raw string) (string, bool) {
+	host, err := config.NormalizeHost(raw)
+	if err != nil {
+		return "", false
+	}
+	login, err := url.Parse(loginURL(cfg))
+	if err != nil || login.Host == "" {
+		return "", false
+	}
+	if want, err := config.NormalizeHost(login.Host); err == nil && want == host {
+		return host, true
+	}
+	return "", false
+}
+
 func (h *Handler) checkApplication(w http.ResponseWriter, r *http.Request) {
 	if h.domains == nil {
 		writeError(w, http.StatusServiceUnavailable, "connection checks are unavailable")
@@ -62,6 +80,9 @@ func (h *Handler) createApplicationRecord(w http.ResponseWriter, r *http.Request
 	}
 	cfg := h.manager.Config()
 	host, ok := configuredHost(cfg, r.PathValue("host"))
+	if !ok {
+		host, ok = loginHostName(cfg, r.PathValue("host"))
+	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "no application uses this hostname")
 		return

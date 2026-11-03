@@ -541,6 +541,9 @@ ozalctl site cutover -host HOST -back EVIDENCE -cloudflare-token FILE [-apply]
 it can read. If the configuration directory is readable only by root and the
 service account (`0750`), it says so and leaves full validation to `ozal upgrade`,
 which runs it as root before stopping the unit. You do not need to open the directory.
+`edge config` needs the live configuration to plan: when your SSH user cannot read
+it, it copies the file once with `sudo` into `edge.stage` (mode `0600`, owned by
+your user), reads it and removes the copy.
 
 <a id="operar-sin-sudo-grupo-del-socket"></a>
 
