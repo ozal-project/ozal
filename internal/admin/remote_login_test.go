@@ -262,3 +262,79 @@ func TestLoginHostCeremonyCannotFinishOnTheConsole(t *testing.T) {
 		t.Fatal("a login-host ceremony opened a console session directly")
 	}
 }
+
+// loginHostBegin starts a login-host ceremony and returns the options the
+// login host's page receives, without answering them.
+func loginHostBegin(t *testing.T, h *Handler, rl *RemoteLogin, start map[string]any) map[string]any {
+	t.Helper()
+	rec := browser(h, "ozal.localhost:9091", "/_/api/admin/remote/start", "", start)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("start = %d %s", rec.Code, rec.Body)
+	}
+	target, _ := url.Parse(decode(t, rec)["url"].(string))
+	_, begun := atLoginHost(rl, http.MethodPost, remotePath+"/begin?tx="+target.Query().Get("tx"), "", map[string]any{})
+	if begun.Code != http.StatusOK {
+		t.Fatalf("begin = %d %s", begun.Code, begun.Body)
+	}
+	return decode(t, begun)["options"].(map[string]any)["publicKey"].(map[string]any)
+}
+
+// redeem trades a login-host code for a console session.
+func redeem(t *testing.T, h *Handler, code, secret string) map[string]any {
+	t.Helper()
+	rec := browser(h, "ozal.localhost:9091", "/_/api/admin/remote/finish", "", map[string]string{"code": code, "verifier": secret})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("redeem = %d %s", rec.Code, rec.Body)
+	}
+	return decode(t, rec)
+}
+
+// On a login host shared with visitors, a password manager holds visitor
+// passkeys for the same RP. The administrator sign-in names the
+// administrators' passkeys so only those are offered, and two administrators
+// can still both sign in: the list steers the browser, it does not tie the
+// ceremony to one account.
+func TestLoginHostSignInNamesOnlyAdministratorPasskeys(t *testing.T) {
+	h, rl, _ := loginHostHandler(t, true)
+	token, _ := hostEnrolment(t, h, "bootstrap", "")
+	owner, ana := newAuthenticator(t), newAuthenticator(t)
+	secret, challenge := verifier()
+	code, _ := loginHostCeremony(t, h, rl, owner, map[string]any{"challenge": challenge, "token": token, "name": "Octavio", "email": "octavio@example.com"})
+	session := redeem(t, h, code, secret)
+	invitation, _ := invite(t, h, session["token"].(string), "ana@example.com", "people")
+	secret, challenge = verifier()
+	code, _ = loginHostCeremony(t, h, rl, ana, map[string]any{"challenge": challenge, "token": invitation, "name": "Ana", "email": "ana@example.com"})
+	redeem(t, h, code, secret)
+
+	_, challenge = verifier()
+	pk := loginHostBegin(t, h, rl, map[string]any{"challenge": challenge})
+	listed := map[string]bool{}
+	for _, c := range pk["allowCredentials"].([]any) {
+		listed[c.(map[string]any)["id"].(string)] = true
+	}
+	want := map[string]bool{b64.EncodeToString(owner.credentialID): true, b64.EncodeToString(ana.credentialID): true}
+	if len(listed) != len(want) || !listed[b64.EncodeToString(owner.credentialID)] || !listed[b64.EncodeToString(ana.credentialID)] {
+		t.Fatalf("allowCredentials = %v, want exactly the two administrator passkeys", listed)
+	}
+
+	for name, device := range map[string]*virtualAuthenticator{"owner": owner, "second administrator": ana} {
+		secret, challenge = verifier()
+		code, _ = loginHostCeremony(t, h, rl, device, map[string]any{"challenge": challenge})
+		if got := redeem(t, h, code, secret); got["token"] == nil {
+			t.Fatalf("%s did not sign in: %v", name, got)
+		}
+	}
+}
+
+// A visitor passkey on the same domain carries the bare email; the
+// administrator passkey gets a name that tells them apart in any manager.
+func TestLoginHostAdministratorPasskeyHasItsOwnName(t *testing.T) {
+	h, rl, _ := loginHostHandler(t, true)
+	token, _ := hostEnrolment(t, h, "bootstrap", "")
+	_, challenge := verifier()
+	pk := loginHostBegin(t, h, rl, map[string]any{"challenge": challenge, "token": token, "name": "Octavio", "email": "octavio@example.com"})
+	user := pk["user"].(map[string]any)
+	if user["name"] != "octavio@example.com · Ozal console" || user["displayName"] != "Octavio" {
+		t.Fatalf("user = %v, want the console name and the person's display name", user)
+	}
+}

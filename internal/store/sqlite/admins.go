@@ -243,6 +243,32 @@ func (s *Admins) AccountByHandle(ctx context.Context, handle []byte) (adminid.Ac
 	return account, credentials, nil
 }
 
+// SignInCredentials returns every active passkey of an enabled
+// administrator, newest first, so a sign-in can name them to the browser.
+func (s *Admins) SignInCredentials(ctx context.Context) ([]webauthn.Credential, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT p.credential_json FROM admin_passkeys p
+		JOIN admin_accounts a ON a.id = p.account_id
+		WHERE p.revoked_at IS NULL AND a.disabled_at IS NULL
+		ORDER BY p.created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var credentials []webauthn.Credential
+	for rows.Next() {
+		var encoded string
+		if err := rows.Scan(&encoded); err != nil {
+			return nil, err
+		}
+		var credential webauthn.Credential
+		if err := json.Unmarshal([]byte(encoded), &credential); err != nil {
+			return nil, fmt.Errorf("decode passkey: %w", err)
+		}
+		credentials = append(credentials, credential)
+	}
+	return credentials, rows.Err()
+}
+
 // RecordLogin stores the new counter. A revoked credential is not updated, so
 // a login racing a recovery cannot bring it back.
 func (s *Admins) RecordLogin(ctx context.Context, credential webauthn.Credential) error {
