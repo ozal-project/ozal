@@ -551,7 +551,8 @@ listener: it is proxy trust, separate from server TLS and from the tunnel.
 For the connection wizard, `dns.target` indicates an IP or public hostname, `dns.proxied` the
 record's mode, and the optional `dns.cloudflare.token` enables automatic creation and zone setup
 in Cloudflare (see above). Without a token the manual record is shown. A record that might serve
-an existing site is never silently replaced.
+an existing site is never silently replaced. `POST /_/api/apps/{host}/dns` also creates the record of
+the sign-in host in `login_url`, which is not an application route.
 
 ## Visitor IP
 
