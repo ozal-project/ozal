@@ -89,6 +89,13 @@ button:disabled { opacity: 0.55; cursor: progress; }
 .devices .badge.bound { border-color: color-mix(in srgb, var(--ok) 50%, transparent); color: var(--ok); }
 .devices li button { grid-column: 3; grid-row: 1; width: auto; padding: 4px 10px; border-radius: 8px; background: transparent; color: var(--err); border: 1px solid color-mix(in srgb, var(--err) 45%, transparent); font-size: 0.8rem; }
 .devices li button:disabled { opacity: 0.35; cursor: not-allowed; }
+/* An in-page question in place of a destructive button (no native confirm()). */
+.confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 6px 0 0; font-size: 0.88rem; }
+.confirm[hidden] { display: none; }
+.confirm > span { flex-basis: 100%; color: var(--fg); }
+.confirm button.danger, .devices li .confirm button.danger { grid-column: auto; grid-row: auto; width: auto; padding: 6px 12px; border-radius: 8px; background: var(--err); color: var(--accent-fg); border: 0; font-size: 0.85rem; }
+.devices li .confirm { grid-column: 1 / -1; }
+.devices li .confirm .link-button { grid-column: auto; grid-row: auto; border: 0; color: var(--fg); padding: 0; }
 footer { font-size: 0.75rem; color: var(--muted); text-align: center; }
 a { color: var(--fg); text-underline-offset: 3px; }
 footer a { color: inherit; }

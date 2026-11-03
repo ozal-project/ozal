@@ -402,6 +402,39 @@ function ago(iso) {
   return then.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
+// askInline swaps a destructive button for an in-page question in box: the
+// action, Cancel, and Escape to back out. A native confirm() would show the
+// browser's own "auth.example.com says" dialog instead of this page.
+function askInline(button, box, question, action, onYes) {
+  const make = (className, text) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = className;
+    b.textContent = text;
+    return b;
+  };
+  const text = document.createElement("span");
+  text.textContent = question;
+  const yes = make("danger", action);
+  const no = make("link-button", "Cancel");
+  box.className = "confirm";
+  box.setAttribute("role", "group");
+  box.setAttribute("aria-label", question);
+  box.replaceChildren(text, yes, no);
+  const close = (refocus) => {
+    box.hidden = true;
+    box.replaceChildren();
+    button.hidden = false;
+    if (refocus) button.focus();
+  };
+  no.addEventListener("click", () => close(true));
+  box.addEventListener("keydown", (event) => { if (event.key === "Escape") close(true); });
+  yes.addEventListener("click", () => { close(false); onYes(); });
+  button.hidden = true;
+  box.hidden = false;
+  yes.focus();
+}
+
 // setupDevices lists the visitor's passkeys and lets them add or remove one
 // (ID-008). The server checks every request against a recent passkey proof;
 // when that lapses it answers 403 and the page sends the visitor to confirm.
@@ -438,10 +471,11 @@ function setupDevices(button) {
       remove.disabled = data.passkeys.length === 1;
       remove.title = remove.disabled ? "Your only passkey cannot be removed" : "";
       remove.setAttribute("aria-label", "Remove the " + key.provider + " passkey");
-      remove.addEventListener("click", () => {
-        if (confirm("Remove the " + key.provider + " passkey? You will be signed out everywhere.")) revoke(key.id).catch(fail);
-      });
-      item.append(title, remove, meta, icon);
+      const ask = el("span", "confirm");
+      ask.hidden = true;
+      remove.addEventListener("click", () => askInline(remove, ask,
+        "Remove the " + key.provider + " passkey? You will be signed out everywhere.", "Remove", () => revoke(key.id).catch(fail)));
+      item.append(title, remove, meta, icon, ask);
       return item;
     }));
     const nav = document.getElementById("sites");
@@ -531,23 +565,29 @@ function setupMe() {
       text.textContent = `${session.current ? "This session" : "Other session"} · ${session.method} · last used ${new Date(session.last_seen).toLocaleString()} · expires ${new Date(session.expires).toLocaleString()}`;
       const button = document.createElement("button");
       button.type = "button"; button.className = "link-button"; button.textContent = "End session";
-      button.addEventListener("click", async () => {
-        if (!confirm(session.current ? "End this session and sign out?" : "End this other session?")) return;
-        button.disabled = true;
-        try {
-          const result = await post("/_/auth/me/sessions/revoke", { id: session.id });
-          if (result.signed_out) location.assign("/_/auth/login");
-          else await loadSessions();
-        } catch (error) { show(error.message, "error"); button.disabled = false; }
-      });
-      li.append(text, button); return li;
+      const ask = document.createElement("span");
+      ask.hidden = true;
+      button.addEventListener("click", () => askInline(button, ask,
+        session.current ? "End this session and sign out?" : "End this other session?",
+        session.current ? "Sign out" : "End session",
+        async () => {
+          button.disabled = true;
+          try {
+            const result = await post("/_/auth/me/sessions/revoke", { id: session.id });
+            if (result.signed_out) location.assign("/_/auth/login");
+            else await loadSessions();
+          } catch (error) { show(error.message, "error"); button.disabled = false; }
+        }));
+      li.append(text, button, ask); return li;
     }));
   }
-  document.getElementById("signout-all")?.addEventListener("click", async () => {
-    if (!confirm("Sign out all your sessions, including this one? Your passkeys stay registered.")) return;
-    try { await post("/_/auth/me/sessions/revoke", { all: true }); location.assign("/_/auth/login"); }
-    catch (error) { show(error.message, "error"); }
-  });
+  const signoutAll = document.getElementById("signout-all");
+  signoutAll?.addEventListener("click", () => askInline(signoutAll, document.getElementById("signout-all-confirm"),
+    "Sign out all your sessions, including this one? Your passkeys stay registered.", "Sign out everywhere",
+    async () => {
+      try { await post("/_/auth/me/sessions/revoke", { all: true }); location.assign("/_/auth/login"); }
+      catch (error) { show(error.message, "error"); }
+    }));
   loadSessions().catch((error) => show(error.message, "error"));
 
   document.getElementById("signout").addEventListener("click", async () => {

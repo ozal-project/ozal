@@ -16,7 +16,7 @@ function render(search, { oidc = "", webauthn = true, page = "login", fetch = ()
     addEventListener(ev, fn) { this.on[ev] = fn; }, focus() {}, setAttribute() {}, append(...c) { this.children.push(...c); }, replaceChildren(...c) { this.children = c; },
     querySelector(q) { return q === "a" ? this.children.find((c) => c.href) || null : null; },
   });
-  ["title", "intro", "action", "oidc", "status", "first-time", "username", "sites", "devices", "who", "email", "signout", "apps", "manage", "choices", "choice-list", "use-phone", "use-key", "recovery-warning"].forEach(el);
+  ["title", "intro", "action", "oidc", "status", "first-time", "username", "sites", "devices", "who", "email", "signout", "apps", "manage", "choices", "choice-list", "use-phone", "use-key", "recovery-warning", "sessions", "signout-all", "signout-all-confirm"].forEach(el);
   const label = { hidden: false };
   const head = [];
   let ready;
@@ -66,6 +66,7 @@ function render(search, { oidc = "", webauthn = true, page = "login", fetch = ()
     pick: (choice) => els["choice-list"].children.find((item) => item.dataset.choice === choice).children[0].on.change(),
     get siteLinks() { return els.sites.children.map((a) => a.textContent); },
     click: (id = "action") => els[id].on.click(),
+    el: (id) => els[id],
     get preconnect() { return head.filter((n) => n.rel === "preconnect").map((n) => n.href); },
   };
 }
@@ -282,7 +283,7 @@ async function portal(reply, opts = {}) {
 const ok = (body) => ({ ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) });
 
 let shown = await portal(ok({ email: "ana@example.com", method: "passkey", passkeys: true, apps: [{ host: "wiki.example.com", url: "https://wiki.example.com/", note: "May ask you to sign in again" }] }));
-assert.deepEqual(shown.calls[0], ["/_/auth/me/data", "POST"]);
+assert.ok(shown.calls.some(([url, method]) => url === "/_/auth/me/data" && method === "POST"), "the portal reads its data with POST");
 assert.deepEqual(shown.page.apps, [["https://wiki.example.com/", "wiki.example.com", "May ask you to sign in again"]], "the note is visible, not only a tooltip");
 assert.equal(shown.page.who(), "ana@example.com");
 assert.equal(shown.page.manageShown(), true);
@@ -296,5 +297,62 @@ assert.match(shown.page.intro, /No app is open to you yet/);
 shown = await portal({ ok: false, status: 401, json: async () => ({ error: "You are signed out. Sign in again." }), text: async () => "" });
 assert.deepEqual(shown.assigned, ["/_/auth/login?return_to=" + encodeURIComponent("https://auth.example.com/_/auth/me")], "a signed-out person logs in and comes back to the portal");
 assert.equal(shown.page.who(), "", "nothing about a person is shown without a session");
+
+// Destructive actions ask in the page, never through confirm() (this fake
+// window has none, so a native dialog would throw here).
+{
+  const posts = [];
+  const fetchRecord = (url, init) => {
+    posts.push(url);
+    return Promise.resolve({ ok: true, json: () => Promise.resolve(url.endsWith("/list") ? { email: "ana@example.com", passkeys: [key("aa11", false), key("dd44", true)], sites: [] } : {}) });
+  };
+  page = render("", { page: "devices", fetch: fetchRecord });
+  await settle();
+  const item = page.devices[1];
+  const remove = item.children[1];
+  const ask = item.children[4];
+  assert.equal(ask.hidden, true, "no question before the button is used");
+  remove.on.click();
+  assert.equal(remove.hidden, true, "the button gives way to the question");
+  assert.equal(ask.hidden, false);
+  assert.match(ask.children[0].textContent, /Remove the Apple Passwords passkey\? You will be signed out everywhere/);
+  assert.equal(ask.children[1].textContent, "Remove");
+  assert.ok(!posts.some((u) => u.includes("revoke")), "asking removes nothing");
+  ask.children[2].on.click();
+  assert.equal(ask.hidden, true, "Cancel closes the question");
+  assert.equal(remove.hidden, false, "and brings the button back");
+  remove.on.click();
+  ask.on.keydown({ key: "Escape" });
+  assert.equal(remove.hidden, false, "Escape backs out too");
+  assert.ok(!posts.some((u) => u.includes("revoke")), "backing out removes nothing");
+  remove.on.click();
+  ask.children[1].on.click();
+  await settle();
+  assert.ok(posts.some((u) => u.includes("/_/auth/devices/revoke")), "confirming removes the passkey");
+}
+{
+  const posts = [];
+  const assigned = [];
+  const sessions = { sessions: [{ id: "s1", current: true, method: "passkey", last_seen: "2026-11-02T20:00:00Z", expires: "2026-11-09T20:00:00Z" }] };
+  page = render("", {
+    page: "me", webauthn: false, assign: (u) => assigned.push(u),
+    fetch: (url) => { posts.push(url); return Promise.resolve({ ok: true, status: 200, json: async () => (url.endsWith("/sessions") ? sessions : { email: "ana@example.com", method: "passkey", passkeys: true, apps: [] }) }); },
+  });
+  await settle();
+  const end = page.el("sessions").children[0].children[1];
+  const askEnd = page.el("sessions").children[0].children[2];
+  end.on.click();
+  assert.equal(askEnd.hidden, false);
+  assert.equal(askEnd.children[1].textContent, "Sign out", "ending this session says it signs you out");
+  assert.ok(!posts.some((u) => u.endsWith("/revoke")), "asking ends nothing");
+  page.click("signout-all");
+  const all = page.el("signout-all-confirm");
+  assert.equal(all.hidden, false, "sign out everywhere asks in the page");
+  assert.match(all.children[0].textContent, /Your passkeys stay registered/);
+  all.children[1].on.click();
+  await settle();
+  assert.ok(posts.some((u) => u.endsWith("/_/auth/me/sessions/revoke")), "confirming signs out everywhere");
+  assert.deepEqual(assigned, ["/_/auth/login"]);
+}
 
 console.log("passkey pages: login, enrolment, recovery preflight, choices and devices OK");
