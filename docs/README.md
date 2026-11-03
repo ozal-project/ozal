@@ -11,8 +11,9 @@ order, depending on whether you want to try Ozal, run it, or contribute.
 4. [Security](security.md): trust boundaries and operator responsibilities.
 
 [Configuration and CLI reference](reference.md) covers advanced options.
-The [alpha.1 notes](releases/v0.1.0-alpha.1.md) describe that version;
-the current checkout may include later features.
+Each release lists its changes on [GitHub Releases](https://github.com/ozal-project/ozal/releases);
+the [alpha.1 notes](releases/v0.1.0-alpha.1.md) describe the first tagged build.
+The current checkout may include later features.
 
 ## Contributing
 

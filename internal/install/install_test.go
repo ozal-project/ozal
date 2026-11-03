@@ -83,11 +83,17 @@ func TestServiceStagingPlanPermissionsAndLegacyRefusal(t *testing.T) {
 	}
 	root := filepath.Join(t.TempDir(), "stage")
 	req := ServiceRequest{Binary: exe, Root: root, Target: "http://127.0.0.1:4000", Group: "staff"}
-	if err := Service(context.Background(), io.Discard, nil, req); err != nil {
+	var plan bytes.Buffer
+	if err := Service(context.Background(), &plan, nil, req); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(root); !os.IsNotExist(err) {
 		t.Fatal("plan wrote files")
+	}
+	for _, want := range []string{"/usr/local/lib/ozal/ozal", "/usr/local/bin/ozal", "/etc/ozal/config.json", "/etc/ozal/admin.token", "/var/lib/ozal/runtime.json", "/etc/systemd/system/ozal.service", "127.0.0.1:9090", `http://localhost:8888 forwards to http://127.0.0.1:4000 and admits only people in the group "staff"`} {
+		if !strings.Contains(plan.String(), want) {
+			t.Fatalf("plan does not name %q:\n%s", want, plan.String())
+		}
 	}
 	req.Apply = true
 	var out bytes.Buffer
@@ -121,6 +127,21 @@ func TestServiceStagingPlanPermissionsAndLegacyRefusal(t *testing.T) {
 	docs, err := os.ReadFile("../../docs/operations/ozal.service")
 	if err == nil && string(docs) != Unit() {
 		t.Fatal("documented and installed unit differ")
+	}
+}
+
+// The last thing a new operator reads says where the trial route goes, who
+// it admits and what an empty upstream looks like.
+func TestServiceReadyNamesTheTrialRoute(t *testing.T) {
+	plan, err := PlanService(ServiceRequest{Binary: "/tmp/ozal", Target: "http://127.0.0.1:4000", Group: "staff"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := serviceReady(plan)
+	for _, want := range []string{`http://localhost:8888 forwards to http://127.0.0.1:4000 and admits only people in the group "staff"`, "Until an application listens on 127.0.0.1:4000", "forward port 9090", "sudo ozal console enrol", "/etc/ozal and /var/lib/ozal"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("ready message does not contain %q:\n%s", want, got)
+		}
 	}
 }
 
@@ -166,11 +187,27 @@ func TestUninstallPlanAndStagedRemovalPreserveStateUnlessPurged(t *testing.T) {
 	if err := os.Symlink("/usr/local/lib/ozal/ozal", filepath.Join(binDir, "ozal")); err != nil {
 		t.Fatal(err)
 	}
-	if err := Uninstall(context.Background(), io.Discard, nil, UninstallRequest{Root: root}); err != nil {
+	var plan bytes.Buffer
+	if err := Uninstall(context.Background(), &plan, nil, UninstallRequest{Root: root}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "usr/local/lib/ozal/ozal")); err != nil {
 		t.Fatal("plan changed installation", err)
+	}
+	for _, want := range []string{"remove ozal.service", "/usr/local/bin/ozal (command link)", "ozal.bak-0123456789ab", "update.lock", "keep /etc/ozal and /var/lib/ozal"} {
+		if !strings.Contains(plan.String(), want) {
+			t.Fatalf("uninstall plan does not name %q:\n%s", want, plan.String())
+		}
+	}
+	if strings.Contains(plan.String(), "ozal-update.timer") {
+		t.Fatalf("uninstall plan names a unit that is not installed:\n%s", plan.String())
+	}
+	plan.Reset()
+	if err := Uninstall(context.Background(), &plan, nil, UninstallRequest{Root: root, PurgeState: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(plan.String(), "remove permanently /etc/ozal and /var/lib/ozal") {
+		t.Fatalf("purge plan does not say state is removed:\n%s", plan.String())
 	}
 	if err := Uninstall(context.Background(), io.Discard, nil, UninstallRequest{Root: root, Apply: true}); err != nil {
 		t.Fatal(err)

@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -143,7 +144,7 @@ func Service(ctx context.Context, out io.Writer, host ServiceHost, r ServiceRequ
 			return errors.New("legacy Switchboard installation found; upgrade it in place instead of creating parallel state")
 		}
 	}
-	fmt.Fprintf(out, "Install root-owned code/config, private service state and loopback listeners (apply=%t, staging=%t).\n", r.Apply, r.Root != "")
+	writeServicePlan(out, plan)
 	if !r.Apply {
 		return nil
 	}
@@ -300,6 +301,60 @@ func Service(ctx context.Context, out io.Writer, host ServiceHost, r ServiceRequ
 		case <-time.After(time.Second):
 		}
 	}
-	fmt.Fprintln(out, "Ozal is running on loopback. Forward port 9090 over SSH; create the first administrator with sudo ozal console enrol. Back up /etc/ozal and /var/lib/ozal.")
+	fmt.Fprint(out, serviceReady(plan))
 	return nil
+}
+
+// trialRoute describes the one route the installer writes.
+func trialRoute(plan ServicePlan) string {
+	return fmt.Sprintf("http://%s forwards to %s and admits only people in the group %q", plan.Config.Routes[0].Host, plan.Request.Target, plan.Request.Group)
+}
+
+// writeServicePlan lists every path, account, unit and listener the
+// installation creates, before anything is changed.
+func writeServicePlan(out io.Writer, plan ServicePlan) {
+	r := plan.Request
+	fmt.Fprintf(out, "Install plan (apply=%t, staging=%t):\n", r.Apply, r.Root != "")
+	if r.Root != "" {
+		fmt.Fprintf(out, "  every path below is created under %s; no account or systemd unit is changed\n", r.Root)
+	}
+	for _, line := range []string{
+		"create /usr/local/lib/ozal/ozal            verified binary, root, 0755",
+		"link   /usr/local/bin/ozal -> /usr/local/lib/ozal/ozal",
+		"create /etc/ozal/config.json               root, 0644",
+		"create /etc/ozal/admin.token               random administrative credential, root:ozal, 0640",
+		"create /var/lib/ozal/runtime.json          ozal, 0600",
+		"create /var/lib/ozal/pages/                ozal, 0700",
+		"create /etc/systemd/system/ozal.service",
+	} {
+		fmt.Fprintf(out, "  %s\n", line)
+	}
+	if r.Root == "" {
+		fmt.Fprintln(out, "  account ozal                               system user and group, created when missing")
+		fmt.Fprintln(out, "  create /var/lib/ozal/state.db              migrated as ozal")
+		fmt.Fprintln(out, "  start  ozal.service                        enabled at boot")
+	}
+	fmt.Fprintf(out, "  listen %s for applications; console on %s and %s\n", plan.Config.Listen, plan.Config.Admin.Listen, plan.Config.Admin.Socket)
+	fmt.Fprintf(out, "  trial route: %s\n", trialRoute(plan))
+}
+
+// serviceReady is what the operator reads once the service answers.
+func serviceReady(plan ServicePlan) string {
+	upstream := plan.Request.Target
+	if u, err := url.Parse(upstream); err == nil {
+		upstream = u.Host
+	}
+	return fmt.Sprintf(`Ozal is running on loopback.
+Trial application: %s.
+Until an application listens on %s, people who pass that check get an error from the gateway.
+Next: forward port %s over SSH, then create the first administrator with sudo ozal console enrol.
+Back up /etc/ozal and /var/lib/ozal.
+`, trialRoute(plan), upstream, adminPort(plan.Config.Admin.Listen))
+}
+
+func adminPort(listen string) string {
+	if _, port, err := net.SplitHostPort(listen); err == nil && port != "" {
+		return port
+	}
+	return listen
 }

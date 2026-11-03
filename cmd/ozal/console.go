@@ -22,7 +22,7 @@ func runConsole(ctx context.Context, args []string, out io.Writer) error {
 	fs := flag.NewFlagSet("console "+args[0], flag.ContinueOnError)
 	fs.SetOutput(out)
 	af := addAdminFlags(fs)
-	name := fs.String("name", "", "operator name asserted by host authority")
+	name := fs.String("name", "", "login: name recorded for this login (default: the user running the command)")
 	tools := fs.String("tools", "", "comma-separated tools this login may change (default: all except updates.install): administrators, applications, connectors, people, publishing, sites, updates, updates.install")
 	email := fs.String("email", "", "recover: email of the administrator who lost their passkeys")
 	id := fs.String("id", "", "session id to revoke")
@@ -60,6 +60,10 @@ func runConsole(ctx context.Context, args []string, out io.Writer) error {
 			Token string `json:"token"`
 		}
 		if err := c.do(ctx, http.MethodPost, "/_/api/admin/enrolments", map[string]string{"kind": kind, "email": *email}, &answer); err != nil {
+			if kind == "bootstrap" && isStatus(err, http.StatusConflict) {
+				fmt.Fprint(out, sshHint(os.Getenv("SSH_CONNECTION"), invokingUser(), base))
+				return errors.New(administratorExists(base))
+			}
 			return err
 		}
 		what := "create the first administrator"
@@ -74,7 +78,10 @@ func runConsole(ctx context.Context, args []string, out io.Writer) error {
 		fmt.Fprint(out, sshHint(os.Getenv("SSH_CONNECTION"), invokingUser(), base))
 	case "login":
 		if strings.TrimSpace(*name) == "" {
-			return errors.New("login needs -name OPERATOR")
+			*name = invokingUser()
+		}
+		if strings.TrimSpace(*name) == "" {
+			return errors.New("login needs -name OPERATOR: no user name could be taken from the environment")
 		}
 		base, err := adminBase(*origin)
 		if err != nil {
@@ -115,6 +122,13 @@ func runConsole(ctx context.Context, args []string, out io.Writer) error {
 		return errors.New("unknown console command")
 	}
 	return nil
+}
+
+// administratorExists answers a second enrol: the first administrator is
+// made once, so point to where they sign in and keep recovery as the last resort.
+func administratorExists(base string) string {
+	return "an administrator already exists; sign in with their passkey at " + passkeyOrigin(base) + "/overview" +
+		" (someone who lost every passkey is recovered with: sudo ozal console recover -email ADMINISTRATOR)"
 }
 
 // splitTools turns "people, sites" into a list; the edge validates the names.

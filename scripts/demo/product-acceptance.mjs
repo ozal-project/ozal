@@ -180,9 +180,10 @@ try {
   await ab("wait", "--text", "contractors created");
   let catalog = (await api("GET", "/_/api/groups")).groups;
   assert.equal(catalog.find((g) => g.name === "contractors")?.defined, true, "the empty group was not created");
-  await goPage("/people", "People");
-  await ab("find", "role", "button", "click", "--name", "Invite person", "--exact");
-  await ab("find", "role", "checkbox", "hover", "--name", "contractors", "--exact");
+  // From the group itself, Invite person opens the invitation with it ticked.
+  await ab("find", "role", "link", "click", "--name", "Invite a person into contractors", "--exact");
+  await ab("wait", "--fn", "[...document.querySelectorAll('dialog[open] label')].some((l) => l.textContent.trim() === 'contractors' && l.querySelector('input').checked)");
+  assert.equal(await evaluate("location.search"), "", "the invite parameter stayed in the address");
   await ab("press", "Escape");
   await goPage("/groups", "People");
   await ab("find", "role", "button", "click", "--name", "Delete contractors", "--exact");

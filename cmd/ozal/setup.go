@@ -108,7 +108,7 @@ system service or move your existing website. Keep this directory private.
 
 1. Start your existing application at the configured target (default port 3000).
 2. Run Ozal with the config and state paths printed by setup.
-3. Run console login -config /path/to/config.json -name YOUR_NAME on this host.
+3. Run console login -config /path/to/config.json on this host.
    Open its one-use private link, then choose Applications. The session lasts
    15 minutes and stays in this browser tab; closing/reloading the tab locks it.
 4. From the host, invite a visitor with group members (command printed by setup).
@@ -143,7 +143,7 @@ or restore the previous config and reload; DNS is a separate operator action.
 	fmt.Fprintln(out, "Created a protected local installation. No existing service or DNS was changed.")
 	fmt.Fprintf(out, "Start: ozal -config %q -db %q\n", filepath.Join(root, "config.json"), dbPath)
 	if socket != "" {
-		fmt.Fprintf(out, "Operator login (after start): ozal console login -config %q -name YOUR_NAME\n", filepath.Join(root, "config.json"))
+		fmt.Fprintf(out, "Operator login (after start): ozal console login -config %q\n", filepath.Join(root, "config.json"))
 		fmt.Fprintf(out, "Invite (after start): ozal user invite -config %q -email person@example.com -group members -return-to http://localhost:8888/\n", filepath.Join(root, "config.json"))
 	}
 	fmt.Fprintf(out, "Console: http://127.0.0.1:9090/applications\nGuide: %s\n", filepath.Join(root, "START-HERE.md"))

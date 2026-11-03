@@ -43,8 +43,8 @@ Ozal is for people who will never buy them.
 ## What exists today
 
 Verified against this checkout; see the [README status table](README.md#status)
-and the [alpha.1 notes](docs/releases/v0.1.0-alpha.1.md) for what each release
-includes.
+and the [release notes](https://github.com/ozal-project/ozal/releases) for what each
+release includes.
 
 - A host-based reverse proxy with health checks, HTTPS with automatic certificates,
   and atomic routing snapshots.
