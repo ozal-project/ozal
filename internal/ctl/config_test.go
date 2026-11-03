@@ -101,9 +101,11 @@ func TestParseRangesRefusesAnythingButCIDRs(t *testing.T) {
 }
 
 type configRemote struct {
-	live     string
-	ran      []string
-	terminal int
+	live       string
+	ran        []string
+	terminal   int
+	unreadable bool // the SSH user cannot read the root config
+	copied     bool
 }
 
 func (f *configRemote) Run(_ context.Context, command string, stdin io.Reader) (string, error) {
@@ -113,6 +115,14 @@ func (f *configRemote) Run(_ context.Context, command string, stdin io.Reader) (
 	}
 	switch {
 	case strings.HasPrefix(command, "cat '/etc/ozal/routing.json'"):
+		if f.unreadable {
+			return "", errors.New("cat: /etc/ozal/routing.json: Permission denied")
+		}
+		return f.live, nil
+	case strings.HasPrefix(command, "cat '/home/deploy/stage/live-config.json'"):
+		if !f.copied {
+			return "", errors.New("no such file")
+		}
 		return f.live, nil
 	case strings.Contains(command, "mkdir '/home/deploy/lock'"):
 		return "taken\n", nil
@@ -124,6 +134,9 @@ func (f *configRemote) Run(_ context.Context, command string, stdin io.Reader) (
 
 func (f *configRemote) Terminal(_ context.Context, command string) (int, error) {
 	f.ran = append(f.ran, "TERMINAL "+command)
+	if strings.Contains(command, "live-config.json") {
+		f.copied = true
+	}
 	return f.terminal, nil
 }
 
@@ -164,6 +177,33 @@ func TestApplyConfigPlansReadOnlyAndAppliesInOrder(t *testing.T) {
 	noSocket.Target = goodTarget()
 	if err := ApplyConfig(context.Background(), io.Discard, &configRemote{live: liveConfig}, noSocket); err == nil {
 		t.Fatal("a target without edge.socket cannot confirm the config in effect")
+	}
+}
+
+// A config directory closed to the SSH user (root:service 0750) is read
+// through one root copy into the user's staging directory, removed after.
+func TestApplyConfigReadsAnUnreadableLiveConfigThroughARootCopy(t *testing.T) {
+	r := &configRemote{live: liveConfig, unreadable: true}
+	req := ConfigRequest{Target: configTarget(), Base: []byte(baseConfig), Owner: "me", Stamp: "s"}
+	if err := ApplyConfig(context.Background(), io.Discard, r, req); err != nil {
+		t.Fatalf("plan with an unreadable config: %v (ran %v)", err, r.ran)
+	}
+	joined := strings.Join(r.ran, "\n")
+	for _, want := range []string{
+		"TERMINAL sudo install -m 0600 -o \"$(id -u)\" -g \"$(id -g)\" '/etc/ozal/routing.json' '/home/deploy/stage/live-config.json'",
+		"rm -f '/home/deploy/stage/live-config.json'",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("ran %v, want %q", r.ran, want)
+		}
+	}
+	if last := r.ran[len(r.ran)-1]; last != "rm -f '/home/deploy/stage/live-config.json'" {
+		t.Errorf("the root copy was not removed last: %q", last)
+	}
+
+	refused := &configRemote{live: liveConfig, unreadable: true, terminal: 1}
+	if err := ApplyConfig(context.Background(), io.Discard, refused, req); err == nil {
+		t.Fatal("a refused sudo copy still produced a plan")
 	}
 }
 
