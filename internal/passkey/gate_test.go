@@ -376,6 +376,44 @@ func TestLoginRefusals(t *testing.T) {
 		}
 	})
 
+	t.Run("passkey of no visitor (a console passkey)", func(t *testing.T) {
+		h, _ := setup(t)
+		stranger := newAuthenticator(t)
+		stranger.userHandle = []byte("a handle no visitor has")
+		b := h.browser()
+		rec, options := b.post(t, "/_/auth/login/begin", map[string]any{})
+		if rec.Code != http.StatusOK {
+			t.Fatal(rec.Code)
+		}
+		rec, result := b.post(t, "/_/auth/login/finish", stranger.get(t, options, loginOrigin))
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("code = %d, want 401", rec.Code)
+		}
+		if msg, _ := result["error"].(string); !strings.Contains(msg, `not marked "Ozal console"`) {
+			t.Fatalf("error = %q, want the hint to pick the other passkey", msg)
+		}
+		if !h.events.has(events.LoginFailed, "passkey_unknown") {
+			t.Fatal("no passkey_unknown event")
+		}
+		if _, ok := b.signedIn(); ok {
+			t.Fatal("an unknown passkey signed in")
+		}
+	})
+
+	t.Run("a refused known passkey keeps the generic message", func(t *testing.T) {
+		h, device := setup(t)
+		device.userVerified = false
+		b := h.browser()
+		rec, options := b.post(t, "/_/auth/login/begin", map[string]any{})
+		if rec.Code != http.StatusOK {
+			t.Fatal(rec.Code)
+		}
+		_, result := b.post(t, "/_/auth/login/finish", device.get(t, options, loginOrigin))
+		if msg, _ := result["error"].(string); strings.Contains(msg, "Ozal console") {
+			t.Fatalf("error = %q; the console hint is only for a passkey of no visitor", msg)
+		}
+	})
+
 	t.Run("open redirect", func(t *testing.T) {
 		h, device := setup(t)
 		code, result := h.browser().login(t, device, "https://evil.example/", loginOrigin)
@@ -1059,5 +1097,19 @@ func TestFailedRecoveryKeepsPreviousAccessAndEmitsNoCompletion(t *testing.T) {
 	}
 	if !h.events.has(events.UserRecovered, "device_bound") {
 		t.Fatal("retry emitted no recovery completion")
+	}
+}
+
+// A person can hold a visitor passkey and a console passkey for the same
+// email on the same domain; the passkey manager must show them apart.
+func TestVisitorPasskeyHasItsOwnName(t *testing.T) {
+	h := newHarness(t)
+	rec, options := h.browser().post(t, "/_/auth/enrol/begin", map[string]string{"token": h.invite(t, "ana@example.com", false)})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("enrol begin = %d", rec.Code)
+	}
+	user := options["publicKey"].(map[string]any)["user"].(map[string]any)
+	if user["name"] != "ana@example.com · sign-in" {
+		t.Fatalf("user.name = %v, want the email marked as a sign-in passkey", user["name"])
 	}
 }
