@@ -81,7 +81,9 @@ try {
   await laptop.page.getByRole("button", { name: "Sign in with passkey" }).click();
   await inConsole(laptop.page);
   const session = await menu(laptop.page, "Olivia Owner");
-  assert.match(await session.textContent(), /Signed in with a passkey/);
+  assert.match(await session.textContent(), /Passkey · signs out after/);
+  // The tools are folded under one summary line; opening it lists them.
+  await session.getByText(/What this session can do/).click();
   const grantedTools = await session.getByRole("listitem").allTextContents();
   assert.ok(grantedTools.length > 0, `the session did not show its granted tools: ${await session.textContent()}`);
   await laptop.page.keyboard.press("Escape");

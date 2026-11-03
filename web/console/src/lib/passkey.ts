@@ -148,6 +148,14 @@ export async function listOwnPasskeys(session: string, signal?: AbortSignal): Pr
   return (await bearerRequest<{ passkeys: OwnPasskey[] }>("GET", "/_/api/admin/passkeys", session, signal)).passkeys ?? [];
 }
 
+export type OwnAccount = { email: string; name: string; also_visitor: boolean };
+
+// Who the signed-in administrator is; also_visitor is a notice that the same
+// email has a visitor account with its own passkeys, never shared access.
+export async function ownAccount(session: string, signal?: AbortSignal): Promise<OwnAccount> {
+  return bearerRequest<OwnAccount>("GET", "/_/api/admin/account", session, signal);
+}
+
 // Revokes one of them; the sessions it opened end on the edge at once.
 export async function removeOwnPasskey(session: string, id: string): Promise<void> {
   await bearerRequest("DELETE", `/_/api/admin/passkeys/${encodeURIComponent(id)}`, session);
