@@ -2,6 +2,7 @@ package passkey_test
 
 import (
 	"context"
+	"encoding/hex"
 	"net/http"
 	"testing"
 )
@@ -53,7 +54,16 @@ func TestPasskeysAndSessionsNameTheirBrowser(t *testing.T) {
 	if len(keys) != 2 {
 		t.Fatalf("passkeys = %v", keys)
 	}
-	first, second := keys[0], keys[1]
+	// Both were made in the same second, so the list order is by ID: find
+	// each by its credential instead.
+	byID := map[string]map[string]any{}
+	for _, k := range keys {
+		byID[k["id"].(string)] = k
+	}
+	first, second := byID[hex.EncodeToString(laptop.credentialID)], byID[hex.EncodeToString(phone.credentialID)]
+	if first == nil || second == nil {
+		t.Fatalf("passkeys = %v; want the laptop's and the phone's", keys)
+	}
 	if first["label"] != "Chrome on macOS" || second["label"] != "Chrome on macOS" {
 		t.Fatalf("labels = %v, %v; want the browser each was made in", first["label"], second["label"])
 	}

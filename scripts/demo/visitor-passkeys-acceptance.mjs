@@ -83,9 +83,11 @@ try {
   step = "the phone's portal names both sessions by browser";
   const sessions = phone.page.locator("#sessions li");
   await sessions.nth(1).waitFor();
-  const names = await sessions.locator("strong").allTextContents();
-  assert.deepEqual(names, ["Safari on iPhone · this browser", "Chrome on macOS"], "newest first, this one marked");
-  assert.equal(await sessions.nth(0).getByRole("button").textContent(), "Sign out");
+  // Sessions created in the same second may list in either order.
+  const names = (await sessions.locator("strong").allTextContents()).sort();
+  assert.deepEqual(names, ["Chrome on macOS", "Safari on iPhone · this browser"], "both browsers, this one marked");
+  const thisOne = phone.page.locator("#sessions li", { hasText: "Safari on iPhone · this browser" });
+  assert.equal(await thisOne.getByRole("button").textContent(), "Sign out");
   await shot(phone.page, "me-phone");
 
   step = "the passkey page on the phone marks the same passkey and its last browser";
