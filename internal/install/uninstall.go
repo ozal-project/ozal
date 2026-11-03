@@ -22,6 +22,13 @@ type UninstallHost interface {
 	Systemctl(context.Context, ...string) error
 }
 
+// updateLocker is the optional part of a host that can hold the update lock
+// every updater takes (ozal update, ozal upgrade, the update executor), so an
+// uninstall never removes the binary under an update that is running.
+type updateLocker interface {
+	LockUpdates(path string) (release func(), err error)
+}
+
 var serviceUnits = []string{"ozal.service", "ozal-update.service", "ozal-update.timer", "ozal-update-executor.service"}
 
 func uninstallBinaryArtifacts(root string) ([]string, error) {
@@ -36,7 +43,9 @@ func uninstallBinaryArtifacts(root string) ([]string, error) {
 	paths := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		name := entry.Name()
-		known := name == "ozal" || name == "ozal.next" || name == "ozal.upgrade.log"
+		// update.lock is left by every update; the uninstaller holds it while
+		// removing, so it is ours to remove too.
+		known := name == "ozal" || name == "ozal.next" || name == "ozal.upgrade.log" || name == "update.lock"
 		if strings.HasPrefix(name, "ozal.bak-") && len(name) == len("ozal.bak-")+12 {
 			_, decodeErr := hex.DecodeString(strings.TrimPrefix(name, "ozal.bak-"))
 			known = decodeErr == nil
@@ -100,6 +109,17 @@ func Uninstall(ctx context.Context, out io.Writer, host UninstallHost, r Uninsta
 	}
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	// Take the update lock before changing anything: a running update is
+	// refused here, with every unit and file still in place.
+	if locker, ok := host.(updateLocker); ok {
+		if _, err := os.Lstat(mapped(r.Root, "/usr/local/lib/ozal")); err == nil {
+			release, err := locker.LockUpdates(mapped(r.Root, "/usr/local/lib/ozal/update.lock"))
+			if err != nil {
+				return fmt.Errorf("an Ozal update is running or its lock is unusable; let it finish before uninstalling: %w", err)
+			}
+			defer release()
+		}
 	}
 	if r.Root == "" {
 		for _, unit := range serviceUnits {

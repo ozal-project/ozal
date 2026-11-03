@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -149,7 +150,7 @@ func TestUninstallPlanAndStagedRemovalPreserveStateUnlessPurged(t *testing.T) {
 		t.Fatal(err)
 	}
 	root := filepath.Join(tempRoot, "stage")
-	for _, path := range []string{"etc/systemd/system/ozal.service", "etc/ozal/config.json", "var/lib/ozal/state.db", "usr/local/lib/ozal/ozal", "usr/local/lib/ozal/ozal.bak-0123456789ab", "usr/local/lib/ozal/ozal.upgrade.log"} {
+	for _, path := range []string{"etc/systemd/system/ozal.service", "etc/ozal/config.json", "var/lib/ozal/state.db", "usr/local/lib/ozal/ozal", "usr/local/lib/ozal/ozal.bak-0123456789ab", "usr/local/lib/ozal/ozal.upgrade.log", "usr/local/lib/ozal/update.lock"} {
 		full := filepath.Join(root, path)
 		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
 			t.Fatal(err)
@@ -229,5 +230,63 @@ func TestUninstallRefusesUnknownBinaryArtifactsBeforeRemovingAnything(t *testing
 		if _, err := os.Stat(filepath.Join(root, path)); err != nil {
 			t.Fatalf("changed installation before refusing unknown file %s: %v", path, err)
 		}
+	}
+}
+
+type lockingHost struct {
+	busy     bool
+	locked   []string
+	released bool
+}
+
+func (h *lockingHost) Systemctl(context.Context, ...string) error { return nil }
+func (h *lockingHost) LockUpdates(path string) (func(), error) {
+	h.locked = append(h.locked, path)
+	if h.busy {
+		return nil, errors.New("another update is already running")
+	}
+	return func() { h.released = true }, nil
+}
+
+// Every update leaves update.lock beside the binary. The uninstaller holds
+// that lock while removing, and refuses with nothing changed while an update
+// owns it.
+func TestUninstallHoldsTheUpdateLockAndRefusesARunningUpdate(t *testing.T) {
+	stage := func(t *testing.T) string {
+		root := t.TempDir()
+		for _, path := range []string{"etc/systemd/system/ozal.service", "usr/local/lib/ozal/ozal", "usr/local/lib/ozal/update.lock"} {
+			full := filepath.Join(root, path)
+			if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(full, nil, 0600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return root
+	}
+
+	root := stage(t)
+	busy := &lockingHost{busy: true}
+	err := Uninstall(context.Background(), io.Discard, busy, UninstallRequest{Root: root, Apply: true})
+	if err == nil || !strings.Contains(err.Error(), "update is running") {
+		t.Fatalf("err = %v, want a refusal naming the running update", err)
+	}
+	for _, path := range []string{"etc/systemd/system/ozal.service", "usr/local/lib/ozal/ozal", "usr/local/lib/ozal/update.lock"} {
+		if _, err := os.Stat(filepath.Join(root, path)); err != nil {
+			t.Fatalf("changed %s while an update ran: %v", path, err)
+		}
+	}
+
+	root = stage(t)
+	idle := &lockingHost{}
+	if err := Uninstall(context.Background(), io.Discard, idle, UninstallRequest{Root: root, Apply: true}); err != nil {
+		t.Fatal(err)
+	}
+	if len(idle.locked) != 1 || idle.locked[0] != filepath.Join(root, "usr/local/lib/ozal/update.lock") || !idle.released {
+		t.Fatalf("locked %v released %v; want the update lock held and released", idle.locked, idle.released)
+	}
+	if _, err := os.Lstat(filepath.Join(root, "usr/local/lib/ozal")); !os.IsNotExist(err) {
+		t.Fatalf("binary directory remains: %v", err)
 	}
 }

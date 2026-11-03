@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+
+	"github.com/ozal-project/ozal/internal/updatelock"
 )
 
 type LinuxHost struct{}
@@ -77,4 +79,13 @@ func (LinuxHost) Healthy(ctx context.Context) bool {
 	}
 	response.Body.Close()
 	return response.StatusCode == 200
+}
+
+// LockUpdates takes the update lock that every updater holds.
+func (LinuxHost) LockUpdates(path string) (func(), error) {
+	lock, err := updatelock.Acquire(path)
+	if err != nil {
+		return nil, err
+	}
+	return func() { _ = lock.Release() }, nil
 }
