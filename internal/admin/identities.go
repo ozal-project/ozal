@@ -223,6 +223,7 @@ func (h *Handler) registerIdentities() {
 	h.mux.HandleFunc("POST /_/api/admin/passkeys/begin", h.requireBearer(h.addPasskeyBegin))
 	h.mux.HandleFunc("POST /_/api/admin/passkeys/finish", h.requireBearer(h.addPasskeyFinish))
 	h.mux.HandleFunc("GET /_/api/admin/passkeys", h.requireBearer(h.listPasskeys))
+	h.mux.HandleFunc("GET /_/api/admin/account", h.requireBearer(h.ownAccount))
 	h.mux.HandleFunc("DELETE /_/api/admin/passkeys/{id}", h.requireBearer(h.removePasskey))
 	h.mux.HandleFunc("POST /_/api/admin/enrolments", h.requireLocal(h.issueEnrolment))
 	h.mux.HandleFunc("POST /_/api/admin/enrol/info", h.enrolInfo)
@@ -1022,6 +1023,43 @@ func (h *Handler) listPasskeys(w http.ResponseWriter, r *http.Request) {
 		out = append(out, view)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"passkeys": out})
+}
+
+// ownAccount tells the console's account menu who the signed-in
+// administrator is and whether the same email also has an enabled visitor
+// account. The two directories stay separate: this is a notice for the
+// person, never an input to access.
+func (h *Handler) ownAccount(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	self, _ := h.callerPasskey(r)
+	if self == "" {
+		writeError(w, http.StatusForbidden, "sign in with your passkey to see your account")
+		return
+	}
+	accounts, err := h.identities.Accounts(r.Context())
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "account unavailable")
+		return
+	}
+	for _, a := range accounts {
+		if a.ID != self {
+			continue
+		}
+		alsoVisitor := false
+		if h.people != nil {
+			if users, err := h.people.Users(r.Context()); err == nil {
+				for _, u := range users {
+					if strings.EqualFold(u.Email, a.Email) && u.DisabledAt.IsZero() {
+						alsoVisitor = true
+						break
+					}
+				}
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"email": a.Email, "name": a.Name, "also_visitor": alsoVisitor})
+		return
+	}
+	writeError(w, http.StatusForbidden, "sign in with your passkey to see your account")
 }
 
 // removePasskey lets an administrator revoke one of their own passkeys, for

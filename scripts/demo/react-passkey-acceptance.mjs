@@ -91,6 +91,15 @@ try {
   step = "account menu device link, second device enrolment and passkey inventory";
   await laptop.page.getByRole("button", { name: "React Owner" }).click();
   const account = laptop.page.getByRole("dialog", { name: "Your session" });
+  // The account menu names the administrator, the passkey that opened this
+  // session and the tools in one line.
+  await account.getByText("react-owner@acme.dev").waitFor();
+  await account.getByText(/^added /).first().waitFor();
+  if (process.env.OZAL_CAPTURE_DIR) await laptop.page.screenshot({ path: join(process.env.OZAL_CAPTURE_DIR, "account-menu.png") });
+
+  await account.getByText("Administrator", { exact: true }).waitFor();
+  await account.getByText("This sign-in", { exact: true }).waitFor();
+  await account.getByText(/What this session can do/).waitFor();
   await account.getByRole("button", { name: "Sign in on another browser" }).click();
   const deviceLink = await account.getByLabel("One-use device link").inputValue();
   assert.equal(new URL(deviceLink).hostname, "ozal.localhost", "device link did not use the console host");
