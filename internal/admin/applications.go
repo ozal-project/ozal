@@ -37,6 +37,7 @@ func (h *Handler) setupStatus(w http.ResponseWriter, r *http.Request) {
 		"routes": cfg.Routes, "login_url": loginURL(cfg),
 		"admin_socket_configured": cfg.Admin.Socket != "",
 		"tls_mode":                tlsMode(cfg), "dns": dnsSettings(cfg),
+		"app_names": h.namesOf(r.Context(), cfg.Routes),
 	})
 }
 
@@ -218,6 +219,12 @@ func (h *Handler) removeApplication(w http.ResponseWriter, r *http.Request) {
 	if err := writer.RemoveApplication(host, req.Expected); err != nil {
 		writeError(w, 409, "application removal could not be confirmed; refresh before retrying")
 		return
+	}
+	if h.appNames != nil {
+		// The name goes with its route; a later route on the same host starts unnamed.
+		if normalized, err := config.NormalizeHost(host); err == nil {
+			_ = h.appNames.SetName(r.Context(), normalized, "")
+		}
 	}
 	h.emit(events.Event{Type: events.ConfigReloaded, Actor: actor(r), Host: safeRouteEventHost(host), Code: "application.removed", ConfigSHA256: h.manager.ConfigDigest()})
 	writeJSON(w, 200, map[string]bool{"route_removed": true, "content_retained": true})

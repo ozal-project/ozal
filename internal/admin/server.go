@@ -58,6 +58,8 @@ type Handler struct {
 	ceremonies             *ceremonyBook
 	remote                 *RemoteLogin
 	people                 people
+	appNames               appNames
+	groupCatalog           groupStore
 	connectors             connectors
 	pairing                pairing
 	updatesExecutor        updateExecutor
@@ -94,6 +96,7 @@ func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 	h.mux.HandleFunc("POST /_/api/apps", h.requireTool("applications", h.saveApplication))
 	h.mux.HandleFunc("POST /_/api/apps/{host}/check", h.requireTool("applications", h.checkApplication))
 	h.mux.HandleFunc("POST /_/api/apps/{host}/dns", h.requireTool("applications", h.createApplicationRecord))
+	h.mux.HandleFunc("PUT /_/api/apps/{host}/name", h.requireTool("applications", h.renameApplication))
 	h.mux.HandleFunc("PUT /_/api/github", h.requireLocal(h.configureGitHub))
 	h.mux.HandleFunc("GET /_/api/github/repositories", h.requireTool("publishing", h.githubRepositories))
 	h.mux.HandleFunc("POST /_/api/github/manifest", h.requireTool("publishing", h.githubManifest))

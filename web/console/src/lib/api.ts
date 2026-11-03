@@ -256,7 +256,8 @@ export type PersonPasskey = { id: string; provider: string; label?: string; sync
 // administrator is the console account with the same email; its details come
 // only to a caller with the administrators tool.
 export type Person = { email: string; subject?: string; name?: string; groups: string[]; created: string; disabled?: string; passkeys: PersonPasskey[]; administrator?: PersonAdmin };
-export type People = { enabled: boolean; users: Person[]; protected_hosts: string[] };
+// app_names holds the console name of a protected app, by host, when it has one.
+export type People = { enabled: boolean; users: Person[]; protected_hosts: string[]; app_names?: Record<string, string>; scheme?: "http" | "https" };
 export type Invitation = { email: string; link: string; expires_at: string };
 
 // Who reached which protected application and why (UI-005). The summary
@@ -292,7 +293,7 @@ export async function fetchPeople(signal?: AbortSignal): Promise<People> {
   if (res.status === 404) return { enabled: false, users: [], protected_hosts: [] };
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const body = (await res.json()) as People;
-  return { enabled: body.enabled, users: body.users ?? [], protected_hosts: body.protected_hosts ?? [] };
+  return { enabled: body.enabled, users: body.users ?? [], protected_hosts: body.protected_hosts ?? [], app_names: body.app_names ?? {}, scheme: body.scheme ?? "https" };
 }
 
 async function adminPost<T>(token: string, url: string, payload?: unknown, signal?: AbortSignal, timeoutMs?: number): Promise<T> {
@@ -316,7 +317,17 @@ export const setDisabled = (token: string, email: string, disabled: boolean, sig
 export const revokePasskey = (token: string, email: string, id: string, signal?: AbortSignal) =>
   adminPost(token, `/_/api/people/${encodeURIComponent(email)}/passkeys/${encodeURIComponent(id)}/revoke`, undefined, signal);
 
-export type Group = { name: string; source: "local"; members: string[]; hosts: string[] };
+// defined: created on purpose in Groups, so it exists with no members too.
+export type Group = { name: string; source: "local"; members: string[]; hosts: string[]; defined?: boolean };
+export async function createGroup(token: string, name: string, signal?: AbortSignal): Promise<string> {
+  const body = await adminPost<{ name: string }>(token, "/_/api/groups", { name }, signal);
+  return body.name;
+}
+export async function deleteGroup(token: string, name: string, signal?: AbortSignal): Promise<void> {
+  const res = await fetch(`/_/api/groups/${encodeURIComponent(name)}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` }, signal: boundedSignal(signal) });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ?? `The group could not be deleted (HTTP ${res.status}).`);
+}
 export async function fetchGroups(token: string, signal?: AbortSignal): Promise<Group[]> {
   const res = await fetch("/_/api/groups", { cache: "no-store", headers: { Authorization: `Bearer ${token}` }, signal: boundedSignal(signal) });
   if (!res.ok) throw new Error(`Groups could not be read (HTTP ${res.status}).`);
@@ -332,7 +343,7 @@ export async function setGroups(token: string, email: string, expected: string[]
 }
 
 export type ApplicationRoute = { host: string; target?: string; upstreams?: string[]; connector?: string; site?: string; root?: string; redirect?: string; spa?: boolean; health_path?: string; auth_required?: boolean; access?: Record<string, unknown>; resource?: Record<string, unknown>; audit_mode?: string };
-export type SetupStatus = { config_sha256: string; methods: string[]; pages_enabled: boolean; tls_enabled: boolean; tls_mode: "off" | "automatic" | "dns01"; dns: { target: string; proxied: boolean; provider: "" | "cloudflare" }; login_url: string; admin_socket_configured: boolean; routes: ApplicationRoute[] };
+export type SetupStatus = { config_sha256: string; methods: string[]; pages_enabled: boolean; tls_enabled: boolean; tls_mode: "off" | "automatic" | "dns01"; dns: { target: string; proxied: boolean; provider: "" | "cloudflare" }; login_url: string; admin_socket_configured: boolean; routes: ApplicationRoute[]; app_names?: Record<string, string> };
 export type ApplicationDraft = { route: ApplicationRoute; expected: string; access_mode: "private" | "public" };
 export type ApplicationPlan = ApplicationDraft & { url: string; dns: string; tls: string; checks: string[] };
 export async function setupStatus(token: string, signal?: AbortSignal): Promise<SetupStatus> {
@@ -342,6 +353,15 @@ export async function setupStatus(token: string, signal?: AbortSignal): Promise<
 }
 export const planApplication = (token: string, draft: ApplicationDraft, signal?: AbortSignal) => adminPost<ApplicationPlan>(token, "/_/api/apps/plan", draft, signal);
 export const saveApplication = (token: string, draft: ApplicationDraft, signal?: AbortSignal) => adminPost(token, "/_/api/apps", draft, signal);
+// renameApplication sets the console's name for an application; "" clears it.
+export async function renameApplication(token: string, host: string, name: string, signal?: AbortSignal): Promise<void> {
+  const res = await fetch(`/_/api/apps/${encodeURIComponent(host)}/name`, {
+    method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ name }), signal: boundedSignal(signal),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ?? `The name could not be saved (HTTP ${res.status}).`);
+}
 
 // UI-006: is a hostname connected to this edge, and which record does it need?
 export type CheckState = "ok" | "wait" | "bad";

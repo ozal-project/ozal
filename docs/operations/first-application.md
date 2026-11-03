@@ -122,8 +122,11 @@ started from it, that address answers like an unknown route.
 
 ## 3. Invite a person
 
-Create a visitor account for someone who should reach the application. Use the group
-that will grant access:
+Create a visitor account for someone who should reach the application, in the group
+that grants access. In the console, open **People → Invite person**, pick the group and
+copy the one-time link. Groups are picked from the existing ones: a group an application
+requires is already there, and a new one is created first in **People → Groups → New
+group**, with or without members. From the host:
 
 ```sh
 ozal user invite -config /path/to/my-edge/config.json \
@@ -303,13 +306,15 @@ route. The bootstrap does not make the first visitor the owner.
 
 ## People, groups and sessions
 
-In **People** you assign groups when you invite someone, and edit native membership
-with a review of the consequences. The update uses a current read; a concurrent change
+In **Groups** you create a group before anyone is in it and delete one nobody uses
+(no members, no application requiring it). In **People** you pick groups when you
+invite someone, and edit native membership with a review of the consequences. The update uses a current read; a concurrent change
 returns a conflict. When groups change, that person's native sessions are deleted in
 the same transaction, and every request checks the current groups, so a sign-in racing
 with the removal still fails. Re-inviting someone does not change their memberships.
-`GET /_/api/groups` lists the local memberships and route requirements. OIDC groups are
-managed by their provider.
+`GET /_/api/groups` lists the created groups, the local memberships and the route
+requirements; `POST /_/api/groups` creates one and `DELETE /_/api/groups/{name}` removes an
+unused one. OIDC groups are managed by their provider.
 
 At `/_/auth/me`, a visitor sees the applications they may open and their own sessions,
 with last-use and expiry dates and the sign-in method. They can sign out one session or

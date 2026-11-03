@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ozal-project/ozal/internal/config"
 	"github.com/ozal-project/ozal/internal/events"
 	"github.com/ozal-project/ozal/internal/passkey"
 	"github.com/ozal-project/ozal/internal/store/sqlite"
@@ -33,6 +34,8 @@ func WithPeople(store people) Option {
 func (h *Handler) registerPeople() {
 	h.mux.HandleFunc("GET /_/api/people", h.requireTool("people", h.listPeople))
 	h.mux.HandleFunc("GET /_/api/groups", h.requireTool("people", h.listGroups))
+	h.mux.HandleFunc("POST /_/api/groups", h.requireTool("people", h.createGroup))
+	h.mux.HandleFunc("DELETE /_/api/groups/{name}", h.requireTool("people", h.deleteGroup))
 	h.mux.HandleFunc("PUT /_/api/people/{email}/groups", h.requireTool("people", h.setPersonGroups))
 	h.mux.HandleFunc("POST /_/api/people/invite", h.requireTool("people", h.invitePerson))
 	h.mux.HandleFunc("POST /_/api/people/{email}/disable", h.requireTool("people", h.setPersonDisabled(true)))
@@ -132,12 +135,14 @@ func (h *Handler) listPeople(w http.ResponseWriter, r *http.Request) {
 		out = append(out, p)
 	}
 	var sites []string
+	var protected []config.Route
 	for _, rt := range cfg.Routes {
 		if rt.RequiresAuth() {
 			sites = append(sites, rt.Host)
+			protected = append(protected, rt)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"enabled": cfg.Auth.Passkeys != nil, "users": out, "protected_hosts": sites})
+	writeJSON(w, http.StatusOK, map[string]any{"enabled": cfg.Auth.Passkeys != nil, "users": out, "protected_hosts": sites, "app_names": h.namesOf(r.Context(), protected), "scheme": appScheme(cfg)})
 }
 
 // maxInviteMinutes caps an enrolment link at a day, as the CLI always has.
@@ -251,4 +256,13 @@ func (h *Handler) personError(w http.ResponseWriter, err error) {
 		return
 	}
 	writeError(w, http.StatusBadRequest, err.Error())
+}
+
+// appScheme is how visitors reach this edge's applications, for the links
+// the console builds: an edge without TLS serves them over plain HTTP.
+func appScheme(cfg config.Config) string {
+	if cfg.TLS.Enabled {
+		return "https"
+	}
+	return "http"
 }

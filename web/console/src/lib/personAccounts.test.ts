@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { adminBadge, adminDetails, passkeyName } from "./personAccounts.ts";
+import { adminBadge, adminDetails, appLabel, passkeyName } from "./personAccounts.ts";
 
 test("the badge says the email is also an administrator, or a disabled one", () => {
   assert.equal(adminBadge({}), "Also an administrator");
@@ -29,4 +29,10 @@ test("a passkey shows its owner's name and keeps the provider beside it", () => 
   assert.deepEqual(passkeyName({ provider: "Bitwarden", label: "Work laptop" }), { name: "Work laptop", provider: "Bitwarden" });
   assert.deepEqual(passkeyName({ provider: "Bitwarden", label: "Bitwarden" }), { name: "Bitwarden", provider: null });
   assert.deepEqual(passkeyName({ provider: "Apple Passwords" }), { name: "Apple Passwords", provider: null });
+});
+
+test("an application shows its name beside its address, or the address alone", () => {
+  assert.equal(appLabel("localhost:8888", { "localhost:8888": "Private app" }), "Private app · localhost:8888");
+  assert.equal(appLabel("localhost:8888", {}), "localhost:8888");
+  assert.equal(appLabel("localhost:8888"), "localhost:8888");
 });

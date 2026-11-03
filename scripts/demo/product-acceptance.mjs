@@ -58,6 +58,8 @@ const api = async (method, path, body) => {
 try {
   edge = await startDemoEdge({ binary, dir: join(root, "edge"), adminSocket: true, dynamicPorts: true });
   await api("POST", "/_/api/people/invite", { email: "new-operator-test@example.test", groups: ["ops"] });
+  // A second group to move the first person into: the editor picks existing groups only.
+  await api("POST", "/_/api/people/invite", { email: "staff-member-test@example.test", groups: ["staff"] });
   step = "host operator login";
   const { stdout } = await exec(binary, ["console", "login", "-config", join(edge.dir, "config.json"), "-name", "Acceptance operator", "-url", edge.consoleURL]);
   const url = stdout.split("\n").find((line) => line.startsWith("http"));
@@ -148,7 +150,8 @@ try {
   await ab("click", 'a[href="/people"]');
   await ab("wait", "--text", "new-operator-test@example.test");
   await ab("find", "role", "button", "click", "--name", "Edit groups for new-operator-test@example.test", "--exact");
-  await ab("fill", "#person-groups", "staff");
+  await ab("find", "role", "checkbox", "click", "--name", "ops", "--exact");
+  await ab("find", "role", "checkbox", "click", "--name", "staff", "--exact");
   await ab("find", "role", "button", "click", "--name", "Review change", "--exact");
   await ab("press", "Escape");
   let people = await api("GET", "/_/api/people");
@@ -169,6 +172,23 @@ try {
   await ab("wait", "--text", "Membership saved");
   people = await api("GET", "/_/api/people");
   assert.deepEqual(people.users.find((p) => p.email === "new-operator-test@example.test").groups, ["staff"]);
+  step = "an empty group is created first, offered to invitations, and deleted";
+  await goPage("/groups", "People");
+  await ab("find", "role", "button", "click", "--name", "New group", "--exact");
+  await ab("fill", "#group-name", "contractors");
+  await ab("find", "role", "button", "click", "--name", "Create group", "--exact");
+  await ab("wait", "--text", "contractors created");
+  let catalog = (await api("GET", "/_/api/groups")).groups;
+  assert.equal(catalog.find((g) => g.name === "contractors")?.defined, true, "the empty group was not created");
+  await goPage("/people", "People");
+  await ab("find", "role", "button", "click", "--name", "Invite person", "--exact");
+  await ab("find", "role", "checkbox", "hover", "--name", "contractors", "--exact");
+  await ab("press", "Escape");
+  await goPage("/groups", "People");
+  await ab("find", "role", "button", "click", "--name", "Delete contractors", "--exact");
+  await ab("wait", "--text", "contractors deleted");
+  catalog = (await api("GET", "/_/api/groups")).groups;
+  assert.ok(!catalog.some((g) => g.name === "contractors"), "the unused group was not deleted");
   step = "Overview sites error and retry";
   await goPage("/sites", "Sites");
   await failNextRequest("/_/api/sites");
