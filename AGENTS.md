@@ -56,6 +56,7 @@ scripts/verify.sh                              # full gate before reporting done
 
 - `cmd/ozal/` — composition root: flags, listeners, signals, shutdown.
 - `cmd/ozalctl/` — SSH operator CLI (targets, upgrades, publication).
+- `cmd/policywasm/` — the access decision compiled to WebAssembly for the site's live demo.
 - `internal/config/` — parse, validate and normalize config; atomic persistence.
 - `internal/auth/` — `Principal`, pure `Authorize`, OIDC `Gate`, sessions.
 - `internal/passkey/` — WebAuthn ceremonies, enrolment, devices and login pages.
@@ -70,10 +71,11 @@ scripts/verify.sh                              # full gate before reporting done
 - `internal/tunnel/`, `internal/tunnelrenew/` — connector transport and renewal.
 - `internal/admin/` — loopback/socket control plane, embedded console and login host.
 - `internal/audit/`, `internal/events/`, `internal/notify/` — durable journal, event stream and alerts.
+- `internal/accesshistory/` — who reached which protected application and why, from the journal when audit is on.
 - `internal/store/sqlite/` — sessions, identities, connectors and deployments.
-- `internal/release/`, `internal/updateexec/`, `internal/updatejob/`, `internal/updatelock/`, `internal/upgrade/` — signed releases and updates.
+- `internal/release/`, `internal/updateexec/`, `internal/updatejob/`, `internal/updatelock/`, `internal/upgrade/`, `internal/pairhelper/` — signed releases and updates; `pairhelper` is the privileged half of a coordinated edge/connector update.
 - `internal/ctl/`, `internal/githubapp/` — operator and GitHub App adapters.
-- Smaller adapters: `internal/ratelimit`, `internal/static`, `internal/policycontext`, `internal/policydemo`, `internal/install`, `internal/diskspace`, `internal/adminid`.
+- Smaller adapters: `internal/ratelimit`, `internal/static`, `internal/policycontext`, `internal/policydemo`, `internal/install`, `internal/diskspace`, `internal/adminid`, `internal/useragent`.
 
 The target layout and the mapping from these packages is in
 `docs/architecture/design.md`. Move a package only when a task already touches

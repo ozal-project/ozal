@@ -3,7 +3,7 @@
 Ozal's active work, priorities and acceptance criteria are maintained by the
 project maintainer and are not published in this repository. The public direction
 is in [VISION.md](../VISION.md), and what each release includes is in its
-[release notes](releases/v0.1.0-alpha.1.md) and the [README status table](../README.md#status).
+[release notes](https://github.com/ozal-project/ozal/releases) and the [README status table](../README.md#status).
 
 Contributors who want to propose work should open an issue describing the behavior
 they need and the evidence they have. Acceptance, security findings and release

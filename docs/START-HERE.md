@@ -32,7 +32,7 @@ exact fields and commands.
 ## I want to know where it is going
 
 1. [VISION.md](../VISION.md): the product direction, what exists today, and what is only a direction.
-2. [Release notes](releases/v0.1.0-alpha.1.md): what the first tagged build includes, and its known limits.
+2. [Release notes](https://github.com/ozal-project/ozal/releases): what each release changed. The [alpha.1 notes](releases/v0.1.0-alpha.1.md) record the first tagged build and its known limits.
 
 ## What is public and what is not
 

@@ -80,10 +80,10 @@ Capabilities below describe this checkout; tagged releases may include less.
 | Passkeys and OIDC login | Available |
 | Static sites with history and rollback | Available |
 | Owned tunnels to private connectors | Experimental, off by default |
-| Signed release updates | Partly built; not yet published |
+| Signed releases and in-place updates | Signed pre-releases published; `ozal update` is alpha |
 | High availability, DDoS protection, CDN | Not offered |
 
-See the [alpha.1 release notes](docs/releases/v0.1.0-alpha.1.md) for what that release includes and its known limits.
+Each release lists its changes and fixes on [GitHub Releases](https://github.com/ozal-project/ozal/releases). The [alpha.1 notes](docs/releases/v0.1.0-alpha.1.md) record the first tagged build and its known limits.
 
 ## Contributing
 
