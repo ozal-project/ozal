@@ -314,7 +314,8 @@ func update(ctx context.Context, args []string, out io.Writer, env updateEnv) er
 	if *expectVersion != "" {
 		// The reviewed version is already running: changing to whatever the
 		// catalog offers now would install a release the operator never saw.
-		if installed == *expectVersion {
+		// The tag is reviewed as "v1.2.3"; a binary reports "1.2.3".
+		if release.IsVersion(installed) && release.Compare(installed, *expectVersion) == 0 {
 			return current(fmt.Sprintf("%s is already installed; nothing to do", installed))
 		}
 		if decision.Code != release.CodeUpdate || decision.Target != *expectVersion || candidate.ArchiveSHA256 != *expectSHA {

@@ -341,16 +341,20 @@ type apiError struct {
 }
 
 var (
-	errLoginFailed   = apiError{http.StatusUnauthorized, "That passkey was not accepted. Try again, or ask the operator for help."}
-	errLinkInvalid   = apiError{http.StatusBadRequest, "This link is invalid, already used or expired. Ask the operator for a new one."}
-	errExpired       = apiError{http.StatusBadRequest, "The request expired. Reload the page and try again."}
-	errBusy          = apiError{http.StatusServiceUnavailable, "Too many sign-ins at once. Try again shortly."}
-	errInternal      = apiError{http.StatusInternalServerError, "Something went wrong on the server."}
-	errBadRequest    = apiError{http.StatusBadRequest, "Bad request."}
-	errWrongOrigin   = apiError{http.StatusForbidden, "Sign in from the login page."}
-	errWrongMethod   = apiError{http.StatusMethodNotAllowed, "Method not allowed."}
-	errWrongEncoding = apiError{http.StatusUnsupportedMediaType, "Send JSON."}
-	errSignedOut     = apiError{http.StatusUnauthorized, "You are signed out. Sign in again."}
+	errLoginFailed = apiError{http.StatusUnauthorized, "That passkey was not accepted. Try again, or ask the operator for help."}
+	// A passkey for this domain that belongs to no visitor is almost always
+	// the console passkey of someone who is also a visitor. The hint holds
+	// for any unknown passkey, so it does not say whose this one is.
+	errPasskeyUnknown = apiError{http.StatusUnauthorized, "That passkey is not a sign-in for these sites. If your password manager lists more than one for this domain, choose the one not marked \"Ozal console\"."}
+	errLinkInvalid    = apiError{http.StatusBadRequest, "This link is invalid, already used or expired. Ask the operator for a new one."}
+	errExpired        = apiError{http.StatusBadRequest, "The request expired. Reload the page and try again."}
+	errBusy           = apiError{http.StatusServiceUnavailable, "Too many sign-ins at once. Try again shortly."}
+	errInternal       = apiError{http.StatusInternalServerError, "Something went wrong on the server."}
+	errBadRequest     = apiError{http.StatusBadRequest, "Bad request."}
+	errWrongOrigin    = apiError{http.StatusForbidden, "Sign in from the login page."}
+	errWrongMethod    = apiError{http.StatusMethodNotAllowed, "Method not allowed."}
+	errWrongEncoding  = apiError{http.StatusUnsupportedMediaType, "Send JSON."}
+	errSignedOut      = apiError{http.StatusUnauthorized, "You are signed out. Sign in again."}
 )
 
 // api runs a JSON endpoint behind the checks every one of them needs:
@@ -465,11 +469,11 @@ func (g *Gate) loginFinish(w http.ResponseWriter, r *http.Request) (any, *apiErr
 	}
 	_, credential, err := g.webauthn.FinishPasskeyLogin(lookup, pending.session, r)
 	if err != nil || found == nil {
-		code := "passkey_invalid"
 		if errors.Is(err, ErrNotFound) {
-			code = "passkey_unknown"
+			g.emit(r, events.Event{Type: events.LoginFailed, Code: "passkey_unknown", Error: errorText(err)})
+			return nil, &errPasskeyUnknown
 		}
-		g.emit(r, events.Event{Type: events.LoginFailed, Code: code, Error: errorText(err)})
+		g.emit(r, events.Event{Type: events.LoginFailed, Code: "passkey_invalid", Error: errorText(err)})
 		return nil, &errLoginFailed
 	}
 	subject := found.user.Subject()
@@ -726,8 +730,12 @@ type webauthnUser struct {
 	credentials []webauthn.Credential
 }
 
+// visitorPasskeyName is the account name a passkey manager shows for a
+// visitor passkey, distinct from the console passkey of the same email.
+func visitorPasskeyName(email string) string { return email + " · sign-in" }
+
 func (u *webauthnUser) WebAuthnID() []byte   { return u.user.Handle }
-func (u *webauthnUser) WebAuthnName() string { return u.user.Email }
+func (u *webauthnUser) WebAuthnName() string { return visitorPasskeyName(u.user.Email) }
 func (u *webauthnUser) WebAuthnDisplayName() string {
 	if u.user.Name != "" {
 		return u.user.Name
