@@ -253,7 +253,12 @@ func (h *lockingHost) LockUpdates(path string) (func(), error) {
 // owns it.
 func TestUninstallHoldsTheUpdateLockAndRefusesARunningUpdate(t *testing.T) {
 	stage := func(t *testing.T) string {
-		root := t.TempDir()
+		// macOS puts t.TempDir under the /var symlink, which uninstall
+		// rightly refuses to traverse.
+		root, err := filepath.EvalSymlinks(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
 		for _, path := range []string{"etc/systemd/system/ozal.service", "usr/local/lib/ozal/ozal", "usr/local/lib/ozal/update.lock"} {
 			full := filepath.Join(root, path)
 			if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
