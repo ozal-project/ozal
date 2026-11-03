@@ -22,7 +22,7 @@ func runConsole(ctx context.Context, args []string, out io.Writer) error {
 	fs := flag.NewFlagSet("console "+args[0], flag.ContinueOnError)
 	fs.SetOutput(out)
 	af := addAdminFlags(fs)
-	name := fs.String("name", "", "operator name asserted by host authority")
+	name := fs.String("name", "", "login: name recorded for this login (default: the user running the command)")
 	tools := fs.String("tools", "", "comma-separated tools this login may change (default: all except updates.install): administrators, applications, connectors, people, publishing, sites, updates, updates.install")
 	email := fs.String("email", "", "recover: email of the administrator who lost their passkeys")
 	id := fs.String("id", "", "session id to revoke")
@@ -78,7 +78,10 @@ func runConsole(ctx context.Context, args []string, out io.Writer) error {
 		fmt.Fprint(out, sshHint(os.Getenv("SSH_CONNECTION"), invokingUser(), base))
 	case "login":
 		if strings.TrimSpace(*name) == "" {
-			return errors.New("login needs -name OPERATOR")
+			*name = invokingUser()
+		}
+		if strings.TrimSpace(*name) == "" {
+			return errors.New("login needs -name OPERATOR: no user name could be taken from the environment")
 		}
 		base, err := adminBase(*origin)
 		if err != nil {

@@ -97,34 +97,20 @@ export function AuthScreen() {
 }
 
 function HostPanel() {
-  const { start, notice } = useSession();
+  const { notice } = useSession();
   const [picked, setPicked] = useState<string[]>(toolList.map(([id]) => id));
-  const [draft, setDraft] = useState("");
-  const [error, setError] = useState("");
-  const [checking, setChecking] = useState(false);
   const allTools = picked.length === toolList.length;
   const command = hostLoginCommand(location.origin, allTools ? undefined : picked);
-  const unlock = async (event: FormEvent) => {
-    event.preventDefault();
-    const token = draft.trim();
-    if (!token || checking) return;
-    setChecking(true); setError("");
-    try {
-      const response = await fetch("/_/api/operators/session", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: AbortSignal.timeout(10_000) });
-      if (!response.ok) throw new Error("This credential could not be verified. Check it and try again.");
-      const value: { kind: string; name?: string; expires?: string; tools: string[] } = await response.json();
-      start({ token, name: value.name || (value.kind === "sites" ? "Sites token" : ""), expires: value.expires, tools: value.tools }, false);
-      setDraft("");
-    } catch (cause) { setError((cause as Error).message); }
-    finally { setChecking(false); }
-  };
   return <>
-    <p className="text-muted-foreground mt-1 mb-5 text-sm">Paste the one-time login printed on the server. It lasts 15 minutes.</p>
-    {(error || notice) && <p className="text-destructive mb-4 text-sm" role="alert">{error || notice}</p>}
-    <fieldset><legend className="plate mb-2">What this login may change</legend><div className="grid grid-cols-2 gap-x-3 gap-y-2">{toolList.map(([id, label, description]) => <label key={id} title={description} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={picked.includes(id)} onChange={(event) => setPicked((current) => event.target.checked ? [...current, id] : current.filter((item) => item !== id))} className="accent-[var(--primary)]" />{label}</label>)}</div></fieldset>
-    <p className="text-muted-foreground mt-4 mb-2 text-sm">Run this on the host, replacing YOUR_NAME, and open the link it prints:</p><code className="block break-all text-xs">{command}</code><div className="mt-2"><CopyText value={command} label="Copy login command" /></div>
-    <p className="text-muted-foreground mt-2 text-xs">Needs <code className="font-mono">ozal</code> on the host's PATH. If it is not found, use the full path to the binary and add <code className="font-mono">-config /path/to/config.json</code>.</p>
-    <form className="mt-5 flex items-center gap-2" onSubmit={(event) => void unlock(event)}><Label className="sr-only" htmlFor="host-admin-token">Admin token</Label><Input id="host-admin-token" type="password" value={draft} onChange={(event) => setDraft(event.target.value)} autoComplete="off" spellCheck={false} placeholder="Or paste the admin token" /><Button type="submit" size="sm" disabled={!draft.trim() || checking}>{checking ? "Checking…" : "Unlock"}</Button></form>
+    <p className="text-muted-foreground mt-1 mb-4 text-sm">Run one command on the server and open the link it prints. The link works once and lasts 5 minutes.</p>
+    {notice && <p className="border-border bg-muted/40 mb-4 rounded-md border px-3 py-2 text-sm" role="status">{notice}</p>}
+    <p className="text-muted-foreground mb-2 text-sm">On the server, run:</p>
+    <code className="block break-all text-xs" data-testid="host-login-command">{command}</code>
+    <div className="mt-2"><CopyText value={command} label="Copy command" /></div>
+    <details className="mt-4 text-sm"><summary className="text-muted-foreground hover:text-foreground cursor-pointer">What this login may change ({allTools ? "everything" : `${picked.length} of ${toolList.length} tools`})</summary>
+      <fieldset className="mt-3"><legend className="sr-only">What this login may change</legend><div className="grid grid-cols-2 gap-x-3 gap-y-2">{toolList.map(([id, label, description]) => <label key={id} title={description} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={picked.includes(id)} onChange={(event) => setPicked((current) => event.target.checked ? [...current, id] : current.filter((item) => item !== id))} className="accent-[var(--primary)]" />{label}</label>)}</div></fieldset>
+    </details>
+    <p className="text-muted-foreground mt-3 text-xs">The login is recorded under your user name on the server. If <code className="font-mono">ozal</code> is not found, use the full path to the binary and add <code className="font-mono">-config /path/to/config.json</code>. Over SSH the command also prints how to forward the port.</p>
   </>;
 }
 
@@ -161,6 +147,6 @@ function EnrolPanel({ token, loginHost }: { token: string; loginHost: string }) 
     {loginHost && <p className="text-muted-foreground text-xs">You will create it on <span className="text-foreground">{new URL(loginHost).host}</span>, this edge's sign-in address, and come back here.</p>}
     {stuck && <p className="text-muted-foreground text-xs" role="status">If the prompt asked for something you do not have, choose another place above and try again.</p>}
     <Button type="submit" disabled={busy || (!alternative && (!name.trim() || !email.trim()))}>{busy ? "Waiting for your device…" : "Create my passkey"}</Button>
-    {!alternative && info?.kind !== "invite" && <details className="text-muted-foreground text-xs" open={stuck}><summary className="cursor-pointer">This computer cannot create a passkey?</summary><p className="mt-2 leading-relaxed">Close the browser's prompt, then run this on the server, replacing YOUR_NAME. It lets you in for a while without creating the administrator account.</p><code>{hostLoginCommand(location.origin)}</code></details>}
+    {!alternative && info?.kind !== "invite" && <details className="text-muted-foreground text-xs" open={stuck}><summary className="cursor-pointer">This computer cannot create a passkey?</summary><p className="mt-2 leading-relaxed">Close the browser's prompt, then run this on the server, . It lets you in for a while without creating the administrator account.</p><code>{hostLoginCommand(location.origin)}</code></details>}
   </form>;
 }

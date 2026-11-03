@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -47,6 +49,51 @@ func TestSecondEnrolPointsToSignInInsteadOfRecovery(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "use recover with their email") {
 		t.Fatalf("error still leads with recovery: %q", err)
+	}
+}
+
+// The console shows a login command with no name to fill in: the login is
+// recorded under the user who runs it, and an explicit -name still wins.
+func TestConsoleLoginDefaultsTheNameToTheInvokingUser(t *testing.T) {
+	dir, err := os.MkdirTemp("", "ozal-login")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	socket := filepath.Join(dir, "admin.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := make(chan string, 2)
+	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Name string `json:"name"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		names <- body.Name
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		w.Write([]byte(`{"token":"abcdefghijklmnopqrstuvwxyz012345","expires":"2030-01-01T00:00:00Z"}`))
+	})}
+	go server.Serve(listener)
+	t.Cleanup(func() { server.Close() })
+	t.Setenv("SSH_CONNECTION", "")
+	t.Setenv("SUDO_USER", "ana")
+
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"login", "-admin", "unix:" + socket, "-url", "http://127.0.0.1:9090"}, "ana"},
+		{[]string{"login", "-name", "Octavio", "-admin", "unix:" + socket, "-url", "http://127.0.0.1:9090"}, "Octavio"},
+	} {
+		if err := runConsole(context.Background(), tc.args, io.Discard); err != nil {
+			t.Fatal(err)
+		}
+		if got := <-names; got != tc.want {
+			t.Fatalf("%v recorded the name %q, want %q", tc.args, got, tc.want)
+		}
 	}
 }
 

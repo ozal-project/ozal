@@ -271,7 +271,7 @@ administrative socket.
 **Tool permissions.** The host decides what each session may change with `-tools`, a
 comma-separated list of `applications`, `people`, `sites`, `publishing` and
 `connectors`. Without `-tools`, it grants all of them. For example,
-`console login -name Ana -tools people` can invite people and edit groups, but gets
+`console login -tools people` (named after the user who runs it; `-name Ana` overrides) can invite people and edit groups, but gets
 `403` when it changes applications or sites. An unknown name is rejected. In **Admin**,
 the console shows what the session includes.
 
