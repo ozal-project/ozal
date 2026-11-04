@@ -124,7 +124,9 @@ started from it, that address answers like an unknown route.
   recognize. Waiting requests live in memory for a day and are cleared when you turn
   the switch off or the edge restarts.
 - **Emergency path.** `console login` and the admin token remain for emergencies and
-  automation. See [operator session](#operator-session) below.
+  automation. See [operator session](#operator-session) below. Reaching the console
+  of a VM or remote host, and the exact commands, are in
+  [Console on a remote host or VM](administration.md#console-on-a-remote-host-or-vm).
 
 <a id="3-invite-a-person"></a>
 

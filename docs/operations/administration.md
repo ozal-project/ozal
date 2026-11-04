@@ -671,6 +671,66 @@ DNS or databases automatically.
 
 <a id="ante-un-fallo"></a>
 
+<a id="console-on-a-remote-host-or-vm"></a>
+
+## Console on a remote host or VM
+
+The console listens only on the admin unix socket (and loopback). On a service
+installation the socket's directory belongs to the service account with mode
+`0700`, so your own user cannot forward to it directly. Do not loosen those
+permissions to look at the console; use a temporary bridge that runs as the
+service account and an SSH forward from your machine (needs `socat` and `sudo`
+on the host, and stays open until you press `Ctrl+C`):
+
+```sh
+ssh -t -L 8787:127.0.0.1:8787 USER@HOST \
+  'sudo -u ozal socat TCP-LISTEN:8787,bind=127.0.0.1,reuseaddr,fork UNIX-CONNECT:/run/ozal/admin.sock'
+```
+
+Then open `http://ozal.localhost:8787` (never an IP address: passkeys need a name).
+A host with a socket group (see [Operate without `sudo`](#operate-without-sudo-socket-group))
+can forward the socket directly: `ssh -N -L 8787:/run/ozal/admin.sock USER@HOST`.
+
+Console commands, run on the host. Pass `-url` with the address your browser uses
+(the local end of the tunnel) so the printed link opens there:
+
+| Situation | Command | Result |
+|---|---|---|
+| No administrator yet | `sudo ozal console enrol -url http://ozal.localhost:8787` | One-use link, 10 minutes, creates the first administrator. Refused once one exists. |
+| An administrator lost every passkey | `sudo ozal console recover -email ADMIN_EMAIL -url http://ozal.localhost:8787` | One-use link that revokes that person's old passkeys and ends their sessions. The account and its tools stay. |
+| Cannot sign in at all, need the console now | `sudo ozal console login -url http://ozal.localhost:8787` (add `-tools people,sites` to limit it) | One-use link, 5 minutes, recorded under your user name. It is a session, not an account. |
+| Add a person as administrator without a passkey yet | Sign in by host login, then **Administrators → Add administrator** and open the link it shows | A named account; the invitee creates a passkey. |
+
+Administrators cannot exist without a passkey and cannot be deleted from the
+CLI. To see who exists (read-only; the file belongs to the service account):
+`sudo -u ozal sqlite3 /var/lib/ozal/state.db "select email, name, disabled_at from admin_accounts;"`.
+Prefer `recover` to editing the database.
+
+### Update a host by hand
+
+When `ozalctl` cannot reach the host, install a published release yourself.
+The service does **not** migrate its own database: after a binary with a newer
+schema starts, it exits with `database has pending migrations: run ozal migrate first`
+and systemd stops retrying after five failures.
+
+```sh
+# Verify the archive for the host's architecture against checksums.txt first.
+sudo cp /usr/local/lib/ozal/ozal /usr/local/lib/ozal/ozal.bak-PREVIOUS
+sudo systemctl stop ozal
+sudo install -m 755 -o root -g root ./ozal /usr/local/lib/ozal/ozal
+sudo -u ozal /usr/local/lib/ozal/ozal migrate -status -db /var/lib/ozal/state.db
+sudo -u ozal /usr/local/lib/ozal/ozal migrate -backup /var/lib/ozal/state.db.pre-NEW -db /var/lib/ozal/state.db
+sudo systemctl reset-failed ozal && sudo systemctl start ozal
+systemctl is-active ozal && ozal version
+```
+
+`-backup` writes a consistent copy first and refuses an existing path. To roll
+back, stop the service, put the previous executable back and restore that copy
+(see [Backup and recovery](#backup-and-recovery)).
+
+Diagnose a service that will not stay up with `systemctl status ozal` and
+`journalctl -u ozal -n 50 --no-pager`.
+
 ## When something fails
 
 Check separately: the process (`/_/healthz`), effective configuration, the
