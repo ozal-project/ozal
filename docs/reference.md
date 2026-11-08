@@ -275,8 +275,9 @@ entry is rejected.
 
 Under **Domains**, **Create tunnel** finds the account from `auth.passkeys.rp_id`
 (or `auth.cookie_domain`), creates a remotely managed tunnel, saves its identity
-and connector token in `state_dir` and routes every hostname to
-`http://<listen>`. Ozal decides which hosts it serves; a new application only
+and connector token in `state_dir`, routes every hostname to `http://<listen>` and
+creates a proxied CNAME for the host of `auth.passkeys.login_url` when that name
+has no address record (an existing one is reported, never replaced). Ozal decides which hosts it serves; a new application only
 needs its DNS record. An active tunnel with the same name is reused instead of
 creating a second one; a tunnel managed by a local `cloudflared` file is refused.
 Then install `cloudflared` from Cloudflare's packages and start

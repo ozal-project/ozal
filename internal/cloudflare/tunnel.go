@@ -12,6 +12,9 @@ const (
 	TunnelIngress TunnelStepName = "ingress"
 	// TunnelConnector is cloudflared on this host, connected to Cloudflare.
 	TunnelConnector TunnelStepName = "connector"
+	// TunnelLogin is the DNS record of the sign-in host (login_url), which is
+	// not an application, so no application panel creates it.
+	TunnelLogin TunnelStepName = "login"
 )
 
 // TunnelState is where a step stands. The values match zonesetup's so the
@@ -31,8 +34,9 @@ const (
 type TunnelAction string
 
 const (
-	CreateTunnel TunnelAction = "create_tunnel"
-	SetIngress   TunnelAction = "set_ingress"
+	CreateTunnel      TunnelAction = "create_tunnel"
+	SetIngress        TunnelAction = "set_ingress"
+	CreateLoginRecord TunnelAction = "create_login_record"
 )
 
 // IngressRule is one rule of a remotely managed tunnel's configuration.
@@ -67,6 +71,13 @@ type TunnelObserved struct {
 	Connections int
 	// TokenSaved is true when the connector token file is present.
 	TokenSaved bool
+
+	// LoginHost is the sign-in host ("" without a passkey login_url).
+	// LoginRead is true when its address records were read; LoginRecords
+	// are their types and contents, e.g. "CNAME x.cfargotunnel.com".
+	LoginHost    string
+	LoginRead    bool
+	LoginRecords []string
 }
 
 // TunnelRecord is the tunnel identity kept in the state directory. It holds
@@ -97,7 +108,7 @@ const ConnectorCommand = "sudo systemctl enable --now ozal-cloudflared"
 // decides to replace what it did not create: a tunnel configured locally
 // (config_src local) is reported, not reconfigured.
 func PlanTunnel(o TunnelObserved, origin string) []TunnelStep {
-	return []TunnelStep{tunnelStep(o), ingressStep(o, origin), connectorStep(o)}
+	return []TunnelStep{tunnelStep(o), ingressStep(o, origin), loginStep(o), connectorStep(o)}
 }
 
 // TunnelReady reports whether visitors can reach this edge through the tunnel.
@@ -161,6 +172,35 @@ func connectorStep(o TunnelObserved) TunnelStep {
 	default:
 		s.State, s.Manual = TunnelTodo, ConnectorCommand
 		s.Detail = "No cloudflared is connected. Install cloudflared on this host, then start the connector Ozal prepared."
+	}
+	return s
+}
+
+func loginStep(o TunnelObserved) TunnelStep {
+	s := TunnelStep{Name: TunnelLogin, Title: "Sign-in address"}
+	if o.LoginHost == "" {
+		s.State, s.Detail = TunnelDone, "No sign-in host to publish: this edge has no passkey login_url."
+		return s
+	}
+	s.Title = "Sign-in address " + o.LoginHost
+	if o.Local == nil || (o.Read && !o.Exists) {
+		s.State, s.Detail = TunnelWaiting, "Created once the tunnel exists."
+		return s
+	}
+	want := "CNAME " + strings.ToLower(o.Local.ID) + ".cfargotunnel.com"
+	switch {
+	case !o.LoginRead:
+		s.State, s.Detail = TunnelUnknown, "Its DNS record could not be read."
+		s.Manual = "Create a proxied CNAME record " + o.LoginHost + " pointing to " + strings.ToLower(o.Local.ID) + ".cfargotunnel.com."
+	case len(o.LoginRecords) == 0:
+		s.State, s.Action = TunnelTodo, CreateLoginRecord
+		s.Detail = "Visitors sign in at " + o.LoginHost + "; it needs a proxied CNAME to the tunnel."
+	case len(o.LoginRecords) == 1 && strings.EqualFold(o.LoginRecords[0], want):
+		s.State, s.Detail = TunnelDone, "Points at the tunnel."
+	default:
+		s.State = TunnelBlocked
+		s.Detail = o.LoginHost + " already has " + strings.Join(o.LoginRecords, ", ") + ". Ozal never replaces a record it did not create."
+		s.Manual = "Change " + o.LoginHost + " to a proxied CNAME pointing to " + strings.ToLower(o.Local.ID) + ".cfargotunnel.com."
 	}
 	return s
 }

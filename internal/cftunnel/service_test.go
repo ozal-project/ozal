@@ -20,10 +20,11 @@ type fakeClient struct {
 	loseCreate  bool
 	tokenCalls  int
 	accountZone string
+	records     map[string][]certs.SiteRecord
 }
 
 func newFake() *fakeClient {
-	return &fakeClient{tunnels: map[string]certs.CloudflareTunnel{}, ingress: map[string][]certs.TunnelIngressRule{}, accountZone: "example.com"}
+	return &fakeClient{tunnels: map[string]certs.CloudflareTunnel{}, ingress: map[string][]certs.TunnelIngressRule{}, accountZone: "example.com", records: map[string][]certs.SiteRecord{}}
 }
 
 func (f *fakeClient) AccountForZone(_ context.Context, name string) (string, error) {
@@ -71,6 +72,18 @@ func (f *fakeClient) SetTunnelIngress(_ context.Context, _, id string, rules []c
 	return nil
 }
 
+func (f *fakeClient) SiteRecords(_ context.Context, name string) ([]certs.SiteRecord, error) {
+	return f.records[name], nil
+}
+func (f *fakeClient) CreateSiteRecord(_ context.Context, record certs.SiteRecord) (certs.SiteRecord, error) {
+	if len(f.records[record.Name]) > 0 {
+		return certs.SiteRecord{}, certs.ErrRecordExists
+	}
+	record.ID = "rec"
+	f.records[record.Name] = append(f.records[record.Name], record)
+	return record, nil
+}
+
 func tunnelConfig(t *testing.T) config.Config {
 	t.Helper()
 	dir := t.TempDir()
@@ -108,7 +121,7 @@ func TestApplyCreatesTunnelSavesTokenAndRoutesToThisEdge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fake.creates != 1 || strings.Join(report.Applied, ",") != "create_tunnel,set_ingress" {
+	if fake.creates != 1 || strings.Join(report.Applied, ",") != "create_tunnel,set_ingress,create_login_record" {
 		t.Fatalf("creates = %d, applied = %v", fake.creates, report.Applied)
 	}
 	state := cfg.Ingress.CloudflareTunnel.StateDir
@@ -125,6 +138,10 @@ func TestApplyCreatesTunnelSavesTokenAndRoutesToThisEdge(t *testing.T) {
 	if dir, _ := os.Stat(state); dir.Mode().Perm() != 0o700 {
 		t.Fatalf("state dir mode = %v", dir.Mode())
 	}
+	login := fake.records["auth.example.com"]
+	if len(login) != 1 || login[0].Type != "CNAME" || !login[0].Proxied || login[0].Content != report.ID+".cfargotunnel.com" {
+		t.Fatalf("sign-in record = %+v", login)
+	}
 	rules := fake.ingress[report.ID]
 	if len(rules) != 1 || rules[0].Service != "http://127.0.0.1:8888" || rules[0].Hostname != "" {
 		t.Fatalf("ingress = %+v", rules)
@@ -132,12 +149,13 @@ func TestApplyCreatesTunnelSavesTokenAndRoutesToThisEdge(t *testing.T) {
 	if Target(cfg) != report.ID+".cfargotunnel.com" || report.Target != Target(cfg) {
 		t.Fatalf("target = %q, report %q", Target(cfg), report.Target)
 	}
-	if strings.Contains(strings.ToLower(report.Error+report.Steps[2].Detail), "token-from-create") {
+	if strings.Contains(strings.ToLower(report.Error+report.Steps[len(report.Steps)-1].Detail), "token-from-create") {
 		t.Fatal("the report exposed the connector token")
 	}
 	// The connector is the operator's step.
-	if report.Steps[2].State != cloudflare.TunnelTodo || report.Steps[2].Manual != cloudflare.ConnectorCommand {
-		t.Fatalf("connector step = %+v", report.Steps[2])
+	connector := report.Steps[len(report.Steps)-1]
+	if connector.Name != cloudflare.TunnelConnector || connector.State != cloudflare.TunnelTodo || connector.Manual != cloudflare.ConnectorCommand {
+		t.Fatalf("connector step = %+v", connector)
 	}
 
 	// A second apply changes nothing and creates no second tunnel.
@@ -218,5 +236,23 @@ func TestInspectWithoutTheTunnelModeOrToken(t *testing.T) {
 	}
 	if _, err := serviceWith(newFake()).Apply(t.Context(), cfg); err == nil {
 		t.Fatal("applied without a readable token")
+	}
+}
+
+func TestApplyNeverReplacesTheSignInRecord(t *testing.T) {
+	cfg := tunnelConfig(t)
+	fake := newFake()
+	fake.records["auth.example.com"] = []certs.SiteRecord{{Type: "A", Name: "auth.example.com", Content: "203.0.113.10"}}
+	report, err := serviceWith(fake).Apply(t.Context(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fake.records["auth.example.com"]; len(got) != 1 || got[0].Content != "203.0.113.10" {
+		t.Fatalf("sign-in record changed: %+v", got)
+	}
+	for _, step := range report.Steps {
+		if step.Name == cloudflare.TunnelLogin && (step.State != cloudflare.TunnelBlocked || step.Manual == "") {
+			t.Fatalf("login step = %+v", step)
+		}
 	}
 }

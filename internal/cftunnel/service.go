@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,6 +39,8 @@ type Client interface {
 	Tunnel(ctx context.Context, account, id string) (certs.CloudflareTunnel, error)
 	TunnelIngress(ctx context.Context, account, id string) ([]certs.TunnelIngressRule, error)
 	SetTunnelIngress(ctx context.Context, account, id string, rules []certs.TunnelIngressRule) error
+	SiteRecords(ctx context.Context, name string) ([]certs.SiteRecord, error)
+	CreateSiteRecord(ctx context.Context, record certs.SiteRecord) (certs.SiteRecord, error)
 }
 
 var _ Client = (*certs.CloudflareClient)(nil)
@@ -110,12 +113,14 @@ func (s *Service) inspect(ctx context.Context, cfg config.Config) (Report, Clien
 	if err != nil {
 		report.Error = err.Error()
 	}
+	observed.LoginHost = loginHost(cfg)
 	if record != nil {
 		report.ID, report.Target = record.ID, config.CloudflareTunnelTarget(record.ID)
 		if client != nil {
 			if err := observe(ctx, client, record, &observed); err != nil {
 				report.Error = "Cloudflare did not answer for tunnel " + record.Name + " (" + permissions + "): " + err.Error()
 			}
+			observeLogin(ctx, client, &observed)
 		}
 	}
 	report.Steps = cloudflare.PlanTunnel(observed, report.Origin)
@@ -202,7 +207,51 @@ func (s *Service) Apply(ctx context.Context, cfg config.Config) (Report, error) 
 		}
 		applied = append(applied, string(cloudflare.SetIngress))
 	}
+	// The sign-in host is not an application, so no application panel
+	// creates its record. Create it only when the name has none.
+	observeLogin(ctx, client, &observed)
+	for _, step := range cloudflare.PlanTunnel(observed, config.CloudflareTunnelOrigin(cfg.Listen)) {
+		if step.Name != cloudflare.TunnelLogin || step.Action != cloudflare.CreateLoginRecord {
+			continue
+		}
+		record := certs.SiteRecord{Type: "CNAME", Name: observed.LoginHost, Content: config.CloudflareTunnelTarget(observed.Local.ID), Proxied: true}
+		if _, err := client.CreateSiteRecord(ctx, record); err != nil {
+			if errors.Is(err, certs.ErrRecordExists) {
+				return finish(errors.New("the sign-in address " + observed.LoginHost + " already has a record; it was left unchanged"))
+			}
+			return finish(failed("creating the record for "+observed.LoginHost, err))
+		}
+		applied = append(applied, string(cloudflare.CreateLoginRecord))
+	}
 	return finish(nil)
+}
+
+// loginHost is the passkey sign-in host, which visitors must reach through
+// the tunnel too.
+func loginHost(cfg config.Config) string {
+	if cfg.Auth.Passkeys == nil || cfg.Auth.Passkeys.LoginURL == "" {
+		return ""
+	}
+	login, err := url.Parse(cfg.Auth.Passkeys.LoginURL)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(login.Hostname())
+}
+
+func observeLogin(ctx context.Context, client Client, o *cloudflare.TunnelObserved) {
+	o.LoginRead, o.LoginRecords = false, nil
+	if o.LoginHost == "" || o.Local == nil {
+		return
+	}
+	records, err := client.SiteRecords(ctx, o.LoginHost)
+	if err != nil {
+		return
+	}
+	o.LoginRead = true
+	for _, r := range records {
+		o.LoginRecords = append(o.LoginRecords, r.Type+" "+strings.ToLower(strings.TrimSuffix(r.Content, ".")))
+	}
 }
 
 // ensureTunnel reuses the tunnel this edge recorded when it still exists,

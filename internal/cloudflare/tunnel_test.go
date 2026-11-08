@@ -30,7 +30,11 @@ func TestPlanTunnel(t *testing.T) {
 			o := healthy
 			tc.mutate(&o)
 			steps := PlanTunnel(o, origin)
-			got := want{steps[0].State, steps[1].State, steps[2].State}
+			by := map[TunnelStepName]TunnelStep{}
+			for _, step := range steps {
+				by[step.Name] = step
+			}
+			got := want{by[TunnelExists].State, by[TunnelIngress].State, by[TunnelConnector].State}
 			if got != tc.want {
 				t.Fatalf("states = %+v, want %+v", got, tc.want)
 			}
@@ -46,9 +50,45 @@ func TestPlanTunnel(t *testing.T) {
 			if TunnelReady(steps) != (tc.want == want{TunnelDone, TunnelDone, TunnelDone}) {
 				t.Fatal("TunnelReady disagrees with the steps")
 			}
-			if steps[2].State == TunnelTodo && steps[2].Manual != ConnectorCommand {
-				t.Fatalf("connector step lacks the command: %+v", steps[2])
+			if c := by[TunnelConnector]; c.State == TunnelTodo && c.Manual != ConnectorCommand {
+				t.Fatalf("connector step lacks the command: %+v", c)
 			}
 		})
+	}
+}
+
+func TestPlanTunnelSignInRecord(t *testing.T) {
+	const origin = "http://127.0.0.1:8888"
+	local := &TunnelRecord{AccountID: "acc", ID: "C0FFEE00-1", Name: "ozal"}
+	base := TunnelObserved{Local: local, Read: true, Exists: true, Remote: true, TokenSaved: true, Ingress: DesiredIngress(origin), Status: "healthy", Connections: 4, LoginHost: "auth.example.com", LoginRead: true}
+	for _, tc := range []struct {
+		name   string
+		mutate func(*TunnelObserved)
+		state  TunnelState
+		action TunnelAction
+	}{
+		{"missing record is created", func(*TunnelObserved) {}, TunnelTodo, CreateLoginRecord},
+		{"pointing at the tunnel", func(o *TunnelObserved) { o.LoginRecords = []string{"CNAME c0ffee00-1.cfargotunnel.com"} }, TunnelDone, ""},
+		{"another record is never replaced", func(o *TunnelObserved) { o.LoginRecords = []string{"A 203.0.113.10"} }, TunnelBlocked, ""},
+		{"unreadable", func(o *TunnelObserved) { o.LoginRead = false }, TunnelUnknown, ""},
+		{"before the tunnel", func(o *TunnelObserved) { o.Local = nil }, TunnelWaiting, ""},
+		{"no passkey login", func(o *TunnelObserved) { o.LoginHost = "" }, TunnelDone, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			o := base
+			tc.mutate(&o)
+			var login TunnelStep
+			for _, s := range PlanTunnel(o, origin) {
+				if s.Name == TunnelLogin {
+					login = s
+				}
+			}
+			if login.State != tc.state || login.Action != tc.action {
+				t.Fatalf("login step = %+v", login)
+			}
+		})
+	}
+	if TunnelReady(PlanTunnel(base, origin)) {
+		t.Fatal("ready without the sign-in record")
 	}
 }

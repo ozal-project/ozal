@@ -6,7 +6,7 @@ import { useSession } from "./session";
 
 const lamps: Record<TunnelStepState, string> = { done: "lamp-on", todo: "lamp-wait", blocked: "lamp-off", unknown: "lamp-warn", waiting: "" };
 const words: Record<TunnelStepState, string> = { done: "Done", todo: "To do", blocked: "Needs you", unknown: "Check again", waiting: "Waiting" };
-const actionWords: Record<string, string> = { create_tunnel: "created the tunnel and saved its connector token on this host", set_ingress: "pointed the tunnel at this edge" };
+const actionWords: Record<string, string> = { create_tunnel: "created the tunnel and saved its connector token on this host", set_ingress: "pointed the tunnel at this edge", create_login_record: "created the sign-in address record" };
 
 /**
  * The Cloudflare Tunnel this edge is published through (ingress.mode

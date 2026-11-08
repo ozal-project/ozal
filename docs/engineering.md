@@ -59,7 +59,7 @@ downgrade claim over TLS.
 local identity and the account it returns the tunnel, ingress and connector
 steps. `cftunnel` is the shell. It never creates a second tunnel (a lost
 create is followed by a lookup by name), never reconfigures a tunnel managed by
-a local file, writes the connector token before the identity (each atomically,
+a local file or a sign-in record it did not create, writes the connector token before the identity (each atomically,
 `0600`) and never returns the token. Tests run against a simulated API.
 
 <a id="identidad-y-aplicaciones"></a>
