@@ -45,6 +45,16 @@ type Route struct {
 	// top-level audit settings are enabled. Empty selects required for protected
 	// routes and best_effort for public routes.
 	AuditMode string `json:"audit_mode,omitempty"`
+	// IdentityAssertion sends the application a signed, short-lived
+	// assertion of the person this edge authorized (X-Ozal-Assertion).
+	IdentityAssertion *RouteAssertion `json:"identity_assertion,omitempty"`
+}
+
+// RouteAssertion names the application the assertion is for. The
+// application accepts only its own audience, so an assertion for one route
+// cannot be replayed against another.
+type RouteAssertion struct {
+	Audience string `json:"audience"`
 }
 
 // RouteResource describes what a route protects. Access remains the route's
@@ -408,8 +418,11 @@ type Config struct {
 	Pages     *Pages       `json:"pages,omitempty"`
 	DNS       *DNS         `json:"dns,omitempty"`
 	// Ingress selects how visitors reach this edge; omitted means direct.
-	Ingress  *Ingress  `json:"ingress,omitempty"`
-	Projects []Project `json:"projects,omitempty"`
+	Ingress *Ingress `json:"ingress,omitempty"`
+	// IdentityAssertion holds the signing key for routes with
+	// identity_assertion.
+	IdentityAssertion *IdentityAssertion `json:"identity_assertion,omitempty"`
+	Projects          []Project          `json:"projects,omitempty"`
 	// UpstreamTimeoutSeconds is how long an upstream may take to start
 	// answering before the visitor gets a 504. Zero means the default (60);
 	// the response body is never limited.
@@ -621,6 +634,9 @@ func Validate(cfg Config) (*Config, error) {
 			}
 		}
 		if err := validateRouteResource(host, r.Resource); err != nil {
+			return nil, err
+		}
+		if err := validateRouteAssertion(&cfg, r); err != nil {
 			return nil, err
 		}
 		if r.Redirect != "" {
@@ -1542,6 +1558,10 @@ func Clone(source Config) Config {
 		}
 		clone.Ingress = &ingress
 	}
+	if source.IdentityAssertion != nil {
+		assertion := *source.IdentityAssertion
+		clone.IdentityAssertion = &assertion
+	}
 	if source.Notify != nil {
 		notifyCopy := *source.Notify
 		if source.Notify.Telegram != nil {
@@ -1607,6 +1627,10 @@ func CloneRoute(route Route) Route {
 		resource := *route.Resource
 		resource.RiskyActions = slices.Clone(route.Resource.RiskyActions)
 		clone.Resource = &resource
+	}
+	if route.IdentityAssertion != nil {
+		assertion := *route.IdentityAssertion
+		clone.IdentityAssertion = &assertion
 	}
 	return clone
 }

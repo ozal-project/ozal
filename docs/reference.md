@@ -146,10 +146,49 @@ only there and takes priority. Unknown hosts do not reveal the public catalog.
 | `access.context_rule` | Condition with explicit sources; unknown required evidence denies |
 | `resource` | Declared owner, class, sensitivity and actions; not inferred evidence |
 | `audit_mode` | `required` or `best_effort` for access when the family is enabled |
+| `identity_assertion.audience` | Sends the application a signed assertion of the authorized person; see [Identity assertion](#identity-assertion) |
 
 An unavailable upstream answers 502; header timeout 504; no healthy upstream 503. A
 disconnected connector answers 502 and has no TCP fallback. Connectors can be protected
 through `access` in the integrated process.
+
+### Identity assertion
+
+`X-Auth-Request-Email` and `X-Auth-Request-User` are only as trustworthy as the hop
+between Ozal and the application. A route with `identity_assertion` also sends
+`X-Ozal-Assertion`: a JWS (EdDSA, Ed25519) that this edge signs for each authorized
+request, which the application verifies with a public key it pins.
+
+```json
+"identity_assertion": { "key_dir": "/var/lib/ozal/assertion" },
+"routes": [{
+  "host": "custodia.example.com", "target": "http://127.0.0.1:8090",
+  "access": { "required_groups": ["security"] },
+  "identity_assertion": { "audience": "custodia" }
+}]
+```
+
+| Claim | Value |
+|---|---|
+| `iss` | Origin of `auth.passkeys.login_url` (or of `auth.redirect_url` with OIDC only) |
+| `aud` | The route's `identity_assertion.audience` |
+| `sub`, `email`, `groups` | The person this edge authorized |
+| `iat`, `exp` | Issued now, valid for 60 seconds |
+| `jti` | Random, once per request |
+
+The protected header carries `kid`, the first 16 bytes of the SHA-256 of the public
+key in hex. The key is created on first use in `key_dir` (directory `0700`, file
+`0600`); `sudo -u ozal ozal assertion public-key` prints the public key (PEM) to pin.
+To rotate, pin the new key next to the old one, replace the key file and restart.
+
+The application must check the signature with a pinned key (never a key named by the
+token), `iss`, `aud`, `exp`/`iat` with a small clock tolerance, and reject a repeated
+`jti`. `assertion.Verify` in this repository is a reference.
+
+The field requires `access`, a `target` or `upstreams`, a login URL for the issuer and
+`identity_assertion.key_dir`. Public routes, sites, redirects and connector routes do
+not get one. A client-supplied `X-Ozal-Assertion`, in any spelling, is removed. If
+signing fails the request is not forwarded.
 
 ## Login and sessions
 

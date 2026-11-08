@@ -25,7 +25,7 @@ conditions. It is not an ASVS certification or a complete audit of an installati
 |---|---|---|
 | Client → edge | Configured hosts, sanitized identity/IP headers, policy and limits | DNS, firewall, capacity and network protection |
 | Browser → login | OIDC or WebAuthn validation, state/challenges, sessions and revocation | Correctly configured IdP, RP/domain and authenticators |
-| Edge → application | Identity generated after authorization; session cookie removed | The app trusts only the authorized gateway and keeps its own permissions |
+| Edge → application | Identity generated after authorization; session cookie removed; optional signed assertion per request | The app trusts only the authorized gateway (or verifies the assertion with a pinned key) and keeps its own permissions |
 | Edge → connector | mTLS, enrolled fingerprint, fixed resources and revocation | CA distribution, local keys and permitted transport |
 | Operator → administration | Host/socket, or a session with the required tool | Unix permissions, browser security and host access |
 | CI → publishing | Dedicated handler, repo/ref/workflow/audience/event and replay protection | Protecting the workflow, its credentials and build artifacts |
@@ -35,7 +35,9 @@ conditions. It is not an ASVS certification or a complete audit of an installati
 A client cannot create a trusted identity with `X-Auth-Request-*`,
 `X-Ozal-Visitor-*` (nor the former `X-Switchboard-Visitor-*`), or variants with
 underscores. The tunnel carries assertions authenticated by mTLS; they are not
-JWTs that any app can verify. Keeping an application's own login is coexistence,
+JWTs that any app can verify. For that, a route can opt into a signed
+[identity assertion](reference.md#identity-assertion): a 60-second EdDSA JWS for that
+application's audience, which it verifies with a pinned key and a replay check. Keeping an application's own login is coexistence,
 not automatic SSO.
 See [identity](architecture/identity-login.md) and
 [host sessions](architecture/host-sessions.md).

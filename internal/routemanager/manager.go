@@ -96,6 +96,14 @@ func WithSites(sites proxy.SiteDirs) Option {
 	return func(m *Manager) { m.sites = sites }
 }
 
+// WithAssertionKeys loads the identity assertion signer from a key
+// directory. The manager calls it once per directory, the first time a
+// configuration with identity_assertion is built; without it such a
+// configuration is rejected.
+func WithAssertionKeys(load func(dir string) (proxy.AssertionSigner, error)) Option {
+	return func(m *Manager) { m.loadAssertionKeys = load }
+}
+
 // RouteStatus combines the immutable route configuration with its latest
 // health observation.
 type RouteStatus struct {
@@ -152,6 +160,9 @@ type Manager struct {
 	audit               events.AuditAppender
 	connectorRoutes     ConnectorRoutes
 	sites               proxy.SiteDirs
+	loadAssertionKeys   func(dir string) (proxy.AssertionSigner, error)
+	assertionMu         sync.Mutex
+	assertionSigners    map[string]proxy.AssertionSigner
 	passkeys            passkey.Directory
 	adminLogin          passkey.AdminLogin
 	onInstall           func(config.Config)
@@ -537,6 +548,13 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 		proxyOpts = append(proxyOpts, proxy.WithSites(m.sites))
 	}
 	proxyOpts = append(proxyOpts, proxy.WithTrustedProxies(trustedProxies), proxy.WithEventSink(m.sink), proxy.WithAuditAppender(m.audit), proxy.WithTransport(transport))
+	if cfg.IdentityAssertion != nil {
+		signer, err := m.assertionSigner(cfg.IdentityAssertion.KeyDir)
+		if err != nil {
+			return nil, err
+		}
+		proxyOpts = append(proxyOpts, proxy.WithIdentityAssertion(signer, cfg.AssertionIssuer()))
+	}
 	if cfg.DevErrors {
 		proxyOpts = append(proxyOpts, proxy.WithDevErrors())
 	}
@@ -738,6 +756,28 @@ func protectedRouteHosts(routes []config.Route) []string {
 // buildOIDCGate builds the upstream provider's login. The secret is resolved
 // only for the consumer; the config keeps the raw reference so control-plane
 // writes persist it unchanged.
+// assertionSigner returns the signer for dir, loading it once. A reload that
+// keeps the directory keeps the key; a new directory loads its own.
+func (m *Manager) assertionSigner(dir string) (proxy.AssertionSigner, error) {
+	m.assertionMu.Lock()
+	defer m.assertionMu.Unlock()
+	if signer, ok := m.assertionSigners[dir]; ok {
+		return signer, nil
+	}
+	if m.loadAssertionKeys == nil {
+		return nil, fmt.Errorf("identity_assertion: this process has no assertion key loader")
+	}
+	signer, err := m.loadAssertionKeys(dir)
+	if err != nil {
+		return nil, fmt.Errorf("identity_assertion: %w", err)
+	}
+	if m.assertionSigners == nil {
+		m.assertionSigners = map[string]proxy.AssertionSigner{}
+	}
+	m.assertionSigners[dir] = signer
+	return signer, nil
+}
+
 func (m *Manager) buildOIDCGate(cfg config.Auth, protectedHosts []string, sessions auth.SessionBackend) (*auth.Gate, context.CancelFunc, error) {
 	resolved, err := config.ResolveSecret(cfg.ClientSecret)
 	if err != nil {

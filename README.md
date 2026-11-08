@@ -80,6 +80,7 @@ Capabilities below describe this checkout; tagged releases may include less.
 | Passkeys and OIDC login | Available |
 | Static sites with history and rollback | Available |
 | Publishing without a public address (Cloudflare Tunnel) | Available; Ozal creates the tunnel, you run `cloudflared` |
+| Signed identity assertion for applications | Available, per route |
 | Owned tunnels to private connectors | Experimental, off by default |
 | Signed releases and in-place updates | Signed pre-releases published; `ozal update` is alpha |
 | High availability, DDoS protection, CDN | Not offered |

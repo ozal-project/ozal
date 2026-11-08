@@ -62,6 +62,15 @@ create is followed by a lookup by name), never reconfigures a tunnel managed by
 a local file or a sign-in record it did not create, writes the connector token before the identity (each atomically,
 `0600`) and never returns the token. Tests run against a simulated API.
 
+**Identity assertion.** `assertion.Build` and `assertion.Check` are pure: claims for
+one authorized person, and the verifier's rules (issuer, audience, subject, ID,
+window with skew, lifetime at most 60 s). The proxy signs right after
+authorization, only for routes with `identity_assertion`, and refuses to forward
+when signing fails. The trust stage strips client copies in every spelling. The
+route manager loads the key once per `key_dir`. Regression tests cover a forged
+header, underscore spellings, another audience, routes without the field, a
+missing signer and a failing signer.
+
 <a id="identidad-y-aplicaciones"></a>
 ## Identity and applications
 
