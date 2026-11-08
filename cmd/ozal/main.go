@@ -8,6 +8,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/ozal-project/ozal/internal/assertion"
+	"github.com/ozal-project/ozal/internal/proxy"
 	"io"
 	"log"
 	"log/slog"
@@ -76,6 +78,7 @@ func subcommands() map[string]func(context.Context, []string, io.Writer) error {
 		"connector":       runConnector,
 		"migrate":         runMigrate,
 		"notify":          runNotify,
+		"assertion":       runAssertion,
 		"policy":          runPolicy,
 		"pair-helper":     runPairHelper,
 		"site":            runSite,
@@ -307,6 +310,7 @@ func main() {
 	}
 	zoneChanges := make(zoneUpdates, 1)
 	managerOpts = append(managerOpts, routemanager.WithInstallHook(zoneChanges.publish))
+	managerOpts = append(managerOpts, routemanager.WithAssertionKeys(loadAssertionSigner))
 	manager, err := routemanager.New(ctx, *configPath, healthCheckInterval, managerOpts...)
 	if err != nil {
 		log.Fatalf("routes: %v", err)
@@ -1121,4 +1125,14 @@ func sighupReloadEvent(err error, digest string, now time.Time) events.Event {
 		event.Reason = "the configuration could not be loaded or validated; run ozal validate for details"
 	}
 	return event
+}
+
+// loadAssertionSigner reads, or creates on first use, the Ed25519 key that
+// signs identity assertions.
+func loadAssertionSigner(dir string) (proxy.AssertionSigner, error) {
+	key, err := assertion.LoadOrCreateKey(dir)
+	if err != nil {
+		return nil, err
+	}
+	return assertion.NewSigner(key)
 }
