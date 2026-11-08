@@ -186,3 +186,41 @@ func joinAddrs(addrs []netip.Addr) string {
 	}
 	return strings.Join(parts, ", ")
 }
+
+// AssessTunnel rewrites the checklist for a Cloudflare Tunnel. Cloudflare
+// answers a proxied CNAME with its own addresses, so public DNS never shows
+// the tunnel target; the public request decides instead. Its errors also
+// mean something else: 530 (error 1033) is no connected cloudflared, and 502
+// is cloudflared failing to reach this edge's listener.
+func AssessTunnel(a Assessment, target string, o Observation) Assessment {
+	switch {
+	case o.Lookup == LookupFound && (o.Reach == ReachEdge || o.Reach == ReachProxyOrigin):
+		a.DNS = Step{StateOK, "Answers through Cloudflare, which routes it to the tunnel."}
+	case o.Lookup == LookupFound && target == "":
+		a.DNS = Step{StateWait, "Create the Cloudflare Tunnel under Domains; this record then points at it."}
+	case o.Lookup == LookupFound:
+		a.DNS = Step{StateWait, "The name resolves, but no request reached the tunnel yet. Its record must be a proxied CNAME to " + target + "."}
+	}
+	switch {
+	case o.Reach == ReachProxyOrigin:
+		a.Reach = Step{StateBad, "Cloudflare has no connected tunnel for this name. Start cloudflared on this host (Domains → Cloudflare Tunnel) and check that the record points at " + nonEmpty(target, "the tunnel") + "."}
+	case o.Reach == ReachOther && o.Status == 502:
+		a.Reach = Step{StateBad, "cloudflared is connected but could not reach this edge's listener. Check that Ozal is running and that the tunnel routes to it."}
+	case o.Reach == ReachOther:
+		a.Reach = Step{StateBad, "Another server answered: the record does not point at this edge's tunnel yet."}
+	}
+	switch o.Reach {
+	case ReachEdge, ReachOther, ReachProxyOrigin:
+		a.Certificate = Step{StateOK, "Cloudflare serves HTTPS for this name; this edge does not need its own certificate."}
+	default:
+		a.Certificate = Step{StateWait, "Cloudflare serves HTTPS once the name reaches it."}
+	}
+	return a
+}
+
+func nonEmpty(value, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
+}

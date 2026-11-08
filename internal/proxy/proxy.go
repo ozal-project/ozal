@@ -617,6 +617,13 @@ func upstreamHandler(r config.Route, devErrors, assertVisitor bool, transport ht
 			}
 			pr.SetURL(target)
 			pr.SetXForwarded()
+			// SetXForwarded reads the transport's TLS; behind a trusted proxy
+			// that terminated TLS the visitor's scheme is Trust's decision.
+			if pipeline.PublicHTTPS(pr.In) {
+				pr.Out.Header.Set("X-Forwarded-Proto", "https")
+			} else {
+				pr.Out.Header.Set("X-Forwarded-Proto", "http")
+			}
 			// A client-supplied forwarding chain is never trusted: forward
 			// a single address from Trust's decision, never an incoming
 			// chain. RemoteAddr still identifies the TCP peer.

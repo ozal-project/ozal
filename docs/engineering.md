@@ -45,6 +45,23 @@ portability with issuance and renewal through a non-Cloudflare provider. Test
 TLS, allowed and denied access, revocation and recovery from an independent
 operator and network.
 
+**Public scheme.** The trust stage decides the visitor's scheme once, next to
+the visitor's IP: the listener's own TLS, or exactly one canonical
+`X-Forwarded-Proto: https` from a peer in `trusted_proxies`. It wraps the whole
+public handler, login endpoints included, and an inner trust stage keeps the
+outer decision. `pipeline.PublicHTTPS` is the only source for Secure cookies,
+OIDC return URLs and the `X-Forwarded-Proto` sent upstream; the OIDC gate gets
+it injected so `auth` does not import `pipeline`. Regression tests cover an
+untrusted peer, repeated or comma-joined claims, underscore spellings and a
+downgrade claim over TLS.
+
+**Cloudflare Tunnel.** `cloudflare.PlanTunnel` is the pure core: from the
+local identity and the account it returns the tunnel, ingress and connector
+steps. `cftunnel` is the shell. It never creates a second tunnel (a lost
+create is followed by a lookup by name), never reconfigures a tunnel managed by
+a local file, writes the connector token before the identity (each atomically,
+`0600`) and never returns the token. Tests run against a simulated API.
+
 <a id="identidad-y-aplicaciones"></a>
 ## Identity and applications
 

@@ -79,6 +79,7 @@ Capabilities below describe this checkout; tagged releases may include less.
 | Reverse proxy, HTTPS, per-route policy | Available |
 | Passkeys and OIDC login | Available |
 | Static sites with history and rollback | Available |
+| Publishing without a public address (Cloudflare Tunnel) | Available; Ozal creates the tunnel, you run `cloudflared` |
 | Owned tunnels to private connectors | Experimental, off by default |
 | Signed releases and in-place updates | Signed pre-releases published; `ozal update` is alpha |
 | High availability, DDoS protection, CDN | Not offered |

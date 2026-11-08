@@ -33,6 +33,9 @@ func runInstall(ctx context.Context, args []string, out io.Writer) error {
 	root := fs.String("root", "", "stage files under an absolute directory; no account or service changes")
 	target := fs.String("target", "http://127.0.0.1:3000", "existing application URL")
 	group := fs.String("group", "members", "first application's required group")
+	ingress := fs.String("ingress", install.IngressDirect, "how visitors reach Ozal: direct (a public address, set up later) or cloudflare-tunnel (no public address)")
+	domain := fs.String("domain", "", "cloudflare-tunnel: your domain in Cloudflare; sign-in runs at https://auth.DOMAIN")
+	cloudflareToken := fs.String("cloudflare-token", "", "cloudflare-tunnel: file with a Cloudflare API token (Account · Cloudflare Tunnel · Edit, Zone · DNS · Edit, Zone · Zone Settings · Edit); copied to /etc/ozal, never printed")
 	unit := fs.Bool("print-unit", false, "print the embedded unit and stop")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
@@ -51,7 +54,7 @@ func runInstall(ctx context.Context, args []string, out io.Writer) error {
 			return err
 		}
 	}
-	return install.Service(ctx, out, install.LinuxHost{}, install.ServiceRequest{Binary: *binary, Archive: *archive, SHA256: *checksum, Root: *root, Target: *target, Group: *group, Apply: *apply})
+	return install.Service(ctx, out, install.LinuxHost{}, install.ServiceRequest{Binary: *binary, Archive: *archive, SHA256: *checksum, Root: *root, Target: *target, Group: *group, Ingress: *ingress, Domain: *domain, CloudflareToken: *cloudflareToken, Apply: *apply})
 }
 
 func runUninstall(ctx context.Context, args []string, out io.Writer) error {

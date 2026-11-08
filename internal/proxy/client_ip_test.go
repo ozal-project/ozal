@@ -66,3 +66,36 @@ func TestTrustedProxyForwardsSelectedIPAndDropsSpoofedChains(t *testing.T) {
 		})
 	}
 }
+
+// Behind a proxy that terminates TLS (Cloudflare Tunnel, a proxied record)
+// the application must learn the visitor's scheme from Trust, never from a
+// client header or from the plain-HTTP hop.
+func TestApplicationReceivesThePublicScheme(t *testing.T) {
+	seen := make(chan http.Header, 1)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { seen <- r.Header.Clone(); w.WriteHeader(204) }))
+	defer upstream.Close()
+	prefixes := []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")}
+	for _, tc := range []struct {
+		name, peer, proto, want string
+	}{
+		{"tunnel asserts https", "127.0.0.1:1234", "https", "https"},
+		{"client asserts https", "203.0.113.9:1234", "https", "http"},
+		{"no assertion", "127.0.0.1:1234", "", "http"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			handler, err := New([]config.Route{{Host: "public.localhost", Target: upstream.URL}}, nil, nil, WithTrustedProxies(prefixes))
+			if err != nil {
+				t.Fatal(err)
+			}
+			req := httptest.NewRequest("GET", "http://public.localhost/", nil)
+			req.RemoteAddr = tc.peer
+			if tc.proto != "" {
+				req.Header.Set("X-Forwarded-Proto", tc.proto)
+			}
+			handler.ServeHTTP(httptest.NewRecorder(), req)
+			if got := (<-seen).Get("X-Forwarded-Proto"); got != tc.want {
+				t.Fatalf("X-Forwarded-Proto = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

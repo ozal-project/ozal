@@ -45,8 +45,8 @@ func runValidate(_ context.Context, args []string, out io.Writer) error {
 	if adminListen == "" {
 		adminListen = config.DefaultAdminListen
 	}
-	// sites= goes last so existing checks of the line's prefix keep matching.
-	fmt.Fprintf(out, "config OK: routes=%d protected=%d tunnel=%d tls=%t dns01=%t trusted_proxies=%d admin=%s sites=%d\n",
-		len(cfg.Routes), protected, tunnels, cfg.TLS.Enabled, cfg.TLS.DNS01 != nil, len(proxies), adminListen, sites)
+	// New fields go last so existing checks of the line's prefix keep matching.
+	fmt.Fprintf(out, "config OK: routes=%d protected=%d tunnel=%d tls=%t dns01=%t trusted_proxies=%d admin=%s sites=%d ingress=%s\n",
+		len(cfg.Routes), protected, tunnels, cfg.TLS.Enabled, cfg.TLS.DNS01 != nil, len(proxies), adminListen, sites, cfg.IngressMode())
 	return nil
 }

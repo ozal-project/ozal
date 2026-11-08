@@ -1,0 +1,40 @@
+[Unit]
+Description=Cloudflare Tunnel connector for Ozal
+Documentation=https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/
+Wants=network-online.target
+After=network-online.target ozal.service
+# Installed with `ozal install service -ingress cloudflare-tunnel`. It stays
+# inactive until Ozal has created the tunnel and saved its connector token
+# (Domains → Cloudflare Tunnel → Create tunnel in the console).
+ConditionPathExists=/var/lib/ozal/cloudflare-tunnel/connector.token
+
+[Service]
+Type=simple
+# cloudflared is installed by the operator from Cloudflare's packages; Ozal
+# never downloads it. systemd looks the name up in its fixed search path.
+ExecStart=cloudflared tunnel --no-autoupdate run --token-file ${CREDENTIALS_DIRECTORY}/token
+# systemd (root) reads the token Ozal wrote and hands a copy to this unit
+# only; the connector runs as a throwaway account that can read nothing of
+# Ozal's state.
+LoadCredential=token:/var/lib/ozal/cloudflare-tunnel/connector.token
+DynamicUser=yes
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+NoNewPrivileges=true
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+MemoryHigh=192M
+MemoryMax=256M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

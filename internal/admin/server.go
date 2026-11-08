@@ -50,6 +50,7 @@ type Handler struct {
 	zoneCertificates       zoneCertificates
 	zoneLookup             func(ctx context.Context, host string) (string, error)
 	zoneSetup              zoneSetupService
+	ingress                ingressService
 	auditStatus            func() AuditStatus
 	mutationAudit          events.AuditAppender
 	auditMutationsRequired bool
@@ -122,6 +123,8 @@ func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 	h.mux.HandleFunc("POST /_/api/zones/{name}/renew", h.requireTool("applications", h.renewZone))
 	h.mux.HandleFunc("GET /_/api/zones/{name}/setup", h.requireTool("applications", h.zoneSetupStatus))
 	h.mux.HandleFunc("POST /_/api/zones/{name}/setup", h.requireTool("applications", h.applyZoneSetup))
+	h.mux.HandleFunc("GET /_/api/ingress", h.requireTool("applications", h.ingressStatus))
+	h.mux.HandleFunc("POST /_/api/ingress/cloudflare-tunnel", h.requireTool("applications", h.applyIngress))
 	for _, opt := range opts {
 		opt(h)
 	}

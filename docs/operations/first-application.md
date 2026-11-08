@@ -250,6 +250,25 @@ mode.
 unpermitted person, and block the old origin. While the old origin stays open,
 **the new policy can still be bypassed**.
 
+### Without a public address: Cloudflare Tunnel
+
+With `ingress.mode: "cloudflare_tunnel"`, the host needs no public IP and opens no
+port. **Domains** shows a **Cloudflare Tunnel** card instead of certificates:
+
+1. **Create tunnel.** Ozal creates the tunnel in your Cloudflare account with the
+   API token and points it at itself. The connector token stays on the host.
+2. **Start the connector.** Install `cloudflared` from Cloudflare's packages and run
+   `sudo systemctl enable --now ozal-cloudflared`. The card turns green when it
+   connects.
+3. **Publish.** Add an application. Its DNS panel creates the record, a proxied
+   CNAME to the tunnel, and checks that a public request reaches this edge. Create
+   the record for the sign-in host (`auth.<domain>`) the same way.
+
+The zone checklist keeps one step: *Always Use HTTPS*. Without it, a visitor who
+types `http://` reaches Ozal through the tunnel without HTTPS. Fields, token
+permissions and limits are in the
+[reference](../reference.md#cloudflare-tunnel-profile).
+
 ### Private apps on another domain
 
 With passkey login, a private app outside `auth.cookie_domain` receives its own host

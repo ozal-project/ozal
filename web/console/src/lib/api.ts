@@ -462,6 +462,12 @@ export type SetupStep = { name: "challenge" | "encryption" | "origin_pull" | "ht
 export type ZoneSetup = { zone: string; provider?: string; ready: boolean; steps: SetupStep[]; error?: string; applied?: string[] };
 export const fetchZoneSetup = (name: string, signal?: AbortSignal) => getJSON<ZoneSetup>(`/_/api/zones/${encodeURIComponent(name)}/setup`, signal);
 export const applyZoneSetup = (token: string, name: string) => adminPost<ZoneSetup>(token, `/_/api/zones/${encodeURIComponent(name)}/setup`, undefined, undefined, 75_000);
+export type TunnelStepState = "done" | "todo" | "blocked" | "unknown" | "waiting";
+export type TunnelStep = { name: "tunnel" | "ingress" | "connector"; state: TunnelStepState; action?: string; title: string; detail: string; manual?: string };
+/** How visitors reach this edge. A Cloudflare Tunnel report never holds a token. */
+export type Ingress = { mode: "direct" | "cloudflare_tunnel"; name?: string; id?: string; target?: string; origin?: string; ready: boolean; steps?: TunnelStep[]; error?: string; applied?: string[] };
+export const fetchIngress = (signal?: AbortSignal) => getJSON<Ingress>("/_/api/ingress", signal, 35_000);
+export const applyIngress = (token: string) => adminPost<Ingress>(token, "/_/api/ingress/cloudflare-tunnel", undefined, undefined, 75_000);
 export const addZone = (token: string, name: string, expected: string) => adminPost<{ config_sha256: string }>(token, "/_/api/zones", { name, expected });
 export const checkZone = (token: string, name: string) => adminPost<ZoneCheck>(token, `/_/api/zones/${encodeURIComponent(name)}/check`);
 export const renewZone = (token: string, name: string) => adminPost<{ status: string }>(token, `/_/api/zones/${encodeURIComponent(name)}/renew`);
