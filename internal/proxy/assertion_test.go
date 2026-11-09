@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"strings"
 	"testing"
 	"time"
 
@@ -64,8 +65,10 @@ func TestIdentityAssertionReachesOnlyItsApplication(t *testing.T) {
 			if got.Get("X-Forwarded-Proto") != "https" {
 				t.Fatal("public HTTPS scheme lost while forwarding the assertion")
 			}
-			if len(got["X_ozal_assertion"])+len(got["X_Ozal_Assertion"]) > 0 {
-				t.Fatal("an underscore spelling reached the application")
+			for name := range got {
+				if strings.EqualFold(name, "X_Ozal_Assertion") {
+					t.Fatal("an underscore spelling reached the application")
+				}
 			}
 			token := got.Get(assertion.Header)
 			if !tc.signed {

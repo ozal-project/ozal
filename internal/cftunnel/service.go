@@ -371,7 +371,7 @@ func tokenSaved(dir string) bool {
 // identity, so the next apply finds the tunnel by name and saves both again.
 func save(dir string, record cloudflare.TunnelRecord, token string) error {
 	if strings.TrimSpace(token) == "" {
-		return errors.New("Cloudflare returned an empty connector token")
+		return errors.New("empty connector token returned by Cloudflare")
 	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("the tunnel state directory %s could not be created", dir)

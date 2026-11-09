@@ -11,6 +11,7 @@ config.json
 !/config.direct.example.json
 !/config.quickstart.json
 !/config.tunnel.example.json
+!/config.cloudflare-tunnel.example.json
 .env
 .env.*
 !.env.example
