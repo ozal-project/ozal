@@ -4,28 +4,33 @@
 @import "@fontsource/geist-sans/600.css";
 @import "@fontsource/geist-mono/400.css";
 
-/* Ozal identity (Marfil), following docs/architecture/product-design.md.
+/* Ozal identity, following docs/architecture/product-design.md.
    Two quiet colours and one loud colour:
-     ink      the ground, about 60% of any screen
-     graphite surfaces, borders and quiet text, about 30%
-     camel    the only loud colour, about 10%: the next action, the current
-              place, focus and what is live
+     espresso the ground, about 60% of any screen: a brown dark enough to
+              rest the eye and warm enough to read as a colour
+     oat      text, surfaces lifted from the ground, borders and quiet text,
+              about 30%
+     camel    the only loud colour, about 10%, on the detail to see first:
+              the headline's key words, the next action, the current choice,
+              the current place and focus
+   The ground is lit softly from above, where the doorway stands; the light
+   is a property of the page, not decoration on a component.
    Ivory is text and the arch of the mark. Green, red and blue are states
    (allowed, refused, waiting): they appear only where a state exists and
    never as decoration. Fonts are bundled (OFL): no third-party requests. */
 @theme {
   --font-sans: "Geist Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
-  --color-bg: #0e0e0d;
-  --color-tile: #171716;
-  --color-tile-2: #1f1f1d;
-  --color-tile-3: #2a2927;
-  --color-ink: #f1ede6;
-  --color-ink-2: #dcd7cf;
-  --color-muted: #a19d96;
+  --color-bg: #16110d;
+  --color-tile: #1e1813;
+  --color-tile-2: #271f19;
+  --color-tile-3: #352b23;
+  --color-ink: #f2e9dc;
+  --color-ink-2: #ddd1c1;
+  --color-muted: #a8998a;
   --color-brand: #f1ece2;
   --color-loud: #e59a57;
-  --color-loud-ink: #0e0e0d;
+  --color-loud-ink: #16110d;
   --color-signal: #e59a57;
   --color-depth: #55514a;
   --color-ok: #78cc8a;
@@ -47,7 +52,7 @@
 @layer base {
   [hidden] { display: none !important; }
   html { color-scheme: dark; scroll-behavior: smooth; scroll-padding-top: 96px; background: var(--color-bg); }
-  body { background: var(--color-bg); color: var(--color-ink); font-family: var(--font-sans); font-size: var(--t-body); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  body { background: radial-gradient(56rem 34rem at 74% -6rem, rgb(229 154 87 / .11), transparent 70%) no-repeat, radial-gradient(80rem 40rem at 30% -14rem, rgb(242 233 220 / .045), transparent 72%) no-repeat, var(--color-bg); color: var(--color-ink); font-family: var(--font-sans); font-size: var(--t-body); line-height: 1.6; -webkit-font-smoothing: antialiased; }
   ::selection { background: var(--color-loud); color: var(--color-loud-ink); }
   a { color: inherit; }
   :focus-visible { outline: 2px solid var(--color-loud); outline-offset: 3px; border-radius: 3px; }
@@ -98,7 +103,7 @@
   /* ---------- Header and footer ---------- */
   .skip-link { position: fixed; top: 12px; left: 12px; z-index: 50; padding: 12px 20px; background: var(--color-ink); color: var(--color-bg); transform: translateY(-200%); }
   .skip-link:focus { transform: none; }
-  .site-header { position: sticky; top: 0; z-index: 40; background: color-mix(in srgb, var(--color-bg) 86%, transparent); backdrop-filter: blur(14px); }
+  .site-header { position: sticky; top: 0; z-index: 40; background: color-mix(in srgb, var(--color-bg) 82%, transparent); backdrop-filter: blur(14px); border-bottom: 1px solid color-mix(in srgb, var(--color-tile-3) 70%, transparent); }
   .topbar { display: flex; align-items: center; gap: 32px; min-height: 72px; }
   .mark { display: inline-flex; align-items: center; gap: 10px; font-size: 1.125rem; font-weight: 600; letter-spacing: -.035em; text-decoration: none; flex: none; }
   .topbar nav { display: flex; flex-wrap: wrap; gap: 28px; margin-left: auto; }

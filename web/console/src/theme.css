@@ -1,6 +1,6 @@
 @custom-variant dark (&:is(.dark *));
 
-/* Ozal identity (SITE-005, Marfil): warm ink with three brand colours, each
+/* Ozal identity: an espresso ground and oat text, with three brand colours, each
    with one meaning and never decoration.
      ivory   (primary)    Ozal itself: actions, the current place, focus
      camel   (signal)     what is live: a signal on a cord, a connection up
@@ -12,23 +12,23 @@
    bundled (OFL): no third-party requests. */
 :root {
   --radius: 0.5rem;
-  --background: #0e0e0d;
-  --foreground: #f1ede6;
-  --card: #171716;
-  --card-foreground: #f1ede6;
-  --popover: #1f1f1d;
-  --popover-foreground: #f1ede6;
+  --background: #16110d;
+  --foreground: #f2e9dc;
+  --card: #1e1813;
+  --card-foreground: #f2e9dc;
+  --popover: #271f19;
+  --popover-foreground: #f2e9dc;
   --primary: #f1ece2;
-  --primary-foreground: #0e0e0d;
-  --secondary: #1f1f1d;
-  --secondary-foreground: #f1ede6;
-  --muted: #1f1f1d;
-  --muted-foreground: #a19d96;
-  --accent: #262624;
-  --accent-foreground: #f1ede6;
+  --primary-foreground: #16110d;
+  --secondary: #271f19;
+  --secondary-foreground: #f2e9dc;
+  --muted: #271f19;
+  --muted-foreground: #a8998a;
+  --accent: #2c241d;
+  --accent-foreground: #f2e9dc;
   --destructive: #ee6b5e;
-  --border: #2a2927;
-  --input: #3a3833;
+  --border: #352b23;
+  --input: #43372d;
   --ring: #c4a17c;
   --success: #78cc8a;
   --warning: #e0a84a;
@@ -36,11 +36,11 @@
   /* Camel: what is live. Graphite: depth. */
   --signal: #c4a17c;
   --depth: #55514a;
-  --sidebar: #0e0e0d;
-  --sidebar-foreground: #f1ede6;
-  --sidebar-border: #2a2927;
-  --sidebar-accent: #1f1f1d;
-  --sidebar-accent-foreground: #f1ede6;
+  --sidebar: #16110d;
+  --sidebar-foreground: #f2e9dc;
+  --sidebar-border: #352b23;
+  --sidebar-accent: #271f19;
+  --sidebar-accent-foreground: #f2e9dc;
 }
 
 @theme inline {
@@ -111,7 +111,7 @@
   .lamp-off { --lamp: var(--destructive); }
   .lamp-wait { --lamp: var(--waiting); animation: lamp-pulse 1.6s ease-in-out infinite; }
   .lamp-warn { --lamp: var(--warning); }
-  .lamp-idle { --lamp: #3a3833; }
+  .lamp-idle { --lamp: #43372d; }
   .lamp-lg { @apply size-3; }
   /* A group name; as a button it adds or removes the group. */
   .chip {
@@ -124,7 +124,7 @@
   }
   .panel-head { @apply flex flex-wrap items-center justify-between gap-3 px-5 py-4; }
   /* A connecting line, as a divider next to labels. */
-  .cord { stroke: #6e6a63; fill: none; stroke-linecap: round; }
+  .cord { stroke: #74675b; fill: none; stroke-linecap: round; }
 }
 
 @keyframes lamp-pulse { 50% { opacity: 0.45; } }

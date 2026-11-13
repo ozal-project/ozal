@@ -186,8 +186,9 @@ async function main() {
   await pause(3400);
   await open("Activity");
   await page.locator("table").getByText("Access denied").first().waitFor();
-  await click(page.locator("button", { hasText: "All events" }).first());
-  await click(page.getByRole("option", { name: "Access decisions" }));
+  // The category filter is a native select: point at it, then choose.
+  await move(page.getByLabel("Event category"));
+  await page.getByLabel("Event category").selectOption("access");
   await say("Every decision, with its reason.");
   await shot("access-log");
   await exportAccessSample(edge);

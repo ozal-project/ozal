@@ -36,15 +36,20 @@ them, they win.
 - **A decision is a first-class object.** Allowed, refused or waiting is shown
   with its stable code and a reason in plain words, for the operator and for
   the refused person.
-- **Two quiet colours, one loud colour.** Warm ink is the ground (about 60%
-  of a screen) and graphite carries surfaces, borders and quiet text (about
-  30%). Camel is the only loud colour (about 10%). It goes on the one detail
+- **Two quiet colours, one loud colour.** Espresso, a brown dark enough to
+  rest the eye and warm enough to read as a colour, is the ground (about 60%
+  of a screen). Oat carries text, raised surfaces, borders and quiet text
+  (about 30%). Pure black is never the ground: a neutral that reads as no
+  colour turns the page into a generic dark mode. Camel is the only loud colour (about 10%). It goes on the one detail
   a screen should be read by first: the headline's key words, the next action,
   the choice the visitor just made, the current place and focus. Everything
   else stays quiet so that detail stands out. Section labels, bullets, link
   underlines, borders and glows are decoration and are never camel. Ivory is
   text and the arch of the mark. If two things on a screen compete for the
   first look, one of them is wrong.
+- **Depth comes from light, not from more colour.** The project page is lit
+  softly from above, where the doorway stands, and the header sits on a
+  hairline. No gradients between colours, no illustrations behind content.
 - **States sit outside that budget.** Green, red, blue and yellow mean
   allowed, refused, waiting and warning. They appear only where a real state
   exists, always with a word or a code, and the loud colour never stands in

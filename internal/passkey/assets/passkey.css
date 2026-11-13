@@ -1,19 +1,19 @@
 /* Ozal identity, shared with the admin console (web/console) and the
-   project page (site/): warm ink with an ivory primary, a camel signal and
-   graphite depth (Marfil). Green and red keep one meaning each: done and refused. Geist is bundled locally (OFL,
+   project page (site/): an espresso ground and oat text, with an ivory
+   primary, a camel signal and graphite depth. Green and red keep one meaning each: done and refused. Geist is bundled locally (OFL,
    see OFL.txt) so the sign-in pages make no third-party request. */
 @font-face { font-family: "Geist"; src: url("/_/auth/geist-400.woff2") format("woff2"); font-weight: 400 500; font-display: swap; }
 @font-face { font-family: "Geist"; src: url("/_/auth/geist-600.woff2") format("woff2"); font-weight: 600 800; font-display: swap; }
 :root {
   color-scheme: dark;
-  --bg: #0e0e0d;
-  --card: #171716;
-  --raised: #1f1f1d;
-  --fg: #f1ede6;
-  --muted: #a19d96;
-  --border: #2a2927;
+  --bg: #16110d;
+  --card: #1e1813;
+  --raised: #271f19;
+  --fg: #f2e9dc;
+  --muted: #a8998a;
+  --border: #352b23;
   --accent: #f1ece2;
-  --accent-fg: #0e0e0d;
+  --accent-fg: #16110d;
   --lamp: #c4a17c;
   --depth: #55514a;
   --ok: #78cc8a;
