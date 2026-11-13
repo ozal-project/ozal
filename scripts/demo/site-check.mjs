@@ -1,4 +1,4 @@
-// Browser regressions for SITE-003/SITE-004 against a built site.
+// Browser regressions for the project page against a built site.
 // Uses the same build-time Playwright dependency as the recorded tour.
 // node site-check.mjs --url http://127.0.0.1:4321 --chrome /path/to/chrome
 import assert from "node:assert/strict";
@@ -20,7 +20,9 @@ const errors = [];
 const checkPage = (page) => page.on("pageerror", (error) => errors.push(error.message));
 const live = async (page) => page.locator("[data-panel]").waitFor({ state: "visible" });
 const decision = async (page, code) => assert.equal(await page.locator("[data-code]").textContent(), code);
-const choose = (page, group, value) => page.locator(`label:has(input[name="${group}"][value="${value}"])`).click();
+// The demo is a matrix of people and apps; choosing a cell explains that answer.
+const cell = (page, who, app) => page.locator(`[data-cell][data-who="${who}"][data-app="${app}"]`);
+const ask = (page, who, app) => cell(page, who, app).click();
 
 try {
   for (const width of [1440, 1024, 768, 390, 320]) {
@@ -51,34 +53,43 @@ try {
     await page.locator("#engine").scrollIntoViewIfNeeded();
     await live(page);
     await decision(page, "allowed");
-    await choose(page, "who", "bob"); await decision(page, "domain_not_allowed");
-    await choose(page, "who", "ana"); await decision(page, "allowed");
-    await choose(page, "app", "billing"); await decision(page, "context_rule_denied");
+    assert.equal(await page.locator("[data-cell][data-state]").count(), 16, "every person and app has an answer");
+    assert.equal(await cell(page, "ana", "grafana").getAttribute("aria-pressed"), "true", "the explained cell is marked");
+    assert.equal(await cell(page, "none", "grafana").getAttribute("data-state"), "again", "no session is sent to sign in, not refused");
+    await ask(page, "bob", "grafana"); await decision(page, "domain_not_allowed");
+    await ask(page, "ana", "grafana"); await decision(page, "allowed");
+    await ask(page, "ana", "billing"); await decision(page, "context_rule_denied");
     await page.locator(".engine-settings > summary").click();
     await page.locator('input[name="bound"]').check(); await decision(page, "allowed");
+    assert.equal(await cell(page, "ana", "billing").getAttribute("data-state"), "allowed", "a setting re-answers the whole matrix");
     await page.locator('select[name="method"]').selectOption("oidc");
     assert.equal(await page.locator('input[name="bound"]').isDisabled(), true);
     // The demo Principal records OIDC as not device-bound (known false), so
     // the device condition must still refuse it.
     await decision(page, "context_rule_denied");
-    await choose(page, "app", "blog"); await choose(page, "who", "none"); await decision(page, "allowed");
-    await choose(page, "app", "grafana"); await decision(page, "authentication_required");
-    await page.locator("#walk-1").focus();
-    await page.keyboard.press("ArrowRight");
-    assert.equal(await page.locator("#walk-2").isChecked(), true, "native walkthrough radios must work from the keyboard");
-    assert.equal(await page.locator("#step-2").isVisible(), true);
-    assert.equal(await page.locator("#step-1").isVisible(), false, "only the chosen step is shown");
-    await page.locator('label[for="walk-3"]').click();
-    assert.equal(await page.locator("#step-3").isVisible(), true, "Next moves to the following step");
-    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${width}px walkthrough overflows`);
-    await page.locator("label:has(#walk-1)").click();
-    assert.equal(await page.locator(".step").count(), 5, "the walkthrough lists five steps");
+    await ask(page, "none", "blog"); await decision(page, "allowed");
+    await ask(page, "none", "grafana"); await decision(page, "authentication_required");
+    // The tour: on a wide screen one sticky stage shows the step being read;
+    // on a narrow one every step keeps its own screen.
+    await page.locator("#step-3 .step-copy h3").evaluate((node) => scrollTo(0, node.getBoundingClientRect().top + scrollY - innerHeight / 2));
+    await page.locator("#step-3 .crop img").waitFor({ state: "visible" });
+    if (width > 860) {
+      await page.locator("#step-3.is-active").waitFor();
+      assert.equal(await page.locator(".step.is-active").count(), 1, "one step is on stage at a time");
+      assert.equal(await page.locator("#step-1 .step-shot").evaluate((node) => getComputedStyle(node).opacity), "0", "the other screens leave the stage");
+      assert.equal(await page.locator("#step-1 .crop").isVisible(), false, "hidden screens cannot receive keyboard focus");
+      assert.equal(await page.locator("#step-3 .step-shot").evaluate((node) => getComputedStyle(node).position), "sticky");
+    } else {
+      assert.equal(await page.locator("#step-1 .step-shot").evaluate((node) => getComputedStyle(node).opacity), "1", "a narrow screen shows every step's screen");
+    }
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${width}px tour overflows`);
+    assert.equal(await page.locator(".step").count(), 5, "the tour lists five steps");
     assert.equal(await page.locator("video").count(), 0, "the page carries no video");
-    await choose(page, "who", "ana");
+    await ask(page, "ana", "grafana");
     await page.evaluate(() => scrollTo(0, 0));
     if (output && [1440, 768, 390].includes(width)) await page.screenshot({ path: join(output, `${width}.png`), fullPage: true });
     await context.close();
-    console.log(`PASS ${width}px: geometry, navigation, keyboard walkthrough, and eight engine decisions`);
+    console.log(`PASS ${width}px: geometry, navigation, the tour stage, the matrix and eight engine decisions`);
   }
 
   const plain = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 390, height: 844 } });
@@ -86,10 +97,9 @@ try {
   await staticPage.goto(url);
   assert.equal(await staticPage.locator("[data-fallback]").isVisible(), true);
   assert.equal(await staticPage.locator("h1").isVisible(), true);
-  await staticPage.locator("label:has(#walk-4)").click();
-  assert.equal(await staticPage.locator("#step-4").isVisible(), true);
+  for (const n of [1, 4, 5]) assert.equal(await staticPage.locator(`#step-${n} .crop img`).isVisible(), true, "every tour step shows its screen without scripts");
   await plain.close();
-  console.log("PASS JavaScript disabled: explanation, recorded answer and walkthrough steps");
+  console.log("PASS JavaScript disabled: explanation, recorded answer and tour steps");
 
 
   const failing = await browser.newContext();
@@ -118,17 +128,19 @@ try {
   await saving.close();
   console.log("PASS Save-Data: download waits for the visitor");
   const moving = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-  const tour = await moving.newPage(); checkPage(tour);
-  await tour.goto(url);
-  await tour.locator(".walk").scrollIntoViewIfNeeded();
-  await tour.mouse.move(1, 1); // hovering the tour pauses it
-  await tour.locator("#walk-2:checked").waitFor({ state: "attached", timeout: 9000 });
-  await tour.locator("label:has(#walk-4)").click();
-  assert.equal(await tour.locator(".walk").getAttribute("data-auto"), null, "a click hands the tour to the visitor");
-  await tour.waitForTimeout(7000);
-  assert.equal(await tour.locator("#walk-4").isChecked(), true, "the tour does not move after the visitor chose a step");
+  const motion = await moving.newPage(); checkPage(motion);
+  await motion.goto(url);
+  await motion.locator("#scene-bob:checked").waitFor({ state: "attached", timeout: 9000 });
+  await motion.locator("label:has(#scene-anon)").click();
+  await motion.waitForTimeout(6500);
+  assert.equal(await motion.locator("#scene-anon").isChecked(), true, "the doorway does not move after the visitor chose a request");
+  assert.equal(await motion.locator("#door-anon").isVisible(), true);
+  await motion.locator("#step-1 .step-copy").scrollIntoViewIfNeeded();
+  const before = await motion.evaluate(() => scrollY);
+  await motion.waitForTimeout(2500);
+  assert.equal(await motion.evaluate(() => scrollY), before, "the tour never scrolls or advances on its own");
   await moving.close();
-  console.log("PASS tour: plays on its own, stops once the visitor chooses");
+  console.log("PASS motion: the doorway plays, stops once the visitor chooses, and the tour waits");
   assert.deepEqual(errors, [], "no uncaught browser errors");
 } finally {
   await browser.close();

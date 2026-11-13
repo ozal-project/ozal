@@ -1,16 +1,17 @@
 # Ozal project page
 
 Static site for `ozal.dev` (`ozal.octaviosantacruz.com` and the old `switchboard.`
-hostname stay as aliases), built with Astro and served by Ozal Pages. Its tokens (warm graphite, Marfil
-ivory and camel, Geist) are shared with the
-console.
+hostname stay as aliases), built with Astro and served by Ozal Pages. It follows
+[product design](../docs/architecture/product-design.md): warm ink and graphite as the two
+quiet colours, camel as the only loud one (actions, focus, the current place), Geist, and
+green, red and blue kept for states.
 
 Publishing is CI: a push to `main` that touches `site/` or the engine paths
 runs `.github/workflows/site.yml`, which builds, refuses secrets
 in `dist/`, uploads through the deploy endpoint with a GitHub OIDC token (project
 `ozal-site`, renamed on the edge with `ozal project rename`), checks the public page and rolls back to the last good build
-if that check fails. The explanation, walkthrough tabs and capability cards work without JavaScript.
-Only the optional live engine and progressive entrance motion use client scripts;
+if that check fails. Every claim, the doorway's three requests, the tour and the status list work without JavaScript.
+Only the live engine, the doorway's playback, the tour's sticky stage, the copy button and entrance motion use client scripts;
 all content is visible if those scripts fail.
 
 ```bash
@@ -30,20 +31,30 @@ section comes into view) and copies the matching `wasm_exec.js`. Both are build 
 committed. `internal/policydemo` is the only code in between; it adds input checks, not policy, and a
 test compares its answer with `auth.NewReport`. The page states what it does not simulate.
 
-The first screen says what Ozal is (the front door for self-hosted apps) with a
-before/after comparison. "Everyone goes through one door" follows: an animated map (CSS
-only, still under reduced motion, a plain list under 640 px) of three people reaching
-Ozal and four apps, with the request pipeline and a `policy explain` trace beside
-it. "Make an app private in four steps" and "Your domains, one certificate each" reuse
-the console's sign-in explanation and Domains card (demo data). The live engine is a
-console-style window: compact choices, the request's path through Ozal and the answer
-with its stages. The walkthrough is five real console screens behind native radio tabs
-that advance on their own while on screen (paused on hover, handed to the visitor on the
-first click or key, off under reduced motion; no video; `scripts/demo/tour.mjs`
-regenerates the stills by signing in with a host login). Below it, capability
-cards summarize Ozal's access, identity, policy and publication surfaces. The
-site presents capabilities without a public roadmap. The public source is
-linked; release downloads stay unadvertised until Ozal artifacts exist.
+The page is ordered as a product story:
+
+1. **First screen.** What Ozal is, "Get started", and the doorway: three recorded requests for
+   `grafana.acme.dev` (let in, refused with a reason, sent to sign in) that walk the checks one by
+   one. Native radios choose the request; `page.ts` plays the three twice while on screen and stops
+   at the first click or key. Under reduced motion it rests on the first request.
+2. **Why it exists.** The three usual ways to share an internal tool and what each costs.
+3. **How it works.** The checks in order, a `policy explain` trace, and the identity headers an
+   app receives. Only stages that run by default are listed.
+4. **Live demo.** An access matrix: four people against four apps, every cell answered by the
+   real engine. Choosing a cell explains that answer; the sign-in settings re-answer the whole
+   matrix, and a cell whose answer changed flashes once.
+5. **The console.** Five real screens, each labelled with who sees it (operator, Ana or Bob)
+   and cropped in CSS to the part the step is about; the link opens the whole still. On a wide
+   screen `page.ts` adds `.is-scrolly`: the screens share one sticky stage and the one shown is
+   the step whose text is at the middle of the viewport. The page scrolls normally and never
+   moves on its own. Without scripts, or on a narrow screen, every step keeps its own screen.
+   The page carries no video. `scripts/demo/tour.mjs` regenerates the stills by signing in with
+   a host login; if their layout changes, update the `.crop-*` rules in `src/styles.css`.
+6. **Also in the binary, status, and get started.** A Domains card (demo data), what works today
+   with how far each feature is proven, who Ozal is and is not for, and the commands to try it.
+
+The site presents capabilities without a public roadmap. The public source is linked; the page
+does not link to release downloads.
 Automatic site publication requires repository variable `OZAL_SITE_DEPLOY_ENABLED=true`,
 set only after the edge trusts the new repository owner and workflow.
 
@@ -105,7 +116,7 @@ node scripts/demo/site-check.mjs --url http://127.0.0.1:4321 --chrome /path/to/c
 ```
 
 The check covers 1440/1024/768/390/320 px, horizontal overflow, visible navigation,
-keyboard walkthrough tabs, tour autoplay and hand-off, live policy decisions, a failed WASM download and
+the tour's sticky stage, the doorway's playback and hand-off, the matrix and its live decisions, a failed WASM download and
 retry, Save-Data, and the page with JavaScript disabled. It does not publish the
 site or exercise a production sign-in. `scripts/verify.sh` remains the full gate;
 the browser check is separate because it requires an installed Chrome/Chromium.

@@ -24,6 +24,7 @@ exact fields and commands.
 ## I want to contribute
 
 1. [Design](architecture/design.md): the pattern every package follows.
+   [Product design](architecture/product-design.md) covers the visible surfaces.
 2. [Stack](architecture/stack.md): the dependency decisions and why.
 3. [Engineering guide](engineering.md): the contracts, and how to verify a change.
 4. [Identity](architecture/identity-login.md) and [host sessions](architecture/host-sessions.md): how sign-in and sessions work.

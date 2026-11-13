@@ -17,7 +17,7 @@ The current checkout may include later features.
 
 ## Contributing
 
-[Design](architecture/design.md) · [Stack](architecture/stack.md) ·
+[Design](architecture/design.md) · [Product design](architecture/product-design.md) · [Stack](architecture/stack.md) ·
 [Engineering contracts and verification](engineering.md) ·
 [Identity](architecture/identity-login.md) ·
 [Host sessions](architecture/host-sessions.md).

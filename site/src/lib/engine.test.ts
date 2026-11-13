@@ -1,7 +1,7 @@
 // node --test --experimental-strip-types src/lib/engine.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { APPS, describe, plainDecision, requestFor, stagesFor, type Report, type Visitor } from "./engine.ts";
+import { APPS, cellWord, describe, plainDecision, requestFor, stagesFor, type Report, type Visitor } from "./engine.ts";
 
 const visitor = (over: Partial<Visitor> = {}): Visitor => ({ who: "ana", verified: true, method: "passkey", bound: false, ...over });
 const report = (over: Partial<Report> & { decision: Report["decision"] }): Report => ({ route: "x", protected: true, scope: "authorization_only", principal: { email: "ana@acme.dev" }, ...over });
@@ -54,6 +54,20 @@ test("the verdict separates refused, let in, and let in with a condition", () =>
   assert.deepEqual(describe(report({ decision: { ...base, allowed: true, code: "allowed", reason: "ok" } })), { state: "allowed", title: "Let in" });
   assert.equal(describe(report({ decision: { ...base, allowed: true, code: "allowed", reason: "allowed; the session must also have a login within the last 15 min (max_auth_age_minutes)" } })).state, "again");
   assert.equal(describe(report({ decision: { allowed: false, step_up: true, code: "context_step_up_required", reason: "x" } })).title, "Asks to sign in again");
+});
+
+test("a visitor without a session is sent to sign in, not refused", () => {
+  const gate = report({ scope: "gate_only", decision: { allowed: false, step_up: false, code: "authentication_required", reason: "x" } });
+  assert.deepEqual(describe(gate), { state: "again", title: "Sign in first" });
+  assert.equal(cellWord(gate), "Sign in");
+});
+
+test("a matrix cell names the answer in one or two words", () => {
+  const cell = (decision: Report["decision"]) => cellWord(report({ decision }));
+  assert.equal(cell({ allowed: true, step_up: false, code: "allowed", reason: "ok" }), "Let in");
+  assert.equal(cell({ allowed: false, step_up: false, code: "domain_not_allowed", reason: "x" }), "Refused");
+  assert.equal(cell({ allowed: false, step_up: true, code: "context_step_up_required", reason: "x" }), "Sign in again");
+  assert.equal(cell({ allowed: true, step_up: false, code: "allowed", reason: "allowed; the session must also have a login within the last 15 min (max_auth_age_minutes)" }), "Conditional");
 });
 
 test("the pipeline stops where the engine stopped, and says what it does not simulate", () => {
