@@ -3,7 +3,7 @@
 Static site for `ozal.dev` (`ozal.octaviosantacruz.com` and the old `switchboard.`
 hostname stay as aliases), built with Astro and served by Ozal Pages. It follows
 [product design](../docs/architecture/product-design.md): warm ink and graphite as the two
-quiet colours, camel as the only loud one (actions, focus, the current place), Geist, and
+quiet colours, camel as the only loud one, on the detail to see first (the headline, the next action, the current choice), Geist, and
 green, red and blue kept for states.
 
 Publishing is CI: a push to `main` that touches `site/` or the engine paths

@@ -38,9 +38,13 @@ them, they win.
   the refused person.
 - **Two quiet colours, one loud colour.** Warm ink is the ground (about 60%
   of a screen) and graphite carries surfaces, borders and quiet text (about
-  30%). Camel is the only loud colour (about 10%) and means "Ozal, here, now":
-  the next action, the current place, focus and what is live. Ivory is text
-  and the arch of the mark. If two things on a screen are loud, one is wrong.
+  30%). Camel is the only loud colour (about 10%). It goes on the one detail
+  a screen should be read by first: the headline's key words, the next action,
+  the choice the visitor just made, the current place and focus. Everything
+  else stays quiet so that detail stands out. Section labels, bullets, link
+  underlines, borders and glows are decoration and are never camel. Ivory is
+  text and the arch of the mark. If two things on a screen compete for the
+  first look, one of them is wrong.
 - **States sit outside that budget.** Green, red, blue and yellow mean
   allowed, refused, waiting and warning. They appear only where a real state
   exists, always with a word or a code, and the loud colour never stands in
@@ -116,7 +120,8 @@ Before a visible change is complete:
 - Which reference and principle does each new pattern come from, and is it
   in the map above?
 - Is camel the only loud colour on the screen, at about a tenth of it, and
-  does every state colour mark a real state?
+  is it on the detail that should be seen first rather than on decoration?
+- Does every state colour mark a real state?
 - Is any state shown that the system cannot prove?
 - Are the empty, loading, failed and refused states designed?
 - Does it work with reduced motion, keyboard only and at 360 px wide?
