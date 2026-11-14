@@ -89,6 +89,9 @@ Every stage emits an event with its decision; nothing decides silently.
   the rules evaluated, which powers explanations.
 - **Raw vs resolved config:** the file holds intent (with secret references);
   the resolved config holds secrets in memory only and is never written back.
+  The one secret the control plane writes is a Cloudflare token the operator
+  pastes in the console: it goes to its own 0600 file beside the state and the
+  config gains only a `file:` reference to it, never the value.
 
 ## Package layout (target)
 

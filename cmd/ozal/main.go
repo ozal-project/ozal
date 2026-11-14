@@ -85,6 +85,7 @@ func subcommands() map[string]func(context.Context, []string, io.Writer) error {
 		"site":            runSite,
 		"schema":          runSchema,
 		"setup":           runSetup,
+		"cloudflare":      runCloudflare,
 		"runtime":         runRuntime,
 		"user":            runUser,
 		"validate":        runValidate,
@@ -228,6 +229,19 @@ func main() {
 	}
 	if *dbPath != "" {
 		adminOpts = append(adminOpts, admin.WithUpdateStatusFile(filepath.Join(filepath.Dir(*dbPath), "update-status.json")))
+		// The console keeps a Cloudflare token beside the state; the host
+		// command it prints moves certificates to DNS-01 with it.
+		// The host command refuses a token path reached through a link, so
+		// the console names the directory as it really is.
+		stateDir, err := cloudflareStateDir(*dbPath)
+		if err != nil {
+			log.Fatalf("resolve Cloudflare state directory: %v", err)
+		}
+		adminOpts = append(adminOpts, admin.WithCloudflareSetup(admin.CloudflareSetup{
+			Dir:     stateDir,
+			Verify:  verifyCloudflareToken,
+			Command: hostCloudflareCommand(*configPath, systemdUnit()),
+		}))
 		// PAGES-010: a GitHub App connected from the console keeps its key
 		// beside the state database, readable by this service only.
 		adminOpts = append(adminOpts, admin.WithGitHubKeyDir(filepath.Dir(*dbPath)))
@@ -989,6 +1003,10 @@ func runCertificateManager(ctx context.Context, manager certificateWorker, relea
 
 // hostEnrolCommand describes how to enrol on this host from its own paths.
 func hostEnrolCommand(configPath string) string {
+	return hostActionCommand(configPath, "console enrol")
+}
+
+func hostActionCommand(configPath, action string) string {
 	exe, err := os.Executable()
 	if err != nil {
 		return ""
@@ -999,7 +1017,7 @@ func hostEnrolCommand(configPath string) string {
 	if abs, err := filepath.Abs(configPath); err == nil {
 		configPath = abs
 	}
-	return enrolCommand(exe, configPath, func(name string) string {
+	return actionCommand(exe, configPath, action, func(name string) string {
 		found, err := exec.LookPath(name)
 		if err != nil {
 			return ""

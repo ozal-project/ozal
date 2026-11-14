@@ -224,13 +224,27 @@ func sshHint(sshConnection, user, base string) string {
 // the config is at the installed path, explicit otherwise. lookPath resolves
 // a command name to the file it runs ("" when absent).
 func enrolCommand(exe, configPath string, lookPath func(string) string) string {
+	return actionCommand(exe, configPath, "console enrol", lookPath)
+}
+
+func actionCommand(exe, configPath, action string, lookPath func(string) string) string {
 	name := exe
 	if found := lookPath("ozal"); found != "" && found == exe {
 		name = "ozal"
 	}
-	command := "sudo " + name + " console enrol"
+	command := "sudo " + shellArg(name) + " " + action
 	if configPath != installedConfig {
-		command += " -config " + configPath
+		command += " -config " + shellArg(configPath)
 	}
 	return command
+}
+
+// shellArg preserves one literal argument when an operator copies a command.
+func shellArg(value string) string {
+	if value != "" && strings.IndexFunc(value, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("_@%+=:,./-", r))
+	}) < 0 {
+		return value
+	}
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }

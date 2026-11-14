@@ -17,6 +17,10 @@ conditions. It is not an ASVS certification or a complete audit of an installati
   around certificate problems, staging tests or connections to the origin.
 - Keep private keys on their host. Configure secrets through `file:`/`env:`
   references and minimal permissions. Never paste them into chats, URLs or repositories.
+  To connect Cloudflare from the console, paste an API token scoped to the zones Ozal
+  serves, with the four permissions **Domains** lists. The edge stores it in a 0600 file
+  beside its state and never shows it again. Moving certificates to DNS-01 with it still
+  takes a command on the host.
 - Distinguish visitors, CI publishers, connectors and administrators. A valid
   identity in one scope grants no authority in the others.
 - Back up and rehearse recovery of keys, configuration and data. An old copy can

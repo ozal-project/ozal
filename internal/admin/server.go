@@ -66,6 +66,8 @@ type Handler struct {
 	// login host, approved in the host's terminal.
 	codes           *enrolcode.Book
 	countries       countries
+	cloudflare      *CloudflareSetup
+	cloudflareMu    sync.Mutex
 	flags           fs.FS
 	countryCredit   CountryCredit
 	people          people
@@ -125,6 +127,7 @@ func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 	h.mux.HandleFunc("DELETE /routes/{host}", h.requireTool("applications", h.deleteRoute))
 	h.mux.HandleFunc("POST /_/api/policy/explain", h.requireTool("applications", h.explainPolicy))
 	h.mux.HandleFunc("GET /_/api/zones", h.requireTool("applications", h.listZones))
+	h.registerCloudflare()
 	h.mux.HandleFunc("POST /_/api/zones", h.requireTool("applications", h.addZone))
 	h.mux.HandleFunc("DELETE /_/api/zones/{name}", h.requireTool("applications", h.removeZone))
 	h.mux.HandleFunc("POST /_/api/zones/{name}/check", h.requireTool("applications", h.checkZone))
