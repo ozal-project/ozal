@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"net/mail"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +21,7 @@ import (
 
 	"github.com/ozal-project/ozal/internal/adminid"
 	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/invitation"
 	"github.com/ozal-project/ozal/internal/passkey"
 	"github.com/ozal-project/ozal/internal/useragent"
 )
@@ -428,12 +428,9 @@ func IssueFirstRun(ctx context.Context, store identities) (string, time.Time, er
 	return token, expires, nil
 }
 
+// validEmail is the same rule as a visitor invitation's.
 func validEmail(email string) bool {
-	if len(email) < 3 || len(email) > 254 {
-		return false
-	}
-	addr, err := mail.ParseAddress(email)
-	return err == nil && addr.Address == email
+	return invitation.ValidEmail(email)
 }
 
 func cleanName(name string) (string, bool) {

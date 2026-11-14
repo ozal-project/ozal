@@ -16,6 +16,7 @@ import (
 
 	"github.com/go-webauthn/webauthn/webauthn"
 
+	"github.com/ozal-project/ozal/internal/invitation"
 	"github.com/ozal-project/ozal/internal/passkey"
 )
 
@@ -50,8 +51,8 @@ type Invitation struct {
 // someone's account.
 func (s *Identity) Invite(ctx context.Context, email, name string, groups []string, recoverAccess bool, ttl time.Duration) (Invitation, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
-	if len(email) < 3 || !strings.Contains(email, "@") {
-		return Invitation{}, fmt.Errorf("invalid email %q", email)
+	if !invitation.ValidEmail(email) {
+		return Invitation{}, fmt.Errorf("%q is not an email address with a domain, such as ana@example.com", email)
 	}
 	groupsJSON, err := encodeGroups(groups)
 	if err != nil {

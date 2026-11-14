@@ -149,6 +149,12 @@ ozal user invite -config /path/to/my-edge/config.json \
   -email ana@example.com -group members -return-to http://localhost:8888/
 ```
 
+The command refuses an address without a real domain (`ana@example` or `tu@correo`) and
+a group that no application, person or console group uses yet, and suggests the closest
+existing name. To create a new group on purpose, add `-new-group`. After the link, it
+prints the person's groups and the applications they will be able to open, or says that
+none admits them yet.
+
 The invitation is a visitor credential. It is separate from the administrator link in
 step 2. Send it to its recipient over a trusted channel.
 
