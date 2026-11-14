@@ -3,13 +3,15 @@ import assert from "node:assert/strict";
 import { confirmWithPasskey } from "./passkey.ts";
 import { withPasskeyProof } from "./accessRequests.ts";
 
-test("HTTPS confirmation navigates without retrying a mutation with the old session", async () => {
+test("HTTPS confirmation navigates without retrying a mutation with the old session", { timeout: 10_000 }, async () => {
   const originalFetch = globalThis.fetch;
   const seen: string[] = [];
   const went: string[] = [];
+  let didNavigate!: () => void;
+  const navigated = new Promise<void>((resolve) => { didNavigate = resolve; });
   const globals = globalThis as unknown as Record<string, unknown>;
   const originals = new Map(["location", "sessionStorage"].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  Object.defineProperty(globalThis, "location", { configurable: true, value: { assign: (url: string) => went.push(url) } });
+  Object.defineProperty(globalThis, "location", { configurable: true, value: { assign: (url: string) => { went.push(url); didNavigate(); } } });
   Object.defineProperty(globalThis, "sessionStorage", { configurable: true, value: { setItem() {} } });
   let mutations = 0;
   try {
@@ -26,7 +28,7 @@ test("HTTPS confirmation navigates without retrying a mutation with the old sess
     }, confirmWithPasskey);
     const result = await Promise.race([
       confirmation.then(() => "retried"),
-      new Promise((resolve) => setTimeout(() => resolve("navigating"), 50)),
+      navigated.then(() => "navigating"),
     ]);
     assert.equal(result, "navigating");
     assert.equal(mutations, 1);
