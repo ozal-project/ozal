@@ -52,7 +52,7 @@ export function UpdateDialogContent({ plan, job, error, loading, busy, confirmin
       {plan.result === "available" ? <>
         {plan.migrations && <p className="text-sm" role="note">This release may update the state database. If it cannot start, Ozal restores the previous binary and database.</p>}
         {plan.reason && <p className="text-muted-foreground text-xs">{plan.reason}</p>}
-        {plan.notes_url && <p className="text-xs"><a className="underline" href={plan.notes_url} target="_blank" rel="noreferrer">Release notes</a></p>}
+        {plan.notes_url && <p className="text-xs"><a className="link" href={plan.notes_url} target="_blank" rel="noreferrer">Release notes</a></p>}
         {canInstall ? <div className="flex flex-wrap justify-end gap-2">
           <Button variant="outline" disabled={busy || confirming} onClick={onClose}>Cancel</Button>
           <Button disabled={busy || confirming} onClick={onApply}>{confirming ? "Confirm with your passkey…" : busy ? "Starting…" : `Update to ${plan.latest}`}</Button>
