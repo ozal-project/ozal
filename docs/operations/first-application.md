@@ -142,18 +142,9 @@ Create a visitor account for someone who should reach the application, in the gr
 that grants access. In the console, open **People → Invite person**, pick the group and
 copy the one-time link. Groups are picked from the existing ones: a group an application
 requires is already there, and a new one is created first in **People → Groups → New
-group**, with or without members. From the host:
-
-```sh
-ozal user invite -config /path/to/my-edge/config.json \
-  -email ana@example.com -group members -return-to http://localhost:8888/
-```
-
-The command refuses an address without a real domain (`ana@example` or `tu@correo`) and
-a group that no application, person or console group uses yet, and suggests the closest
-existing name. To create a new group on purpose, add `-new-group`. After the link, it
-prints the person's groups and the applications they will be able to open, or says that
-none admits them yet.
+group**, with or without members. After the first administrator, this and the rest of the
+day-to-day work happen in the console; the host commands for people are for automation
+and emergencies ([reference](../reference.md#people-from-the-host)).
 
 The invitation is a visitor credential. It is separate from the administrator link in
 step 2. Send it to its recipient over a trusted channel.

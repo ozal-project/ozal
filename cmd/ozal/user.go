@@ -272,6 +272,7 @@ func printInvite(out io.Writer, email, link string, expires time.Time) {
 	fmt.Fprintf(out, "Enrolment link for %s (single use, expires %s):\n\n  %s\n\n",
 		email, expires.UTC().Format(time.RFC3339), link)
 	fmt.Fprintln(out, "Send it over a channel you trust: whoever opens it first gets the passkey.")
+	fmt.Fprintln(out, "Day to day, invite people in the console: People → Invite person.")
 }
 
 // printReach says what the invited person will be able to open, from the

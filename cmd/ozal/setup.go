@@ -111,8 +111,8 @@ system service or move your existing website. Keep this directory private.
 3. Run console login -config /path/to/config.json on this host.
    Open its one-use private link, then choose Applications. The session lasts
    15 minutes and stays in this browser tab; closing/reloading the tab locks it.
-4. From the host, invite a visitor with group members (command printed by setup).
-   Send the one-use invitation over a trusted channel; it expires in 15 minutes.
+4. In the console, open People → Invite person, pick the group members and copy
+   the link. Send it over a trusted channel; it expires in 15 minutes.
 5. The visitor creates a passkey and opens http://localhost:8888/. Without a
    session the app asks for login; a person without members must be refused.
 6. In People, edit membership, review the consequences and confirm that previous
@@ -144,7 +144,7 @@ or restore the previous config and reload; DNS is a separate operator action.
 	fmt.Fprintf(out, "Start: ozal -config %q -db %q\n", filepath.Join(root, "config.json"), dbPath)
 	if socket != "" {
 		fmt.Fprintf(out, "Operator login (after start): ozal console login -config %q\n", filepath.Join(root, "config.json"))
-		fmt.Fprintf(out, "Invite (after start): ozal user invite -config %q -email person@example.com -group members -return-to http://localhost:8888/\n", filepath.Join(root, "config.json"))
+		fmt.Fprintln(out, "Invite people (after start): in the console, People → Invite person, group members.")
 	}
 	fmt.Fprintf(out, "Console: http://127.0.0.1:9090/applications\nGuide: %s\n", filepath.Join(root, "START-HERE.md"))
 	return nil
