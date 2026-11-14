@@ -1,0 +1,68 @@
+/* Console setup by code: a three-step page on top of passkey.css. */
+.enrol { max-width: 440px; }
+.enrol h1 { margin-bottom: 8px; }
+.enrol h2 { margin: 22px 0 8px; font-size: 1rem; font-weight: 650; }
+.enrol code { font: 0.86em var(--mono); padding: 1px 6px; border-radius: 6px; background: var(--raised); border: 1px solid var(--border); color: var(--fg); overflow-wrap: anywhere; }
+
+/* Progress: three dots joined by a line that fills as steps complete. */
+.steps { list-style: none; display: grid; grid-template-columns: repeat(3, 1fr); margin: 0 0 24px; padding: 0; counter-reset: step; }
+.steps li { position: relative; display: grid; justify-items: center; gap: 6px; font-size: 0.74rem; font-weight: 600; color: var(--muted); }
+.steps li + li::before { content: ""; position: absolute; top: 13px; right: 50%; width: 100%; height: 2px; background: var(--border); z-index: 0; }
+.steps .dot { position: relative; z-index: 1; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--border); background: var(--card); font: 600 0.78rem/1 var(--mono); }
+.steps li[aria-current="step"] { color: var(--fg); }
+.steps li[aria-current="step"] .dot { border-color: var(--lamp); color: var(--fg); box-shadow: 0 0 0 4px color-mix(in srgb, var(--lamp) 18%, transparent); }
+.steps li.complete { color: var(--fg); }
+.steps li.complete .dot { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); }
+.steps li.complete + li::before, .steps li[aria-current="step"]:not(:first-child)::before { background: var(--accent); }
+
+/* The code field reads like the terminal that printed it. */
+.code-input { margin-bottom: 6px; padding: 14px 12px; font: 600 1.7rem/1 var(--mono); letter-spacing: 0.18em; text-align: center; text-transform: uppercase; }
+/* The example code stays readable: --muted on --raised is above 4.5:1. */
+.code-input::placeholder { color: var(--muted); opacity: 1; }
+.code-input[aria-invalid="true"] { border-color: var(--err); }
+.field-help { margin: 0 0 16px; font-size: 0.82rem; color: var(--muted); }
+.field-help.error { color: var(--err); }
+/* Headings take focus when a step changes, for screen readers; no ring. */
+.enrol h1:focus { outline: none; }
+.aside { margin-top: 18px; font-size: 0.88rem; }
+.aside summary { cursor: pointer; color: var(--muted); }
+.aside summary:hover, .aside[open] summary { color: var(--fg); }
+.aside p { margin: 8px 0 0; font-size: 0.88rem; }
+
+/* Whose request this is, so the person recognises their own. */
+.request { display: grid; gap: 0; margin: 14px 0 12px; padding: 4px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--raised); }
+.request div { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; font-size: 0.9rem; }
+.request div + div { border-top: 1px solid var(--border); }
+.request dt { color: var(--muted); }
+.request dd { margin: 0; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+.request dd#req-operator, .request .countdown { white-space: nowrap; }
+.countdown { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.countdown.low { color: var(--err); }
+.note { margin-bottom: 16px; padding: 10px 12px; border-left: 3px solid var(--lamp); background: color-mix(in srgb, var(--lamp) 8%, transparent); border-radius: 0 8px 8px 0; color: var(--fg); font-size: 0.9rem; }
+.link-button.quiet { display: block; margin: 14px auto 0; color: var(--muted); font-weight: 500; }
+.link-button.quiet:hover { color: var(--err); }
+
+/* Done. */
+.done-mark { display: grid; place-items: center; width: 52px; height: 52px; margin: 0 0 14px; border-radius: 50%; background: color-mix(in srgb, var(--ok) 16%, transparent); border: 1px solid color-mix(in srgb, var(--ok) 45%, transparent); }
+.done-mark svg { width: 26px; height: 26px; fill: none; stroke: var(--ok); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.next { margin: 0 0 14px; padding-left: 1.2em; display: grid; gap: 10px; color: var(--muted); font-size: 0.92rem; }
+.next li::marker { color: var(--fg); font-weight: 700; }
+.next code.copyable { display: block; margin-top: 6px; padding: 9px 10px; cursor: copy; user-select: all; }
+.next a { font-weight: 600; overflow-wrap: anywhere; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .enrol section:not([hidden]) { animation: rise 180ms ease-out; }
+  @keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+}
+@media (max-width: 380px) {
+  .code-input { font-size: 1.4rem; letter-spacing: 0.12em; }
+}
+
+/* Request details: tags that qualify an address, and the code echoed back. */
+.request .mono { font-family: var(--mono); letter-spacing: 0.08em; }
+.tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); font-size: 0.7rem; font-weight: 600; color: var(--muted); vertical-align: 1px; white-space: nowrap; }
+.tag.match { border-color: color-mix(in srgb, var(--ok) 50%, transparent); color: var(--ok); }
+.flag { display: inline-block; width: 18px; height: 18px; margin-right: 7px; vertical-align: -4px; }
+.flag-code { margin-right: 6px; font: 600 0.72rem var(--mono); color: var(--muted); }
+.credit { margin: -6px 0 12px; font-size: 0.72rem; color: var(--muted); text-align: right; }
+.credit a { color: var(--muted); }

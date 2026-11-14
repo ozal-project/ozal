@@ -240,6 +240,7 @@ func (h *Handler) registerIdentities() {
 	h.mux.HandleFunc("POST /_/api/admin/requests/status", h.accessRequestStatus)
 	h.mux.HandleFunc("POST /_/api/admin/remote/start", h.remoteStart)
 	h.mux.HandleFunc("POST /_/api/admin/remote/finish", h.remoteFinish)
+	h.registerCodeEnrolment()
 	h.mux.HandleFunc("GET /_/api/admins", h.requireTool("administrators", h.listAdmins))
 	h.mux.HandleFunc("POST /_/api/admins/invite", h.requireTool("administrators", h.inviteAdmin))
 	h.mux.HandleFunc("GET /_/api/admins/requests", h.requireTool("administrators", h.listAccessRequests))
@@ -316,14 +317,26 @@ func (h *Handler) adminState(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, state)
 }
 
-// issueEnrolment is the host's one door: a printed link, valid ten minutes.
+// issueEnrolment is the host's one door: a printed link valid ten minutes, or
+// with mode "code" a short code typed on the login host and approved in the
+// terminal (code_enrolment.go).
 func (h *Handler) issueEnrolment(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Kind  string `json:"kind"`
 		Email string `json:"email"`
+		Mode  string `json:"mode"`
+		// Operator is who ran the command on the host and From the address
+		// of their SSH session; the code page shows both so the person
+		// recognises their own request.
+		Operator string `json:"operator"`
+		From     string `json:"from"`
 	}
 	if err := decodeJSON(w, r, &req); err != nil || (req.Kind != enrolBootstrap && req.Kind != enrolRecover) {
 		writeError(w, http.StatusBadRequest, "kind must be bootstrap or recover")
+		return
+	}
+	if req.Mode != "" && req.Mode != "link" && req.Mode != "code" {
+		writeError(w, http.StatusBadRequest, "mode must be link or code")
 		return
 	}
 	email := strings.ToLower(strings.TrimSpace(req.Email))
@@ -331,30 +344,44 @@ func (h *Handler) issueEnrolment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "recover needs the administrator's email")
 		return
 	}
+	if req.Mode == "code" {
+		h.issueCode(w, r, req.Kind, email, codeRequest{Operator: req.Operator, From: req.From})
+		return
+	}
 	if !h.recordMutationIntent(w, r, "admin.enrolment", req.Kind) {
 		return
 	}
-	raw := make([]byte, 32)
-	if _, err := rand.Read(raw); err != nil {
+	token, hash, err := newEnrolmentToken()
+	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "enrolment could not be issued")
 		return
 	}
-	token := base64.RawURLEncoding.EncodeToString(raw)
-	hash := sha256.Sum256([]byte(token))
 	expires := time.Now().Add(enrolmentTTL)
-	switch err := h.identities.IssueEnrolment(r.Context(), adminid.EnrolmentRequest{Kind: req.Kind, Email: email}, hash[:], expires); {
-	case errors.Is(err, adminid.ErrAlreadyEnrolled):
-		writeError(w, http.StatusConflict, "an administrator already exists; use recover with their email")
+	if !h.storeEnrolment(w, r, req.Kind, email, hash, expires) {
 		return
-	case errors.Is(err, adminid.ErrAccountNotFound):
-		writeError(w, http.StatusNotFound, "no administrator has that email")
-		return
-	case err != nil:
-		writeError(w, http.StatusServiceUnavailable, "enrolment could not be issued")
-		return
+	}
+	if req.Kind == enrolRecover {
+		// A recovery link retires earlier unused recoveries, codes included.
+		h.codes.Supersede("", req.Kind, email)
 	}
 	h.emit(events.Event{Type: events.Type("admin.enrolment_issued"), Actor: localActor(r), Code: req.Kind})
 	writeJSON(w, http.StatusCreated, map[string]any{"token": token, "expires": expires})
+}
+
+// storeEnrolment keeps the hash of a host-issued token, or answers why not.
+func (h *Handler) storeEnrolment(w http.ResponseWriter, r *http.Request, kind, email string, hash []byte, expires time.Time) bool {
+	switch err := h.identities.IssueEnrolment(r.Context(), adminid.EnrolmentRequest{Kind: kind, Email: email}, hash, expires); {
+	case errors.Is(err, adminid.ErrAlreadyEnrolled):
+		writeError(w, http.StatusConflict, "an administrator already exists; use recover with their email")
+		return false
+	case errors.Is(err, adminid.ErrAccountNotFound):
+		writeError(w, http.StatusNotFound, "no administrator has that email")
+		return false
+	case err != nil:
+		writeError(w, http.StatusServiceUnavailable, "enrolment could not be issued")
+		return false
+	}
+	return true
 }
 
 // newEnrolmentToken makes a one-use token and the hash that is stored.

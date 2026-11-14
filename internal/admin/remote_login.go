@@ -357,24 +357,23 @@ func (rl *RemoteLogin) ServeAdminLogin(w http.ResponseWriter, r *http.Request) b
 	if !ok {
 		return false
 	}
+	if strings.HasPrefix(r.URL.Path, codePath) {
+		return rl.serveCode(w, r, h, rp, loginOrigin)
+	}
 	id := r.URL.Query().Get("tx")
 	tx, ok := rl.lookup(id)
 	if !ok {
 		return false
 	}
-	loginHeaders(w.Header())
-	post := r.Method == http.MethodPost
-	if post && r.Header.Get("Origin") != loginOrigin {
-		writeError(w, http.StatusForbidden, "open this page from its own address")
+	post, ok := loginHostRequest(w, r, loginOrigin)
+	if !ok {
 		return true
 	}
 	switch {
 	case r.URL.Path == remotePath && !post:
 		rl.servePage(w, tx, id)
 	case r.URL.Path == remotePath+".js" && !post:
-		body, _ := loginHostAssets.ReadFile("loginhost/admin-login.js")
-		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-		_, _ = w.Write(body)
+		serveAsset(w, "loginhost/admin-login.js", "text/javascript; charset=utf-8")
 	case r.URL.Path == remotePath+"/begin" && post:
 		if tx.enrol != nil {
 			h.beginEnrol(w, r, rp, *tx.enrol, id)
@@ -433,6 +432,20 @@ func (rl *RemoteLogin) servePage(w http.ResponseWriter, tx remoteTx, id string) 
 	).Replace(string(body))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(page))
+}
+
+// loginHostRequest applies what every login-host answer here shares: the page
+// headers and, for a POST, an Origin equal to the login host. It reports
+// whether the request is a POST and whether it may go on; when it may not,
+// the refusal has been written.
+func loginHostRequest(w http.ResponseWriter, r *http.Request, loginOrigin string) (post, ok bool) {
+	loginHeaders(w.Header())
+	post = r.Method == http.MethodPost
+	if post && r.Header.Get("Origin") != loginOrigin {
+		writeError(w, http.StatusForbidden, "open this page from its own address")
+		return post, false
+	}
+	return post, true
 }
 
 // loginHeaders are the login host's page headers (internal/passkey pageHeaders).
