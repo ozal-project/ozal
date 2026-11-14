@@ -70,6 +70,10 @@ button:disabled { opacity: 0.55; cursor: progress; }
 .choice-actions .secondary { margin-top: 0; }
 .help section { margin-top: 22px; }
 .help h2 { margin: 0 0 6px; font-size: 1.05rem; }
+.help h3 { margin: 14px 0 4px; font-size: 0.95rem; }
+.help section > h3:first-child { margin-top: 0; }
+.help .triage { padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--raised); }
+.help .places-title { margin-top: 28px; }
 .help section p { margin: 0 0 6px; }
 .help > .secondary { margin-top: 26px; }
 .sites { display: grid; gap: 8px; margin-top: 16px; }
