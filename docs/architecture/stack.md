@@ -26,6 +26,7 @@ versions or keep a task status table in this file.
 | Console | React, TypeScript, Vite, Tailwind and Radix primitives (shadcn/ui pattern) | Static React SPA embedded in the binary; Node is only needed at build time. |
 | Public site | Static Astro, Tailwind and an optional Go/WASM engine | Accessible content without a Node server |
 | Typography | Self-hosted Geist Sans/Mono, OFL | Local assets and a CSP without font providers |
+| IP to country | An operator-supplied table such as DB-IP Lite (CC BY 4.0), read by `internal/ipcountry` with the standard library | Optional and offline: no lookup service, no address leaves the host |
 | CLI | Standard `flag`; separate `ozalctl` for SSH operation | Installation and automation; routine work from the console |
 | Telegram / GitHub App | net/http adapters | Optional, referenced locally, minimal permissions |
 | Audit | JSONL, SHA-256 and Ed25519 checkpoints | Local contract with explicit evidence limits |
