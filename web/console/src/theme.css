@@ -129,7 +129,29 @@
   .panel-head { @apply flex flex-wrap items-center justify-between gap-3 px-5 py-4; }
   /* A connecting line, as a divider next to labels. */
   .cord { stroke: #6b717b; fill: none; stroke-linecap: round; }
+  /* One link style: light indigo with a soft underline that firms on hover.
+     link-quiet is for secondary links in muted text (an event's host). */
+  .link {
+    color: var(--signal);
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--signal) 45%, transparent);
+    text-underline-offset: 4px;
+    cursor: pointer;
+  }
+  .link:hover { text-decoration-color: currentColor; }
+  .link-quiet {
+    color: var(--muted-foreground);
+    text-decoration: underline;
+    text-decoration-color: var(--border);
+    text-underline-offset: 4px;
+    cursor: pointer;
+  }
+  .link-quiet:hover { color: var(--foreground); text-decoration-color: var(--signal); }
 }
+
+/* A page title takes focus after navigation so screen readers announce the
+   new page; it is not a control, so it draws no focus box. */
+h1[tabindex="-1"]:focus { outline: none; }
 
 @keyframes lamp-pulse { 50% { opacity: 0.45; } }
 
