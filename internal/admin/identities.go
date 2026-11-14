@@ -1046,9 +1046,11 @@ type passkeyView struct {
 	// kind of passkey ("Synced passkey"), never a place.
 	Provider      string `json:"provider"`
 	ProviderKnown bool   `json:"provider_known"`
-	CreatedAt     string `json:"created_at"`
-	LastUsedAt    string `json:"last_used_at,omitempty"`
-	Current       bool   `json:"current,omitempty"`
+	// Synced says the provider reported it may copy the passkey elsewhere.
+	Synced     bool   `json:"synced"`
+	CreatedAt  string `json:"created_at"`
+	LastUsedAt string `json:"last_used_at,omitempty"`
+	Current    bool   `json:"current,omitempty"`
 }
 
 // listPasskeys shows the signed-in administrator their own active passkeys
@@ -1068,7 +1070,7 @@ func (h *Handler) listPasskeys(w http.ResponseWriter, r *http.Request) {
 	out := make([]passkeyView, 0, len(passkeys))
 	for _, p := range passkeys {
 		provider, _, known := passkey.Provider(p.AAGUID, p.Synced)
-		view := passkeyView{ID: base64.RawURLEncoding.EncodeToString(p.ID), Label: p.Label, Provider: provider, ProviderKnown: known, CreatedAt: p.CreatedAt.UTC().Format(time.RFC3339), Current: string(p.ID) == current}
+		view := passkeyView{ID: base64.RawURLEncoding.EncodeToString(p.ID), Label: p.Label, Provider: provider, ProviderKnown: known, Synced: p.Synced, CreatedAt: p.CreatedAt.UTC().Format(time.RFC3339), Current: string(p.ID) == current}
 		if !p.LastUsedAt.IsZero() {
 			view.LastUsedAt = p.LastUsedAt.UTC().Format(time.RFC3339)
 		}

@@ -596,6 +596,27 @@ function askInline(button, box, question, action, onYes) {
 // setupDevices lists the visitor's passkeys and lets them add or remove one
 // (ID-008). The server checks every request against a recent passkey proof;
 // when that lapses it answers 403 and the page sends the visitor to confirm.
+// backupState reads the providers as a hint, never as proof (the console's
+// lib/backupPasskey.ts decides the same way). An AAGUID names a provider or
+// a model, not a vault: two synced passkeys of one provider may hang on one
+// vault, two device-bound ones of one model may be independent, and an
+// unknown provider tells nothing. Only "one" and "same-provider" suggest
+// another place; nothing ever says the account is protected.
+function backupState(passkeys) {
+  if (!Array.isArray(passkeys) || passkeys.length === 0) return "unknown";
+  if (passkeys.length === 1) return "one";
+  if (passkeys.some((p) => !p.provider_known || !p.provider)) return "unknown";
+  if (new Set(passkeys.map((p) => p.provider)).size > 1) return "separate";
+  return passkeys.every((p) => p.synced === true) ? "same-provider" : "unknown";
+}
+
+function backupHint(passkeys) {
+  const state = backupState(passkeys);
+  if (state === "one") return "This is your only passkey. If you lose it, you need a new invitation. Add another in a different place: a security key, a password manager or another device.";
+  if (state === "same-provider") return "Your passkeys are all in " + passkeys[0].provider + ". If you lose access to it, you may lose all of them. Keep one somewhere else, such as a security key or another device.";
+  return "";
+}
+
 function setupDevices(button) {
   const list = document.getElementById("devices");
   const relogin = () => location.assign("/_/auth/login?return_to=" + encodeURIComponent(location.origin + "/_/auth/devices") + "&reauth=1&methods=passkey");
@@ -653,6 +674,11 @@ function setupDevices(button) {
       item.append(title, remove, meta, icon, ask, form, renameButton);
       return item;
     }));
+    const hint = document.getElementById("backup-hint");
+    if (hint) {
+      hint.textContent = backupHint(data.passkeys);
+      hint.hidden = !hint.textContent;
+    }
     const nav = document.getElementById("sites");
     const sites = data.sites || [];
     nav.replaceChildren(nav.querySelector("h2") || el("span"), ...sites.map((url) => {

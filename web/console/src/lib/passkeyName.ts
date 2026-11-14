@@ -1,6 +1,6 @@
 // provider names where a passkey lives only when provider_known; otherwise
 // it is a kind of passkey ("Synced passkey") and never shown as a place.
-export type OwnPasskey = { id: string; label?: string; provider?: string; provider_known?: boolean; created_at: string; last_used_at?: string; current?: boolean };
+export type OwnPasskey = { id: string; label?: string; provider?: string; provider_known?: boolean; synced?: boolean; created_at: string; last_used_at?: string; current?: boolean };
 
 // passkeyName is what a person recognises a passkey by: their own name for
 // it, else its known provider, else a plain "Passkey".
