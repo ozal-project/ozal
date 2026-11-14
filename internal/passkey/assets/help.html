@@ -19,28 +19,43 @@
   <h1>Ways to sign in</h1>
   <p>This site uses passkeys instead of passwords. A passkey lives in one place you choose; you confirm it there with your face, fingerprint or PIN, and this site keeps only a public key. Pick the place that suits the device you are on: this site treats every option the same, and none is required.</p>
 
+  <section id="cant-find" class="triage">
+    <h2>Can't find your passkey?</h2>
+    <p>Look where you created it. Which of these is you?</p>
+    <h3>I created it in another browser</h3>
+    <p>It may still be available here. If you saved it in a password manager, install its extension in this browser and unlock it. If the browser itself saved it (for example Chrome's Google Password Manager), keep using that browser for this site, or, if the passkey reaches your phone too, sign in here with "Use my phone". Once you are signed in here, add a passkey for this browser from <a href="/_/auth/devices">Your passkeys</a>.</p>
+    <h3>It is on my phone</h3>
+    <p>Choose <a href="/_/auth/login">Sign in</a>, then "Passkey somewhere else?" and "Use my phone", and scan the code with the phone. The computer needs Bluetooth, and the phone must be nearby.</p>
+    <h3>I use a password manager</h3>
+    <p>Unlock it and check that its browser extension is on and allowed to save and use passkeys. Then sign in again.</p>
+    <h3>I lost every place I kept one</h3>
+    <p>Ask the person who runs this site for a new invitation. Only this case needs one: a different browser or device does not.</p>
+  </section>
+
+  <h2 class="places-title">Where a passkey can live</h2>
+
   <section>
-    <h2>This device</h2>
+    <h3>This device</h3>
     <p><strong>Good for</strong> your own laptop or phone.</p>
     <p><strong>You need</strong> Windows Hello, Touch ID, or an Android phone or iPhone with a screen lock. Apple and Google may copy it to your other devices through iCloud Keychain or Google Password Manager.</p>
     <p class="hint">Linux desktops usually have no built-in place for passkeys; use one of the options below there.</p>
   </section>
 
   <section>
-    <h2>A password manager</h2>
+    <h3>A password manager</h3>
     <p><strong>Good for</strong> Linux, several computers, or keeping passkeys off a personal device.</p>
     <p><strong>You need</strong> a password manager that saves passkeys, with its browser extension installed: the extension takes over the browser's prompt. For example Bitwarden (or a self-hosted Vaultwarden server), 1Password, Proton Pass or KeePassXC (open source, kept on your computer), or any other that saves passkeys.</p>
   </section>
 
   <section>
-    <h2>Your phone</h2>
+    <h3>Your phone</h3>
     <p><strong>Good for</strong> a computer that is not yours: the passkey stays on the phone.</p>
     <p><strong>You need</strong> a browser that shows a QR code to scan, Bluetooth on the computer, and the phone nearby.</p>
     <p class="hint">Not every browser offers this, and virtual machines usually have no Bluetooth.</p>
   </section>
 
   <section>
-    <h2>A security key</h2>
+    <h3>A security key</h3>
     <p><strong>Good for</strong> administrators and shared computers: the key never leaves your hands.</p>
     <p><strong>You need</strong> a FIDO2 key that plugs in by USB or works over NFC, with a PIN set on it. For example YubiKey, Nitrokey, Google Titan or SoloKeys, or any other FIDO2 key.</p>
   </section>

@@ -49,9 +49,10 @@ function credentialJSON(credential: PublicKeyCredential) {
   return out;
 }
 
-// Passkeys live in the password manager that saved them: one saved by Chrome's
-// Google Password Manager is not offered by Firefox, and the reverse.
-const otherBrowser = "Passkeys stay in the password manager that saved them, so a passkey made in another browser is not offered here. From a browser where you are signed in, open your name in the header and choose “Sign in on another browser”.";
+// Whether a passkey made in one browser is offered in another depends on the
+// password manager, the system and how they are connected, so the text names
+// where to look and never says it cannot be here.
+const otherBrowser = "Your passkey may still be available in this browser: check the password manager, phone or security key you used when creating it. If it is not, from a browser where you are signed in, open your name in the header and choose “Sign in on another browser”.";
 
 // The browser reports a closed prompt, a timeout and "no passkey here" alike.
 export function explainPasskeyError(e: unknown, phase: "sign-in" | "create" = "create"): string {
