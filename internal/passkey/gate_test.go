@@ -56,6 +56,13 @@ func newHarness(t testing.TB) *harness {
 // outside example.test get host sessions through handoffs (ID-015).
 func newHarnessFor(t testing.TB, protected ...string) *harness {
 	t.Helper()
+	return buildHarness(t, nil, protected...)
+}
+
+// buildHarness lets a test put a wrapper between the gate and the
+// directory, to make one of its reads fail.
+func buildHarness(t testing.TB, wrap func(*sqlite.Identity) passkey.Directory, protected ...string) *harness {
+	t.Helper()
 	ctx := context.Background()
 	db, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "state.db"))
 	if err != nil {
@@ -75,7 +82,11 @@ func newHarnessFor(t testing.TB, protected ...string) *harness {
 		Passkeys:     &config.Passkeys{RPID: "example.test", LoginURL: loginOrigin, DisplayName: "Ozal"},
 	}
 	rec := &recorder{}
-	gate, err := passkey.NewGate(cfg, protected, identity, sqlite.NewSessions(db, auth.SessionLifetime(cfg)), rec)
+	var dir passkey.Directory = identity
+	if wrap != nil {
+		dir = wrap(identity)
+	}
+	gate, err := passkey.NewGate(cfg, protected, dir, sqlite.NewSessions(db, auth.SessionLifetime(cfg)), rec)
 	if err != nil {
 		t.Fatal(err)
 	}

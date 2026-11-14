@@ -128,6 +128,19 @@ and a browser that does not answer within 1.5 seconds is treated as having no
 authenticator. Administrators get no such offer: their login host returns a
 code to the console and keeps no session.
 
+Visitor pages use the WebAuthn Signal API so that a revoked passkey stops
+being offered. A successful sign-in answers with `accepted` (relying party,
+user handle and every active credential of that account, base64url), read
+after the sign-in. It is absent when the read fails, would be empty, or does
+not include the passkey that just signed in. Revoking answers with the passkeys
+left, read in the revocation's own transaction, and the page signals them
+although its session has ended. A refused sign-in names
+`unknown_credential` only when this directory holds that credential as
+revoked. A passkey it never held (such as an administrator's), an active one
+(a disabled account) and a failed check send nothing. The page never awaits a
+signal and never claims the manager acted. Renaming does not use
+`signalCurrentUserDetails`. Administrator passkeys are not signalled yet.
+
 The app may keep its own login. Gateway headers are accepted only from its
 authenticated path; the app keeps its internal authorization. Signed claims that
 the app can verify, token exchange and Ozal as an OIDC provider are distinct

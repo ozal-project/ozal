@@ -27,8 +27,29 @@ async function post(path, body) {
     body: JSON.stringify(body),
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "The request failed.");
+  if (!response.ok) throw Object.assign(new Error(data.error || "The request failed."), { data });
   return data;
+}
+
+// The Signal API tells the browser or password manager which of this site's
+// passkeys still work, so a revoked one stops being offered. The server sends
+// a list only when it read it whole, and names a passkey as gone only when it
+// revoked it. Nothing here is awaited: a browser without the API, or one that
+// refuses, changes nothing, and a resolved promise does not prove the manager
+// acted, so the page never says it did.
+function signalAccepted(list) {
+  try {
+    const signal = typeof PublicKeyCredential !== "undefined" && PublicKeyCredential.signalAllAcceptedCredentials;
+    if (!list || !list.rp_id || !list.user_id || !Array.isArray(list.ids) || list.ids.length === 0 || typeof signal !== "function") return;
+    signal.call(PublicKeyCredential, { rpId: list.rp_id, userId: list.user_id, allAcceptedCredentialIds: list.ids }).catch(() => {});
+  } catch {}
+}
+function signalUnknown(gone) {
+  try {
+    const signal = typeof PublicKeyCredential !== "undefined" && PublicKeyCredential.signalUnknownCredential;
+    if (!gone || !gone.rp_id || !gone.credential_id || typeof signal !== "function") return;
+    signal.call(PublicKeyCredential, { rpId: gone.rp_id, credentialId: gone.credential_id }).catch(() => {});
+  } catch {}
 }
 
 // hints, when the person said where they keep passkeys, steer the browser's
@@ -370,7 +391,14 @@ function setupLogin(button, returnTo) {
     const credential = await navigator.credentials.get(request);
     button.disabled = true;
     show("Checking…");
-    const result = await post("/_/auth/login/finish", credentialJSON(credential));
+    let result;
+    try {
+      result = await post("/_/auth/login/finish", credentialJSON(credential));
+    } catch (error) {
+      signalUnknown(error.data && error.data.unknown_credential);
+      throw error;
+    }
+    signalAccepted(result.accepted);
     if (await offerBridge(credential)) bridge(result);
     else finish(result, "You are signed in.");
   }
@@ -679,7 +707,8 @@ function setupDevices(button) {
 
   async function revoke(id) {
     show("Removing…");
-    await post("/_/auth/devices/revoke", { id });
+    const result = await post("/_/auth/devices/revoke", { id });
+    signalAccepted(result.accepted);
     show("Removed. You are signed out everywhere; sign in again with another passkey.", "ok");
     list.replaceChildren();
     button.disabled = true;

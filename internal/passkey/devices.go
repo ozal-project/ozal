@@ -23,10 +23,10 @@ import (
 const selfServiceMaxAge = 5 * time.Minute
 
 var (
-	errStale       = apiError{http.StatusForbidden, "Confirm it's you first: sign in with your passkey again."}
-	errLastPasskey = apiError{http.StatusConflict, "This is your only passkey. Add another one before removing it."}
-	errNoPasskey   = apiError{http.StatusNotFound, "That passkey is not one of yours, or it is already removed."}
-	errBadLabel    = apiError{http.StatusBadRequest, "Use 1 to 60 characters for the name, without line breaks."}
+	errStale       = apiError{http.StatusForbidden, "Confirm it's you first: sign in with your passkey again.", nil}
+	errLastPasskey = apiError{http.StatusConflict, "This is your only passkey. Add another one before removing it.", nil}
+	errNoPasskey   = apiError{http.StatusNotFound, "That passkey is not one of yours, or it is already removed.", nil}
+	errBadLabel    = apiError{http.StatusBadRequest, "Use 1 to 60 characters for the name, without line breaks.", nil}
 )
 
 // maxLabel is the longest passkey name the store accepts.
@@ -239,7 +239,8 @@ func (g *Gate) devicesRevoke(w http.ResponseWriter, r *http.Request) (any, *apiE
 	if err != nil || len(id) == 0 || len(id) > 1023 {
 		return nil, &errBadRequest
 	}
-	switch err := g.dir.RevokeOwnPasskey(r.Context(), user.ID, id); {
+	remaining, err := g.dir.RevokeOwnPasskey(r.Context(), user.ID, id)
+	switch {
 	case errors.Is(err, ErrLastPasskey):
 		return nil, &errLastPasskey
 	case errors.Is(err, ErrNotFound):
@@ -250,7 +251,13 @@ func (g *Gate) devicesRevoke(w http.ResponseWriter, r *http.Request) (any, *apiE
 	g.emit(r, events.Event{Type: events.PasskeyRevoked, Actor: user.Subject(), Reason: "revoked from a signed-in session"})
 	// The revocation ended every session of the user, this one included.
 	http.SetCookie(w, &http.Cookie{Name: auth.SessionCookieName, Value: "", Domain: g.cookieDomain, Path: "/", MaxAge: -1, HttpOnly: true, Secure: g.secure, SameSite: http.SameSiteLaxMode})
-	return map[string]bool{"signed_out": true}, nil
+	// The passkeys left, read in the revocation's own transaction: the page
+	// can tell the browser right away, though this session just ended.
+	answer := map[string]any{"signed_out": true}
+	if list := accepted(g.webauthn.Config.RPID, user.Handle, remaining, nil); list != nil {
+		answer["accepted"] = list
+	}
+	return answer, nil
 }
 
 // createdPasskey tells the page that just created a passkey where it was

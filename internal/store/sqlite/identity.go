@@ -444,36 +444,68 @@ func (s *Identity) RenamePasskey(ctx context.Context, userID string, credentialI
 }
 
 // RevokeOwnPasskey implements passkey.Directory.
-func (s *Identity) RevokeOwnPasskey(ctx context.Context, userID string, credentialID []byte) error {
+func (s *Identity) RevokeOwnPasskey(ctx context.Context, userID string, credentialID []byte) ([][]byte, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("begin revoke: %w", err)
+		return nil, fmt.Errorf("begin revoke: %w", err)
 	}
 	defer tx.Rollback()
 	user, err := scanUser(tx.QueryRowContext(ctx, userColumns+` WHERE id = ? AND disabled_at IS NULL`, userID))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var active, mine int
 	if err := tx.QueryRowContext(ctx,
 		`SELECT COUNT(*), COALESCE(SUM(credential_id = ?), 0) FROM passkeys WHERE user_id = ? AND revoked_at IS NULL`,
 		credentialID, userID,
 	).Scan(&active, &mine); err != nil {
-		return fmt.Errorf("count passkeys: %w", err)
+		return nil, fmt.Errorf("count passkeys: %w", err)
 	}
 	if mine != 1 {
-		return passkey.ErrNotFound
+		return nil, passkey.ErrNotFound
 	}
 	if active == 1 {
-		return passkey.ErrLastPasskey
+		return nil, passkey.ErrLastPasskey
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE passkeys SET revoked_at = ? WHERE credential_id = ? AND user_id = ?`, s.now().Unix(), credentialID, userID); err != nil {
-		return fmt.Errorf("revoke passkey: %w", err)
+		return nil, fmt.Errorf("revoke passkey: %w", err)
 	}
 	if err := deleteSessions(ctx, tx, user); err != nil {
-		return err
+		return nil, err
 	}
-	return tx.Commit()
+	rows, err := tx.QueryContext(ctx, `SELECT credential_id FROM passkeys WHERE user_id = ? AND revoked_at IS NULL ORDER BY created_at, credential_id`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list remaining passkeys: %w", err)
+	}
+	var remaining [][]byte
+	for rows.Next() {
+		var id []byte
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		remaining = append(remaining, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return remaining, nil
+}
+
+// CredentialRevoked implements passkey.Directory.
+func (s *Identity) CredentialRevoked(ctx context.Context, credentialID []byte) (bool, error) {
+	var revoked int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM passkeys WHERE credential_id = ? AND revoked_at IS NOT NULL`, credentialID).Scan(&revoked)
+	if err != nil {
+		return false, fmt.Errorf("check passkey: %w", err)
+	}
+	return revoked == 1, nil
 }
 
 // SetDisabled disables (and ends the sessions of) or re-enables a user.
