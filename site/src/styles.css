@@ -57,7 +57,7 @@
 @layer base {
   [hidden] { display: none !important; }
   html { color-scheme: dark; scroll-behavior: smooth; scroll-padding-top: 96px; background: var(--color-bg); }
-  body { background: radial-gradient(56rem 34rem at 74% -6rem, rgb(129 140 248 / .06), transparent 70%) no-repeat, radial-gradient(80rem 40rem at 30% -14rem, rgb(238 240 243 / .04), transparent 72%) no-repeat, var(--color-bg); color: var(--color-ink); font-family: var(--font-sans); font-size: var(--t-body); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  body { background: radial-gradient(56rem 34rem at 74% -6rem, rgb(129 140 248 / .09), transparent 70%) no-repeat, radial-gradient(80rem 40rem at 30% -14rem, rgb(238 240 243 / .04), transparent 72%) no-repeat, var(--color-bg); color: var(--color-ink); font-family: var(--font-sans); font-size: var(--t-body); line-height: 1.6; -webkit-font-smoothing: antialiased; }
   ::selection { background: var(--color-loud-solid); color: var(--color-loud-ink); }
   a { color: inherit; }
   :focus-visible { outline: 2px solid var(--color-loud); outline-offset: 3px; border-radius: 3px; }
