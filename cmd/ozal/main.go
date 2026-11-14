@@ -233,9 +233,9 @@ func main() {
 		// command it prints moves certificates to DNS-01 with it.
 		// The host command refuses a token path reached through a link, so
 		// the console names the directory as it really is.
-		stateDir := filepath.Dir(*dbPath)
-		if resolved, err := filepath.EvalSymlinks(stateDir); err == nil {
-			stateDir = resolved
+		stateDir, err := cloudflareStateDir(*dbPath)
+		if err != nil {
+			log.Fatalf("resolve Cloudflare state directory: %v", err)
 		}
 		adminOpts = append(adminOpts, admin.WithCloudflareSetup(admin.CloudflareSetup{
 			Dir:     stateDir,

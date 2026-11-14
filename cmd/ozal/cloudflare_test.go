@@ -238,3 +238,23 @@ func TestCloudflareHostCommandKeepsPathsAsLiteralArguments(t *testing.T) {
 		}
 	}
 }
+
+func TestCloudflareRelativeDatabaseProducesAnAbsoluteTokenDirectory(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+	got, err := cloudflareStateDir("state.db")
+	if err != nil || got != dir || !filepath.IsAbs(got) {
+		t.Fatalf("relative database directory: %q %v", got, err)
+	}
+	linked := filepath.Join(t.TempDir(), "state-link")
+	if err := os.Symlink(dir, linked); err != nil {
+		t.Skip("symbolic links unavailable")
+	}
+	got, err = cloudflareStateDir(filepath.Join(linked, "state.db"))
+	if err != nil || got != dir {
+		t.Fatalf("linked database directory: %q %v", got, err)
+	}
+}

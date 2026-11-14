@@ -320,3 +320,13 @@ func unitFromCgroup(listing string) string {
 	}
 	return ""
 }
+
+// cloudflareStateDir also makes a relative -db path usable by the absolute
+// token path required by the host command.
+func cloudflareStateDir(dbPath string) (string, error) {
+	dir, err := filepath.Abs(filepath.Dir(dbPath))
+	if err != nil {
+		return "", err
+	}
+	return filepath.EvalSymlinks(dir)
+}
