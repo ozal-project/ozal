@@ -94,6 +94,14 @@ type Directory interface {
 	// RevokeOwnPasskey revokes one of the user's active passkeys and ends
 	// all their sessions in one transaction. It returns ErrNotFound for a
 	// passkey that is not theirs or not active, and ErrLastPasskey for
-	// their only active one.
-	RevokeOwnPasskey(ctx context.Context, userID string, credentialID []byte) error
+	// their only active one. remaining lists the user's active passkeys
+	// after the revocation, read in the same transaction.
+	RevokeOwnPasskey(ctx context.Context, userID string, credentialID []byte) (remaining [][]byte, err error)
+	// CredentialRevoked reports whether credentialID is a visitor passkey
+	// this directory revoked and whose owner has this user handle. A passkey
+	// it never held, one still active, or one presented with another handle
+	// is false: the signature of a revoked passkey can no longer be checked,
+	// so the handle, which only its authenticator holds, keeps this from
+	// answering anyone who merely knows a credential ID.
+	CredentialRevoked(ctx context.Context, userHandle, credentialID []byte) (bool, error)
 }

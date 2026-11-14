@@ -349,23 +349,25 @@ func (g *Gate) ServeAuthEndpoint(w http.ResponseWriter, r *http.Request) bool {
 type apiError struct {
 	status  int
 	message string
+	// unknown, on a refused sign-in, names a passkey this site retired.
+	unknown *unknownCredential
 }
 
 var (
-	errLoginFailed = apiError{http.StatusUnauthorized, "That passkey was not accepted. Try again, or ask the operator for help."}
+	errLoginFailed = apiError{http.StatusUnauthorized, "That passkey was not accepted. Try again, or ask the operator for help.", nil}
 	// A passkey for this domain that belongs to no visitor is almost always
 	// the console passkey of someone who is also a visitor. The hint holds
 	// for any unknown passkey, so it does not say whose this one is.
-	errPasskeyUnknown = apiError{http.StatusUnauthorized, "That passkey is not a sign-in for these sites. If your password manager lists more than one for this domain, choose the one not marked \"Ozal console\"."}
-	errLinkInvalid    = apiError{http.StatusBadRequest, "This link is invalid, already used or expired. Ask the operator for a new one."}
-	errExpired        = apiError{http.StatusBadRequest, "The request expired. Reload the page and try again."}
-	errBusy           = apiError{http.StatusServiceUnavailable, "Too many sign-ins at once. Try again shortly."}
-	errInternal       = apiError{http.StatusInternalServerError, "Something went wrong on the server."}
-	errBadRequest     = apiError{http.StatusBadRequest, "Bad request."}
-	errWrongOrigin    = apiError{http.StatusForbidden, "Sign in from the login page."}
-	errWrongMethod    = apiError{http.StatusMethodNotAllowed, "Method not allowed."}
-	errWrongEncoding  = apiError{http.StatusUnsupportedMediaType, "Send JSON."}
-	errSignedOut      = apiError{http.StatusUnauthorized, "You are signed out. Sign in again."}
+	errPasskeyUnknown = apiError{http.StatusUnauthorized, "That passkey is not a sign-in for these sites. If your password manager lists more than one for this domain, choose the one not marked \"Ozal console\".", nil}
+	errLinkInvalid    = apiError{http.StatusBadRequest, "This link is invalid, already used or expired. Ask the operator for a new one.", nil}
+	errExpired        = apiError{http.StatusBadRequest, "The request expired. Reload the page and try again.", nil}
+	errBusy           = apiError{http.StatusServiceUnavailable, "Too many sign-ins at once. Try again shortly.", nil}
+	errInternal       = apiError{http.StatusInternalServerError, "Something went wrong on the server.", nil}
+	errBadRequest     = apiError{http.StatusBadRequest, "Bad request.", nil}
+	errWrongOrigin    = apiError{http.StatusForbidden, "Sign in from the login page.", nil}
+	errWrongMethod    = apiError{http.StatusMethodNotAllowed, "Method not allowed.", nil}
+	errWrongEncoding  = apiError{http.StatusUnsupportedMediaType, "Send JSON.", nil}
+	errSignedOut      = apiError{http.StatusUnauthorized, "You are signed out. Sign in again.", nil}
 )
 
 // api runs a JSON endpoint behind the checks every one of them needs:
@@ -394,7 +396,11 @@ func (g *Gate) api(w http.ResponseWriter, r *http.Request, handle func(w http.Re
 	w.Header().Set("Cache-Control", "no-store")
 	if failed != nil {
 		w.WriteHeader(failed.status)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": failed.message})
+		body := map[string]any{"error": failed.message}
+		if failed.unknown != nil {
+			body["unknown_credential"] = failed.unknown
+		}
+		_ = json.NewEncoder(w).Encode(body)
 		return
 	}
 	_ = json.NewEncoder(w).Encode(result)
@@ -440,6 +446,9 @@ type finishResponse struct {
 	Sites    []string `json:"sites,omitempty"`
 	// Passkey is the one an enrolment just created, for its receipt.
 	Passkey *createdPasskey `json:"passkey,omitempty"`
+	// Accepted is the account's complete passkey list after a sign-in, for
+	// the Signal API; absent when it could not be read.
+	Accepted *acceptedCredentials `json:"accepted,omitempty"`
 }
 
 // destination validates a return address against the configured hosts. It
@@ -471,8 +480,13 @@ func (g *Gate) loginFinish(w http.ResponseWriter, r *http.Request) (any, *apiErr
 		g.emit(r, events.Event{Type: events.LoginFailed, Code: "ceremony_unknown"})
 		return nil, &errExpired
 	}
-	var found *webauthnUser
+	var (
+		found      *webauthnUser
+		usedID     []byte
+		usedHandle []byte
+	)
 	lookup := func(rawID, userHandle []byte) (webauthn.User, error) {
+		usedID, usedHandle = rawID, userHandle
 		user, credentials, err := g.dir.UserByHandle(r.Context(), userHandle)
 		if err != nil {
 			return nil, err
@@ -482,12 +496,18 @@ func (g *Gate) loginFinish(w http.ResponseWriter, r *http.Request) (any, *apiErr
 	}
 	_, credential, err := g.webauthn.FinishPasskeyLogin(lookup, pending.session, r)
 	if err != nil || found == nil {
+		refusal := errLoginFailed
+		code := "passkey_invalid"
 		if errors.Is(err, ErrNotFound) {
-			g.emit(r, events.Event{Type: events.LoginFailed, Code: "passkey_unknown", Error: errorText(err)})
-			return nil, &errPasskeyUnknown
+			refusal, code = errPasskeyUnknown, "passkey_unknown"
 		}
-		g.emit(r, events.Event{Type: events.LoginFailed, Code: "passkey_invalid", Error: errorText(err)})
-		return nil, &errLoginFailed
+		g.emit(r, events.Event{Type: events.LoginFailed, Code: code, Error: errorText(err)})
+		revoked, checkErr := false, error(nil)
+		if len(usedID) > 0 {
+			revoked, checkErr = g.dir.CredentialRevoked(r.Context(), usedHandle, usedID)
+		}
+		refusal.unknown = retired(g.webauthn.Config.RPID, usedID, revoked, checkErr)
+		return nil, &refusal
 	}
 	subject := found.user.Subject()
 	// A counter that went backwards means two copies of the private key
@@ -506,7 +526,16 @@ func (g *Gate) loginFinish(w http.ResponseWriter, r *http.Request) (any, *apiErr
 		return nil, apiErr
 	}
 	g.emit(r, events.Event{Type: events.LoginSucceeded, Actor: subject, Code: "passkey"})
-	return g.finished(pending.returnTo), nil
+	done := g.finished(pending.returnTo)
+	// The account's complete list, read now; a failed read sends none.
+	if keys, err := g.dir.ActivePasskeys(r.Context(), found.user.ID); err == nil {
+		ids := make([][]byte, 0, len(keys))
+		for _, k := range keys {
+			ids = append(ids, k.Credential.ID)
+		}
+		done.Accepted = accepted(g.webauthn.Config.RPID, found.user.Handle, ids, credential.ID)
+	}
+	return done, nil
 }
 
 // --- enrolment ----------------------------------------------------------

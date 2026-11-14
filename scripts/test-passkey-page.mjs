@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 
 const src = readFileSync(new URL("../internal/passkey/assets/passkey.js", import.meta.url), "utf8");
 
-function render(search, { oidc = "", webauthn = true, page = "login", fetch = () => new Promise(() => {}), assign = () => {}, caps, get = () => new Promise(() => {}), create = () => new Promise(() => {}), hash = "", uvpa, storage = {} } = {}) {
+function render(search, { oidc = "", webauthn = true, page = "login", fetch = () => new Promise(() => {}), assign = () => {}, caps, get = () => new Promise(() => {}), create = () => new Promise(() => {}), hash = "", uvpa, storage = {}, signals = {} } = {}) {
   const els = {};
   const el = (id) => (els[id] ??= {
     id, textContent: "", value: "", src: "", hidden: id === "oidc" || id === "recovery-warning" || id === "receipt" || id === "receipt-return" || id === "receipt-icon" || id === "bridge", open: false, href: "", disabled: false, dataset: {}, children: [], on: {},
@@ -38,7 +38,7 @@ function render(search, { oidc = "", webauthn = true, page = "login", fetch = ()
     history: { replaceState() {} },
     localStorage: { setItem(k, v) { storage[k] = String(v); }, getItem: (k) => storage[k] ?? null, removeItem(k) { delete storage[k]; } },
     navigator: webauthn ? { credentials: { get, create } } : {},
-    PublicKeyCredential: webauthn ? (uvpa == null ? {} : { isUserVerifyingPlatformAuthenticatorAvailable: uvpa }) : undefined,
+    PublicKeyCredential: webauthn ? { ...(uvpa == null ? {} : { isUserVerifyingPlatformAuthenticatorAvailable: uvpa }), ...signals } : undefined,
     fetch,
   };
   vm.createContext(ctx);
@@ -299,15 +299,15 @@ assert.equal(page.choices, "closed", "adding a passkey asks where to keep it too
 // never in the way: Continue goes on at once.
 const buf = () => new Uint8Array([1]).buffer;
 const signedWith = (attachment) => ({ id: "c", rawId: buf(), type: "public-key", authenticatorAttachment: attachment, getClientExtensionResults: () => ({}), response: { clientDataJSON: buf(), authenticatorData: buf(), signature: buf(), userHandle: buf() } });
-async function bridgePage({ attachment = "cross-platform", uvpa = async () => true, storage = {}, search = rt, addFails = false } = {}) {
+async function bridgePage({ attachment = "cross-platform", uvpa = async () => true, storage = {}, search = rt, addFails = false, signals = {}, finish } = {}) {
   const went = [];
   const madeWith = [];
   const p = render(search, {
-    uvpa, storage,
+    uvpa, storage, signals,
     assign: (url) => went.push(url),
     fetch: async (url) => {
       if (url.endsWith("/login/begin")) return { ok: true, json: async () => ({ publicKey: { challenge: "AAAA" } }) };
-      if (url.endsWith("/login/finish")) return { ok: true, json: async () => ({ redirect: "https://private.example.com/x" }) };
+      if (url.endsWith("/login/finish")) return finish ? finish() : { ok: true, json: async () => ({ redirect: "https://private.example.com/x" }) };
       if (url.endsWith("/add/begin")) return addFails ? { ok: false, status: 403, json: async () => ({ error: "Confirm it's you" }) } : { ok: true, json: async () => ({ publicKey: { challenge: "AAAA", user: { id: "AAAA" } } }) };
       if (url.endsWith("/add/finish")) return { ok: true, json: async () => ({ id: "ab", provider: "Bitwarden", provider_known: true }) };
       return { ok: true, json: async () => ({}) };
@@ -363,6 +363,42 @@ for (const [why, options] of [
   assert.equal(b.p.el("bridge").hidden, true, `no offer after ${why}`);
   assert.deepEqual(b.went, ["https://private.example.com/x"], `${why}: straight on`);
 }
+// The Signal API: a sign-in passes the server's whole list on; a refusal
+// that names a retired passkey passes that on; neither is awaited, and a
+// browser without the API or a refused signal changes nothing.
+const sent = [];
+const plain = (v) => JSON.parse(JSON.stringify(v));
+const recordingSignals = (fail = false) => ({
+  signalAllAcceptedCredentials: async (o) => { sent.push(["all", o]); if (fail) throw new Error("refused"); },
+  signalUnknownCredential: async (o) => { sent.push(["unknown", o]); if (fail) throw new Error("refused"); },
+});
+const list = { rp_id: "example.com", user_id: "dXNlcg", ids: ["YQ", "Yg"] };
+b = await bridgePage({ attachment: "platform", signals: recordingSignals(), finish: () => ({ ok: true, json: async () => ({ redirect: "https://private.example.com/x", accepted: list }) }) });
+assert.deepEqual(plain(sent), [["all", { rpId: "example.com", userId: "dXNlcg", allAcceptedCredentialIds: ["YQ", "Yg"] }]]);
+assert.deepEqual(b.went, ["https://private.example.com/x"]);
+
+sent.length = 0;
+for (const partial of [undefined, { ...list, ids: [] }, { ...list, rp_id: "" }, { ...list, user_id: "" }]) {
+  b = await bridgePage({ attachment: "platform", signals: recordingSignals(), finish: () => ({ ok: true, json: async () => ({ redirect: "https://private.example.com/x", accepted: partial }) }) });
+  assert.deepEqual(b.went, ["https://private.example.com/x"]);
+}
+assert.deepEqual(sent, [], "no list, an empty one or one without its keys is never sent");
+
+b = await bridgePage({ attachment: "platform", signals: recordingSignals(true), finish: () => ({ ok: true, json: async () => ({ redirect: "https://private.example.com/x", accepted: list }) }) });
+await tick();
+assert.deepEqual(b.went, ["https://private.example.com/x"], "a refused signal does not hold the sign-in");
+b = await bridgePage({ attachment: "platform", finish: () => ({ ok: true, json: async () => ({ redirect: "https://private.example.com/x", accepted: list }) }) });
+assert.deepEqual(b.went, ["https://private.example.com/x"], "a browser without the API signs in the same");
+
+sent.length = 0;
+const refused = (body) => () => ({ ok: false, status: 401, json: async () => body });
+b = await bridgePage({ signals: recordingSignals(), finish: refused({ error: "That passkey was not accepted.", unknown_credential: { rp_id: "example.com", credential_id: "YQ" } }) });
+assert.deepEqual(plain(sent), [["unknown", { rpId: "example.com", credentialId: "YQ" }]]);
+assert.match(b.p.status, /not accepted/, "the refusal is still explained");
+sent.length = 0;
+b = await bridgePage({ signals: recordingSignals(), finish: refused({ error: "That passkey was not accepted." }) });
+assert.deepEqual(sent, [], "a refusal without a retired passkey signals nothing");
+
 b = await bridgePage({ uvpa: () => new Promise(() => {}) });
 await tick(1600);
 assert.equal(b.p.el("bridge").hidden, true, "a browser that never answers does not hold the sign-in");
@@ -468,6 +504,23 @@ assert.equal(shown.page.who(), "", "nothing about a person is shown without a se
   await settle();
   assert.ok(posts.some((u) => u.includes("/_/auth/devices/revoke")), "confirming removes the passkey");
 }
+// The revocation's answer carries the passkeys left; the page passes them
+// on at once, since its session has just ended.
+{
+  const signalled = [];
+  const left = { rp_id: "example.com", user_id: "dXNlcg", ids: ["YQ"] };
+  page = render("", {
+    page: "devices",
+    signals: { signalAllAcceptedCredentials: async (o) => { signalled.push(JSON.parse(JSON.stringify(o))); } },
+    fetch: (url) => Promise.resolve({ ok: true, json: () => Promise.resolve(url.endsWith("/list") ? { email: "ana@example.com", passkeys: [key("aa11", false), key("dd44", true)], sites: [] } : url.endsWith("/revoke") ? { signed_out: true, accepted: left } : {}) }),
+  });
+  await settle();
+  page.devices[1].children[1].on.click();
+  page.devices[1].children[4].children[1].on.click();
+  await settle();
+  assert.deepEqual(signalled, [{ rpId: "example.com", userId: "dXNlcg", allAcceptedCredentialIds: ["YQ"] }]);
+  assert.match(page.status, /Removed/);
+}
 {
   const posts = [];
   const assigned = [];
@@ -560,4 +613,4 @@ assert.equal(shown.page.who(), "", "nothing about a person is shown without a se
   assert.equal(page.el("also-admin").hidden, true, "no notice for a visitor only");
 }
 
-console.log("passkey pages: login, bridge, enrolment, receipt, recovery preflight, choices, devices, rename and sessions OK");
+console.log("passkey pages: login, bridge, signals, enrolment, receipt, recovery preflight, choices, devices, rename and sessions OK");
