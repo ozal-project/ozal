@@ -27,6 +27,7 @@ func runConsole(ctx context.Context, args []string, out io.Writer) error {
 	email := fs.String("email", "", "recover: email of the administrator who lost their passkeys")
 	id := fs.String("id", "", "session id to revoke")
 	origin := fs.String("url", "", "private browser URL (default: the admin.listen port of the config; use the locally forwarded port when it differs)")
+	link := fs.Bool("link", false, "enrol/recover: print a one-time console link instead of a code to type on the login host")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -55,6 +56,22 @@ func runConsole(ctx context.Context, args []string, out io.Writer) error {
 		base, err := adminBase(*origin)
 		if err != nil {
 			return err
+		}
+		if !*link {
+			// A code typed on the login host needs no tunnel to the console;
+			// without admin.login_host the edge says so and the link remains.
+			done, err := enrolByCode(ctx, c, kind, *email, out)
+			if done || err != nil {
+				if err == nil {
+					fmt.Fprintf(out, "Sign in to the console with this passkey: %s/overview\n", passkeyOrigin(base))
+					fmt.Fprint(out, sshHint(os.Getenv("SSH_CONNECTION"), invokingUser(), base))
+				} else if kind == "bootstrap" && isStatus(err, http.StatusConflict) {
+					fmt.Fprint(out, sshHint(os.Getenv("SSH_CONNECTION"), invokingUser(), base))
+					return errors.New(administratorExists(base))
+				}
+				return err
+			}
+			fmt.Fprintln(out, "This edge does not offer enrolment codes (they need admin.login_host); printing a console link instead.")
 		}
 		var answer struct {
 			Token string `json:"token"`
