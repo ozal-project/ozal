@@ -138,3 +138,9 @@ body[data-page="denied"] form { margin-top: 18px; }
 .receipt form { margin-top: 18px; }
 .receipt .optional { font-weight: 400; }
 .field-hint { margin: -6px 0 14px; font-size: 0.82rem; color: var(--muted); }
+
+/* The bridge after a sign-in from another device: Continue first. */
+.bridge { display: grid; gap: 10px; }
+.bridge h2 { margin: 0; font-size: 1.15rem; }
+.bridge p { margin: 0 0 6px; color: var(--muted); }
+.bridge .link-button { justify-self: center; margin-top: 4px; color: var(--muted); }

@@ -37,6 +37,13 @@
     <strong>First time here?</strong>
     <p>You need an invitation link from the operator to create your passkey; the link works once and expires soon. <a href="/_/auth/help">See where a passkey can live</a> before you open it.</p>
   </div>
+  <section id="bridge" class="bridge" hidden aria-labelledby="bridge-title">
+    <h2 id="bridge-title">You are signed in</h2>
+    <p>You used a passkey on another device or a security key. You can also keep one on this device, to sign in here directly next time. Your other passkey keeps working.</p>
+    <button id="bridge-continue" type="button">Continue</button>
+    <button id="bridge-add" class="secondary" type="button">Also set up this device</button>
+    <button id="bridge-never" class="link-button" type="button">Don't ask on this device</button>
+  </section>
   <nav id="sites" class="sites" aria-label="Your sites" hidden></nav>
 </main>
 <footer>Self-hosted access · Ozal keeps only your passkey’s public key</footer>

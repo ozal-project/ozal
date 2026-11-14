@@ -9,14 +9,14 @@ import assert from "node:assert/strict";
 
 const src = readFileSync(new URL("../internal/passkey/assets/passkey.js", import.meta.url), "utf8");
 
-function render(search, { oidc = "", webauthn = true, page = "login", fetch = () => new Promise(() => {}), assign = () => {}, caps, get = () => new Promise(() => {}), create = () => new Promise(() => {}), hash = "" } = {}) {
+function render(search, { oidc = "", webauthn = true, page = "login", fetch = () => new Promise(() => {}), assign = () => {}, caps, get = () => new Promise(() => {}), create = () => new Promise(() => {}), hash = "", uvpa, storage = {} } = {}) {
   const els = {};
   const el = (id) => (els[id] ??= {
-    id, textContent: "", value: "", src: "", hidden: id === "oidc" || id === "recovery-warning" || id === "receipt" || id === "receipt-return" || id === "receipt-icon", open: false, href: "", disabled: false, dataset: {}, children: [], on: {},
+    id, textContent: "", value: "", src: "", hidden: id === "oidc" || id === "recovery-warning" || id === "receipt" || id === "receipt-return" || id === "receipt-icon" || id === "bridge", open: false, href: "", disabled: false, dataset: {}, children: [], on: {},
     addEventListener(ev, fn) { this.on[ev] = fn; }, focus() {}, setAttribute() {}, append(...c) { this.children.push(...c); }, replaceChildren(...c) { this.children = c; },
     querySelector(q) { return q === "a" ? this.children.find((c) => c.href) || null : null; },
   });
-  ["title", "intro", "action", "oidc", "status", "first-time", "username", "sites", "devices", "who", "email", "signout", "apps", "manage", "choices", "choice-list", "use-phone", "use-key", "recovery-warning", "sessions", "signout-all", "signout-all-confirm", "also-admin", "receipt", "receipt-where", "receipt-icon", "receipt-return", "receipt-form", "receipt-name", "receipt-continue"].forEach(el);
+  ["title", "intro", "action", "oidc", "status", "first-time", "username", "sites", "devices", "who", "email", "signout", "apps", "manage", "choices", "choice-list", "use-phone", "use-key", "recovery-warning", "sessions", "signout-all", "signout-all-confirm", "also-admin", "receipt", "receipt-where", "receipt-icon", "receipt-return", "receipt-form", "receipt-name", "receipt-continue", "bridge", "bridge-continue", "bridge-add", "bridge-never"].forEach(el);
   const label = { hidden: false };
   const head = [];
   let ready;
@@ -36,9 +36,9 @@ function render(search, { oidc = "", webauthn = true, page = "login", fetch = ()
     setTimeout,
     location: { search, hash, pathname: "/_/auth/" + page, origin: "https://auth.example.com", assign },
     history: { replaceState() {} },
-    localStorage: { setItem() {}, getItem: () => null, removeItem() {} },
+    localStorage: { setItem(k, v) { storage[k] = String(v); }, getItem: (k) => storage[k] ?? null, removeItem(k) { delete storage[k]; } },
     navigator: webauthn ? { credentials: { get, create } } : {},
-    PublicKeyCredential: webauthn ? {} : undefined,
+    PublicKeyCredential: webauthn ? (uvpa == null ? {} : { isUserVerifyingPlatformAuthenticatorAvailable: uvpa }) : undefined,
     fetch,
   };
   vm.createContext(ctx);
@@ -294,6 +294,80 @@ assert.deepEqual(asked, [undefined, ["hybrid"], ["security-key"]], "the main but
 page = render("", { page: "devices", fetch: () => new Promise(() => {}) });
 assert.equal(page.choices, "closed", "adding a passkey asks where to keep it too");
 
+// The bridge: a sign-in with a passkey on another device or a key offers to
+// keep one here too, only where this device has its own authenticator, and
+// never in the way: Continue goes on at once.
+const buf = () => new Uint8Array([1]).buffer;
+const signedWith = (attachment) => ({ id: "c", rawId: buf(), type: "public-key", authenticatorAttachment: attachment, getClientExtensionResults: () => ({}), response: { clientDataJSON: buf(), authenticatorData: buf(), signature: buf(), userHandle: buf() } });
+async function bridgePage({ attachment = "cross-platform", uvpa = async () => true, storage = {}, search = rt, addFails = false } = {}) {
+  const went = [];
+  const madeWith = [];
+  const p = render(search, {
+    uvpa, storage,
+    assign: (url) => went.push(url),
+    fetch: async (url) => {
+      if (url.endsWith("/login/begin")) return { ok: true, json: async () => ({ publicKey: { challenge: "AAAA" } }) };
+      if (url.endsWith("/login/finish")) return { ok: true, json: async () => ({ redirect: "https://private.example.com/x" }) };
+      if (url.endsWith("/add/begin")) return addFails ? { ok: false, status: 403, json: async () => ({ error: "Confirm it's you" }) } : { ok: true, json: async () => ({ publicKey: { challenge: "AAAA", user: { id: "AAAA" } } }) };
+      if (url.endsWith("/add/finish")) return { ok: true, json: async () => ({ id: "ab", provider: "Bitwarden", provider_known: true }) };
+      return { ok: true, json: async () => ({}) };
+    },
+    get: async (request) => (request.mediation ? new Promise(() => {}) : signedWith(attachment)),
+    create: async (request) => { madeWith.push(request.publicKey.hints && [...request.publicKey.hints]); return credential; },
+  });
+  await tick();
+  p.click();
+  await tick(20);
+  return { p, went, madeWith };
+}
+
+let b = await bridgePage();
+assert.equal(b.p.el("bridge").hidden, false, "another device's passkey offers one for this device");
+assert.deepEqual(b.went, [], "the offer waits for the person");
+await b.p.click("bridge-continue");
+assert.deepEqual(b.went, ["https://private.example.com/x"], "Continue goes on without creating anything");
+assert.deepEqual(b.madeWith, []);
+
+b = await bridgePage();
+await b.p.click("bridge-add");
+await tick();
+assert.deepEqual(b.madeWith, [["client-device"]], "the new passkey is steered to this device");
+assert.deepEqual(b.went, ["https://private.example.com/x"]);
+assert.match(b.p.status, /Bitwarden/);
+
+b = await bridgePage({ addFails: true });
+await b.p.click("bridge-add");
+await tick();
+assert.match(b.p.status, /continue without it/);
+assert.deepEqual(b.went, [], "a failed add leaves the choice to the person");
+assert.equal(b.p.el("bridge").hidden, false);
+await b.p.click("bridge-continue");
+assert.deepEqual(b.went, ["https://private.example.com/x"]);
+
+const kept = {};
+b = await bridgePage({ storage: kept });
+await b.p.click("bridge-never");
+assert.deepEqual(b.went, ["https://private.example.com/x"]);
+b = await bridgePage({ storage: kept });
+assert.equal(b.p.el("bridge").hidden, true, "a refusal is remembered on this device");
+assert.deepEqual(b.went, ["https://private.example.com/x"]);
+
+for (const [why, options] of [
+  ["a passkey of this device", { attachment: "platform" }],
+  ["no authenticator here", { uvpa: async () => false }],
+  ["a browser that cannot tell", { uvpa: null }],
+  ["a failing check", { uvpa: async () => { throw new Error("no"); } }],
+  ["a step-up", { search: rt + "&reauth=1" }],
+]) {
+  b = await bridgePage(options);
+  assert.equal(b.p.el("bridge").hidden, true, `no offer after ${why}`);
+  assert.deepEqual(b.went, ["https://private.example.com/x"], `${why}: straight on`);
+}
+b = await bridgePage({ uvpa: () => new Promise(() => {}) });
+await tick(1600);
+assert.equal(b.p.el("bridge").hidden, true, "a browser that never answers does not hold the sign-in");
+assert.deepEqual(b.went, ["https://private.example.com/x"]);
+
 // Browser errors other than NotAllowedError name what the person can do.
 for (const [name, said] of [["NotSupportedError", /cannot use this kind of passkey/], ["SecurityError", /Open the sign-in link again/], ["UnknownError", /could not use a passkey here/]]) {
   page = render(rt, {
@@ -486,4 +560,4 @@ assert.equal(shown.page.who(), "", "nothing about a person is shown without a se
   assert.equal(page.el("also-admin").hidden, true, "no notice for a visitor only");
 }
 
-console.log("passkey pages: login, enrolment, receipt, recovery preflight, choices, devices, rename and sessions OK");
+console.log("passkey pages: login, bridge, enrolment, receipt, recovery preflight, choices, devices, rename and sessions OK");

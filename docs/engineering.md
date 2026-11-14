@@ -119,6 +119,14 @@ ordinary rename on the fresh session. An administrator renames only their own
 active passkey (`PATCH /_/api/admin/passkeys/{id}`), from a session opened with
 a passkey and a passkey proof under five minutes old; another account's passkey
 is not found. The provider is a label for the owner, never a trust decision.
+After a visitor signs in with a passkey on another device or a security key
+(`authenticatorAttachment` is `cross-platform`) on a device that reports its
+own authenticator, the login page offers to add one there, through the
+ordinary add on the fresh session. Continue is the default and goes on at
+once; a refusal is remembered on that device; a step-up never shows the offer,
+and a browser that does not answer within 1.5 seconds is treated as having no
+authenticator. Administrators get no such offer: their login host returns a
+code to the console and keeps no session.
 
 The app may keep its own login. Gateway headers are accepted only from its
 authenticated path; the app keeps its internal authorization. Signed claims that
