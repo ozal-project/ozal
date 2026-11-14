@@ -21,8 +21,8 @@
 <main class="enrol">
   <ol class="steps" aria-label="Progress">
     <li data-step="code" aria-current="step"><span class="dot">1</span><span>Code</span></li>
-    <li data-step="you"><span class="dot">2</span><span>You</span></li>
-    <li data-step="done"><span class="dot">3</span><span>Passkey</span></li>
+    <li data-step="check"><span class="dot">2</span><span>Check</span></li>
+    <li data-step="passkey"><span class="dot">3</span><span>Passkey</span></li>
   </ol>
 
   <section id="step-code">
@@ -40,8 +40,8 @@
     </details>
   </section>
 
-  <section id="step-you" hidden>
-    <h1 id="you-title">Create the first administrator</h1>
+  <section id="step-check" hidden>
+    <h1 id="check-title">Is this your request?</h1>
     <dl class="request" aria-label="This request">
       <div><dt>Server</dt><dd id="req-server"></dd></div>
       <div><dt>Requested by</dt><dd id="req-operator"></dd></div>
@@ -52,18 +52,27 @@
       <div><dt>Expires in</dt><dd><span id="req-countdown" class="countdown"></span></dd></div>
     </dl>
     <p id="country-credit" class="credit" hidden>Countries are approximate.</p>
-    <p id="you-intro" class="note">Continue only if you ran the command on that server just now.</p>
+    <p id="check-intro" class="note">Continue only if you ran the command on that server just now.</p>
+    <button id="confirm" type="button">Yes, continue</button>
+    <button id="withdraw" class="link-button quiet" type="button">This wasn't me — cancel the code</button>
+  </section>
+
+  <section id="step-passkey" hidden>
+    <h1 id="passkey-title">Create your passkey</h1>
+    <p id="passkey-intro">Your device saves it and unlocks it with your fingerprint, face or PIN. The server keeps only its public key.</p>
     <form id="who-form" novalidate>
       <div id="who-fields">
         <label for="name">Full name</label>
-        <input id="name" name="name" autocomplete="name" maxlength="80">
+        <input id="name" name="name" autocomplete="name" maxlength="80" aria-describedby="name-error">
+        <p id="name-error" class="field-help error" hidden></p>
         <label for="email">Email</label>
-        <input id="email" name="email" type="email" autocomplete="email" maxlength="254">
-        <p class="field-help">It names your account; no message is sent.</p>
+        <input id="email" name="email" type="email" autocomplete="email" maxlength="254" aria-describedby="email-help">
+        <p id="email-help" class="field-help">It names your account; no message is sent.</p>
       </div>
       <button id="create" type="submit">Create passkey</button>
     </form>
-    <button id="withdraw" class="link-button quiet" type="button">This wasn't me — cancel the code</button>
+    <p class="field-help timeleft">Finish within <span id="passkey-countdown" class="countdown"></span>.</p>
+    <button id="back" class="link-button quiet" type="button">Back to the request</button>
   </section>
 
   <section id="step-done" hidden>

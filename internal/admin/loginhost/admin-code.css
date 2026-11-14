@@ -19,7 +19,9 @@
 .code-input { margin-bottom: 6px; padding: 14px 12px; font: 600 1.7rem/1 var(--mono); letter-spacing: 0.18em; text-align: center; text-transform: uppercase; }
 /* The example code stays readable: --muted on --raised is above 4.5:1. */
 .code-input::placeholder { color: var(--muted); opacity: 1; }
-.code-input[aria-invalid="true"] { border-color: var(--err); }
+.code-input[aria-invalid="true"], input[aria-invalid="true"] { border-color: var(--err); }
+#who-fields .field-help { margin-top: -6px; }
+.timeleft { margin: 12px 0 0; text-align: center; }
 .field-help { margin: 0 0 16px; font-size: 0.82rem; color: var(--muted); }
 .field-help.error { color: var(--err); }
 /* Headings take focus when a step changes, for screen readers; no ring. */
@@ -62,7 +64,7 @@
 .request .mono { font-family: var(--mono); letter-spacing: 0.08em; }
 .tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); font-size: 0.7rem; font-weight: 600; color: var(--muted); vertical-align: 1px; white-space: nowrap; }
 .tag.match { border-color: color-mix(in srgb, var(--ok) 50%, transparent); color: var(--ok); }
-.flag { display: inline-block; width: 18px; height: 18px; margin-right: 7px; vertical-align: -4px; }
-.flag-code { margin-right: 6px; font: 600 0.72rem var(--mono); color: var(--muted); }
+.place { white-space: nowrap; font-weight: 500; color: var(--muted); }
+.flag { display: inline-block; width: 16px; height: 16px; margin-right: 5px; vertical-align: -3px; }
 .credit { margin: -6px 0 12px; font-size: 0.72rem; color: var(--muted); text-align: right; }
 .credit a { color: var(--muted); }

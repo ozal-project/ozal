@@ -72,8 +72,8 @@ function show(message, kind) {
 }
 
 function go(step) {
-  for (const id of ["code", "you", "done", "ended"]) $("step-" + id).hidden = id !== step;
-  const order = ["code", "you", "done"];
+  for (const id of ["code", "check", "passkey", "done", "ended"]) $("step-" + id).hidden = id !== step;
+  const order = ["code", "check", "passkey"];
   const at = order.indexOf(step);
   document.querySelectorAll(".steps li").forEach((li, i) => {
     li.classList.toggle("complete", at < 0 ? false : i < at || step === "done");
@@ -122,11 +122,12 @@ function format(value) {
   return symbols.length > 4 ? symbols.slice(0, 4) + "-" + symbols.slice(4) : symbols;
 }
 
-// flag shows a country's flag, served by this host (vendored Radian UI
-// SVGs), and names the country in the reader's language. The country comes
-// from the server's local table; nothing is looked up elsewhere. A flag the
-// host does not have falls back to the code.
-function flag(country) {
+// place shows where an address is, after it in parentheses: the country's
+// flag (served by this host, Radian UI SVGs) and its name in the reader's
+// language, since few people recognise their own IP. The country comes from
+// the server's local table; nothing is looked up elsewhere. Without the flag
+// file only the name shows.
+function place(country) {
   if (!/^[A-Z]{2}$/.test(country || "")) return null;
   let name = country;
   try {
@@ -137,19 +138,15 @@ function flag(country) {
   const img = document.createElement("img");
   img.className = "flag";
   img.src = "/_/auth/admin/code/flags/" + country.toLowerCase() + ".svg";
-  img.alt = name;
-  img.title = name;
-  img.width = 18;
-  img.height = 18;
-  img.addEventListener("error", () => {
-    const code = document.createElement("span");
-    code.className = "flag-code";
-    code.textContent = country;
-    code.title = name;
-    img.replaceWith(code);
-  });
+  img.alt = "";
+  img.width = 16;
+  img.height = 16;
+  img.addEventListener("error", () => img.remove());
+  const span = document.createElement("span");
+  span.className = "place";
+  span.append("(", img, name, ")");
   $("country-credit").hidden = false;
-  return img;
+  return span;
 }
 
 // credit names the source of the countries, as its licence asks.
@@ -174,15 +171,31 @@ function credit(text, url) {
 function address(id, ip, tag, match, country) {
   const cell = $(id);
   cell.textContent = "";
-  const mark = flag(country);
-  if (mark) cell.append(mark);
   cell.append(ip);
+  const where = place(country);
+  if (where) cell.append(" ", where);
   if (tag) {
     const label = document.createElement("span");
     label.className = "tag" + (match ? " match" : "");
     label.textContent = tag;
     cell.append(label);
   }
+}
+
+// fieldProblem shows what is wrong with a field right under it; the email's
+// problem takes the place of its hint.
+function fieldProblem(id, message) {
+  const input = $(id);
+  input.setAttribute("aria-invalid", message ? "true" : "false");
+  if (id === "name") {
+    $("name-error").textContent = message;
+    $("name-error").hidden = !message;
+    return;
+  }
+  const help = $("email-help");
+  if (!help.dataset.hint) help.dataset.hint = help.textContent;
+  help.textContent = message || help.dataset.hint;
+  help.classList.toggle("error", Boolean(message));
 }
 
 // fieldError puts a code problem right under the field it is about.
@@ -194,12 +207,14 @@ function fieldError(message) {
 }
 
 function countdown(seconds) {
-  const out = $("req-countdown");
+  const outs = [$("req-countdown"), $("passkey-countdown")];
   const deadline = Date.now() + seconds * 1000;
   const tick = () => {
     const left = Math.max(0, Math.round((deadline - Date.now()) / 1000));
-    out.textContent = Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0");
-    out.classList.toggle("low", left < 60);
+    for (const out of outs) {
+      out.textContent = Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0");
+      out.classList.toggle("low", left < 60);
+    }
     if (left === 0) end("Time ran out", "The setup has to finish within fifteen minutes of the code being printed.");
   };
   tick();
@@ -256,16 +271,15 @@ document.addEventListener("DOMContentLoaded", () => {
       $("req-code").textContent = input.value;
       credit(claimed.country_credit, claimed.country_credit_url);
       if (claimed.kind === "recover") {
-        $("you-title").textContent = "Replace your console passkey";
-        $("you-intro").textContent = "This replaces every passkey of " + (claimed.email || "this administrator") + ". Continue only if you ran the command on that server just now.";
+        $("check-intro").textContent = "This replaces every passkey of " + (claimed.email || "this administrator") + ". Continue only if you ran the command on that server just now.";
+        $("passkey-title").textContent = "Create your new passkey";
         $("who-fields").hidden = true;
       } else {
         $("name").required = true;
         $("email").required = true;
       }
       countdown(claimed.expires_in || 600);
-      go("you");
-      if (claimed.kind !== "recover") $("name").focus();
+      go("check");
     } catch (error) {
       input.disabled = false;
       if (finalCodes[error.code] && error.code !== "code_expired" && error.code !== "code_taken") {
@@ -281,16 +295,26 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  $("confirm").addEventListener("click", () => {
+    go("passkey");
+    if (!$("who-fields").hidden) $("name").focus();
+  });
+  $("back").addEventListener("click", () => go("check"));
+  for (const id of ["name", "email"]) $(id).addEventListener("input", () => fieldProblem(id, ""));
+
   $("who-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const name = $("name");
     const email = $("email");
     if (!$("who-fields").hidden) {
-      if (!name.value.trim()) return show("Add your full name.", "error"), name.focus();
-      if (!email.checkValidity() || !email.value.trim()) return show("Add a valid email address.", "error"), email.focus();
+      fieldProblem("name", name.value.trim() ? "" : "Add your full name.");
+      fieldProblem("email", email.value.trim() && email.checkValidity() ? "" : "Add a valid email address.");
+      const wrong = [name, email].find((input) => input.getAttribute("aria-invalid") === "true");
+      if (wrong) return wrong.focus();
     }
     const create = $("create");
     create.disabled = true;
+    $("back").disabled = true;
     show("Follow your device's prompt to save the passkey…");
     try {
       const begun = await post("/begin", { name: name.value.trim(), email: email.value.trim() });
@@ -312,6 +336,7 @@ document.addEventListener("DOMContentLoaded", () => {
       show("");
     } catch (error) {
       create.disabled = false;
+      $("back").disabled = false;
       if (finalCodes[error.code]) {
         const [title, text] = finalCodes[error.code];
         end(title, text);
