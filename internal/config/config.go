@@ -341,6 +341,17 @@ type Admin struct {
 	// it empty keeps the console consultation-only. The executor profile, not
 	// this file, owns the unit, binary, catalog and key paths.
 	UpdateSocket string `json:"update_socket,omitempty"`
+	// CountryDatabase is a local IP-to-country table (start,end,country CSV,
+	// optionally .gz, such as DB-IP's free country table). When set, the
+	// enrolment-by-code page shows the country of the addresses it lists.
+	// It is read once at start, never sent anywhere and never used to decide
+	// access; a missing or broken file only drops the flags.
+	CountryDatabase string `json:"country_database,omitempty"`
+	// CountryCredit is the attribution shown with the countries, when the
+	// table's licence asks for one and it is not DB-IP's (which is credited
+	// automatically for a file named dbip*). Plain text, at most 120
+	// characters.
+	CountryCredit string `json:"country_credit,omitempty"`
 }
 
 // Notify configures outbound notifications (NTF-001). Channels are opt-in:
@@ -544,6 +555,12 @@ func Validate(cfg Config) (*Config, error) {
 	}
 	if cfg.Admin.UpdateSocket != "" && (!filepath.IsAbs(cfg.Admin.UpdateSocket) || filepath.Clean(cfg.Admin.UpdateSocket) != cfg.Admin.UpdateSocket) {
 		return nil, fmt.Errorf("config: admin.update_socket must be an absolute clean path")
+	}
+	if cfg.Admin.CountryDatabase != "" && (!filepath.IsAbs(cfg.Admin.CountryDatabase) || filepath.Clean(cfg.Admin.CountryDatabase) != cfg.Admin.CountryDatabase) {
+		return nil, fmt.Errorf("config: admin.country_database must be an absolute clean path")
+	}
+	if len(cfg.Admin.CountryCredit) > 120 || strings.ContainsFunc(cfg.Admin.CountryCredit, unicode.IsControl) {
+		return nil, fmt.Errorf("config: admin.country_credit must be plain text of at most 120 characters")
 	}
 	if len(cfg.Routes) == 0 {
 		return nil, fmt.Errorf("config: at least one route is required")

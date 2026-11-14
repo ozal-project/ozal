@@ -39,6 +39,7 @@ import (
 	"github.com/ozal-project/ozal/internal/domaincheck/probe"
 	"github.com/ozal-project/ozal/internal/events"
 	"github.com/ozal-project/ozal/internal/githubapp"
+	"github.com/ozal-project/ozal/internal/ipcountry"
 	"github.com/ozal-project/ozal/internal/notify"
 	"github.com/ozal-project/ozal/internal/notify/telegram"
 	"github.com/ozal-project/ozal/internal/originauth"
@@ -256,6 +257,19 @@ func main() {
 		// the HTTPS login host; the book is shared by the console and the gate.
 		remoteLogin := admin.NewRemoteLogin()
 		adminOpts = append(adminOpts, admin.WithRemoteLogin(remoteLogin))
+		// The country next to an address on the enrolment page is cosmetic:
+		// the table loads in the background, off the listeners' path, and a
+		// table that cannot be read only drops it.
+		if path := loaded.Admin.CountryDatabase; path != "" {
+			table := ipcountry.LoadAsync(ctx, path, func(t *ipcountry.Table, err error) {
+				if err != nil {
+					log.Printf("admin.country_database: %v; the enrolment page shows addresses without a country", err)
+					return
+				}
+				log.Printf("admin.country_database: %d ranges loaded", t.Len())
+			})
+			adminOpts = append(adminOpts, admin.WithCountries(table, countryCredit(loaded.Admin.CountryCredit, path)))
+		}
 		managerOpts = append(managerOpts, routemanager.WithAdminLogin(remoteLogin))
 		// A fresh install needs no command: until the first administrator
 		// exists, a one-use setup link is kept in a file only root and the
@@ -1135,4 +1149,17 @@ func loadAssertionSigner(dir string) (proxy.AssertionSigner, error) {
 		return nil, err
 	}
 	return assertion.NewSigner(key)
+}
+
+// countryCredit is the attribution the enrolment page shows for the country
+// table: the operator's own (admin.country_credit), or DB-IP's when the file
+// is one of theirs, as their licence asks; otherwise none.
+func countryCredit(configured, path string) admin.CountryCredit {
+	if configured != "" {
+		return admin.CountryCredit{Text: configured}
+	}
+	if strings.HasPrefix(strings.ToLower(filepath.Base(path)), "dbip") {
+		return admin.CountryCredit{Text: "IP Geolocation by DB-IP", URL: "https://db-ip.com"}
+	}
+	return admin.CountryCredit{}
 }
