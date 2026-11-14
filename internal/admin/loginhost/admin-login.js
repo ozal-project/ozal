@@ -19,6 +19,22 @@ const b64url = {
   },
 };
 
+function signalAccepted(list) {
+  try {
+    const signal = typeof PublicKeyCredential !== "undefined" && PublicKeyCredential.signalAllAcceptedCredentials;
+    if (!list || !list.rp_id || !list.user_id || !Array.isArray(list.ids) || list.ids.length === 0 || typeof signal !== "function") return;
+    signal.call(PublicKeyCredential, { rpId: list.rp_id, userId: list.user_id, allAcceptedCredentialIds: list.ids }).catch(() => {});
+  } catch {}
+}
+function signalUnknown(gone) {
+  try {
+    const signal = typeof PublicKeyCredential !== "undefined" && PublicKeyCredential.signalUnknownCredential;
+    if (!gone || !gone.rp_id || !gone.credential_id || typeof signal !== "function") return;
+    signal.call(PublicKeyCredential, { rpId: gone.rp_id, credentialId: gone.credential_id }).catch(() => {});
+  } catch {}
+}
+
+
 function credentialJSON(credential) {
   const r = credential.response;
   const out = {
@@ -48,7 +64,7 @@ async function post(path, body, ceremony) {
     body: JSON.stringify(body),
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "This step could not be completed; start again from the console.");
+  if (!response.ok) throw Object.assign(new Error(data.error || "This step could not be completed; start again from the console."), { data });
   return data;
 }
 
@@ -108,9 +124,11 @@ document.addEventListener("DOMContentLoaded", () => {
         credential = await navigator.credentials.get({ publicKey: pk });
       }
       const result = await post("/_/auth/admin/finish" + query, credentialJSON(credential), begun.ceremony);
+      signalAccepted(result.accepted);
       show("Done. Returning to the console…", "ok");
       location.assign(result.redirect);
     } catch (error) {
+      signalUnknown(error.data && error.data.unknown_credential);
       button.disabled = false;
       show(explain(error, create), "error");
     }

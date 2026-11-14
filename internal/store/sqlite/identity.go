@@ -474,9 +474,19 @@ func (s *Identity) RevokeOwnPasskey(ctx context.Context, userID string, credenti
 	if err := deleteSessions(ctx, tx, user); err != nil {
 		return nil, err
 	}
+	// The snapshot is optional. A failed read must never undo a revocation
+	// and session termination that can still be committed.
+	remaining, _ := remainingPasskeys(ctx, tx, userID)
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return remaining, nil
+}
+
+func remainingPasskeys(ctx context.Context, tx *sql.Tx, userID string) ([][]byte, error) {
 	rows, err := tx.QueryContext(ctx, `SELECT credential_id FROM passkeys WHERE user_id = ? AND revoked_at IS NULL ORDER BY created_at, credential_id`, userID)
 	if err != nil {
-		return nil, fmt.Errorf("list remaining passkeys: %w", err)
+		return nil, err
 	}
 	var remaining [][]byte
 	for rows.Next() {
@@ -491,9 +501,6 @@ func (s *Identity) RevokeOwnPasskey(ctx context.Context, userID string, credenti
 		return nil, err
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	return remaining, nil

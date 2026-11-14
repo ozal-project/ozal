@@ -254,7 +254,7 @@ func (g *Gate) devicesRevoke(w http.ResponseWriter, r *http.Request) (any, *apiE
 	// The passkeys left, read in the revocation's own transaction: the page
 	// can tell the browser right away, though this session just ended.
 	answer := map[string]any{"signed_out": true}
-	if list := accepted(g.webauthn.Config.RPID, user.Handle, remaining, nil); list != nil {
+	if list := AcceptedPasskeys(g.webauthn.Config.RPID, user.Handle, remaining, nil); list != nil {
 		answer["accepted"] = list
 	}
 	return answer, nil

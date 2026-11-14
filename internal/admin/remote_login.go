@@ -22,6 +22,7 @@ import (
 
 	"github.com/ozal-project/ozal/internal/adminid"
 	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/passkey"
 )
 
 // Administrator passkeys on the HTTPS login host (ID-021). Many authenticators
@@ -318,7 +319,7 @@ func (h *Handler) remoteFinish(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "that administrator is no longer active")
 		return
 	}
-	h.startAdminSession(w, r, account, code.credentialID)
+	h.startPasskeySession(w, r, account, code.credentialID, true)
 }
 
 // IsAdministrator reports whether email belongs to an enabled administrator
@@ -411,7 +412,21 @@ func (rl *RemoteLogin) handBack(id string) ceremonyDone {
 		if h := rl.handler.Load(); h != nil {
 			h.emit(events.Event{Type: events.Type("admin.login_host_ceremony"), Actor: "admin:" + account.Email})
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"redirect": origin + "/overview#admin_code=" + url.QueryEscape(code)})
+		answer := map[string]any{"redirect": origin + "/overview#admin_code=" + url.QueryEscape(code)}
+		if h := rl.handler.Load(); h != nil {
+			if rp, _, ok := h.loginSite(); ok {
+				if keys, err := h.identities.Passkeys(r.Context(), account.ID); err == nil {
+					ids := make([][]byte, 0, len(keys))
+					for _, key := range keys {
+						ids = append(ids, key.ID)
+					}
+					if list := passkey.AcceptedPasskeys(rp.Config.RPID, account.Handle, ids, credentialID); list != nil {
+						answer["accepted"] = list
+					}
+				}
+			}
+		}
+		writeJSON(w, http.StatusOK, answer)
 	}
 }
 

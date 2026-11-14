@@ -527,6 +527,17 @@ func (s *Admins) RenamePasskey(ctx context.Context, accountID string, credential
 	return nil
 }
 
+// CredentialRevoked reports only a retired credential of an enabled account
+// with the supplied handle. Unknown credentials and disabled accounts say none.
+func (s *Admins) CredentialRevoked(ctx context.Context, handle, credentialID []byte) (bool, error) {
+	if len(handle) == 0 || len(credentialID) == 0 {
+		return false, nil
+	}
+	var count int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM admin_passkeys p JOIN admin_accounts a ON a.id = p.account_id WHERE p.credential_id = ? AND p.revoked_at IS NOT NULL AND a.handle = ? AND a.disabled_at IS NULL`, credentialID, handle).Scan(&count)
+	return count == 1 && err == nil, err
+}
+
 func nullLabel(label string) any {
 	if label == "" {
 		return nil

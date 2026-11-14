@@ -76,6 +76,40 @@ func TestPasskeysCarryTheirLabel(t *testing.T) {
 	}
 }
 
+func TestRetiredAdminPasskeyNeedsItsEnabledOwnersHandle(t *testing.T) {
+	ctx := context.Background()
+	admins, account := enrolledAdmin(t)
+	first, other := []byte("first-passkey-credential"), []byte("other-passkey-credential")
+	if err := admins.AddPasskey(ctx, account.ID, webauthn.Credential{ID: other}, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := admins.RemovePasskey(ctx, account.ID, first); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		handle, id []byte
+		want       bool
+	}{
+		{account.Handle, first, true},
+		{account.Handle, other, false},
+		{account.Handle, []byte("visitor-passkey-credential"), false},
+		{[]byte("another-account"), first, false},
+		{nil, first, false},
+	} {
+		if got, err := admins.CredentialRevoked(ctx, tc.handle, tc.id); err != nil || got != tc.want {
+			t.Fatalf("retired credential = %v %v, want %v", got, err, tc.want)
+		}
+	}
+	// Disable directly to exercise the lookup even for the last account;
+	// the public disable operation has its own last-administrator safeguard.
+	if _, err := admins.db.ExecContext(ctx, `UPDATE admin_accounts SET disabled_at = 1 WHERE id = ?`, account.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := admins.CredentialRevoked(ctx, account.Handle, first); err != nil || got {
+		t.Fatalf("disabled account's credential was named: %v %v", got, err)
+	}
+}
+
 func TestAccessRequestsSettingIsOffByDefaultAndSurvivesToggling(t *testing.T) {
 	ctx := context.Background()
 	admins, _ := enrolledAdmin(t)

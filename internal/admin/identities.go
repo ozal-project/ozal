@@ -70,6 +70,8 @@ type identities interface {
 	RemovePasskey(ctx context.Context, accountID string, credentialID []byte) error
 	// RenamePasskey labels one of the account's active passkeys.
 	RenamePasskey(ctx context.Context, accountID string, credentialID []byte, label string) error
+	// CredentialRevoked checks a retired credential and its owner handle.
+	CredentialRevoked(ctx context.Context, handle, credentialID []byte) (bool, error)
 	// RecordLogin stores a credential's new counter; it fails for a revoked one.
 	RecordLogin(ctx context.Context, credential webauthn.Credential) error
 	// AccessRequests reports whether the sign-in page accepts requests for
@@ -711,7 +713,9 @@ func (h *Handler) adminLoginFinish(w http.ResponseWriter, r *http.Request) {
 // hands the account to done.
 func (h *Handler) finishLogin(w http.ResponseWriter, r *http.Request, rp *webauthn.WebAuthn, pending pendingCeremony, done ceremonyDone) {
 	var found adminid.Account
-	lookup := func(_, handle []byte) (webauthn.User, error) {
+	var usedID, usedHandle []byte
+	lookup := func(rawID, handle []byte) (webauthn.User, error) {
+		usedID, usedHandle = rawID, handle
 		account, credentials, err := h.identities.AccountByHandle(r.Context(), handle)
 		if err != nil {
 			return nil, err
@@ -722,6 +726,15 @@ func (h *Handler) finishLogin(w http.ResponseWriter, r *http.Request, rp *webaut
 	_, credential, err := rp.FinishPasskeyLogin(lookup, pending.session, r)
 	if err != nil || found.ID == "" {
 		h.failedSignIn(r, "passkey_invalid", err)
+		// Signals belong only on the HTTPS RP, never on the console's
+		// loopback origin. An unrelated or unreadable credential sends none.
+		if pending.tx != "" {
+			revoked, checkErr := h.identities.CredentialRevoked(r.Context(), usedHandle, usedID)
+			if gone := passkey.RetiredPasskey(rp.Config.RPID, usedID, revoked, checkErr); gone != nil {
+				writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "that passkey is not an administrator of this edge", "unknown_credential": gone})
+				return
+			}
+		}
 		writeError(w, http.StatusUnauthorized, "that passkey is not an administrator of this edge")
 		return
 	}
@@ -748,7 +761,11 @@ func (h *Handler) finishLogin(w http.ResponseWriter, r *http.Request, rp *webaut
 // startAdminSession turns a verified administrator into the same short
 // operator session the host login produces.
 func (h *Handler) startAdminSession(w http.ResponseWriter, r *http.Request, account adminid.Account, credentialID []byte) {
-	token, grant, err := h.operators.issueSliding(account.Name, account.Tools...)
+	h.startPasskeySession(w, r, account, credentialID, false)
+}
+
+func (h *Handler) startPasskeySession(w http.ResponseWriter, r *http.Request, account adminid.Account, credentialID []byte, loginHost bool) {
+	token, grant, err := h.operators.issuePasskey(account.Name, loginHost, account.Tools...)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "the session could not be opened")
 		return

@@ -19,9 +19,10 @@ const b64url = {
   },
 };
 
-async function post(path, body) {
+async function post(path, body, signal) {
   const response = await fetch(path, {
     method: "POST",
+    signal,
     headers: { "Content-Type": "application/json" },
     credentials: "same-origin",
     body: JSON.stringify(body),
@@ -369,7 +370,7 @@ function bridge(result) {
       const options = await post("/_/auth/devices/add/begin", {});
       const created = await navigator.credentials.create({ publicKey: creationOptions(options, choices.device.hints) });
       const added = await post("/_/auth/devices/add/finish", credentialJSON(created));
-      done((added.provider_known ? "Passkey saved in " + added.provider + "." : "Passkey saved on this device.") + " You are signed in.");
+      done((added.provider_known ? "Passkey saved in " + added.provider + "." : "Your passkey is saved.") + " You are signed in.");
     } catch (error) {
       add.disabled = false;
       show(explain(error, "enrol") + " You can continue without it.", "error");
@@ -522,26 +523,52 @@ function receipt(result) {
   // A name that fails is reported once; submitting the same name again
   // continues without it, a different name is tried.
   let failed = null;
+  let completed = false;
+  let saving = false;
+  let controller;
+  const skip = document.getElementById("receipt-skip");
+  skip.addEventListener("click", () => {
+    if (completed) return;
+    completed = true;
+    controller?.abort();
+    document.getElementById("receipt").hidden = true;
+    finish(result, "Your passkey is saved.", true);
+  });
   input.addEventListener("input", () => {
     go.textContent = input.value.trim() === failed ? "Continue without a name" : "Continue";
   });
   document.getElementById("receipt-form").addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (completed || saving) return;
     const label = input.value.trim();
     let named = false;
     if (label && label !== failed) {
       go.disabled = true;
+      saving = true;
+      skip.hidden = false;
+      controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10_000);
       try {
-        await post("/_/auth/devices/rename", { id: created.id, label });
+        await Promise.race([
+          post("/_/auth/devices/rename", { id: created.id, label }, controller.signal),
+          new Promise((_, reject) => controller.signal.addEventListener("abort", () => reject(new Error("Saving the name was interrupted. You can continue without it.")), { once: true })),
+        ]);
         named = true;
       } catch (error) {
+        if (completed) return;
         failed = label;
         go.disabled = false;
         go.textContent = "Continue without a name";
         show("The name was not saved: " + error.message, "error");
         return;
+      } finally {
+        clearTimeout(timer);
+        saving = false;
+        skip.hidden = true;
       }
     }
+    if (completed) return;
+    completed = true;
     document.getElementById("receipt").hidden = true;
     finish(result, named ? "Saved as “" + label + "”." : "Your passkey is saved.", true);
   });

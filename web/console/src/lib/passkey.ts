@@ -1,7 +1,8 @@
 // Administrator passkeys. The edge sends WebAuthn options with binary fields
 // as base64url; the browser wants ArrayBuffers and the edge wants base64url
 // back. The ceremony ID travels in a header, never in a cookie or URL.
-import { withHints } from "$lib/passkeyChoices";
+import { withHints } from "./passkeyChoices.ts";
+import { reauthenticateOnLoginHost } from "./loginHost.ts";
 
 export type AdminSession = { token: string; name: string; expires: string; tools: string[]; renewable?: boolean };
 
@@ -26,7 +27,7 @@ async function api<T>(path: string, body: unknown, ceremony?: string, bearer?: s
     body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as { error?: string }).error || "The request failed.");
+  if (!res.ok) throw Object.assign(new Error((data as { error?: string }).error || "The request failed."), { code: (data as { code?: string }).code });
   return data as T;
 }
 
@@ -124,9 +125,20 @@ export async function addPasskey(session: string): Promise<void> {
 
 // confirmWithPasskey proves the signed-in administrator is still present
 // before a sensitive operation such as installing a release. It never opens
-// a new session; the edge marks this one as recently confirmed.
+// a new session on loopback; a configured login host reauthenticates there.
+// After that round trip the person retries the action with the new session.
 export async function confirmWithPasskey(session: string): Promise<void> {
-  const begun = await api<Begun>("/_/api/admin/step-up/begin", {}, undefined, session);
+  // The HTTPS RP's passkey cannot confirm on ozal.localhost. Navigation
+  // starts a fresh sign-in; keep the caller from retrying with its old token.
+  let begun: Begun;
+  try {
+    begun = await api<Begun>("/_/api/admin/step-up/begin", {}, undefined, session);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "login_host_required" && await reauthenticateOnLoginHost()) {
+      return new Promise<void>(() => {});
+    }
+    throw error;
+  }
   const pk = begun.options.publicKey;
   pk.challenge = decode(pk.challenge);
   for (const c of pk.allowCredentials ?? []) c.id = decode(c.id);

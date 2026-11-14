@@ -9,14 +9,14 @@ import assert from "node:assert/strict";
 
 const src = readFileSync(new URL("../internal/passkey/assets/passkey.js", import.meta.url), "utf8");
 
-function render(search, { oidc = "", webauthn = true, page = "login", fetch = () => new Promise(() => {}), assign = () => {}, caps, get = () => new Promise(() => {}), create = () => new Promise(() => {}), hash = "", uvpa, storage = {}, signals = {} } = {}) {
+function render(search, { oidc = "", webauthn = true, page = "login", fetch = () => new Promise(() => {}), assign = () => {}, caps, get = () => new Promise(() => {}), create = () => new Promise(() => {}), hash = "", uvpa, storage = {}, signals = {}, timer = setTimeout } = {}) {
   const els = {};
   const el = (id) => (els[id] ??= {
     id, textContent: "", value: "", src: "", hidden: id === "oidc" || id === "recovery-warning" || id === "receipt" || id === "receipt-return" || id === "receipt-icon" || id === "bridge" || id === "backup-hint", open: false, href: "", disabled: false, dataset: {}, children: [], on: {},
     addEventListener(ev, fn) { this.on[ev] = fn; }, focus() {}, setAttribute() {}, append(...c) { this.children.push(...c); }, replaceChildren(...c) { this.children = c; },
     querySelector(q) { return q === "a" ? this.children.find((c) => c.href) || null : null; },
   });
-  ["title", "intro", "action", "oidc", "status", "first-time", "username", "sites", "devices", "who", "email", "signout", "apps", "manage", "choices", "choice-list", "use-phone", "use-key", "recovery-warning", "sessions", "signout-all", "signout-all-confirm", "also-admin", "receipt", "receipt-where", "receipt-icon", "receipt-return", "receipt-form", "receipt-name", "receipt-continue", "bridge", "bridge-continue", "bridge-add", "bridge-never", "backup-hint"].forEach(el);
+  ["title", "intro", "action", "oidc", "status", "first-time", "username", "sites", "devices", "who", "email", "signout", "apps", "manage", "choices", "choice-list", "use-phone", "use-key", "recovery-warning", "sessions", "signout-all", "signout-all-confirm", "also-admin", "receipt", "receipt-skip", "receipt-where", "receipt-icon", "receipt-return", "receipt-form", "receipt-name", "receipt-continue", "bridge", "bridge-continue", "bridge-add", "bridge-never", "backup-hint"].forEach(el);
   const label = { hidden: false };
   const head = [];
   let ready;
@@ -33,7 +33,7 @@ function render(search, { oidc = "", webauthn = true, page = "login", fetch = ()
   const ctx = {
     document, URL, URLSearchParams, encodeURIComponent, AbortController, atob, btoa, JSON, Date, String, Uint8Array, DOMException,
     window: webauthn ? { PublicKeyCredential: Object.assign(function () {}, caps === undefined ? {} : { getClientCapabilities: caps }) } : {},
-    setTimeout,
+    setTimeout: timer, clearTimeout,
     location: { search, hash, pathname: "/_/auth/" + page, origin: "https://auth.example.com", assign },
     history: { replaceState() {} },
     localStorage: { setItem(k, v) { storage[k] = String(v); }, getItem: (k) => storage[k] ?? null, removeItem(k) { delete storage[k]; } },
@@ -268,6 +268,52 @@ await submit(page);
 assert.equal(renames.length, 1, "the same failed name is not retried");
 assert.equal(page.el("receipt").hidden, true, "the person continues without it");
 
+// A hung optional rename still offers a way into the destination. A late
+// response must not navigate a second time or replace the successful state.
+const receiptWent = [];
+let settleName;
+const hungReceipt = enrol({
+  assign: (url) => receiptWent.push(url),
+  fetch: async (url) => {
+    if (url.endsWith("/info")) return { ok: true, json: async () => ({ recovery: false }) };
+    if (url.endsWith("/begin")) return { ok: true, json: async () => ({ publicKey: { challenge: "AAAA", user: { id: "AAAA" } } }) };
+    if (url.endsWith("/rename")) return new Promise((resolve) => { settleName = resolve; });
+    return { ok: true, json: async () => ({ redirect: "https://private.example.com/x", passkey: { id: "ab", provider_known: false } }) };
+  },
+  create: async () => credential,
+});
+await tick();
+await hungReceipt.click();
+hungReceipt.el("receipt-name").value = "Laptop";
+const savingName = submit(hungReceipt);
+await tick();
+assert.equal(hungReceipt.el("receipt-skip").hidden, false);
+await hungReceipt.click("receipt-skip");
+await savingName;
+assert.deepEqual(receiptWent, ["https://private.example.com/x"]);
+settleName({ ok: true, json: async () => ({}) });
+await tick();
+assert.deepEqual(receiptWent, ["https://private.example.com/x"], "a late name never navigates twice");
+
+const timeoutReceipt = enrol({
+  timer: (fn, ms) => setTimeout(fn, ms === 10_000 ? 0 : ms),
+  fetch: async (url) => {
+    if (url.endsWith("/info")) return { ok: true, json: async () => ({ recovery: false }) };
+    if (url.endsWith("/begin")) return { ok: true, json: async () => ({ publicKey: { challenge: "AAAA", user: { id: "AAAA" } } }) };
+    if (url.endsWith("/rename")) return new Promise(() => {});
+    return { ok: true, json: async () => ({ passkey: { id: "ab", provider_known: false }, redirect: "" }) };
+  },
+  create: async () => credential,
+});
+await tick();
+await timeoutReceipt.click();
+timeoutReceipt.el("receipt-name").value = "Laptop";
+await submit(timeoutReceipt);
+assert.equal(timeoutReceipt.el("receipt-continue").disabled, false);
+assert.match(timeoutReceipt.status, /continue without it/);
+await submit(timeoutReceipt);
+assert.equal(timeoutReceipt.el("receipt").hidden, true);
+
 page = enrol({ webauthn: false });
 assert.notEqual(page.choices, "hidden");
 assert.match(page.status, /Copy this page's address/, "the invitation can move to a browser that supports passkeys");
@@ -299,7 +345,7 @@ assert.equal(page.choices, "closed", "adding a passkey asks where to keep it too
 // never in the way: Continue goes on at once.
 const buf = () => new Uint8Array([1]).buffer;
 const signedWith = (attachment) => ({ id: "c", rawId: buf(), type: "public-key", authenticatorAttachment: attachment, getClientExtensionResults: () => ({}), response: { clientDataJSON: buf(), authenticatorData: buf(), signature: buf(), userHandle: buf() } });
-async function bridgePage({ attachment = "cross-platform", uvpa = async () => true, storage = {}, search = rt, addFails = false, signals = {}, finish } = {}) {
+async function bridgePage({ attachment = "cross-platform", uvpa = async () => true, storage = {}, search = rt, addFails = false, signals = {}, finish, added = { id: "ab", provider: "Bitwarden", provider_known: true } } = {}) {
   const went = [];
   const madeWith = [];
   const p = render(search, {
@@ -309,7 +355,7 @@ async function bridgePage({ attachment = "cross-platform", uvpa = async () => tr
       if (url.endsWith("/login/begin")) return { ok: true, json: async () => ({ publicKey: { challenge: "AAAA" } }) };
       if (url.endsWith("/login/finish")) return finish ? finish() : { ok: true, json: async () => ({ redirect: "https://private.example.com/x" }) };
       if (url.endsWith("/add/begin")) return addFails ? { ok: false, status: 403, json: async () => ({ error: "Confirm it's you" }) } : { ok: true, json: async () => ({ publicKey: { challenge: "AAAA", user: { id: "AAAA" } } }) };
-      if (url.endsWith("/add/finish")) return { ok: true, json: async () => ({ id: "ab", provider: "Bitwarden", provider_known: true }) };
+      if (url.endsWith("/add/finish")) return { ok: true, json: async () => added };
       return { ok: true, json: async () => ({}) };
     },
     get: async (request) => (request.mediation ? new Promise(() => {}) : signedWith(attachment)),
@@ -334,6 +380,11 @@ await tick();
 assert.deepEqual(b.madeWith, [["client-device"]], "the new passkey is steered to this device");
 assert.deepEqual(b.went, ["https://private.example.com/x"]);
 assert.match(b.p.status, /Bitwarden/);
+
+b = await bridgePage({ added: { id: "ab", provider: "Synced passkey", provider_known: false } });
+await b.p.click("bridge-add");
+assert.match(b.p.status, /Your passkey is saved/);
+assert.doesNotMatch(b.p.status, /saved on this device|Synced passkey/);
 
 b = await bridgePage({ addFails: true });
 await b.p.click("bridge-add");
@@ -633,3 +684,60 @@ assert.equal(shown.page.who(), "", "nothing about a person is shown without a se
 }
 
 console.log("passkey pages: login, bridge, signals, enrolment, receipt, recovery preflight, choices, devices, rename and sessions OK");
+
+
+// The administrator login host runs on the HTTPS RP. Signals must remain
+// optional here too, including a pending, rejected or synchronously thrown call.
+const adminLoginScript = readFileSync(new URL("../internal/admin/loginhost/admin-login.js", import.meta.url), "utf8");
+async function adminLoginPage({ result = {}, ok = true, signals = {} } = {}) {
+  const sent = [];
+  const went = [];
+  const nodes = Object.fromEntries(["action", "status", "title"].map((id) => [id, {
+    textContent: "", dataset: {}, disabled: false,
+    addEventListener(_, fn) { this.click = fn; },
+  }]));
+  const context = {
+    document: {
+      body: { dataset: { tx: "t", kind: "sign-in" } },
+      getElementById: (id) => nodes[id],
+      addEventListener(_, fn) { fn(); },
+    },
+    window: { PublicKeyCredential: {} }, PublicKeyCredential: signals,
+    URLSearchParams, atob, btoa, Uint8Array, DOMException,
+    navigator: { credentials: { get: async () => signedWith("platform") } },
+    location: { assign: (url) => went.push(url) },
+    fetch: async (url) => {
+      sent.push(url);
+      return { ok: url.includes("/begin") || ok, json: async () => url.includes("/begin")
+        ? { ceremony: "c", options: { publicKey: { challenge: "AAAA" } } }
+        : { redirect: "http://ozal.localhost:9091/overview#admin_code=one-use", ...result } };
+    },
+  };
+  vm.runInNewContext(adminLoginScript, context);
+  await nodes.action.click();
+  await tick();
+  return { went, status: nodes.status.textContent };
+}
+const adminAccepted = { rp_id: "example.com", user_id: "YWRtaW4", ids: ["YQ"] };
+for (const signalMode of ["missing", "works", "rejects", "throws", "pending"]) {
+  const calls = [];
+  const signals = signalMode === "missing" ? {} : { signalAllAcceptedCredentials: (options) => {
+    calls.push(JSON.parse(JSON.stringify(options)));
+    if (signalMode === "throws") throw new Error("refused");
+    if (signalMode === "rejects") return Promise.reject(new Error("refused"));
+    if (signalMode === "pending") return new Promise(() => {});
+    return Promise.resolve();
+  } };
+  const admin = await adminLoginPage({ result: { accepted: adminAccepted }, signals });
+  assert.equal(admin.went.length, 1, `${signalMode}: the console return is never held`);
+  if (signalMode !== "missing") assert.deepEqual(calls, [{ rpId: "example.com", userId: "YWRtaW4", allAcceptedCredentialIds: ["YQ"] }]);
+}
+const retiredCalls = [];
+const retiredSignals = { signalUnknownCredential: async (options) => { retiredCalls.push(JSON.parse(JSON.stringify(options))); } };
+let admin = await adminLoginPage({ ok: false, result: { error: "retired", unknown_credential: { rp_id: "example.com", credential_id: "YQ" } }, signals: retiredSignals });
+assert.deepEqual(retiredCalls, [{ rpId: "example.com", credentialId: "YQ" }]);
+assert.deepEqual(admin.went, []);
+retiredCalls.length = 0;
+await adminLoginPage({ ok: false, result: { error: "ambiguous" }, signals: retiredSignals });
+assert.deepEqual(retiredCalls, []);
+console.log("administrator login host: optional accepted and retired signals OK");

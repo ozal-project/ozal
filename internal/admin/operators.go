@@ -44,6 +44,8 @@ type operatorGrant struct {
 	// passkeyAt is the last passkey assertion that opened or confirmed this
 	// session. It is zero for host logins and the admin token.
 	passkeyAt time.Time
+	// loginHost means the session was authenticated on the public RP.
+	loginHost bool
 	// idle > 0 makes the session sliding: each use pushes Expires to now+idle,
 	// never past limit. Passkey sessions slide; host logins do not.
 	idle  time.Duration
@@ -186,6 +188,10 @@ func (s *operatorSessions) renew(token string) (operatorGrant, bool) {
 // issueSliding opens a passkey session: idle timeout with an absolute limit.
 // It records the assertion time, which is the first passkey proof.
 func (s *operatorSessions) issueSliding(name string, tools ...string) (string, operatorGrant, error) {
+	return s.issuePasskey(name, false, tools...)
+}
+
+func (s *operatorSessions) issuePasskey(name string, loginHost bool, tools ...string) (string, operatorGrant, error) {
 	token, g, err := s.issue(name, false, tools...)
 	if err != nil {
 		return "", operatorGrant{}, err
@@ -196,6 +202,7 @@ func (s *operatorSessions) issueSliding(name string, tools ...string) (string, o
 	now := s.now()
 	g.idle, g.limit, g.Expires = passkeyIdle, now.Add(passkeyLimit), now.Add(passkeyIdle)
 	g.passkeyAt = now
+	g.loginHost = loginHost
 	s.grants[hash] = g
 	return token, g, nil
 }
