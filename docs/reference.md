@@ -392,6 +392,36 @@ of other names) and answers `ok` or `bad` with the exact record to create.
 it answers 202, 409 if one is already running or queued, and 429 if the last one was less
 than a minute ago or the CA asked to wait.
 
+**Connecting Cloudflare from the console.** On an edge that does not yet own its
+certificates, **Domains** connects Cloudflare. The operator pastes an API token with *Zone ·
+Read*, *DNS · Edit*, *Zone Settings · Edit* and *SSL and Certificates · Edit* over the zones
+Ozal serves, and this edge's public address (the console suggests the sign-in host's). The
+edge checks the token with Cloudflare and keeps it in `cloudflare.token` (0600) beside the
+state database (`-db`), with the zones it sees in `cloudflare.json`. The token is never in
+`config.json`, never returned and never logged (`GET /_/api/cloudflare` and
+`POST`/`DELETE /_/api/cloudflare/token`, *applications* tool). The page then shows the plan: one certificate per zone (`zone` and
+`*.zone`) and the addresses each covers. A plan that would leave an address the token
+cannot reach without a certificate is refused. The page also shows the one host command
+that applies it:
+
+```sh
+sudo ozal cloudflare enable -config /etc/ozal/config.json \
+  -token-file /var/lib/ozal/cloudflare.token -target 203.0.113.10 -apply -restart ozal.service
+```
+
+Changing how the public listener gets its certificates needs a restart and stays with the
+host. The command:
+
+1. checks the token again;
+2. writes `tls.domains`, `tls.dns01` (state in `dns01/` beside the token), `dns.cloudflare`
+   and `dns.target` to the host configuration, never the runtime file;
+3. keeps the previous file as `config.json.before-dns01-<time>`, with its permissions and
+   owner;
+4. restarts the unit.
+
+Without `-apply` it only shows the plan. Afterwards **Domains** lists the zones and sets each
+one up (below). A token the edge uses cannot be replaced or forgotten from the console.
+
 **Provider setup.** `GET /_/api/zones/{zone}/setup` returns what the zone still needs outside
 the edge, as steps `challenge` (the CNAME above), `encryption` (the proxy's SSL mode),
 `origin_pull` (the client certificate the proxy presents) and `https_redirect` (*Always Use

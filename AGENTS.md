@@ -103,7 +103,8 @@ it, never as a standalone big-bang refactor.
   regression test that fails without the change.
 - Never weaken a check to make a test pass.
 - Secrets come from env or files; the control plane never writes resolved
-  secrets back to disk.
+  secrets back to disk. The one exception is a Cloudflare token pasted in the
+  console: its own 0600 file beside the state, referenced, never inlined.
 - The admin listener stays loopback-only.
 
 ## Product and implementation ownership
