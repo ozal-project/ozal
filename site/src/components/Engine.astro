@@ -17,7 +17,7 @@ const title = (key: string) => key.charAt(0).toUpperCase() + key.slice(1);
       <p class="label">Recorded example</p>
       <p class="decision-title">Refused</p>
       <p>Bob asks for grafana.acme.dev. Only people at acme.dev may open it; his email is bob@other.org.</p>
-      <p class="small quiet">The interactive demo needs JavaScript. This recorded answer remains available.</p>
+      <p class="small quiet" data-nojs>The interactive demo needs JavaScript. This recorded answer remains available.</p>
       <button type="button" data-start hidden class="button">Load the engine</button>
     </div>
     <div data-panel hidden class="engine-panel">
@@ -28,7 +28,7 @@ const title = (key: string) => key.charAt(0).toUpperCase() + key.slice(1);
           <tbody>{people.map(([who, name, email]) => (
             <tr>
               <th scope="row"><span class={`avatar avatar-${who}`} aria-hidden="true">{who === "none" ? "?" : name[0]}</span><span class="matrix-name">{name}</span><small>{email}</small></th>
-              {apps.map(([key]) => <td><button type="button" class="cell" data-cell data-who={who} data-app={key} aria-pressed="false"><i class="cell-mark" aria-hidden="true"></i><span class="cell-word">…</span></button></td>)}
+              {apps.map(([key]) => <td><button type="button" class="cell" data-cell data-who={who} data-app={key} data-app-rule={rule[key]} aria-pressed="false"><i class="cell-mark" aria-hidden="true"></i><span class="cell-word">…</span></button></td>)}
             </tr>
           ))}</tbody>
         </table>
@@ -55,6 +55,7 @@ const title = (key: string) => key.charAt(0).toUpperCase() + key.slice(1);
         <div data-verdict data-state="allowed" class="verdict" role="status" aria-live="polite" aria-atomic="true" aria-label="Decision">
           <p class="verdict-head"><span class="verdict-lamp" aria-hidden="true"></span><span data-verdict-title class="decision-title">—</span></p>
           <p data-reason class="verdict-reason"></p>
+          <p data-rule class="verdict-rule"></p>
           <p class="verdict-code">code <code data-code></code></p>
         </div>
         <div class="decision-stages"><p class="stages-title">How this answer was reached</p><ol data-stages></ol></div>

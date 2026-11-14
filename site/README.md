@@ -41,7 +41,8 @@ The page is ordered as a product story:
 2. **Live demo.** Right after the first screen, so the real engine is one scroll away. An access
    matrix: four people against four apps, every cell answered by the real engine. Choosing a cell
    explains that answer; the sign-in settings re-answer the whole matrix, and a cell whose answer
-   changed flashes once.
+   changed flashes once. At 480 px and below the matrix hides each app's rule, so the answer
+   names it ("Grafana's rule: Company email").
 3. **Why it exists.** The three usual ways to share an internal tool, what each costs, and the
    one front door.
 4. **How it works.** The checks in order, a `policy explain` trace, and the identity headers an
@@ -57,11 +58,19 @@ The page is ordered as a product story:
    The page carries no video. `scripts/demo/tour.mjs` regenerates every still by signing in with
    a host login, including the narrow ones, clipped from the texts each `shot()` call names; if
    the wide layout changes, update the `.crop-*` rules in `src/styles.css`, and if a narrow
-   still's height changes, its `narrowH` in `src/pages/index.astro`.
-6. **Also in the binary, status, and get started.** A Domains card (demo data) and static sites,
-   what works today with how far each feature is proven, who Ozal is and is not for, and the
-   commands to try it. Each capability is described once: sign-in lives in the pipeline and the
+   still's height changes, its `narrowH` in `src/pages/index.astro`. Each still's URL carries a
+   hash of its content (`?v=`), so a new capture is never hidden by a cached old one. The section
+   says the console is on main, not yet in alpha.1, with the status list's "Unreleased" tag.
+6. **Also in the binary, status, and get started.** A Domains card (demo data, marked as on main
+   and not yet in alpha.1) and static sites, what works today with how far each feature is
+   proven, who Ozal is and is not for, and the commands for a local trial. The guided next step,
+   "Publish your first application" at `/docs/first-application/`, leads; the source is the
+   secondary link. Each capability is described once: sign-in lives in the pipeline and the
    tour, the decision record in the tour's last step.
+
+Once a visitor chooses a request in the doorway, the answer arrives in 150 ms; the slower
+walk-through is only for autoplay. Buttons, toggles and summaries a thumb presses are at least
+44 px tall, as [product design](../docs/architecture/product-design.md) asks.
 
 ## Documentation at /docs
 
@@ -141,7 +150,8 @@ node scripts/demo/site-check.mjs --url http://127.0.0.1:4321 --chrome /path/to/c
 
 The check covers 1440/1024/768/390/320 px, horizontal overflow, visible navigation,
 the tour's sticky stage, the doorway's playback and hand-off, the matrix and its live decisions, a failed WASM download and
-retry, Save-Data, the page with JavaScript disabled, and every guide at /docs with its links,
-anchors and phone widths. It does not publish the
+retry, Save-Data, the page with JavaScript disabled, the answer naming the app's rule on a
+phone, whole app names at 320 px, 44 px targets, the guided next step, the doorway answering a
+chosen request at once, and every guide at /docs with its links, anchors and phone widths. It does not publish the
 site or exercise a production sign-in. `scripts/verify.sh` remains the full gate;
 the browser check is separate because it requires an installed Chrome/Chromium.

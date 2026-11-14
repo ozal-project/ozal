@@ -64,7 +64,7 @@ if (door && !still && observing) {
     clearInterval(timer);
     if (entries.some((e) => e.isIntersecting)) timer = window.setInterval(next, hold);
   }, { threshold: 0.5 });
-  const stop = () => { clearInterval(timer); seen.disconnect(); };
+  const stop = () => { clearInterval(timer); seen.disconnect(); door.classList.add("door-chosen"); };
   door.addEventListener("pointerdown", stop, { once: true });
   door.addEventListener("keydown", stop, { once: true });
   seen.observe(door);

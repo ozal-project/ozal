@@ -89,6 +89,9 @@ function render(root: HTMLElement, report: Report | { error: string }, app: stri
   text($(root, "[data-verdict-title]"), d.title);
   text($(root, "[data-code]"), report.decision.code);
   text($(root, "[data-reason]"), plainDecision(report, app, visitor));
+  // A narrow screen hides each app's rule in the matrix, so the answer names it.
+  const rule = root.querySelector<HTMLElement>(`[data-cell][data-app="${app}"]`)?.dataset.appRule;
+  text($(root, "[data-rule]"), rule ? `${app.charAt(0).toUpperCase()}${app.slice(1)}'s rule: ${rule}` : "");
   for (const stage of stagesFor(report)) {
     const li = document.createElement("li");
     li.className = "stage";
@@ -146,6 +149,9 @@ export function setup(root: HTMLElement) {
   const panel = $(root, "[data-panel]");
   const fallback = $(root, "[data-fallback]");
   const start = $<HTMLButtonElement>(root, "[data-start]");
+  // Scripts run, so "needs JavaScript" no longer applies; the status line
+  // says what is happening instead (loading, failed with a retry, or ready).
+  root.querySelector<HTMLElement>("[data-nojs]")?.setAttribute("hidden", "");
 
   async function boot() {
     start.disabled = true;

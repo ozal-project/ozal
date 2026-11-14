@@ -103,7 +103,9 @@
   .terminal pre b { font-weight: 400; color: var(--color-ink); }
   .terminal pre .t-no { color: var(--color-no); } .terminal pre .t-ok { color: var(--color-ok); } .terminal pre .t-dim { color: var(--color-muted); }
   .terminal-note { padding: 0 20px 18px; font-size: var(--t-small); color: var(--color-muted); }
-  .copy { font: inherit; font-size: var(--t-micro); color: var(--color-ink-2); background: var(--color-tile-2); border: 1px solid var(--color-tile-3); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  .copy { position: relative; font: inherit; font-size: var(--t-micro); color: var(--color-ink-2); background: var(--color-tile-2); border: 1px solid var(--color-tile-3); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  /* The button stays small inside the title bar; its hit area is 44 px tall. */
+  .copy::after { content: ""; position: absolute; inset: -8px -6px; }
 
   /* ---------- Header and footer ---------- */
   .skip-link { position: fixed; top: 12px; left: 12px; z-index: 50; padding: 12px 20px; background: var(--color-ink); color: var(--color-bg); transform: translateY(-200%); }
@@ -115,7 +117,7 @@
   .topbar nav a { position: relative; color: var(--color-muted); text-decoration: none; font-size: .9375rem; padding-block: 10px; transition: color 150ms; }
   .topbar nav a:is([aria-current="location"], [aria-current="page"]) { color: var(--color-ink); }
   .topbar nav a:is([aria-current="location"], [aria-current="page"])::after { content: ""; position: absolute; inset: auto 0 4px; height: 2px; border-radius: 1px; background: var(--color-loud); }
-  .header-action { min-height: 40px; padding: 8px 16px; font-size: .9375rem; }
+  .header-action { min-height: 44px; padding: 8px 16px; font-size: .9375rem; }
   .footer { display: flex; align-items: center; justify-content: space-between; gap: 32px; padding-block: 56px; margin-top: 120px; border-top: 1px solid var(--color-tile-2); }
   .footer > p, .footer > .text-link { font-size: var(--t-small); color: var(--color-muted); }
   .footer > p a { text-decoration: underline; text-underline-offset: 3px; }
@@ -140,7 +142,7 @@
   .door-tabs { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; }
   .door-tabs label { position: relative; cursor: pointer; }
   .door-tabs input { position: absolute; opacity: 0; width: 1px; height: 1px; }
-  .door-tabs label > span { display: flex; align-items: center; gap: 8px; padding: 6px 14px 6px 6px; border-radius: 999px; border: 1px solid var(--color-tile-3); background: var(--color-bg); color: var(--color-muted); font-size: var(--t-small); transition: border-color 150ms, color 150ms; }
+  .door-tabs label > span { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 14px 6px 9px; border-radius: 999px; border: 1px solid var(--color-tile-3); background: var(--color-bg); color: var(--color-muted); font-size: var(--t-small); transition: border-color 150ms, color 150ms; }
   .door-tabs label:has(input:checked) > span { border-color: var(--color-loud-solid); background: var(--color-loud-solid); color: var(--color-loud-ink); font-weight: 500; }
   .door-tabs label:has(input:checked) .avatar { background: rgb(255 255 255 / .22); color: var(--color-loud-ink); border-color: transparent; }
   .door-tabs label:has(input:focus-visible) > span { outline: 2px solid var(--color-loud); outline-offset: 3px; }
@@ -230,8 +232,8 @@
   .matrix-legend { display: flex; flex-wrap: wrap; gap: 6px 20px; }
   .matrix-legend li { display: inline-flex; align-items: baseline; gap: 7px; }
   .engine-settings, .engine-technical, .decision-stages { font-size: var(--t-small); }
-  .engine-settings { border-top: 1px solid var(--color-tile-3); padding-top: 12px; }
-  .engine-settings > summary, .engine-technical > summary { color: var(--color-muted); padding-block: 4px; }
+  .engine-settings { border-top: 1px solid var(--color-tile-3); padding-top: 4px; }
+  .engine-settings > summary, .engine-technical > summary { color: var(--color-muted); padding-block: 12px; }
   .engine-settings > div { display: grid; gap: 14px; margin-block: 16px 6px; }
   .engine-settings:not([open]) > div, .engine-technical:not([open]) > div { display: none; }
   .engine-settings label { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
@@ -259,6 +261,7 @@
   .verdict-head { display: flex; align-items: center; gap: 12px; }
   .verdict-lamp { width: 10px; height: 10px; border-radius: 50%; background: var(--tone); box-shadow: 0 0 0 4px color-mix(in srgb, var(--tone) 22%, transparent); flex: none; }
   .verdict-reason { color: var(--color-ink-2); }
+  .verdict-rule { display: none; font-size: var(--t-small); color: var(--color-ink-2); }
   .verdict-code { font-size: .8125rem; color: var(--color-muted); }
   .verdict-code code { color: var(--color-ink-2); }
   .decision-stages { padding: 4px 4px 0; }
@@ -317,6 +320,9 @@
   .dns-record { display: grid; grid-template-columns: 4rem minmax(0, 1fr) minmax(0, 1fr); gap: 12px; padding: 12px 14px; background: var(--color-bg); border: 1px solid var(--color-tile-3); border-radius: 8px; }
   .dns-record dt { color: var(--color-muted); font-size: .6875rem; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 4px; }
   .more-caption { margin-top: 14px; }
+  /* Where an unreleased feature is shown, it says so, with the status list's own tag. */
+  .availability { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: var(--t-small); color: var(--color-muted); }
+  .more .availability { margin-top: 10px; }
   .facts { border-top: 1px solid var(--color-tile-3); }
   .facts li { display: grid; gap: 8px; padding-block: 24px; border-bottom: 1px solid var(--color-tile-3); }
   .facts h3 { font-size: var(--t-h3); letter-spacing: -.02em; }
@@ -419,10 +425,15 @@
   .door-stages li { grid-template-columns: 10px 4.75rem minmax(0, 1fr); gap: 10px; }
   .pipeline li { grid-template-columns: 1fr; gap: 4px; }
   .engine-body { padding: 14px; }
-  .matrix thead td { width: 26%; }
   .matrix small, .matrix tbody th .avatar { display: none; }
   .matrix tbody th { display: table-cell; min-height: 0; }
-  .matrix-name { font-size: .8125rem; overflow-wrap: anywhere; }
+  /* Names stay whole words down to 320 px ("No session" may wrap between its
+     words); the rules the matrix hides are named in the answer. */
+  .matrix-name { font-size: .8125rem; overflow-wrap: normal; }
+  .matrix thead th { padding-inline: 0; text-align: center; }
+  .matrix thead .matrix-name { font-size: .75rem; letter-spacing: -.01em; }
+  .matrix thead td { width: 24%; }
+  .verdict-rule { display: block; }
   .cell { position: relative; }
   .cell-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
   .cell-mark { font-size: 1rem; }
@@ -435,6 +446,9 @@
   .zone-facts, .dns-record { grid-template-columns: 1fr; }
   .terminal pre { padding: 16px; }
   .start { padding: 22px; }
+}
+@media (max-width: 360px) {
+  .matrix thead .matrix-name { font-size: .6875rem; letter-spacing: -.02em; }
 }
 
 /* ---------- Tour: one sticky stage on wide screens ---------- */
@@ -570,6 +584,11 @@
   @keyframes door-row { from { opacity: 0; transform: translateX(-6px); } }
   @keyframes door-rail { from { transform: scaleY(0); } }
   @keyframes door-tone { from { background: var(--color-tile); border-top-color: var(--color-tile-3); } }
+  /* Autoplay walks the checks one by one to explain them. Once the visitor
+     chooses a request (page.ts adds .door-chosen), the answer comes first:
+     the checks and the verdict arrive together in 150 ms. */
+  .door-chosen .door-card { animation-duration: 150ms; }
+  .door-chosen :is(.door-stages li > *, .door-verdict, .door-verdict > *), .door-chosen .door-stages li::before { animation-delay: 0ms; animation-duration: 150ms; }
 
   /* A request walks the pipeline: each stage lights in order while on screen. */
   .pipeline li::after, .pipeline strong { animation: stage-lit 6s linear infinite paused; }

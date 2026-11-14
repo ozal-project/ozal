@@ -49,6 +49,7 @@ try {
     assert.ok(geometry.introInView, `${width}px explanation and primary action must fit the first screen`);
     assert.ok(geometry.navigation, `${width}px navigation must remain visible and fit`);
     assert.deepEqual(geometry.brokenAnchors, []);
+    assert.equal(await page.locator("#start .button").getAttribute("href"), "/docs/first-application/", "the guided next step leads the final call to action");
     assert.equal(geometry.privateDownloads, 0, "private releases must not be advertised as a public download");
     await page.locator("#engine").scrollIntoViewIfNeeded();
     await live(page);
@@ -69,6 +70,21 @@ try {
     await decision(page, "context_rule_denied");
     await ask(page, "none", "blog"); await decision(page, "allowed");
     await ask(page, "none", "grafana"); await decision(page, "authentication_required");
+    // A narrow screen hides each app's rule in the matrix, so the answer names
+    // it; app names stay whole down to 320 px.
+    if (width <= 480) {
+      assert.equal(await page.locator("[data-rule]").textContent(), "Grafana's rule: Company email");
+      assert.ok(await page.locator("[data-rule]").isVisible(), `${width}px the answer names the app's rule`);
+      const split = await page.locator(".matrix thead .matrix-name").evaluateAll((nodes) => nodes.filter((n) => n.getBoundingClientRect().height > parseFloat(getComputedStyle(n).lineHeight) * 1.5).map((n) => n.textContent));
+      assert.deepEqual(split, [], `${width}px app names split across lines`);
+      // No name is cut inside a word: a word that does not fit would overflow its cell.
+      const cut = await page.locator(".matrix .matrix-name").evaluateAll((nodes) => nodes.filter((n) => n.scrollWidth > n.clientWidth + 1 || getComputedStyle(n).overflowWrap !== "normal").map((n) => n.textContent));
+      assert.deepEqual(cut, [], `${width}px names cut inside a word`);
+    }
+    // Ozal's own 44 px target for what a thumb presses.
+    const small = await page.evaluate(() => [...document.querySelectorAll(".header-action, .door-tabs label > span, .engine-settings > summary, .engine-technical > summary")]
+      .filter((n) => n.getBoundingClientRect().height < 44).map((n) => n.textContent.trim()));
+    assert.deepEqual(small, [], `${width}px targets under 44 px`);
     // The tour: on a wide screen one sticky stage shows the step being read;
     // on a narrow one every step keeps its own screen.
     await page.locator("#step-3 .step-copy h3").evaluate((node) => scrollTo(0, node.getBoundingClientRect().top + scrollY - innerHeight / 2));
@@ -168,6 +184,9 @@ try {
   await motion.goto(url);
   await motion.locator("#scene-bob:checked").waitFor({ state: "attached", timeout: 9000 });
   await motion.locator("label:has(#scene-anon)").click();
+  // Once the visitor chooses, the answer comes first, not after the walk-through.
+  await motion.waitForTimeout(400);
+  assert.equal(await motion.locator("#door-anon .door-verdict strong").evaluate((n) => getComputedStyle(n).opacity), "1", "a chosen request is answered at once");
   await motion.waitForTimeout(6500);
   assert.equal(await motion.locator("#scene-anon").isChecked(), true, "the doorway does not move after the visitor chose a request");
   assert.equal(await motion.locator("#door-anon").isVisible(), true);

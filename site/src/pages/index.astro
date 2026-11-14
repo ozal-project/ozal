@@ -15,7 +15,6 @@ const repo = "https://github.com/ozal-project/ozal";
 // new capture is a new URL and nobody sees the old screen. The build runs in
 // site/, so public/ is relative to the working directory.
 const shot = (name: string) => `/shots/${name}.jpg?v=${createHash("sha256").update(readFileSync(`${process.cwd()}/public/shots/${name}.jpg`)).digest("hex").slice(0, 10)}`;
-const docs = `${repo}/blob/main/docs`;
 
 // The usual ways to share an internal tool, and what each one costs.
 const options = [
@@ -150,6 +149,7 @@ Host: grafana.acme.dev
         <p class="label">The console</p>
         <h2 id="tour-title">One afternoon, seen from both sides of the door.</h2>
         <p>An invitation, an allowed visit, a refusal and the log that explains both. Real screens from a demo workspace.</p>
+        <p class="availability"><span class="works-tag works-unreleased">Unreleased</span> The console is on main, not yet in alpha.1.</p>
       </div>
       <div class="walk" data-walk>
         {steps.map((st, i) => (
@@ -200,6 +200,7 @@ Host: grafana.acme.dev
             </div>
           </div>
           <p class="more-caption small quiet">Ozal checks the record before it asks the certificate authority, and keeps serving the current certificate while a renewal runs.</p>
+          <p class="availability"><span class="works-tag works-unreleased">Unreleased</span> Domains are on main, not yet in alpha.1.</p>
         </div>
         <ul class="facts">
           <li><h3>HTTPS for every address, one certificate per domain</h3><p>Add a domain once and every address under it gets HTTPS. Each domain renews on its own schedule, so one failing renewal never takes the others down. A new domain needs a single DNS record, and Ozal never asks for access to your DNS account.</p></li>
@@ -250,10 +251,11 @@ Host: grafana.acme.dev
       <div class="start-copy">
         <p class="label">Get started</p>
         <h2 id="start-title">Put it in front of an app on port 3000.</h2>
-        <p>Build the binary and run one command. It creates a new private installation and prints how to start it, invite yourself and sign in. It does not change DNS or expose the app to the internet.</p>
+        <p>Build the binary and run one command. It creates a new private installation on your machine and prints how to start it, invite yourself and sign in. Nothing is published yet: it does not change DNS or expose the app to the internet.</p>
+        <p>When it works locally, the guide takes you from there to a protected address and your own domain.</p>
         <div class="start-actions">
-          <a class="button" href={repo}>Source on GitHub <span aria-hidden="true">↗</span></a>
-          <a class="text-link" href={`${docs}/operations/first-application.md`}>Publish your first application <span aria-hidden="true">↗</span></a>
+          <a class="button" href="/docs/first-application/">Publish your first application <span aria-hidden="true">→</span></a>
+          <a class="text-link" href={repo}>Source on GitHub <span aria-hidden="true">↗</span></a>
         </div>
       </div>
       <figure class="terminal" data-ui>
