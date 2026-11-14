@@ -48,7 +48,7 @@ export function PasskeysDialog({ open, onOpenChange, token, portalContainer }: P
         {passkeys === null && !error ? <p className="text-muted-foreground text-sm" role="status">Reading…</p> : passkeys && <>
           <ul className="divide-border border-border divide-y rounded-lg border" aria-label="Passkeys">
             {passkeys.map((passkey) => <li key={passkey.id} className="flex flex-wrap items-center gap-3 px-3 py-3">
-              <div className="min-w-0 flex-1"><p className="text-sm font-medium">{name(passkey)}{passkey.current && <span className="text-primary ml-2 text-xs font-normal">this session</span>}</p><p className="text-muted-foreground text-xs">Added {when(passkey.created_at)} · last used {when(passkey.last_used_at)}</p></div>
+              <div className="min-w-0 flex-1"><p className="text-sm font-medium">{name(passkey)}{passkey.current && <span className="text-signal ml-2 text-xs font-normal">this session</span>}</p><p className="text-muted-foreground text-xs">Added {when(passkey.created_at)} · last used {when(passkey.last_used_at)}</p></div>
               {!passkey.current && <Button variant="outline" size="sm" disabled={busy} aria-label={`Remove ${name(passkey)}, added ${when(passkey.created_at)}`} onClick={() => setPending(passkey)}>Remove</Button>}
             </li>)}
           </ul>

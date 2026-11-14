@@ -36,17 +36,19 @@ them, they win.
 - **A decision is a first-class object.** Allowed, refused or waiting is shown
   with its stable code and a reason in plain words, for the operator and for
   the refused person.
-- **Two quiet colours, one loud colour.** Espresso, a brown dark enough to
-  rest the eye and warm enough to read as a colour, is the ground (about 60%
-  of a screen). Oat carries text, raised surfaces, borders and quiet text
-  (about 30%). Pure black is never the ground: a neutral that reads as no
-  colour turns the page into a generic dark mode. Camel is the only loud colour (about 10%). It goes on the one detail
-  a screen should be read by first: the headline's key words, the next action,
-  the choice the visitor just made, the current place and focus. Everything
-  else stays quiet so that detail stands out. Section labels, bullets, link
-  underlines, borders and glows are decoration and are never camel. Ivory is
-  text and the arch of the mark. If two things on a screen compete for the
-  first look, one of them is wrong.
+- **A neutral ground, one loud colour.** Ozal uses the palette people
+  already trust in access and identity products: a graphite ground, near
+  black but not pure black (about 60% of a screen), grey-white text, raised
+  surfaces and borders (about 30%), and indigo as the only loud colour (about
+  10%). Indigo goes on the one detail a screen should be read by first: the
+  headline's key words, the next action, the choice the visitor just made,
+  the current place and focus. It has two values: a filled control is
+  `#4f46e5` with white text, and text, marks and focus rings on the dark
+  ground are the lighter `#818cf8`, so both pass AA. Everything else stays
+  quiet so that detail stands out. Section labels, bullets, link underlines,
+  borders and glows are decoration and are never indigo. The arch of the
+  mark is text colour; the light in its doorway is indigo. If two things on a
+  screen compete for the first look, one of them is wrong.
 - **Depth comes from light, not from more colour.** The project page is lit
   softly from above, where the doorway stands, and the header sits on a
   hairline. No gradients between colours, no illustrations behind content.
@@ -97,7 +99,7 @@ A reference without a "Leave" entry has not been thought through.
   the consequence spelled out.
 - **Copy before chrome.** If a label, heading or sentence makes the meaning
   clear, do not add an icon, badge or colour to say it again.
-- **Accessible by default.** WCAG 2.1 AA contrast, visible focus in camel,
+- **Accessible by default.** WCAG 2.1 AA contrast, visible focus in indigo,
   touch targets of at least 44 px, and every state readable without colour.
 
 ## Briefing a change
@@ -124,7 +126,7 @@ Before a visible change is complete:
 
 - Which reference and principle does each new pattern come from, and is it
   in the map above?
-- Is camel the only loud colour on the screen, at about a tenth of it, and
+- Is indigo the only loud colour on the screen, at about a tenth of it, and
   is it on the detail that should be seen first rather than on decoration?
 - Does every state colour mark a real state?
 - Is any state shown that the system cannot prove?

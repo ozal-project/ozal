@@ -11,7 +11,7 @@ export const buttonVariants = tv({
       secondary: "bg-secondary text-secondary-foreground hover:bg-accent",
       ghost: "hover:bg-muted hover:text-foreground",
       destructive: "bg-destructive/10 hover:bg-destructive/20 text-destructive",
-      link: "text-primary underline-offset-4 hover:underline",
+      link: "text-signal underline-offset-4 hover:underline",
     },
     size: {
       default: "h-9 gap-1.5 px-3",

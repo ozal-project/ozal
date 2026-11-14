@@ -16,9 +16,9 @@ export function Logo({ size = 28, animated = false, entrance = false, className 
     <defs>
       <clipPath id={`${id}-door`}><path d={doorway} /></clipPath>
       <linearGradient id={`${id}-beam`} x1="0" x2="1" y1="0" y2="0">
-        <stop offset="0" stopColor="var(--primary)" stopOpacity="0" />
-        <stop offset="0.5" stopColor="var(--primary)" stopOpacity="0.8" />
-        <stop offset="1" stopColor="var(--primary)" stopOpacity="0" />
+        <stop offset="0" stopColor="var(--foreground)" stopOpacity="0" />
+        <stop offset="0.5" stopColor="var(--foreground)" stopOpacity="0.8" />
+        <stop offset="1" stopColor="var(--foreground)" stopOpacity="0" />
       </linearGradient>
     </defs>
     <g className="logo-door" clipPath={`url(#${id}-door)`}>
@@ -26,7 +26,7 @@ export function Logo({ size = 28, animated = false, entrance = false, className 
       <rect className="logo-beam" x="4" y="8" width="5" height="24" fill={`url(#${id}-beam)`} opacity="0" />
       <path className="logo-leaf" d="M10.4 30V14.8A5.6 5.6 0 0 1 16 9.2V30Z" fill="var(--depth)" />
     </g>
-    <path className="logo-arch" d={arch} fill="var(--primary)" />
-    {entrance && <path className="logo-trace" d={arch} pathLength="100" strokeDasharray="100" fill="none" stroke="var(--primary)" strokeWidth="0.6" strokeLinejoin="round" />}
+    <path className="logo-arch" d={arch} fill="var(--foreground)" />
+    {entrance && <path className="logo-trace" d={arch} pathLength="100" strokeDasharray="100" fill="none" stroke="var(--foreground)" strokeWidth="0.6" strokeLinejoin="round" />}
   </svg>;
 }

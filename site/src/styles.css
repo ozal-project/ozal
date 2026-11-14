@@ -5,36 +5,39 @@
 @import "@fontsource/geist-mono/400.css";
 
 /* Ozal identity, following docs/architecture/product-design.md.
-   Two quiet colours and one loud colour:
-     espresso the ground, about 60% of any screen: a brown dark enough to
-              rest the eye and warm enough to read as a colour
-     oat      text, surfaces lifted from the ground, borders and quiet text,
-              about 30%
-     camel    the only loud colour, about 10%, on the detail to see first:
+   A neutral graphite ground, grey-white text and one accent, indigo:
+     graphite the ground and the surfaces lifted from it, about 60% of a screen
+     ink      text, quiet text and borders, about 30%
+     indigo   the only loud colour, about 10%, on the detail to see first:
               the headline's key words, the next action, the current choice,
-              the current place and focus
+              the current place and focus. Two values: loud (#818cf8) for
+              text, rails and focus on the dark ground, loud-solid (#4f46e5)
+              for a filled control with white text.
    The ground is lit softly from above, where the doorway stands; the light
    is a property of the page, not decoration on a component.
-   Ivory is text and the arch of the mark. Green, red and blue are states
-   (allowed, refused, waiting): they appear only where a state exists and
-   never as decoration. Fonts are bundled (OFL): no third-party requests.
-   Contrast (WCAG 2.1 AA): muted text is at least 6.8:1 on every surface
-   and depth, the border of a control, at least 3:1. */
+   The arch of the mark is ink. Green, red and blue are states (allowed,
+   refused, waiting): they appear only where a state exists and never as
+   decoration. Fonts are bundled (OFL): no third-party requests.
+   Contrast (WCAG 2.1 AA): muted text is at least 6.5:1 on every surface,
+   loud at least 5.6:1, white on loud-solid 6.3:1, and depth, the border of
+   a control, at least 3:1. */
 @theme {
   --font-sans: "Geist Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
-  --color-bg: #16110d;
-  --color-tile: #1e1813;
-  --color-tile-2: #271f19;
-  --color-tile-3: #41352b;
-  --color-ink: #f2e9dc;
-  --color-ink-2: #ddd1c1;
-  --color-muted: #b5a696;
-  --color-brand: #f1ece2;
-  --color-loud: #e59a57;
-  --color-loud-ink: #16110d;
-  --color-signal: #e59a57;
-  --color-depth: #857869;
+  --color-bg: #0b0c0e;
+  --color-tile: #131518;
+  --color-tile-2: #1b1e22;
+  --color-tile-3: #2a2e34;
+  --color-ink: #eef0f3;
+  --color-ink-2: #cfd4da;
+  --color-muted: #9ca3ac;
+  --color-brand: #eef0f3;
+  --color-loud: #818cf8;
+  --color-loud-solid: #4f46e5;
+  --color-loud-solid-hover: #5b53f0;
+  --color-loud-ink: #ffffff;
+  --color-signal: #818cf8;
+  --color-depth: #717883;
   --color-ok: #78cc8a;
   --color-no: #ee6b5e;
   --color-wait: #86b3e6;
@@ -54,8 +57,8 @@
 @layer base {
   [hidden] { display: none !important; }
   html { color-scheme: dark; scroll-behavior: smooth; scroll-padding-top: 96px; background: var(--color-bg); }
-  body { background: radial-gradient(56rem 34rem at 74% -6rem, rgb(229 154 87 / .11), transparent 70%) no-repeat, radial-gradient(80rem 40rem at 30% -14rem, rgb(242 233 220 / .045), transparent 72%) no-repeat, var(--color-bg); color: var(--color-ink); font-family: var(--font-sans); font-size: var(--t-body); line-height: 1.6; -webkit-font-smoothing: antialiased; }
-  ::selection { background: var(--color-loud); color: var(--color-loud-ink); }
+  body { background: radial-gradient(56rem 34rem at 74% -6rem, rgb(129 140 248 / .06), transparent 70%) no-repeat, radial-gradient(80rem 40rem at 30% -14rem, rgb(238 240 243 / .04), transparent 72%) no-repeat, var(--color-bg); color: var(--color-ink); font-family: var(--font-sans); font-size: var(--t-body); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  ::selection { background: var(--color-loud-solid); color: var(--color-loud-ink); }
   a { color: inherit; }
   :focus-visible { outline: 2px solid var(--color-loud); outline-offset: 3px; border-radius: 3px; }
   h1, h2, h3 { text-wrap: balance; font-weight: 500; }
@@ -81,7 +84,7 @@
   .head h2 { font-size: var(--t-h2); line-height: 1.06; letter-spacing: -.035em; font-weight: 600; }
   .head > p:not(.label) { color: var(--color-ink-2); max-width: 60ch; }
 
-  .button { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 46px; padding: 11px 20px; border-radius: 8px; background: var(--color-loud); color: var(--color-loud-ink); font-weight: 600; font-size: 1rem; text-decoration: none; border: 0; cursor: pointer; transition: background-color 150ms, transform 150ms; }
+  .button { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 46px; padding: 11px 20px; border-radius: 8px; background: var(--color-loud-solid); color: var(--color-loud-ink); font-weight: 600; font-size: 1rem; text-decoration: none; border: 0; cursor: pointer; transition: background-color 150ms, transform 150ms; }
   .button:active { transform: scale(.98); }
   .button.quiet-button { background: var(--color-tile-2); color: var(--color-ink); box-shadow: inset 0 0 0 1px var(--color-tile-3); }
   .button[disabled] { opacity: .6; cursor: progress; }
@@ -138,11 +141,11 @@
   .door-tabs label { position: relative; cursor: pointer; }
   .door-tabs input { position: absolute; opacity: 0; width: 1px; height: 1px; }
   .door-tabs label > span { display: flex; align-items: center; gap: 8px; padding: 6px 14px 6px 6px; border-radius: 999px; border: 1px solid var(--color-tile-3); background: var(--color-bg); color: var(--color-muted); font-size: var(--t-small); transition: border-color 150ms, color 150ms; }
-  .door-tabs label:has(input:checked) > span { border-color: var(--color-loud); background: var(--color-loud); color: var(--color-loud-ink); font-weight: 500; }
-  .door-tabs label:has(input:checked) .avatar { background: var(--color-loud-ink); color: var(--color-loud); border-color: transparent; }
+  .door-tabs label:has(input:checked) > span { border-color: var(--color-loud-solid); background: var(--color-loud-solid); color: var(--color-loud-ink); font-weight: 500; }
+  .door-tabs label:has(input:checked) .avatar { background: rgb(255 255 255 / .22); color: var(--color-loud-ink); border-color: transparent; }
   .door-tabs label:has(input:focus-visible) > span { outline: 2px solid var(--color-loud); outline-offset: 3px; }
   .avatar { display: grid; place-items: center; flex: none; width: 26px; height: 26px; border-radius: 50%; font-size: .75rem; font-weight: 600; background: var(--color-tile-3); color: var(--color-ink); }
-  .avatar-ana { background: #1f3a30; } .avatar-carla { background: #2c2f40; } .avatar-bob { background: #42231f; }
+  .avatar-ana { background: #1b3128; } .avatar-carla { background: #232838; } .avatar-bob { background: #3a2220; }
   .avatar-none, .avatar-anon { background: transparent; border: 1px dashed var(--color-depth); color: var(--color-muted); }
   .door:has(#scene-ana:checked) .door-card:not(#door-ana),
   .door:has(#scene-bob:checked) .door-card:not(#door-bob),
@@ -234,7 +237,7 @@
   .engine-settings label { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
   .engine-settings input[type="checkbox"] { appearance: none; flex: none; display: grid; place-content: center; width: 20px; height: 20px; margin: 0; border-radius: 5px; border: 1.5px solid var(--color-depth); background: var(--color-bg); cursor: pointer; transition: background-color 150ms, border-color 150ms; }
   .engine-settings input[type="checkbox"]::before { content: ""; width: 11px; height: 11px; background: var(--color-loud-ink); clip-path: polygon(14% 52%, 0 66%, 40% 100%, 100% 22%, 86% 10%, 38% 70%); transform: scale(0); transition: transform 150ms var(--ease); }
-  .engine-settings input[type="checkbox"]:checked { background: var(--color-loud); border-color: var(--color-loud); }
+  .engine-settings input[type="checkbox"]:checked { background: var(--color-loud-solid); border-color: var(--color-loud-solid); }
   .engine-settings input[type="checkbox"]:checked::before { transform: scale(1); }
   .engine-settings input[type="checkbox"]:disabled { opacity: .4; cursor: not-allowed; }
   .engine-settings label:has(input:disabled) { color: var(--color-muted); }
@@ -349,7 +352,7 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .button:hover { background: #f0ab6d; }
+  .button:hover { background: var(--color-loud-solid-hover); }
   .button.quiet-button:hover { background: var(--color-tile-3); }
   .topbar nav a:hover { color: var(--color-ink); }
   .text-link:hover { color: var(--color-loud); text-decoration-color: var(--color-loud); }
@@ -440,7 +443,7 @@
   .is-scrolly .step { display: contents; }
   .is-scrolly .step-copy { position: relative; grid-column: 1; min-height: max(40vh, 300px); padding-left: 26px; }
   /* A step not on stage stays readable (muted, at least 6.8:1); the one on
-     stage takes full ink and the camel rail. */
+     stage takes full ink and the indigo rail. */
   .is-scrolly .step:not(.is-active) .step-copy :is(h3, p) { color: var(--color-muted); }
   .is-scrolly .step-copy::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--color-tile-3); }
   .is-scrolly .step:nth-child(1) .step-copy { grid-row: 1; } .is-scrolly .step:nth-child(2) .step-copy { grid-row: 2; }

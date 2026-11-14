@@ -131,5 +131,5 @@ function EventCard({ event, whoActed }: { event: AccessEvent; whoActed: (actor?:
 }
 
 function ActivityMark() {
-  return <svg width="44" height="44" viewBox="0 0 32 32" aria-hidden="true" className="opacity-80"><path d="M5 30V14.5A11 11 0 0 1 27 14.5V30h-5.4V14.8a5.6 5.6 0 0 0-11.2 0V30Z" fill="var(--primary)" /><path d="M10.4 30V14.8A5.6 5.6 0 0 1 16 9.2V30Z" fill="var(--depth)" /></svg>;
+  return <svg width="44" height="44" viewBox="0 0 32 32" aria-hidden="true" className="opacity-80"><path d="M5 30V14.5A11 11 0 0 1 27 14.5V30h-5.4V14.8a5.6 5.6 0 0 0-11.2 0V30Z" fill="var(--foreground)" /><path d="M10.4 30V14.8A5.6 5.6 0 0 1 16 9.2V30Z" fill="var(--depth)" /></svg>;
 }

@@ -1,21 +1,22 @@
 /* Ozal identity, shared with the admin console (web/console) and the
-   project page (site/): an espresso ground and oat text, with an ivory
-   primary, a camel signal and graphite depth. Green and red keep one meaning each: done and refused. Geist is bundled locally (OFL,
+   project page (site/): a graphite ground and grey-white text, with an
+   indigo primary (filled, white text), a light indigo for focus and the
+   light of the mark, an ink arch and graphite depth. Green and red keep one meaning each: done and refused. Geist is bundled locally (OFL,
    see OFL.txt) so the sign-in pages make no third-party request. */
 @font-face { font-family: "Geist"; src: url("/_/auth/geist-400.woff2") format("woff2"); font-weight: 400 500; font-display: swap; }
 @font-face { font-family: "Geist"; src: url("/_/auth/geist-600.woff2") format("woff2"); font-weight: 600 800; font-display: swap; }
 :root {
   color-scheme: dark;
-  --bg: #16110d;
-  --card: #1e1813;
-  --raised: #271f19;
-  --fg: #f2e9dc;
-  --muted: #a8998a;
-  --border: #352b23;
-  --accent: #f1ece2;
-  --accent-fg: #16110d;
-  --lamp: #c4a17c;
-  --depth: #55514a;
+  --bg: #0b0c0e;
+  --card: #131518;
+  --raised: #1b1e22;
+  --fg: #eef0f3;
+  --muted: #9ca3ac;
+  --border: #2a2e34;
+  --accent: #4f46e5;
+  --accent-fg: #ffffff;
+  --lamp: #818cf8;
+  --depth: #717883;
   --ok: #78cc8a;
   --err: #ee6b5e;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -24,22 +25,22 @@
 [hidden] { display: none !important; }
 body {
   margin: 0; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 20px; padding: 24px 16px; background: radial-gradient(900px 480px at 50% -10%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%), var(--bg);
+  gap: 20px; padding: 24px 16px; background: radial-gradient(900px 480px at 50% -10%, color-mix(in srgb, var(--lamp) 10%, transparent), transparent 70%), var(--bg);
   color: var(--fg); font: 16px/1.55 "Geist", ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased;
 }
 .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; }
 .brand svg { width: 28px; height: 28px; flex: none; }
-.brand .arch { fill: var(--accent); }
+.brand .arch { fill: var(--fg); }
 .brand .leaf { fill: var(--depth); }
 .brand .light { fill: var(--lamp); }
 .brand .name { display: block; font-weight: 600; font-size: 1rem; line-height: 1; letter-spacing: -0.01em; }
 .brand .sub { display: block; margin-top: 5px; font: 0.68rem/1 var(--mono); color: var(--muted); }
-main { width: 100%; max-width: 420px; background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 28px 24px; box-shadow: 0 30px 80px -40px color-mix(in srgb, var(--accent) 35%, transparent); }
+main { width: 100%; max-width: 420px; background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 28px 24px; box-shadow: 0 30px 80px -40px rgb(0 0 0 / .7); }
 h1 { margin: 0 0 6px; font-size: 1.45rem; font-weight: 700; letter-spacing: -0.02em; }
 p { margin: 0 0 18px; color: var(--muted); }
 label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
 input { width: 100%; padding: 11px 12px; margin-bottom: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--raised); color: inherit; font: inherit; }
-input:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--lamp); outline-offset: 2px; }
 button, .secondary { display: block; width: 100%; padding: 12px; border-radius: 10px; font: inherit; font-weight: 700; text-align: center; text-decoration: none; cursor: pointer; }
 button { border: 0; background: var(--accent); color: var(--accent-fg); }
 button:disabled { opacity: 0.55; cursor: progress; }
