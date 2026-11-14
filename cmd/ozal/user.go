@@ -15,6 +15,7 @@ import (
 
 	"github.com/ozal-project/ozal/internal/config"
 	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/invitation"
 	"github.com/ozal-project/ozal/internal/passkey"
 	"github.com/ozal-project/ozal/internal/store/sqlite"
 )
@@ -28,7 +29,7 @@ const (
 type userArgs struct {
 	sub, email, name, prefix, returnTo string
 	groups                             []string
-	recoverAccess                      bool
+	recoverAccess, newGroup            bool
 	ttl                                time.Duration
 }
 
@@ -49,6 +50,7 @@ func runUser(ctx context.Context, args []string, out io.Writer) error {
 	fs.StringVar(&a.email, "email", "", "the user's email address")
 	fs.StringVar(&a.name, "name", "", "display name shown by the authenticator (invite)")
 	fs.BoolVar(&a.recoverAccess, "recover", false, "replace the passkeys of a user who lost them: completing the link revokes the old ones and ends their sessions (host only)")
+	fs.BoolVar(&a.newGroup, "new-group", false, "invite: create a -group that no application or person uses yet (otherwise refused, to catch typos)")
 	fs.DurationVar(&a.ttl, "ttl", defaultInviteTTL, "how long the enrolment link stays valid (at most 24h)")
 	fs.StringVar(&a.prefix, "passkey", "", "leading hex characters of the passkey ID (revoke)")
 	fs.StringVar(&a.returnTo, "return-to", "", "invite: protected URL to open after the passkey is created (must be a configured host)")
@@ -76,6 +78,9 @@ func runUser(ctx context.Context, args []string, out io.Writer) error {
 	}
 	if a.sub == "revoke" && a.prefix == "" {
 		return errors.New("revoke needs -passkey")
+	}
+	if a.sub == "invite" && !invitation.ValidEmail(strings.ToLower(a.email)) {
+		return fmt.Errorf("-email %q is not an email address with a domain, such as ana@example.com", a.email)
 	}
 	if a.sub == "invite" && (a.ttl <= 0 || a.ttl > maxInviteTTL) {
 		return fmt.Errorf("-ttl must be between 1s and %s", maxInviteTTL)
@@ -113,15 +118,20 @@ func runUserAPI(ctx context.Context, c *adminClient, a userArgs, out io.Writer) 
 			Email     string    `json:"email"`
 			Link      string    `json:"link"`
 			ExpiresAt time.Time `json:"expires_at"`
+			Groups    []string  `json:"groups"`
+			Apps      *[]string `json:"apps"`
 		}
 		request := map[string]any{
 			"email": a.email, "name": a.name, "groups": a.groups, "recover": a.recoverAccess,
-			"return_to": a.returnTo, "ttl_minutes": int(math.Ceil(a.ttl.Minutes())),
+			"return_to": a.returnTo, "ttl_minutes": int(math.Ceil(a.ttl.Minutes())), "new_group": a.newGroup,
 		}
 		if err := c.do(ctx, http.MethodPost, "/_/api/people/invite", request, &invited); err != nil {
 			return err
 		}
 		printInvite(out, invited.Email, invited.Link, invited.ExpiresAt)
+		if invited.Apps != nil { // an older edge does not say
+			printReach(out, invited.Groups, *invited.Apps)
+		}
 	case "list", "passkeys":
 		var listed struct {
 			Users []person `json:"users"`
@@ -185,11 +195,29 @@ func runUserOffline(ctx context.Context, a userArgs, dbPath, configPath string, 
 		if _, err := passkey.InviteLink(*cfg, "", a.returnTo); err != nil {
 			return fmt.Errorf("-%w", err)
 		}
-		invitation, err := identity.Invite(ctx, a.email, a.name, a.groups, a.recoverAccess, a.ttl)
+		if !a.recoverAccess && !a.newGroup && len(a.groups) > 0 {
+			defined, err := sqlite.NewGroupCatalog(db).Defined(ctx)
+			if err != nil {
+				return err
+			}
+			users, err := identity.Users(ctx)
+			if err != nil {
+				return err
+			}
+			held := make([][]string, 0, len(users))
+			for _, u := range users {
+				held = append(held, u.Groups)
+			}
+			known := invitation.KnownGroups(defined, held, cfg.Routes)
+			if unknown := invitation.UnknownGroups(a.groups, known); len(unknown) > 0 {
+				return unknownGroupsError(unknown, known)
+			}
+		}
+		invited, err := identity.Invite(ctx, a.email, a.name, a.groups, a.recoverAccess, a.ttl)
 		if err != nil {
 			return err
 		}
-		link, err := passkey.InviteLink(*cfg, invitation.Token, a.returnTo)
+		link, err := passkey.InviteLink(*cfg, invited.Token, a.returnTo)
 		if err != nil {
 			return err
 		}
@@ -197,8 +225,9 @@ func runUserOffline(ctx context.Context, a userArgs, dbPath, configPath string, 
 		if a.recoverAccess {
 			code = "recover"
 		}
-		emitOffline(sink, events.Event{Type: events.UserInvited, Host: invitation.User.Email, Code: code})
-		printInvite(out, invitation.User.Email, link, invitation.ExpiresAt)
+		emitOffline(sink, events.Event{Type: events.UserInvited, Host: invited.User.Email, Code: code})
+		printInvite(out, invited.User.Email, link, invited.ExpiresAt)
+		printReach(out, invited.User.Groups, invitation.OpenableHosts(cfg.Routes, invited.User.Email, invited.User.Groups, time.Now()))
 		if a.recoverAccess {
 			fmt.Fprintln(out, "Completing it replaces every passkey of this user and ends their sessions.")
 		}
@@ -243,6 +272,36 @@ func printInvite(out io.Writer, email, link string, expires time.Time) {
 	fmt.Fprintf(out, "Enrolment link for %s (single use, expires %s):\n\n  %s\n\n",
 		email, expires.UTC().Format(time.RFC3339), link)
 	fmt.Fprintln(out, "Send it over a channel you trust: whoever opens it first gets the passkey.")
+	fmt.Fprintln(out, "Day to day, invite people in the console: People → Invite person.")
+}
+
+// printReach says what the invited person will be able to open, from the
+// groups they really hold, so an empty portal is no surprise.
+func printReach(out io.Writer, groups, apps []string) {
+	held := "none"
+	if len(groups) > 0 {
+		held = strings.Join(groups, ", ")
+	}
+	fmt.Fprintf(out, "Groups: %s\n", held)
+	if len(apps) == 0 {
+		fmt.Fprintln(out, "Can open: nothing yet. No application admits this person; add them to a group an application requires, or change its policy.")
+		return
+	}
+	fmt.Fprintf(out, "Can open: %s\n", strings.Join(apps, ", "))
+}
+
+// unknownGroupsError names the groups nothing uses, a likely intended one,
+// and how to create a group on purpose.
+func unknownGroupsError(unknown []string, known map[string]bool) error {
+	parts := make([]string, 0, len(unknown))
+	for _, g := range unknown {
+		if near := invitation.Suggest(g, known); near != "" {
+			parts = append(parts, fmt.Sprintf("%q (did you mean %q?)", g, near))
+		} else {
+			parts = append(parts, fmt.Sprintf("%q", g))
+		}
+	}
+	return fmt.Errorf("no application or person uses group %s; check the name, or add -new-group to create it", strings.Join(parts, ", "))
 }
 
 func printEnabled(out io.Writer, sub, email string) {

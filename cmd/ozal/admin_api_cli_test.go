@@ -98,7 +98,15 @@ func TestUserCommandsGoThroughTheAdminSocket(t *testing.T) {
 		err := runUser(ctx, append(args, "-config", live.config), &out)
 		return out.String(), err
 	}
-	if out, err := run("invite", "-email", "ana@example.com", "-group", "owner"); err != nil || !strings.Contains(out, "https://auth.example.com/_/auth/enrol") {
+	// A group nothing uses is refused until it is confirmed as new; an
+	// address without a real domain is refused before anything is sent.
+	if _, err := run("invite", "-email", "ana@example.com", "-group", "owner"); err == nil || !strings.Contains(err.Error(), "-new-group") {
+		t.Fatalf("an unknown group was accepted: %v", err)
+	}
+	if _, err := run("invite", "-email", "tu@correo", "-group", "owner", "-new-group"); err == nil || !strings.Contains(err.Error(), "not an email address") {
+		t.Fatalf("an address without a domain was accepted: %v", err)
+	}
+	if out, err := run("invite", "-email", "ana@example.com", "-group", "owner", "-new-group"); err != nil || !strings.Contains(out, "https://auth.example.com/_/auth/enrol") || !strings.Contains(out, "Groups: owner") || !strings.Contains(out, "Can open:") {
 		t.Fatalf("invite: %v %q", err, out)
 	}
 	// Recovery: accepted because the socket is the host.

@@ -261,9 +261,31 @@ outside `cookie_domain` with central passkey login use host sessions; the protoc
 limits are in [host sessions](architecture/host-sessions.md). A code change is not the
 same as HTTPS, browser or real-domain acceptance; see the host-sessions guide.
 
-Invitations and recovery: [first application](operations/first-application.md). The
+Invitations: [first application](operations/first-application.md). The
 administrative identity is separate from visitor identities and has its own session
 lifecycle; the times in this section are not the console's.
+
+### People from the host
+
+Inviting people and managing their accounts happen in the console (**People**). The host
+commands below do the same through the admin socket, for automation and for emergencies;
+they are not a second way to onboard people.
+
+```sh
+ozal user invite -config /path/config.json -email ana@example.com -group members
+ozal user list|passkeys|revoke|disable|enable -config /path/config.json [-email ...]
+```
+
+- `invite` refuses an address without a real domain (`ana@example`) and a group that no
+  application, person or console group uses, suggesting the closest name; `-new-group`
+  creates one on purpose. It prints the person's groups and the applications they will be
+  able to open. `-return-to` names a protected URL to open after the passkey is created;
+  `-ttl` sets the link's life (15 minutes by default, at most 24 hours).
+- `invite -recover` replaces the passkeys of a person who lost them: completing the link
+  revokes the old ones and ends their sessions. It runs only on the host, the root of
+  trust, never through the admin token.
+- `-db PATH` is the break-glass: it changes the state database directly when the process
+  cannot start, and records what it did.
 
 ## Secrets
 
