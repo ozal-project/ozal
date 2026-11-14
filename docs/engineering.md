@@ -115,10 +115,16 @@ Where a passkey lives is named only when the authenticator reports an AAGUID
 on the known-provider list (`provider_known`); otherwise the name is a kind of
 passkey ("Synced passkey") and pages never present it as a place. A new
 visitor passkey ends on a receipt with an optional name, saved through the
-ordinary rename on the fresh session. An administrator renames only their own
-active passkey (`PATCH /_/api/admin/passkeys/{id}`), from a session opened with
+ordinary rename on the fresh session. Saving the optional name has a ten-second
+timeout and a separate Continue without a name action; neither a hung request
+nor a late response keeps the visitor from their destination. An administrator
+renames only their own active passkey (`PATCH /_/api/admin/passkeys/{id}`), from a session opened with
 a passkey and a passkey proof under five minutes old; another account's passkey
-is not found. The provider is a label for the owner, never a trust decision.
+is not found. Confirmation for a session opened on the HTTPS login host returns
+to that host for a full sign-in; after returning, the person retries the action
+with the fresh session. It never tries that RP's passkey on loopback or replays
+a mutation across navigation. Sessions opened on loopback still confirm there.
+The provider is a label for the owner, never a trust decision.
 After a visitor signs in with a passkey on another device or a security key
 (`authenticatorAttachment` is `cross-platform`) on a device that reports its
 own authenticator, the login page offers to add one there, through the
@@ -134,14 +140,19 @@ user handle and every active credential of that account, base64url), read
 after the sign-in. It is absent when the read fails, would be empty, or does
 not include the passkey that just signed in. Revoking answers with the passkeys
 left, read in the revocation's own transaction, and the page signals them
-although its session has ended. A refused sign-in names
-`unknown_credential` only when this directory holds that credential as
+although its session has ended. If this optional snapshot fails, revocation
+and session termination still commit, and no list is sent. A refused sign-in
+names `unknown_credential` only when this directory holds that credential as
 revoked for the user handle the authenticator presented. A revoked passkey's
 signature can no longer be checked, so the handle keeps this from answering
 anyone who only knows a credential ID. A passkey it never held (such as an administrator's), an active one
 (a disabled account) and a failed check send nothing. The page never awaits a
 signal and never claims the manager acted. Renaming does not use
-`signalCurrentUserDetails`. Administrator passkeys are not signalled yet.
+`signalCurrentUserDetails`. The administrator login host sends the same signals
+for its separate directory, using its own account handle and complete active credential list. Failed reads,
+unrelated credentials and disabled administrator accounts send no signal.
+No signals run on the loopback console; an administrator revocation is reflected
+on their next successful login on the HTTPS host.
 
 The backup suggestion reads providers as a hint, never as proof: an AAGUID
 names a provider or a model, not a vault or a device. One passkey, or several

@@ -350,7 +350,7 @@ type apiError struct {
 	status  int
 	message string
 	// unknown, on a refused sign-in, names a passkey this site retired.
-	unknown *unknownCredential
+	unknown *UnknownCredential
 }
 
 var (
@@ -448,7 +448,7 @@ type finishResponse struct {
 	Passkey *createdPasskey `json:"passkey,omitempty"`
 	// Accepted is the account's complete passkey list after a sign-in, for
 	// the Signal API; absent when it could not be read.
-	Accepted *acceptedCredentials `json:"accepted,omitempty"`
+	Accepted *AcceptedCredentials `json:"accepted,omitempty"`
 }
 
 // destination validates a return address against the configured hosts. It
@@ -506,7 +506,7 @@ func (g *Gate) loginFinish(w http.ResponseWriter, r *http.Request) (any, *apiErr
 		if len(usedID) > 0 {
 			revoked, checkErr = g.dir.CredentialRevoked(r.Context(), usedHandle, usedID)
 		}
-		refusal.unknown = retired(g.webauthn.Config.RPID, usedID, revoked, checkErr)
+		refusal.unknown = RetiredPasskey(g.webauthn.Config.RPID, usedID, revoked, checkErr)
 		return nil, &refusal
 	}
 	subject := found.user.Subject()
@@ -533,7 +533,7 @@ func (g *Gate) loginFinish(w http.ResponseWriter, r *http.Request) (any, *apiErr
 		for _, k := range keys {
 			ids = append(ids, k.Credential.ID)
 		}
-		done.Accepted = accepted(g.webauthn.Config.RPID, found.user.Handle, ids, credential.ID)
+		done.Accepted = AcceptedPasskeys(g.webauthn.Config.RPID, found.user.Handle, ids, credential.ID)
 	}
 	return done, nil
 }

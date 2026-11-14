@@ -25,6 +25,10 @@ func (h *Handler) stepUpBegin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "administrator passkeys are not configured on this host")
 		return
 	}
+	if grant.loginHost {
+		writeErrorCode(w, http.StatusConflict, "sign in again on the sign-in site, then retry this action", "login_host_required")
+		return
+	}
 	rp, err := h.relyingParty(r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())

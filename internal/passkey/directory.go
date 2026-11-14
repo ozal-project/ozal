@@ -95,7 +95,8 @@ type Directory interface {
 	// all their sessions in one transaction. It returns ErrNotFound for a
 	// passkey that is not theirs or not active, and ErrLastPasskey for
 	// their only active one. remaining lists the user's active passkeys
-	// after the revocation, read in the same transaction.
+	// after the revocation, read in the same transaction; nil means the
+	// optional snapshot could not be read, without undoing the revocation.
 	RevokeOwnPasskey(ctx context.Context, userID string, credentialID []byte) (remaining [][]byte, err error)
 	// CredentialRevoked reports whether credentialID is a visitor passkey
 	// this directory revoked and whose owner has this user handle. A passkey
