@@ -17,22 +17,24 @@
    is a property of the page, not decoration on a component.
    Ivory is text and the arch of the mark. Green, red and blue are states
    (allowed, refused, waiting): they appear only where a state exists and
-   never as decoration. Fonts are bundled (OFL): no third-party requests. */
+   never as decoration. Fonts are bundled (OFL): no third-party requests.
+   Contrast (WCAG 2.1 AA): muted text is at least 6.8:1 on every surface
+   and depth, the border of a control, at least 3:1. */
 @theme {
   --font-sans: "Geist Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
   --color-bg: #16110d;
   --color-tile: #1e1813;
   --color-tile-2: #271f19;
-  --color-tile-3: #352b23;
+  --color-tile-3: #41352b;
   --color-ink: #f2e9dc;
   --color-ink-2: #ddd1c1;
-  --color-muted: #a8998a;
+  --color-muted: #b5a696;
   --color-brand: #f1ece2;
   --color-loud: #e59a57;
   --color-loud-ink: #16110d;
   --color-signal: #e59a57;
-  --color-depth: #55514a;
+  --color-depth: #857869;
   --color-ok: #78cc8a;
   --color-no: #ee6b5e;
   --color-wait: #86b3e6;
@@ -288,10 +290,13 @@
   .walk-count { display: none; }
   .crop { display: block; overflow: hidden; cursor: zoom-in; }
   .crop img { display: block; height: auto; max-width: none; }
-  /* Source stills are 2560x1600; the console's content starts at x=550. */
-  .crop-overview { aspect-ratio: 1940 / 1123; } .crop-overview img { width: 131.96%; margin: -3.3% 0 0 -28.35%; }
-  .crop-people { aspect-ratio: 1940 / 806; } .crop-people img { width: 131.96%; margin: -3.81% 0 0 -28.35%; }
-  .crop-access-log { aspect-ratio: 1940 / 1082; } .crop-access-log img { width: 131.96%; margin: -13.09% 0 0 -28.35%; }
+  /* Console stills are 2000x1600 (a 1000 px window at 2x, see
+     scripts/demo/tour.mjs). Each crop keeps x 40-1960, the console's content
+     with its header, so the tile is about 0.4 of the source and text stays
+     legible. Percentages are of the 1920 px crop width. */
+  .crop-overview { aspect-ratio: 1920 / 1070; } .crop-overview img { width: 104.17%; margin: 0 0 0 -2.083%; }
+  .crop-people { aspect-ratio: 1920 / 1040; } .crop-people img { width: 104.17%; margin: 0 0 0 -2.083%; }
+  .crop-access-log { aspect-ratio: 1920 / 1010; } .crop-access-log img { width: 104.17%; margin: -30.73% 0 0 -2.083%; }
   .crop-portal { aspect-ratio: 840 / 800; } .crop-portal img, .crop-refused img { width: 100%; }
 
   /* ---------- The rest of the front door ---------- */
@@ -372,14 +377,22 @@
   .topbar nav { order: 3; flex-basis: 100%; gap: 4px 20px; margin: 0; }
   .topbar nav a { font-size: var(--t-small); }
   .header-action { margin-left: auto; }
-  .section { margin-top: 104px; scroll-margin-top: 24px; }
-  .head { margin-bottom: 36px; }
-  .hero { grid-template-columns: minmax(0, 1fr); gap: 56px; padding-top: 36px; }
+  .section { margin-top: 88px; scroll-margin-top: 24px; }
+  .head { gap: 14px; margin-bottom: 28px; }
+  .hero { grid-template-columns: minmax(0, 1fr); gap: 44px; padding-top: 32px; }
+  .hero-note { margin-top: 22px; }
   .hero-description { font-size: 1.125rem; margin-top: 22px; }
   .hero-actions { margin-top: 26px; }
   .door { max-width: 520px; width: 100%; margin-inline: auto; }
   .how, .more, .status, .start { grid-template-columns: minmax(0, 1fr); }
-  .walk { gap: 56px; }
+  .walk { gap: 48px; }
+  .step { gap: 16px; }
+  /* A narrow screen would show the console at a third of its size, too
+     small to read. Its steps show a phone-width still of the one detail the
+     step names instead (<picture>, see index.astro), whole and uncropped;
+     "Open full size" keeps the whole screen a tap away. */
+  :is(.crop-overview, .crop-people, .crop-access-log) { aspect-ratio: auto; }
+  :is(.crop-overview, .crop-people, .crop-access-log) img { width: 100%; margin: 0; }
   .start { padding: 28px; }
   .works li { grid-template-columns: minmax(0, 1fr) auto; }
   .works li p { grid-column: 1 / -1; grid-row: 2; }
@@ -425,12 +438,14 @@
 @media (min-width: 861px) {
   .walk.is-scrolly { grid-template-columns: minmax(0, .46fr) minmax(0, 1fr); gap: 0 64px; }
   .is-scrolly .step { display: contents; }
-  .is-scrolly .step-copy { position: relative; grid-column: 1; min-height: 66vh; padding-left: 26px; opacity: .32; }
+  .is-scrolly .step-copy { position: relative; grid-column: 1; min-height: max(40vh, 300px); padding-left: 26px; }
+  /* A step not on stage stays readable (muted, at least 6.8:1); the one on
+     stage takes full ink and the camel rail. */
+  .is-scrolly .step:not(.is-active) .step-copy :is(h3, p) { color: var(--color-muted); }
   .is-scrolly .step-copy::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--color-tile-3); }
   .is-scrolly .step:nth-child(1) .step-copy { grid-row: 1; } .is-scrolly .step:nth-child(2) .step-copy { grid-row: 2; }
   .is-scrolly .step:nth-child(3) .step-copy { grid-row: 3; } .is-scrolly .step:nth-child(4) .step-copy { grid-row: 4; }
   .is-scrolly .step:nth-child(5) .step-copy { grid-row: 5; }
-  .is-scrolly .step.is-active .step-copy { opacity: 1; }
   .is-scrolly .step.is-active .step-copy::before { background: var(--color-loud); }
   .is-scrolly .step-shot { order: 0; grid-column: 2; grid-row: 1 / span 5; position: sticky; top: 96px; height: calc(100vh - 128px); max-width: none; display: grid; align-content: center; opacity: 0; transform: translateY(14px) scale(.985); pointer-events: none; }
   .is-scrolly .step-shot { visibility: hidden; }
@@ -523,7 +538,7 @@
   /* The tour's stage crosses from one screen to the next, and a matrix cell
      whose answer changed says so once. */
   .is-scrolly .step-shot { transition: opacity 380ms ease, transform 520ms var(--ease); }
-  .is-scrolly .step-copy { transition: opacity 300ms ease; }
+  .is-scrolly .step-copy :is(h3, p) { transition: color 250ms ease; }
   .is-scrolly .step-copy::before { transition: background-color 300ms ease; }
   .cell-changed { animation: cell-changed 900ms ease-out; }
   @keyframes cell-changed { from { box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 70%, transparent); } to { box-shadow: 0 0 0 3px transparent; } }

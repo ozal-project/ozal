@@ -33,25 +33,35 @@ test compares its answer with `auth.NewReport`. The page states what it does not
 
 The page is ordered as a product story:
 
-1. **First screen.** What Ozal is, "Get started", and the doorway: three recorded requests for
-   `grafana.acme.dev` (let in, refused with a reason, sent to sign in) that walk the checks one by
-   one. Native radios choose the request; `page.ts` plays the three twice while on screen and stops
-   at the first click or key. Under reduced motion it rests on the first request.
-2. **Why it exists.** The three usual ways to share an internal tool and what each costs.
-3. **How it works.** The checks in order, a `policy explain` trace, and the identity headers an
+1. **First screen.** What Ozal is, "Get started", "Try the live demo", and the doorway: three
+   recorded requests for `grafana.acme.dev` (let in, refused with a reason, sent to sign in) that
+   walk the checks one by one. Native radios choose the request; `page.ts` plays the three twice
+   while on screen and stops at the first click or key. Under reduced motion it rests on the first
+   request.
+2. **Live demo.** Right after the first screen, so the real engine is one scroll away. An access
+   matrix: four people against four apps, every cell answered by the real engine. Choosing a cell
+   explains that answer; the sign-in settings re-answer the whole matrix, and a cell whose answer
+   changed flashes once.
+3. **Why it exists.** The three usual ways to share an internal tool, what each costs, and the
+   one front door.
+4. **How it works.** The checks in order, a `policy explain` trace, and the identity headers an
    app receives. Only stages that run by default are listed.
-4. **Live demo.** An access matrix: four people against four apps, every cell answered by the
-   real engine. Choosing a cell explains that answer; the sign-in settings re-answer the whole
-   matrix, and a cell whose answer changed flashes once.
 5. **The console.** Five real screens, each labelled with who sees it (operator, Ana or Bob)
    and cropped in CSS to the part the step is about; the link opens the whole still. On a wide
    screen `page.ts` adds `.is-scrolly`: the screens share one sticky stage and the one shown is
-   the step whose text is at the middle of the viewport. The page scrolls normally and never
-   moves on its own. Without scripts, or on a narrow screen, every step keeps its own screen.
-   The page carries no video. `scripts/demo/tour.mjs` regenerates the stills by signing in with
-   a host login; if their layout changes, update the `.crop-*` rules in `src/styles.css`.
-6. **Also in the binary, status, and get started.** A Domains card (demo data), what works today
-   with how far each feature is proven, who Ozal is and is not for, and the commands to try it.
+   the step whose text is at the middle of the viewport. Each step's text is about 40% of the
+   viewport tall, and a step not on stage stays readable in the muted colour. The page scrolls
+   normally and never moves on its own. Without scripts, or on a narrow screen, every step keeps
+   its own screen. Below 861 px a console step shows a phone-width still of the one detail it
+   names (`<name>-narrow.jpg`, through `<picture>`), whole and readable.
+   The page carries no video. `scripts/demo/tour.mjs` regenerates every still by signing in with
+   a host login, including the narrow ones, clipped from the texts each `shot()` call names; if
+   the wide layout changes, update the `.crop-*` rules in `src/styles.css`, and if a narrow
+   still's height changes, its `narrowH` in `src/pages/index.astro`.
+6. **Also in the binary, status, and get started.** A Domains card (demo data) and static sites,
+   what works today with how far each feature is proven, who Ozal is and is not for, and the
+   commands to try it. Each capability is described once: sign-in lives in the pipeline and the
+   tour, the decision record in the tour's last step.
 
 The site presents capabilities without a public roadmap. The public source is linked; the page
 does not link to release downloads.

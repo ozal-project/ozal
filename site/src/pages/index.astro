@@ -19,20 +19,22 @@ const options = [
 // The checks a request passes on the edge, in the order they run.
 const pipeline = [
   { s: "trust", d: "Establishes who is really asking: the client address, trusted proxies and the origin certificate." },
-  { s: "identify", d: "Finds the signed-in person, from a passkey or your OIDC provider. Nobody signed in means a trip to sign in." },
+  { s: "identify", d: "Finds the signed-in person, from a passkey or your OIDC provider. Ozal never stores a password. Nobody signed in means a trip to sign in." },
   { s: "authorize", d: "Applies the app's rule and returns one decision, with a stable code and a reason." },
   { s: "route", d: "Looks the hostname up in a routing snapshot that is swapped atomically on every change." },
   { s: "forward", d: "Sends the request to the app or static site, with the person's identity attached." },
 ];
 
 // One story in five screens. Each still is cropped to the part that matters;
-// the crop itself is set per step in styles.css.
+// the crop itself is set per step in styles.css. A console step also has a
+// phone-width still (<img>-narrow.jpg, 840 px wide, narrowH tall) of the one
+// detail it names, shown below 861 px.
 const steps = [
-  { role: "Operator", t: "The operator sees what needs attention", d: "One thing is wrong: an app that does not answer. A live map shows every app behind the edge.", img: "overview", w: 2560, h: 1600, alt: "The console Overview with an app that is not answering and a map of the apps behind the edge." },
-  { role: "Operator", t: "Inviting Ana", d: "The operator invites her by email. She gets a one-time link and creates a passkey on her own device. There is no password to share.", img: "people", w: 2560, h: 1600, alt: "The People page listing Ana, Bob and Carla with their passkeys." },
+  { role: "Operator", t: "The operator sees what needs attention", d: "One thing is wrong: an app that does not answer. Below it, who got in and why the others were refused.", img: "overview", w: 2000, h: 1600, narrowH: 1114, alt: "The console Overview with an app that is not answering, and who got in and why others were refused." },
+  { role: "Operator", t: "Inviting Ana", d: "The operator invites her by email. She gets a one-time link and creates a passkey on her own device. There is no password to share.", img: "people", w: 2000, h: 1600, narrowH: 1070, alt: "The People page listing Ana, Bob and Carla with their passkeys." },
   { role: "Ana", t: "Ana sees only her apps", d: "Grafana, Billing and the wiki. Nothing else is listed, and a sensitive app can ask her to sign in again.", img: "portal", w: 840, h: 1438, narrow: true, alt: "Ana's page lists the apps her account may open." },
   { role: "Bob", t: "Bob, from another company, is refused", d: "He gets a clear answer with a reference he can pass on, and a way back to his own apps. Not a bare error.", img: "refused", w: 840, h: 702, narrow: true, alt: "Bob's refusal page names the app, his account and a reference code." },
-  { role: "Operator", t: "The log explains both", d: "Every decision with its code and reason: why Ana got in and why Bob did not.", img: "access-log", w: 2560, h: 1600, alt: "The Activity log listing allowed and refused requests with their reasons." },
+  { role: "Operator", t: "The log explains both", d: "Every decision with its code and reason: why Ana got in and why Bob did not. A durable audit trail of access and admin changes is available when configured.", img: "access-log", w: 2000, h: 1600, narrowH: 880, alt: "The Activity log listing allowed and refused requests with their reasons." },
 ];
 
 // A domain as the console shows it (demo data): its certificate and the one
@@ -40,10 +42,10 @@ const steps = [
 const zone = { name: "acme.io", state: "Waiting to issue", cert: "Not issued yet", renew: "After the first certificate", apps: "1 · status.acme.io",
   record: { type: "CNAME", name: "_acme-challenge.acme.io", value: "acme.io.edge.acme.dev" } };
 
+// Only what the rest of the page does not already show: sign-in is in the
+// pipeline and the tour, the record of decisions in the tour's last step.
 const facts = [
   { t: "Static sites with history", d: "Publish a build from GitHub Actions or upload it. Every deployment is kept, and going back to the previous one is a single step." },
-  { t: "Passkeys, or the login you already use", d: "Native passkeys with invitations and recovery, or any OIDC provider. Ozal never stores a password." },
-  { t: "A record of who got in", d: "An activity feed with the code and reason for each decision. A durable audit trail for access and admin changes is available when configured." },
 ];
 
 // "In use" runs on the author's server; "Tested" is covered by automated
@@ -70,11 +72,20 @@ const slug = (e: string) => e.toLowerCase().replace(" ", "-");
         <p class="hero-description">Put Grafana, a wiki or any internal tool on the internet. Ozal signs people in, checks your rules, and only then lets them reach the app. No VPN, one Go binary.</p>
         <div class="hero-actions">
           <a class="button" href="#start">Get started <span aria-hidden="true">↓</span></a>
-          <a class="text-link" href="#how">See how it works <span aria-hidden="true">↓</span></a>
+          <a class="text-link" href="#engine">Try the live demo <span aria-hidden="true">↓</span></a>
         </div>
         <p class="hero-note">If you know Cloudflare Access or Pomerium: the same idea, on a server you own.</p>
       </div>
       <Door />
+    </section>
+
+    <section class="section frame" aria-labelledby="try-title">
+      <div class="head">
+        <p class="label">Live demo</p>
+        <h2 id="try-title">Who can open what. Ask the real engine.</h2>
+        <p>Four people, four apps, sixteen answers from the gateway's own decision code, compiled to WebAssembly and running in your browser. Choose a cell to see why. Nothing is sent anywhere.</p>
+      </div>
+      <Engine />
     </section>
 
     <section class="section frame" aria-labelledby="why-title">
@@ -92,7 +103,6 @@ const slug = (e: string) => e.toLowerCase().replace(" ", "-");
       <div class="head">
         <p class="label">How it works</p>
         <h2 id="how-title">Every request, the same checks, in the same order.</h2>
-        <p>Your apps stop facing the internet. Each request reaches Ozal first, which lets it through, asks the visitor to sign in, or refuses with a reason.</p>
       </div>
       <div class="how">
         <div>
@@ -126,20 +136,12 @@ Host: grafana.acme.dev
       </div>
     </section>
 
-    <section class="section frame" aria-labelledby="try-title">
-      <div class="head">
-        <p class="label">Live demo</p>
-        <h2 id="try-title">Who can open what. Ask the real engine.</h2>
-        <p>Four people, four apps, sixteen answers. Each one comes from the gateway's own decision code, compiled to WebAssembly and running in your browser. Nothing is sent anywhere.</p>
-      </div>
-      <Engine />
-    </section>
 
     <section id="tour" class="section frame" aria-labelledby="tour-title">
       <div class="head">
         <p class="label">The console</p>
         <h2 id="tour-title">One afternoon, seen from both sides of the door.</h2>
-        <p>An invitation, an allowed visit, a refusal and the log that explains both. Real screens from a demo workspace. Keep scrolling.</p>
+        <p>An invitation, an allowed visit, a refusal and the log that explains both. Real screens from a demo workspace.</p>
       </div>
       <div class="walk" data-walk>
         {steps.map((st, i) => (
@@ -151,7 +153,7 @@ Host: grafana.acme.dev
               <p class="step-links"><a class="text-link" href={`/shots/${st.img}.jpg`}>Open full size <span aria-hidden="true">↗</span></a></p>
             </div>
             <figure class="step-shot">
-              <div class="window"><span class="window-bar" aria-hidden="true"><i></i><i></i><i></i><b>{st.narrow ? `${st.role}'s browser` : "Operator console"} · demo workspace</b></span><a class={`crop crop-${st.img}`} href={`/shots/${st.img}.jpg`} aria-label={`Open full size: ${st.alt}`}><img src={`/shots/${st.img}.jpg`} width={st.w} height={st.h} loading={i === 0 ? "eager" : "lazy"} alt={st.alt} /></a></div>
+              <div class="window"><span class="window-bar" aria-hidden="true"><i></i><i></i><i></i><b>{st.narrow ? `${st.role}'s browser` : "Operator console"} · demo workspace</b></span><a class={`crop crop-${st.img}`} href={`/shots/${st.img}.jpg`} aria-label={`Open full size: ${st.alt}`}><picture>{st.narrowH && <source media="(max-width: 860px)" srcset={`/shots/${st.img}-narrow.jpg`} width="840" height={st.narrowH} />}<img src={`/shots/${st.img}.jpg`} width={st.w} height={st.h} loading={i === 0 ? "eager" : "lazy"} alt={st.alt} /></picture></a></div>
             </figure>
           </article>
         ))}
