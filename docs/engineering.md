@@ -60,6 +60,31 @@ route manager loads the key once per `key_dir`. Regression tests cover a forged
 header, underscore spellings, another audience, routes without the field, a
 missing signer and a failing signer.
 
+**Enrolment by code.** `enrolcode.Book` is the pure core: a host-issued code
+(8 symbols from a 32-letter alphabet without I, O, 0 and 1, 40 bits) is claimed
+by one browser at most once within 5 minutes, and only that browser's claim
+token can create the passkey; the whole enrolment ends within 15 minutes. Wrong
+codes are limited per address and in total, and neither limit ends a code or an
+enrolment in progress, so a guesser cannot end someone else's onboarding, though
+reaching the total limit pauses every claim while it lasts (the terminal reports
+it and the link remains); fewer than sixty guesses fit in a code's window. A newer
+recovery, or the first administrator being created, marks the codes that can no
+longer succeed as replaced. Storing the passkey first
+reserves the enrolment, so a withdrawal or a host cancellation racing with the
+store is refused rather than reported as done, and a failed store releases it.
+The code is reserved in the book before the enrolment is stored, so a full book
+leaves an earlier recovery link intact. There is no second factor on the host:
+the first browser to type a valid code wins, bounded by the window, the limits and
+the terminal's report. The code and the browser's claim token are compared by
+hash, and the terminal's poll secret is never sent to the browser. `admin` stores
+the enrolment token, serves `/_/auth/admin/code` on the login host only while a
+code is live, never reads a code from the page URL, and runs the ceremony on a
+transaction that the console's own enrolment path refuses. Regression tests cover
+the claim, withdrawal, a withdrawal during a real store, a failed store, a full
+book with an earlier recovery, expiry, a second browser, a forged claim, a
+cross-origin claim, the address and total limits, a code in the URL, host-only
+terminal endpoints and recovery.
+
 <a id="identidad-y-aplicaciones"></a>
 ## Identity and applications
 

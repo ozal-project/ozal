@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0c0e">
+<meta name="robots" content="noindex">
+<link rel="icon" href="/_/auth/icons/ozal.svg" type="image/svg+xml">
+<title>Set up the console · Ozal</title>
+<link rel="stylesheet" href="/_/auth/passkey.css">
+<link rel="stylesheet" href="/_/auth/admin/code.css">
+<script src="/_/auth/admin/code.js" defer></script>
+</head>
+<body data-page="admin-code">
+<header>
+  <span class="brand">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><path class="arch" d="M5 30V14.5A11 11 0 0 1 27 14.5V30H21.6V14.8A5.6 5.6 0 0 0 10.4 14.8V30Z"/><path class="leaf" d="M10.4 30V14.8A5.6 5.6 0 0 1 16 9.2V30Z"/><path class="light" d="M16 9.2A5.6 5.6 0 0 1 21.6 14.8V30H16Z"/></svg>
+    <span><span class="name">ozal</span><span class="sub">console setup</span></span>
+  </span>
+</header>
+<main class="enrol">
+  <ol class="steps" aria-label="Progress">
+    <li data-step="code" aria-current="step"><span class="dot">1</span><span>Code</span></li>
+    <li data-step="check"><span class="dot">2</span><span>Check</span></li>
+    <li data-step="passkey"><span class="dot">3</span><span>Passkey</span></li>
+  </ol>
+
+  <section id="step-code">
+    <h1>Enter your setup code</h1>
+    <p>Your server printed it when you ran <code>ozal console enrol</code>. It works once, for five minutes.</p>
+    <form id="code-form" autocomplete="off" novalidate>
+      <label for="code">Setup code</label>
+      <input id="code" class="code-input" name="code" inputmode="text" autocomplete="one-time-code" autocapitalize="characters" autocorrect="off" spellcheck="false" maxlength="9" placeholder="ABCD-EFGH" aria-describedby="code-help" required>
+      <p id="code-help" class="field-help">Letters and digits 2–9. Case and the dash do not matter.</p>
+      <button id="code-submit" type="submit" disabled>Continue</button>
+    </form>
+    <details class="aside">
+      <summary>Where do I find the code?</summary>
+      <p>In a terminal on the server, run <code>sudo ozal console enrol</code>. It prints this page's address and a new code.</p>
+    </details>
+  </section>
+
+  <section id="step-check" hidden>
+    <h1 id="check-title">Is this your request?</h1>
+    <dl class="request" aria-label="This request">
+      <div><dt>Server</dt><dd id="req-server"></dd></div>
+      <div><dt>Requested by</dt><dd id="req-operator"></dd></div>
+      <div><dt>From</dt><dd id="req-from"></dd></div>
+      <div><dt>This browser</dt><dd id="req-browser"></dd></div>
+      <div><dt>Grants</dt><dd id="req-grants"></dd></div>
+      <div><dt>Code</dt><dd id="req-code" class="mono"></dd></div>
+      <div><dt>Expires in</dt><dd><span id="req-countdown" class="countdown"></span></dd></div>
+    </dl>
+    <p id="country-credit" class="credit" hidden>Countries are approximate.</p>
+    <p id="check-intro" class="note">Continue only if you ran the command on that server just now.</p>
+    <button id="confirm" type="button">Yes, continue</button>
+    <button id="withdraw" class="link-button quiet" type="button">This wasn't me — cancel the code</button>
+  </section>
+
+  <section id="step-passkey" hidden>
+    <h1 id="passkey-title">Create your passkey</h1>
+    <p id="passkey-intro">Your device saves it and unlocks it with your fingerprint, face or PIN. The server keeps only its public key.</p>
+    <form id="who-form" novalidate>
+      <div id="who-fields">
+        <label for="name">Full name</label>
+        <input id="name" name="name" autocomplete="name" maxlength="80" aria-describedby="name-error">
+        <p id="name-error" class="field-help error" hidden></p>
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email" maxlength="254" aria-describedby="email-help">
+        <p id="email-help" class="field-help">It names your account; no message is sent.</p>
+      </div>
+      <button id="create" type="submit">Create passkey</button>
+    </form>
+    <p class="field-help timeleft">Finish within <span id="passkey-countdown" class="countdown"></span>.</p>
+    <button id="back" class="link-button quiet" type="button">Back to the request</button>
+  </section>
+
+  <section id="step-done" hidden>
+    <div class="done-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7"/></svg></div>
+    <h1>You're the administrator</h1>
+    <p id="done-who"></p>
+    <h2>Open the console</h2>
+    <ol class="next">
+      <li>From your computer, open a tunnel to the server:<code id="done-tunnel" class="copyable"></code></li>
+      <li>Open <a id="done-console" href="#"></a> and sign in with this passkey.</li>
+    </ol>
+    <p class="field-help">The console stays private to the server; the tunnel is how you reach it.</p>
+  </section>
+
+  <section id="step-ended" hidden>
+    <h1 id="ended-title">This code can't be used</h1>
+    <p id="ended-text"></p>
+    <p class="field-help">For a new code, run <code id="ended-command">sudo ozal console enrol</code> on the server again.</p>
+  </section>
+
+  <p id="status" role="status" aria-live="polite"></p>
+</main>
+<footer>Self-hosted access · Ozal keeps only your passkey’s public key</footer>
+</body>
+</html>

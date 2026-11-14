@@ -742,3 +742,25 @@ func TestValidateAdminUpdateSocketNeedsAnAbsoluteCleanPath(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateAdminCountryDatabaseNeedsAnAbsoluteCleanPath(t *testing.T) {
+	base := Config{
+		Listen: ":8888",
+		Routes: []Route{{Host: "app.localhost", Target: "http://localhost:9000"}},
+	}
+	for _, c := range []struct {
+		path string
+		ok   bool
+	}{
+		{"", true},
+		{"/var/lib/ozal/dbip-country-lite.csv.gz", true},
+		{"dbip-country-lite.csv", false},
+		{"/var/lib/ozal/../dbip.csv", false},
+	} {
+		cfg := base
+		cfg.Admin.CountryDatabase = c.path
+		if _, err := Validate(cfg); (err == nil) != c.ok {
+			t.Errorf("admin.country_database %q: err = %v, want ok=%v", c.path, err, c.ok)
+		}
+	}
+}

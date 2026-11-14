@@ -3,12 +3,14 @@ package admin
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net"
 	"net/http"
@@ -18,6 +20,7 @@ import (
 
 	"github.com/ozal-project/ozal/internal/adminid"
 	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/enrolcode"
 	"github.com/ozal-project/ozal/internal/events"
 	"github.com/ozal-project/ozal/internal/healthcheck"
 	"github.com/ozal-project/ozal/internal/routemanager"
@@ -59,22 +62,28 @@ type Handler struct {
 	identityMu             sync.Mutex
 	ceremonies             *ceremonyBook
 	remote                 *RemoteLogin
-	people                 people
-	appNames               appNames
-	groupCatalog           groupStore
-	connectors             connectors
-	pairing                pairing
-	updatesExecutor        updateExecutor
-	accessHistory          accessHistory
-	domains                domainService
-	mux                    *http.ServeMux
+	// codes are device-code enrolments: printed on the host, typed on the
+	// login host, approved in the host's terminal.
+	codes           *enrolcode.Book
+	countries       countries
+	flags           fs.FS
+	countryCredit   CountryCredit
+	people          people
+	appNames        appNames
+	groupCatalog    groupStore
+	connectors      connectors
+	pairing         pairing
+	updatesExecutor updateExecutor
+	accessHistory   accessHistory
+	domains         domainService
+	mux             *http.ServeMux
 }
 
 func New(manager routeManager, sink events.Sink, opts ...Option) *Handler {
 	if sink == nil {
 		sink = events.Discard
 	}
-	h := &Handler{operators: newOperatorSessions(), manager: manager, sink: sink, mux: http.NewServeMux(), ceremonies: newCeremonyBook(), devices: newDeviceBook(), requests: adminid.NewRequests()}
+	h := &Handler{operators: newOperatorSessions(), manager: manager, sink: sink, mux: http.NewServeMux(), ceremonies: newCeremonyBook(), codes: enrolcode.New(time.Now, rand.Reader), flags: flagAssets(), devices: newDeviceBook(), requests: adminid.NewRequests()}
 	h.registerOperators()
 	h.mux.HandleFunc("GET /_/console.css", h.consoleCSS)
 	h.mux.HandleFunc("GET /_/fonts/manrope.ttf", h.consoleFont)
