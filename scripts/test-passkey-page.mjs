@@ -12,11 +12,11 @@ const src = readFileSync(new URL("../internal/passkey/assets/passkey.js", import
 function render(search, { oidc = "", webauthn = true, page = "login", fetch = () => new Promise(() => {}), assign = () => {}, caps, get = () => new Promise(() => {}), create = () => new Promise(() => {}), hash = "", uvpa, storage = {}, signals = {} } = {}) {
   const els = {};
   const el = (id) => (els[id] ??= {
-    id, textContent: "", value: "", src: "", hidden: id === "oidc" || id === "recovery-warning" || id === "receipt" || id === "receipt-return" || id === "receipt-icon" || id === "bridge", open: false, href: "", disabled: false, dataset: {}, children: [], on: {},
+    id, textContent: "", value: "", src: "", hidden: id === "oidc" || id === "recovery-warning" || id === "receipt" || id === "receipt-return" || id === "receipt-icon" || id === "bridge" || id === "backup-hint", open: false, href: "", disabled: false, dataset: {}, children: [], on: {},
     addEventListener(ev, fn) { this.on[ev] = fn; }, focus() {}, setAttribute() {}, append(...c) { this.children.push(...c); }, replaceChildren(...c) { this.children = c; },
     querySelector(q) { return q === "a" ? this.children.find((c) => c.href) || null : null; },
   });
-  ["title", "intro", "action", "oidc", "status", "first-time", "username", "sites", "devices", "who", "email", "signout", "apps", "manage", "choices", "choice-list", "use-phone", "use-key", "recovery-warning", "sessions", "signout-all", "signout-all-confirm", "also-admin", "receipt", "receipt-where", "receipt-icon", "receipt-return", "receipt-form", "receipt-name", "receipt-continue", "bridge", "bridge-continue", "bridge-add", "bridge-never"].forEach(el);
+  ["title", "intro", "action", "oidc", "status", "first-time", "username", "sites", "devices", "who", "email", "signout", "apps", "manage", "choices", "choice-list", "use-phone", "use-key", "recovery-warning", "sessions", "signout-all", "signout-all-confirm", "also-admin", "receipt", "receipt-where", "receipt-icon", "receipt-return", "receipt-form", "receipt-name", "receipt-continue", "bridge", "bridge-continue", "bridge-add", "bridge-never", "backup-hint"].forEach(el);
   const label = { hidden: false };
   const head = [];
   let ready;
@@ -471,6 +471,25 @@ assert.match(shown.page.intro, /No app is open to you yet/);
 shown = await portal({ ok: false, status: 401, json: async () => ({ error: "You are signed out. Sign in again." }), text: async () => "" });
 assert.deepEqual(shown.assigned, ["/_/auth/login?return_to=" + encodeURIComponent("https://auth.example.com/_/auth/me")], "a signed-out person logs in and comes back to the portal");
 assert.equal(shown.page.who(), "", "nothing about a person is shown without a session");
+
+// The backup hint reads providers as a hint: only one passkey, or all synced
+// in one provider, suggests another place; nothing claims protection.
+{
+  const kp = (id, provider, known, synced) => ({ id, provider, provider_known: known, synced, icon: "key", created: "2026-10-21T12:00:00Z" });
+  const hintFor = async (passkeys) => {
+    const p = render("", { page: "devices", fetch: (url) => Promise.resolve({ ok: true, json: () => Promise.resolve(url.endsWith("/list") ? { email: "ana@example.com", passkeys, sites: [] } : {}) }) });
+    await settle();
+    return p.el("backup-hint").hidden ? "" : p.el("backup-hint").textContent;
+  };
+  assert.match(await hintFor([kp("aa", "Bitwarden", true, true)]), /only passkey/);
+  assert.match(await hintFor([kp("aa", "Bitwarden", true, true), kp("bb", "Bitwarden", true, true)]), /all in Bitwarden/);
+  assert.equal(await hintFor([kp("aa", "Bitwarden", true, true), kp("bb", "Google Password Manager", true, true)]), "", "different providers: no claim either way");
+  assert.equal(await hintFor([kp("aa", "Windows Hello", true, false), kp("bb", "Windows Hello", true, false)]), "", "two device-bound passkeys of one model may be independent");
+  assert.equal(await hintFor([kp("aa", "Bitwarden", true, true), kp("bb", "Synced passkey", false, true)]), "", "an unknown provider tells nothing");
+  for (const passkeys of [[kp("aa", "Bitwarden", true, true), kp("bb", "Google Password Manager", true, true)], [kp("aa", "Bitwarden", true, true)]]) {
+    assert.doesNotMatch(await hintFor(passkeys), /protected|safe|secure/i, "never a verdict");
+  }
+}
 
 // Destructive actions ask in the page, never through confirm() (this fake
 // window has none, so a native dialog would throw here).

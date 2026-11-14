@@ -143,6 +143,12 @@ anyone who only knows a credential ID. A passkey it never held (such as an admin
 signal and never claims the manager acted. Renaming does not use
 `signalCurrentUserDetails`. Administrator passkeys are not signalled yet.
 
+The backup suggestion reads providers as a hint, never as proof: an AAGUID
+names a provider or a model, not a vault or a device. One passkey, or several
+all synced in one known provider, suggests keeping one in another place. Known
+providers that differ, two device-bound passkeys of one model, or any unknown
+provider claim nothing either way. No page says an account is protected.
+
 The app may keep its own login. Gateway headers are accepted only from its
 authenticated path; the app keeps its internal authorization. Signed claims that
 the app can verify, token exchange and Ozal as an OIDC provider are distinct

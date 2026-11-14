@@ -18,7 +18,7 @@ func TestAdministratorNamesOnlyTheirOwnPasskeyWithAFreshProof(t *testing.T) {
 	ana := decode(t, enrol(t, h, newAuthenticator(t), invitation, "Ana", "ana@example.com"))["token"].(string)
 
 	own := ownPasskeys(t, h, owner)
-	if len(own) != 1 || own[0]["provider_known"] != false || own[0]["provider"] != "Security key or device passkey" {
+	if len(own) != 1 || own[0]["provider_known"] != false || own[0]["provider"] != "Security key or device passkey" || own[0]["synced"] != false {
 		t.Fatalf("owner's passkeys = %v", own)
 	}
 	ownID := own[0]["id"].(string)

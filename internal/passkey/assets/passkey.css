@@ -144,3 +144,6 @@ body[data-page="denied"] form { margin-top: 18px; }
 .bridge h2 { margin: 0; font-size: 1.15rem; }
 .bridge p { margin: 0 0 6px; color: var(--muted); }
 .bridge .link-button { justify-self: center; margin-top: 4px; color: var(--muted); }
+
+/* The backup hint under the passkey list: a suggestion, never a verdict. */
+#backup-hint { margin: 12px 0 0; padding: 10px 12px; border-left: 3px solid var(--lamp); border-radius: 0 8px 8px 0; background: color-mix(in srgb, var(--lamp) 8%, transparent); font-size: 0.88rem; }
