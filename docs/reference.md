@@ -278,6 +278,56 @@ Keep the previous service until that acceptance; returning to the previous profi
 is the rollback. The example does not change firewall or DNS and does not establish the
 controls of [direct exposure](security.md#direct-ingress-or-behind-a-proxy).
 
+### Cloudflare Tunnel profile
+
+For a host without a public address, or one whose address you do not want to
+publish. [config.cloudflare-tunnel.example.json](../config.cloudflare-tunnel.example.json)
+is a template; `ozal install service -ingress cloudflare-tunnel` writes the same
+shape (see the [service guide](operations/download-install.md#3-install-the-linux-service)).
+
+```json
+"ingress": {
+  "mode": "cloudflare_tunnel",
+  "cloudflare_tunnel": {
+    "token": "file:/etc/ozal/cloudflare.token",
+    "state_dir": "/var/lib/ozal/cloudflare-tunnel",
+    "name": "ozal"
+  }
+}
+```
+
+| Field | Use |
+|---|---|
+| `ingress.mode` | `direct` (default when omitted) or `cloudflare_tunnel` |
+| `cloudflare_tunnel.token` | `file:` or `env:` reference to a Cloudflare API token; an inline value is rejected |
+| `cloudflare_tunnel.state_dir` | Tunnel identity and connector token; default `/var/lib/ozal/cloudflare-tunnel` |
+| `cloudflare_tunnel.name` | Tunnel name in the account; default `ozal` |
+
+The token needs *Account · Cloudflare Tunnel · Edit*, *Zone · DNS · Edit* on the
+served zones and *Zone · Zone Settings · Edit* (for Always Use HTTPS). Without
+`dns.cloudflare`, records are written with this token.
+
+Validation requires `listen` on a loopback IP, `tls.enabled` false, an `https`
+`auth.passkeys.login_url` (and `auth.redirect_url` with OIDC) and an empty
+`dns.target`. `trusted_proxies` is set to `127.0.0.1/32` and `::1/128`; any other
+entry is rejected.
+
+Under **Domains**, **Create tunnel** finds the account from `auth.passkeys.rp_id`
+(or `auth.cookie_domain`), creates a remotely managed tunnel, saves its identity
+and connector token in `state_dir`, routes every hostname to `http://<listen>` and
+creates a proxied CNAME for the host of `auth.passkeys.login_url` when that name
+has no address record (an existing one is reported, never replaced). Ozal decides which hosts it serves; a new application only
+needs its DNS record. An active tunnel with the same name is reused instead of
+creating a second one; a tunnel managed by a local `cloudflared` file is refused.
+Then install `cloudflared` from Cloudflare's packages and start
+`sudo systemctl enable --now ozal-cloudflared`. The unit runs
+`cloudflared tunnel run --token-file`, so it needs a `cloudflared` release that
+has that flag.
+
+Each application's DNS panel creates a proxied CNAME to
+`<tunnel-id>.cfargotunnel.com`. Cloudflare's Universal SSL covers the domain and
+one level of subdomains; deeper names need an advanced certificate at Cloudflare.
+
 ### DNS-01
 
 DNS-01 uses `tls.domains` and a `tls.dns01` block:

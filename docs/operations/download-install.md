@@ -98,6 +98,20 @@ sudo ./ozal install service -binary ./ozal -target http://127.0.0.1:3000 -apply
 sudo ./ozal install service -archive ./ozal_VERSION_linux_amd64.tar.gz -sha256 EXPECTED_SHA256 -apply
 ```
 
+**Without a public address.** `-ingress cloudflare-tunnel` installs the
+[Cloudflare Tunnel profile](../reference.md#cloudflare-tunnel-profile) instead:
+
+```sh
+sudo ./ozal install service -binary ./ozal -ingress cloudflare-tunnel \
+  -domain example.com -cloudflare-token /root/cloudflare.token -apply
+```
+
+Sign-in moves to `https://auth.<domain>` and the trial route to `app.<domain>`.
+The installer copies the token file to `/etc/ozal/cloudflare.token` (root and
+the service account only; it is never printed), creates
+`/var/lib/ozal/cloudflare-tunnel/` and installs the `ozal-cloudflared` unit
+disabled. The tunnel itself is created later from **Domains** in the console.
+
 The installer creates `/usr/local/bin/ozal` as a link to the installed binary. This
 keeps `ozal upgrade` working from any directory. Administration commands use
 `/etc/ozal/config.json` unless a `config.json` exists in the current directory.

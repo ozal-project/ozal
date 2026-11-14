@@ -87,6 +87,35 @@ type Gate struct {
 	lifetime Lifetime
 	loginKey []byte
 	sink     events.Sink
+	// https reports the visitor's scheme. The composition root passes the
+	// trust stage's decision so a proxy that terminated TLS (Cloudflare
+	// Tunnel) still yields Secure cookies; the default is the transport.
+	https func(*http.Request) bool
+}
+
+// GateOption adjusts a Gate at construction.
+type GateOption func(*Gate)
+
+// WithPublicScheme replaces the transport check (r.TLS) with the scheme the
+// trust stage decided. Pass only a function backed by that stage: a client
+// header must never mark a request as HTTPS.
+func WithPublicScheme(https func(*http.Request) bool) GateOption {
+	return func(g *Gate) {
+		if https != nil {
+			g.https = https
+		}
+	}
+}
+
+func transportHTTPS(r *http.Request) bool { return r.TLS != nil }
+
+// secure is the visitor's scheme; a Gate built as a struct literal in a test
+// falls back to the transport.
+func (g *Gate) secure(r *http.Request) bool {
+	if g.https == nil {
+		return r.TLS != nil
+	}
+	return g.https(r)
 }
 
 // emit publishes a login event when a sink is configured.
@@ -106,7 +135,7 @@ func (g *Gate) emit(e events.Event) {
 // routing config) a post-login redirect is allowed to land on. Without
 // this check, an attacker could craft a login link with return_to pointing
 // anywhere and use this Gate as an open redirect once a victim logs in.
-func NewGate(ctx context.Context, cfg config.Auth, allowedHosts []string, sessions SessionBackend, sink events.Sink) (*Gate, error) {
+func NewGate(ctx context.Context, cfg config.Auth, allowedHosts []string, sessions SessionBackend, sink events.Sink, opts ...GateOption) (*Gate, error) {
 	if sessions == nil {
 		return nil, errors.New("auth: NewGate requires a session store")
 	}
@@ -127,7 +156,7 @@ func NewGate(ctx context.Context, cfg config.Auth, allowedHosts []string, sessio
 		hosts[host] = true
 	}
 
-	return &Gate{
+	gate := &Gate{
 		issuer: cfg.Issuer,
 		oauthConfig: oauth2.Config{
 			ClientID:     cfg.ClientID,
@@ -143,7 +172,12 @@ func NewGate(ctx context.Context, cfg config.Auth, allowedHosts []string, sessio
 		lifetime:     SessionLifetime(cfg),
 		loginKey:     loginCookieKey(cfg.ClientSecret),
 		sink:         sink,
-	}, nil
+		https:        transportHTTPS,
+	}
+	for _, opt := range opts {
+		opt(gate)
+	}
+	return gate, nil
 }
 
 // Authenticate returns the trusted identity stored in a valid session.
@@ -167,13 +201,13 @@ func (g *Gate) Authenticate(r *http.Request) (Principal, bool) {
 // host than this request when auth spans multiple hosts under
 // cookie_domain — can send the browser back to the right place afterwards.
 func (g *Gate) RedirectToLogin(w http.ResponseWriter, r *http.Request) {
-	returnTo := requestURL(r)
+	returnTo := g.requestURL(r)
 	http.Redirect(w, r, "/_/auth/login?return_to="+url.QueryEscape(returnTo), http.StatusFound)
 }
 
-func requestURL(r *http.Request) string {
+func (g *Gate) requestURL(r *http.Request) string {
 	scheme := "http"
-	if r.TLS != nil {
+	if g.secure(r) {
 		scheme = "https"
 	}
 	return scheme + "://" + r.Host + r.URL.RequestURI()
@@ -228,7 +262,7 @@ func (g *Gate) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		MaxAge:   int(loginCookieTTL.Seconds()),
 		HttpOnly: true,
-		Secure:   r.TLS != nil,
+		Secure:   g.secure(r),
 		SameSite: http.SameSiteLaxMode,
 	})
 
@@ -317,7 +351,7 @@ func (g *Gate) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	g.emit(events.Event{Type: events.LoginSucceeded, Actor: principal.Subject, Host: r.Host, RemoteAddr: r.RemoteAddr})
 
-	http.SetCookie(w, SessionCookie(sessionID, g.cookieDomain, r.TLS != nil, g.lifetime))
+	http.SetCookie(w, SessionCookie(sessionID, g.cookieDomain, g.secure(r), g.lifetime))
 	http.Redirect(w, r, g.safeReturnTo(pl.ReturnTo), http.StatusFound)
 }
 
@@ -359,7 +393,7 @@ func (g *Gate) HandleLogout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   r.TLS != nil,
+		Secure:   g.secure(r),
 		SameSite: http.SameSiteLaxMode,
 	})
 	http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -434,7 +468,7 @@ func (g *Gate) clearLoginCookie(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   r.TLS != nil,
+		Secure:   g.secure(r),
 		SameSite: http.SameSiteLaxMode,
 	})
 }

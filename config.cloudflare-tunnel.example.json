@@ -1,0 +1,31 @@
+{
+  "listen": "127.0.0.1:8888",
+  "runtime_file": "/var/lib/ozal/runtime.json",
+  "admin": {
+    "listen": "127.0.0.1:9090",
+    "socket": "/run/ozal/admin.sock"
+  },
+  "ingress": {
+    "mode": "cloudflare_tunnel",
+    "cloudflare_tunnel": {
+      "token": "file:/etc/ozal/cloudflare.token",
+      "state_dir": "/var/lib/ozal/cloudflare-tunnel",
+      "name": "ozal"
+    }
+  },
+  "auth": {
+    "cookie_domain": "example.com",
+    "passkeys": {
+      "rp_id": "example.com",
+      "login_url": "https://auth.example.com",
+      "display_name": "Ozal"
+    }
+  },
+  "routes": [
+    {
+      "host": "notes.example.com",
+      "target": "http://127.0.0.1:3000",
+      "access": { "allowed_emails": ["operator@example.com"] }
+    }
+  ]
+}

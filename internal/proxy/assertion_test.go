@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"testing"
 	"time"
@@ -37,7 +38,9 @@ func TestIdentityAssertionReachesOnlyItsApplication(t *testing.T) {
 		t.Fatal(err)
 	}
 	gate := &fakeGate{authenticated: true, principal: auth.Principal{Subject: "passkey:alice", Email: "alice@example.com", Groups: []string{"members"}}}
-	handler, err := New(assertionRoutes(upstream.URL), nil, gate, WithIdentityAssertion(signer, testIssuer))
+	handler, err := New(assertionRoutes(upstream.URL), nil, gate,
+		WithIdentityAssertion(signer, testIssuer),
+		WithTrustedProxies([]netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,10 +55,16 @@ func TestIdentityAssertionReachesOnlyItsApplication(t *testing.T) {
 	} {
 		t.Run(tc.host, func(t *testing.T) {
 			req := httptest.NewRequest("GET", "http://"+tc.host+"/", nil)
+			// cloudflared reaches the edge over HTTP, carrying public HTTPS.
+			req.RemoteAddr = "127.0.0.1:40000"
+			req.Header.Set("X-Forwarded-Proto", "https")
 			req.Header.Set(assertion.Header, forged)
 			req.Header["X_Ozal_Assertion"] = []string{forged}
 			handler.ServeHTTP(httptest.NewRecorder(), req)
 			got := <-seen
+			if got.Get("X-Forwarded-Proto") != "https" {
+				t.Fatal("public HTTPS scheme lost while forwarding the assertion")
+			}
 			for name := range got {
 				if strings.EqualFold(name, "X_Ozal_Assertion") {
 					t.Fatal("an underscore spelling reached the application")

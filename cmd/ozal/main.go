@@ -35,6 +35,7 @@ import (
 	"github.com/ozal-project/ozal/internal/audit"
 	"github.com/ozal-project/ozal/internal/auth"
 	"github.com/ozal-project/ozal/internal/certs"
+	"github.com/ozal-project/ozal/internal/cftunnel"
 	"github.com/ozal-project/ozal/internal/config"
 	"github.com/ozal-project/ozal/internal/domaincheck/probe"
 	"github.com/ozal-project/ozal/internal/events"
@@ -378,7 +379,13 @@ func main() {
 			setupIdentity = identity
 		}
 		adminOpts = append(adminOpts, admin.WithZoneSetup(zoneprovider.New(setupIdentity, originTrust)))
+	} else if cfg.IngressMode() == config.IngressCloudflareTunnel {
+		// Cloudflare holds the certificates; the zone checklist still turns on
+		// Always Use HTTPS with the tunnel's token.
+		adminOpts = append(adminOpts, admin.WithZoneSetup(zoneprovider.New(nil, nil)))
 	}
+	// Reports the mode in every installation; acts only with a tunnel.
+	adminOpts = append(adminOpts, admin.WithIngress(cftunnel.New()))
 	adminServer, err := startAdmin(&cfg, manager, sink, broker, certificateStatus(certificateManager), adminOpts...)
 	if err != nil {
 		log.Fatalf("admin listener: %v", err)

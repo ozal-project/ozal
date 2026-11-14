@@ -53,6 +53,10 @@ type Observed struct {
 	// Proxied is the edge's own setting: visitors arrive through the
 	// provider's proxy. Without it no proxy setting applies.
 	Proxied bool
+	// Tunnel is true with ingress.mode cloudflare_tunnel: Cloudflare reaches
+	// this edge through cloudflared, so its SSL mode and Origin Pulls do not
+	// apply, while http:// must still be redirected at the proxy.
+	Tunnel bool
 
 	ChallengeDelegated bool
 	ChallengeName      string
@@ -130,6 +134,8 @@ func encryption(o Observed) Step {
 	s := Step{Name: Encryption, Title: "Encrypted connection from the proxy"}
 	manual := "SSL/TLS → Overview: choose Full (strict)."
 	switch {
+	case o.Tunnel:
+		s.State, s.Detail = NotNeeded, "Cloudflare reaches this edge through its tunnel, which is always encrypted; the SSL mode does not apply to it."
 	case !o.Proxied:
 		s.State, s.Detail = NotNeeded, "Visitors reach this edge directly; no proxy setting applies."
 	case !o.Provider:
@@ -151,6 +157,8 @@ func originPull(o Observed) Step {
 	s := Step{Name: OriginPull, Title: "Proxy certificate for this edge"}
 	manual := "SSL/TLS → Origin Server → Authenticated Origin Pulls: upload a client certificate this edge trusts at Zone-level and turn Zone-level on."
 	switch {
+	case o.Tunnel:
+		s.State, s.Detail = NotNeeded, "Only cloudflared on this host can connect to this edge; no proxy certificate is needed."
 	case !o.OriginAuth:
 		s.State, s.Detail = NotNeeded, "This edge does not ask the proxy for a certificate."
 	case !o.Proxied:
@@ -183,6 +191,9 @@ func httpsRedirect(o Observed) Step {
 		s.State, s.Detail, s.Manual = Unknown, "The proxy should send http:// to https://; otherwise a typed address gets error 522.", manual
 	case o.AlwaysHTTPS == "on":
 		s.State, s.Detail = Done, "Always Use HTTPS is on."
+	case o.AlwaysHTTPS == "off" && o.Tunnel:
+		s.State, s.Action, s.Manual = Todo, SetAlwaysHTTPS, manual
+		s.Detail = "Cloudflare forwards http:// through the tunnel: visitors who type the address would sign in without HTTPS."
 	case o.AlwaysHTTPS == "off":
 		s.State, s.Action, s.Manual = Todo, SetAlwaysHTTPS, manual
 		s.Detail = "The proxy forwards http:// to this edge, which does not answer it: visitors who type the address get error 522."

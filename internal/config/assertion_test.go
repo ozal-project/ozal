@@ -44,3 +44,29 @@ func TestIdentityAssertionConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestCloudflareTunnelWithIdentityAssertion(t *testing.T) {
+	cfg := tunnelConfig()
+	cfg.IdentityAssertion = &IdentityAssertion{KeyDir: "/var/lib/ozal/assertion"}
+	cfg.Routes[0].IdentityAssertion = &RouteAssertion{Audience: "custodia"}
+	got, err := Validate(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.IngressMode() != IngressCloudflareTunnel || got.AssertionIssuer() != "https://auth.example.com" {
+		t.Fatalf("mode %q, issuer %q", got.IngressMode(), got.AssertionIssuer())
+	}
+	// Reloads clone both settings; changing one snapshot must not alter another.
+	clone := Clone(*got)
+	clone.Ingress.CloudflareTunnel.Name = "another-edge"
+	clone.IdentityAssertion.KeyDir = "/var/lib/another-edge/assertion"
+	clone.Routes[0].IdentityAssertion.Audience = "another-app"
+	if got.Ingress.CloudflareTunnel.Name != "ozal" || got.IdentityAssertion.KeyDir != cfg.IdentityAssertion.KeyDir || got.Routes[0].IdentityAssertion.Audience != "custodia" {
+		t.Fatal("cloning shared tunnel or assertion settings")
+	}
+	// Tunnel mode must still enforce HTTPS for the assertion's login origin.
+	cfg.Auth.Passkeys.LoginURL = "http://auth.example.com"
+	if _, err := Validate(cfg); err == nil || !strings.Contains(err.Error(), "login_url must be https") {
+		t.Fatalf("insecure tunnel login accepted: %v", err)
+	}
+}

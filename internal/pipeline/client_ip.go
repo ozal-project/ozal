@@ -12,6 +12,7 @@ import (
 
 type clientIPKey struct{}
 type trustEvidenceKey struct{}
+type publicHTTPSKey struct{}
 
 // TrustEvidence is the source-level provenance selected by the trust stage.
 // It contains no client address, so it can be attached to a policy decision
@@ -23,6 +24,9 @@ type TrustEvidence struct {
 
 type trustDecision struct {
 	ClientIP netip.Addr
+	// HTTPS is the scheme the visitor used: this listener's own TLS, or a
+	// single "https" asserted by a trusted proxy that terminated TLS for it.
+	HTTPS bool
 	TrustEvidence
 }
 
@@ -40,13 +44,36 @@ func TrustEvidenceFrom(ctx context.Context) (TrustEvidence, bool) {
 	return evidence, ok
 }
 
+// PublicHTTPS reports whether the visitor reached this edge over HTTPS, as
+// decided by Trust. Behind a trusted proxy that terminates TLS (Cloudflare
+// Tunnel, a proxied DNS record) the connection to Ozal is plain HTTP while
+// the visitor's is HTTPS; this is the answer for cookies, redirects and the
+// X-Forwarded-Proto an application receives. Without Trust it is r.TLS.
+func PublicHTTPS(r *http.Request) bool {
+	if https, ok := r.Context().Value(publicHTTPSKey{}).(bool); ok {
+		return https
+	}
+	return r.TLS != nil
+}
+
 // TrustWithProxies captures an immutable peer allowlist for this snapshot.
-// Only one valid CF-Connecting-IP from a trusted TCP peer is accepted.
+// Only one valid CF-Connecting-IP from a trusted TCP peer is accepted, and
+// only one canonical X-Forwarded-Proto: https from such a peer upgrades the
+// public scheme.
 func TrustWithProxies(proxies []netip.Prefix) Stage {
 	trusted := slices.Clone(proxies)
 	return trustStage(func(r *http.Request) trustDecision {
-		return resolveClientEvidence(r.RemoteAddr, headerValues(r.Header, "CF-Connecting-IP"), trusted)
+		decision := resolveClientEvidence(r.RemoteAddr, headerValues(r.Header, "CF-Connecting-IP"), trusted)
+		decision.HTTPS = r.TLS != nil || (decision.ArrivalPath == policycontext.ArrivalProxy && assertsHTTPS(headerValues(r.Header, "X-Forwarded-Proto")))
+		return decision
 	})
+}
+
+// assertsHTTPS accepts exactly one value equal to "https". A repeated,
+// comma-joined or underscore-spelled claim (headerValues returns nothing for
+// the latter) is not an assertion: the scheme stays as the transport says.
+func assertsHTTPS(values []string) bool {
+	return len(values) == 1 && strings.EqualFold(strings.TrimSpace(values[0]), "https")
 }
 
 // TrustAuthenticatedTunnel is the connector side of the tunnel: every request
@@ -56,7 +83,9 @@ func TrustWithProxies(proxies []netip.Prefix) Stage {
 // through that tunnel.
 func TrustAuthenticatedTunnel() Stage {
 	address := trustStage(func(r *http.Request) trustDecision {
-		return resolveTunnelEvidence(r.RemoteAddr, headerValues(r.Header, VisitorIPHeader))
+		decision := resolveTunnelEvidence(r.RemoteAddr, headerValues(r.Header, VisitorIPHeader))
+		decision.HTTPS = r.TLS != nil
+		return decision
 	})
 	return func(next http.Handler) http.Handler {
 		inner := address(next)
@@ -81,7 +110,7 @@ func trustStage(resolve func(*http.Request) trustDecision) Stage {
 			// headers; running again would see them stripped and downgrade
 			// the client to the transport peer.
 			evidence, hasEvidence := TrustEvidenceFrom(r.Context())
-			decision := trustDecision{TrustEvidence: evidence}
+			decision := trustDecision{TrustEvidence: evidence, HTTPS: PublicHTTPS(r)}
 			if ip, ok := ClientIP(r.Context()); ok {
 				decision.ClientIP = ip
 			}
@@ -91,6 +120,7 @@ func trustStage(resolve func(*http.Request) trustDecision) Stage {
 			stripIdentityHeaders(r.Header)
 			stripForwardingHeaders(r.Header)
 			ctx := context.WithValue(r.Context(), trustEvidenceKey{}, decision.TrustEvidence)
+			ctx = context.WithValue(ctx, publicHTTPSKey{}, decision.HTTPS)
 			if decision.ClientIP.IsValid() {
 				ctx = context.WithValue(ctx, clientIPKey{}, decision.ClientIP)
 			}

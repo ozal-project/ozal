@@ -354,3 +354,48 @@ func TestOIDCGateRejectsLegacyNativeAndOtherIssuerSessions(t *testing.T) {
 		}
 	}
 }
+
+// Behind Cloudflare Tunnel the hop to Ozal is plain HTTP while the visitor's
+// connection is HTTPS. With the trust stage's decision injected the login
+// cookie must be Secure and the return URL https; without it, a client
+// header alone must change nothing.
+func TestGateUsesTheInjectedPublicScheme(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		https func(*http.Request) bool
+		want  bool
+	}{
+		{"trusted proxy terminated TLS", func(*http.Request) bool { return true }, true},
+		{"transport default ignores client headers", nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			g := newTestGate()
+			WithPublicScheme(tc.https)(g)
+			req := httptest.NewRequest(http.MethodGet, "http://app.example.com/_/auth/login?return_to=%2F", nil)
+			req.Header.Set("X-Forwarded-Proto", "https")
+			rec := httptest.NewRecorder()
+			g.HandleLogin(rec, req)
+			var login *http.Cookie
+			for _, c := range rec.Result().Cookies() {
+				if c.Name == LoginCookieName {
+					login = c
+				}
+			}
+			if login == nil {
+				t.Fatalf("no login cookie (status %d)", rec.Code)
+			}
+			if login.Secure != tc.want {
+				t.Fatalf("login cookie Secure = %v, want %v", login.Secure, tc.want)
+			}
+
+			redirect := httptest.NewRecorder()
+			g.RedirectToLogin(redirect, httptest.NewRequest(http.MethodGet, "http://app.example.com/notes", nil))
+			location, _ := url.Parse(redirect.Header().Get("Location"))
+			returnTo := location.Query().Get("return_to")
+			wantPrefix := map[bool]string{true: "https://", false: "http://"}[tc.want]
+			if len(returnTo) < len(wantPrefix) || returnTo[:len(wantPrefix)] != wantPrefix {
+				t.Fatalf("return_to = %q, want scheme %s", returnTo, wantPrefix)
+			}
+		})
+	}
+}

@@ -571,14 +571,15 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 	handler := withAuthEndpoints(proxyHandler, builtGate, authEndpointHosts(*cfg, protectedHosts))
 	handler = withLoginRoot(handler, *cfg)
 	if limiters != nil {
-		// Outside withAuthEndpoints so /_/auth/* is limited too. Trust runs
-		// first for the client IP; the copy inside the proxy is a no-op.
-		handler = pipeline.Chain(
-			pipeline.TrustWithProxies(trustedProxies),
-			pipeline.RateLimit(limiters.general, limiters.auth, "/_/auth/",
-				pipeline.WithRateLimitSink(m.sink), pipeline.WithRouteCatalog(cfg.Routes), pipeline.WithRateLimitAudit(m.audit)),
-		)(handler)
+		// Outside withAuthEndpoints so /_/auth/* is limited too.
+		handler = pipeline.RateLimit(limiters.general, limiters.auth, "/_/auth/",
+			pipeline.WithRateLimitSink(m.sink), pipeline.WithRouteCatalog(cfg.Routes), pipeline.WithRateLimitAudit(m.audit))(handler)
 	}
+	// Trust wraps everything public, the login endpoints included, so the
+	// client IP and the visitor's scheme (Secure cookies behind a proxy that
+	// terminated TLS) are decided once from the original headers. The copy
+	// inside the proxy keeps that decision.
+	handler = pipeline.TrustWithProxies(trustedProxies)(handler)
 	checker.Start(healthCtx, cfg.Routes, m.healthCheckInterval)
 	if err := m.contextError(); err != nil {
 		return nil, err
@@ -784,7 +785,7 @@ func (m *Manager) buildOIDCGate(cfg config.Auth, protectedHosts []string, sessio
 	}
 	cfg.ClientSecret = resolved
 	gateCtx, cancel := context.WithCancel(m.ctx)
-	gate, err := auth.NewGate(gateCtx, cfg, protectedHosts, sessions, m.sink)
+	gate, err := auth.NewGate(gateCtx, cfg, protectedHosts, sessions, m.sink, auth.WithPublicScheme(pipeline.PublicHTTPS))
 	if err != nil {
 		cancel()
 		return nil, nil, fmt.Errorf("build auth gate: %w", err)

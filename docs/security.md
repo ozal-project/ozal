@@ -58,6 +58,24 @@ a specific zone. Check direct origin access over IPv4/IPv6 and alternative names
 When migrating to direct ingress, prepare an explicit profile with its own
 firewall, TLS and IP; the proxy failing must never open the origin automatically.
 
+**Cloudflare Tunnel** (`ingress.mode: "cloudflare_tunnel"`) is a third profile.
+The host has no public address or open port: `cloudflared` on the same host dials
+out to Cloudflare and forwards visitors to Ozal's loopback listener over plain
+HTTP. Configuration enforces the shape that keeps it safe: `listen` on loopback,
+`tls.enabled` false, `trusted_proxies` exactly `127.0.0.1/32` and `::1/128`, and
+HTTPS login URLs. Only that peer may assert the visitor's address
+(`CF-Connecting-IP`) and scheme (one `X-Forwarded-Proto: https`); Secure cookies,
+login redirects and the `X-Forwarded-Proto` an application receives follow that
+decision, never a client header. Its limits:
+
+- Cloudflare terminates TLS and sees the traffic in clear.
+- Any local process can connect to the loopback listener and claim to be
+  `cloudflared`. A host where untrusted users run code is not a fit.
+- The API token can create tunnels and DNS records in its account. Keep it
+  scoped to the account and zones this edge serves.
+- The connector token is written to the state directory (mode `0600`) and loaded
+  by the `ozal-cloudflared` unit as a systemd credential. Ozal never shows it.
+
 DNS and HTTP-01 do not depend intrinsically on Cloudflare. The current DNS-01
 automation uses its API. The generic public tunnel and full provider independence
 have separate acceptance; a local test does not demonstrate them.

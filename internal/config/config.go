@@ -417,6 +417,8 @@ type Config struct {
 	Tunnel    *Tunnel      `json:"tunnel,omitempty"`
 	Pages     *Pages       `json:"pages,omitempty"`
 	DNS       *DNS         `json:"dns,omitempty"`
+	// Ingress selects how visitors reach this edge; omitted means direct.
+	Ingress *Ingress `json:"ingress,omitempty"`
 	// IdentityAssertion holds the signing key for routes with
 	// identity_assertion.
 	IdentityAssertion *IdentityAssertion `json:"identity_assertion,omitempty"`
@@ -736,7 +738,10 @@ func Validate(cfg Config) (*Config, error) {
 		return nil, err
 	}
 
-	if err := normalizeDNS(cfg.DNS); err != nil {
+	if err := normalizeIngress(&cfg); err != nil {
+		return nil, err
+	}
+	if err := normalizeDNS(cfg.DNS, cfg.IngressMode() == IngressCloudflareTunnel); err != nil {
 		return nil, err
 	}
 
@@ -1545,6 +1550,14 @@ func Clone(source Config) Config {
 		clone.DNS = &dns
 	}
 	clone.TrustedProxies = slices.Clone(source.TrustedProxies)
+	if source.Ingress != nil {
+		ingress := *source.Ingress
+		if source.Ingress.CloudflareTunnel != nil {
+			tunnel := *source.Ingress.CloudflareTunnel
+			ingress.CloudflareTunnel = &tunnel
+		}
+		clone.Ingress = &ingress
+	}
 	if source.IdentityAssertion != nil {
 		assertion := *source.IdentityAssertion
 		clone.IdentityAssertion = &assertion
@@ -1633,7 +1646,7 @@ func cloneBool(value *bool) *bool {
 // normalizeDNS checks the dns section: the target is an address or a plain
 // hostname (no port, no wildcard), and a provider needs both a target to
 // point records at and a token reference.
-func normalizeDNS(dns *DNS) error {
+func normalizeDNS(dns *DNS, tunnel bool) error {
 	if dns == nil {
 		return nil
 	}
@@ -1652,7 +1665,7 @@ func normalizeDNS(dns *DNS) error {
 		}
 	}
 	if dns.Cloudflare != nil {
-		if dns.Target == "" {
+		if dns.Target == "" && !tunnel {
 			return fmt.Errorf("config: dns.cloudflare requires dns.target, the address its records point at")
 		}
 		if strings.TrimSpace(dns.Cloudflare.Token) == "" {
