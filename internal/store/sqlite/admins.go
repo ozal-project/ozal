@@ -452,7 +452,7 @@ func (s *Admins) AddPasskey(ctx context.Context, accountID string, credential we
 // Passkeys lists an administrator's active passkeys, oldest first.
 func (s *Admins) Passkeys(ctx context.Context, accountID string) ([]adminid.Passkey, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT credential_id, label, created_at, last_used_at FROM admin_passkeys WHERE account_id = ? AND revoked_at IS NULL ORDER BY created_at, credential_id`, accountID)
+		`SELECT credential_id, label, created_at, last_used_at, credential_json FROM admin_passkeys WHERE account_id = ? AND revoked_at IS NULL ORDER BY created_at, credential_id`, accountID)
 	if err != nil {
 		return nil, fmt.Errorf("list passkeys: %w", err)
 	}
@@ -464,9 +464,17 @@ func (s *Admins) Passkeys(ctx context.Context, accountID string) ([]adminid.Pass
 			label    sql.NullString
 			created  int64
 			lastUsed sql.NullInt64
+			encoded  string
 		)
-		if err := rows.Scan(&passkey.ID, &label, &created, &lastUsed); err != nil {
+		if err := rows.Scan(&passkey.ID, &label, &created, &lastUsed, &encoded); err != nil {
 			return nil, err
+		}
+		// The provider is a label for the owner: a credential that does not
+		// decode is listed without one rather than hiding the passkey.
+		var credential webauthn.Credential
+		if json.Unmarshal([]byte(encoded), &credential) == nil {
+			passkey.AAGUID = credential.Authenticator.AAGUID
+			passkey.Synced = credential.Flags.BackupEligible
 		}
 		passkey.Label = label.String
 		passkey.CreatedAt = time.Unix(created, 0)
@@ -502,6 +510,21 @@ func (s *Admins) RemovePasskey(ctx context.Context, accountID string, credential
 		return fmt.Errorf("revoke passkey: %w", err)
 	}
 	return tx.Commit()
+}
+
+// RenamePasskey sets the label of one of an administrator's active
+// passkeys; another account's passkey, or a revoked one, is not found.
+func (s *Admins) RenamePasskey(ctx context.Context, accountID string, credentialID []byte, label string) error {
+	result, err := s.db.ExecContext(ctx,
+		`UPDATE admin_passkeys SET label = ? WHERE account_id = ? AND credential_id = ? AND revoked_at IS NULL`,
+		nullLabel(label), accountID, credentialID)
+	if err != nil {
+		return fmt.Errorf("rename passkey: %w", err)
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		return adminid.ErrPasskeyNotFound
+	}
+	return nil
 }
 
 func nullLabel(label string) any {

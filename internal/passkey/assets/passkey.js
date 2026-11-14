@@ -381,13 +381,88 @@ function setupEnrol(button) {
       const options = await post("/_/auth/enrol/begin", { token, return_to: returnTo });
       const credential = await navigator.credentials.create({ publicKey: creationOptions(options, keepHints()) });
       const result = await post("/_/auth/enrol/finish", credentialJSON(credential));
-      finish(result, "Your passkey is saved and you are signed in. A second one in another place (another device, your password manager or a key) keeps you from being locked out if you lose this one.", true);
+      receipt(result);
     } catch (error) {
       button.disabled = false;
       show(explain(error, "enrol"), "error");
       openChoices(error);
     }
   });
+}
+
+// Where a known provider's passkeys can be used again. Only for providers
+// whose reach is documented; the wording stays conditional because it also
+// depends on the browser and the system.
+const returnHints = {
+  "Bitwarden": "To use it in another browser, install the Bitwarden extension there and unlock it.",
+  "1Password": "To use it in another browser, install the 1Password extension there and unlock it.",
+  "Google Password Manager": "Chrome signed in to the same Google account, and your Android phone, can offer it.",
+  "Apple Passwords": "Your Apple devices signed in to the same Apple Account can offer it.",
+};
+
+// receipt follows a new enrolment: where the passkey was saved when the
+// provider says so (never a guess), an optional name, then the destination.
+// The name uses the ordinary rename, which the fresh session allows; a name
+// that cannot be saved never keeps the person from continuing.
+function receipt(result) {
+  const created = result.passkey;
+  if (!created || !created.id) {
+    finish(result, "Your passkey is saved and you are signed in. A second one in another place (another device, your password manager or a key) keeps you from being locked out if you lose this one.", true);
+    return;
+  }
+  for (const id of ["choices", "action", "recovery-warning"]) {
+    const el = document.getElementById(id);
+    if (el) el.hidden = true;
+  }
+  document.querySelectorAll("main > .hint").forEach((el) => { el.hidden = true; });
+  document.getElementById("title").textContent = "Your passkey is saved";
+  document.getElementById("intro").textContent = "You are signed in.";
+  const where = document.getElementById("receipt-where");
+  const icon = document.getElementById("receipt-icon");
+  if (created.provider_known) {
+    where.textContent = "Saved in " + created.provider + ".";
+    icon.src = "/_/auth/icons/" + created.icon + ".svg";
+    icon.hidden = false;
+    const hint = returnHints[created.provider];
+    if (hint) {
+      const line = document.getElementById("receipt-return");
+      line.textContent = hint;
+      line.hidden = false;
+    }
+  } else {
+    where.textContent = "Your device did not say where it saved it. A name helps you find it later, such as where you chose to keep it.";
+  }
+  document.getElementById("receipt").hidden = false;
+  show("");
+  const input = document.getElementById("receipt-name");
+  const go = document.getElementById("receipt-continue");
+  // A name that fails is reported once; submitting the same name again
+  // continues without it, a different name is tried.
+  let failed = null;
+  input.addEventListener("input", () => {
+    go.textContent = input.value.trim() === failed ? "Continue without a name" : "Continue";
+  });
+  document.getElementById("receipt-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const label = input.value.trim();
+    let named = false;
+    if (label && label !== failed) {
+      go.disabled = true;
+      try {
+        await post("/_/auth/devices/rename", { id: created.id, label });
+        named = true;
+      } catch (error) {
+        failed = label;
+        go.disabled = false;
+        go.textContent = "Continue without a name";
+        show("The name was not saved: " + error.message, "error");
+        return;
+      }
+    }
+    document.getElementById("receipt").hidden = true;
+    finish(result, named ? "Saved as “" + label + "”." : "Your passkey is saved.", true);
+  });
+  input.focus();
 }
 
 // ago turns a timestamp into "just now", "3 hours ago", "Oct 21".

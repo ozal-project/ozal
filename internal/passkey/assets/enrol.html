@@ -17,8 +17,8 @@
   </span>
 </header>
 <main>
-  <h1>Create your passkey</h1>
-  <p>Where you keep it will ask for your face, fingerprint or PIN. They never reach Ozal, which keeps only a public key.</p>
+  <h1 id="title">Create your passkey</h1>
+  <p id="intro">Where you keep it will ask for your face, fingerprint or PIN. They never reach Ozal, which keeps only a public key.</p>
   <fieldset id="choices" class="choices" hidden>
     <legend>Where will you keep this passkey?</legend>
     <div id="choice-list"></div>
@@ -26,6 +26,17 @@
   <p class="hint"><a href="/_/auth/help">Not sure which? Compare the ways to sign in</a></p>
   <p id="recovery-warning" class="hint" role="note" hidden>This is an account recovery. Creating this passkey replaces all your previous passkeys, signs out your previous sessions and invalidates your other recovery links. Only continue if you asked the operator to recover your account.</p>
   <button id="action" type="button" disabled>Create passkey</button>
+  <section id="receipt" class="receipt" hidden aria-labelledby="receipt-title">
+    <p class="receipt-where"><img id="receipt-icon" class="icon" alt="" width="20" height="20" hidden><span id="receipt-where"></span></p>
+    <p id="receipt-return" class="hint" hidden></p>
+    <form id="receipt-form" novalidate>
+      <label for="receipt-name">Name it <span class="optional">(optional)</span></label>
+      <input id="receipt-name" maxlength="60" autocomplete="off" aria-describedby="receipt-name-hint">
+      <p id="receipt-name-hint" class="field-hint">So you recognise it later, for example “Work laptop”, “Bitwarden” or “YubiKey”.</p>
+      <button id="receipt-continue" type="submit">Continue</button>
+    </form>
+    <p class="hint">A second passkey in another place (another device, your password manager or a key) keeps you from being locked out if you lose this one. You can add it from Your passkeys.</p>
+  </section>
   <p id="status" role="status" aria-live="polite"></p>
   <nav id="sites" class="sites" aria-label="Your sites" hidden></nav>
 </main>

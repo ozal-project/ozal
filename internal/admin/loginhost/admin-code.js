@@ -327,6 +327,12 @@ document.addEventListener("DOMContentLoaded", () => {
       const done = await post("/finish", credentialJSON(credential), begun.ceremony);
       clearInterval(timer);
       $("done-who").textContent = done.name + " · " + done.email;
+      // Only a provider the server recognised is named; you can name the
+      // passkey yourself in the console, under Your passkeys.
+      if (done.provider) {
+        $("done-where").textContent = "Your passkey is saved in " + done.provider + ". You can name it in the console, under Your passkeys.";
+        $("done-where").hidden = false;
+      }
       const port = new URL(done.console).port || "80";
       $("done-tunnel").textContent = "ssh -N -L " + port + ":127.0.0.1:" + port + " you@your-server";
       const link = $("done-console");

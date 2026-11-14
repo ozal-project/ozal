@@ -1,6 +1,8 @@
 package admin
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"io/fs"
 	"net"
@@ -17,6 +19,7 @@ import (
 	"github.com/ozal-project/ozal/internal/enrolcode"
 	"github.com/ozal-project/ozal/internal/events"
 	"github.com/ozal-project/ozal/internal/ipcountry"
+	"github.com/ozal-project/ozal/internal/passkey"
 	"github.com/ozal-project/ozal/internal/pipeline"
 	"github.com/ozal-project/ozal/internal/useragent"
 )
@@ -282,7 +285,7 @@ func (h *Handler) finishCode(w http.ResponseWriter, r *http.Request, rp *webauth
 			h.codes.Release(poll)
 		}
 	}()
-	h.finishEnrol(w, r, rp, pending, func(w http.ResponseWriter, r *http.Request, account adminid.Account, _ []byte) {
+	h.finishEnrol(w, r, rp, pending, func(w http.ResponseWriter, r *http.Request, account adminid.Account, credentialID []byte) {
 		stored = true
 		h.codes.Finish(poll, account.Name+" <"+account.Email+">")
 		if pending.kind == enrolBootstrap {
@@ -291,10 +294,17 @@ func (h *Handler) finishCode(w http.ResponseWriter, r *http.Request, rp *webauth
 			h.codes.Supersede(poll, enrolBootstrap, "")
 		}
 		h.emit(events.Event{Type: events.Type("admin.enrolment_code_done"), Actor: "admin:" + account.Email})
-		writeJSON(w, http.StatusOK, map[string]string{
+		answer := map[string]any{
 			"state": string(enrolcode.Done), "name": account.Name, "email": account.Email,
 			"console": h.consoleAddress(),
-		})
+		}
+		// Where the passkey was saved, for the receipt, only when the
+		// provider says so. This page has no console session, so naming the
+		// passkey waits for the console.
+		if provider, known := h.passkeyProvider(r.Context(), account.ID, credentialID); known {
+			answer["provider"] = provider
+		}
+		writeJSON(w, http.StatusOK, answer)
 	})
 }
 
@@ -360,6 +370,22 @@ func (h *Handler) claimCode(w http.ResponseWriter, r *http.Request, loginOrigin 
 func isLocalAddress(s string) bool {
 	addr, err := netip.ParseAddr(s)
 	return err == nil && ipcountry.IsLocal(addr)
+}
+
+// passkeyProvider names where one of an account's passkeys lives, when its
+// provider is known. A lookup that fails only drops the name.
+func (h *Handler) passkeyProvider(ctx context.Context, accountID string, credentialID []byte) (string, bool) {
+	keys, err := h.identities.Passkeys(ctx, accountID)
+	if err != nil {
+		return "", false
+	}
+	for _, k := range keys {
+		if bytes.Equal(k.ID, credentialID) {
+			name, _, known := passkey.Provider(k.AAGUID, k.Synced)
+			return name, known
+		}
+	}
+	return "", false
 }
 
 func isFlagName(s string) bool {

@@ -34,6 +34,10 @@ type Passkey struct {
 	Label      string
 	CreatedAt  time.Time
 	LastUsedAt time.Time
+	// AAGUID and Synced are what the authenticator reported when it was
+	// created; they name its provider for the owner, never a trust decision.
+	AAGUID []byte
+	Synced bool
 }
 
 // Account is one administrator.

@@ -136,6 +136,10 @@ func TestCodeEnrolmentCreatesTheFirstAdministratorOnThePage(t *testing.T) {
 	}
 	if done := decode(t, rec); done["email"] != "octavio@example.com" || !strings.HasPrefix(done["console"].(string), "http://ozal.localhost:") {
 		t.Fatalf("finish = %v", done)
+	} else if _, named := done["provider"]; named {
+		// The test authenticator reports no AAGUID: an unknown provider is
+		// never named as the place the passkey lives.
+		t.Fatalf("an unknown provider was named: %v", done)
 	}
 	if seen := watch(t, h, issued.poll); seen["state"] != "done" || seen["account"] != "Octavio Santacruz <octavio@example.com>" {
 		t.Fatalf("terminal sees %v after the passkey", seen)

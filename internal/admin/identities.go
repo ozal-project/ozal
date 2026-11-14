@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/mail"
@@ -14,12 +15,14 @@ import (
 	"sync"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 
 	"github.com/ozal-project/ozal/internal/adminid"
 	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/passkey"
 	"github.com/ozal-project/ozal/internal/useragent"
 )
 
@@ -65,6 +68,8 @@ type identities interface {
 	Passkeys(ctx context.Context, accountID string) ([]adminid.Passkey, error)
 	// RemovePasskey revokes one; the account's last passkey is refused.
 	RemovePasskey(ctx context.Context, accountID string, credentialID []byte) error
+	// RenamePasskey labels one of the account's active passkeys.
+	RenamePasskey(ctx context.Context, accountID string, credentialID []byte, label string) error
 	// RecordLogin stores a credential's new counter; it fails for a revoked one.
 	RecordLogin(ctx context.Context, credential webauthn.Credential) error
 	// AccessRequests reports whether the sign-in page accepts requests for
@@ -230,6 +235,7 @@ func (h *Handler) registerIdentities() {
 	h.mux.HandleFunc("GET /_/api/admin/passkeys", h.requireBearer(h.listPasskeys))
 	h.mux.HandleFunc("GET /_/api/admin/account", h.requireBearer(h.ownAccount))
 	h.mux.HandleFunc("DELETE /_/api/admin/passkeys/{id}", h.requireBearer(h.removePasskey))
+	h.mux.HandleFunc("PATCH /_/api/admin/passkeys/{id}", h.requireBearer(h.renamePasskey))
 	h.mux.HandleFunc("POST /_/api/admin/enrolments", h.requireLocal(h.issueEnrolment))
 	h.mux.HandleFunc("POST /_/api/admin/enrol/info", h.enrolInfo)
 	h.mux.HandleFunc("POST /_/api/admin/enrol/begin", h.enrolBegin)
@@ -1034,11 +1040,15 @@ func (h *Handler) finishDevice(w http.ResponseWriter, r *http.Request, rp *webau
 }
 
 type passkeyView struct {
-	ID         string `json:"id"`
-	Label      string `json:"label,omitempty"`
-	CreatedAt  string `json:"created_at"`
-	LastUsedAt string `json:"last_used_at,omitempty"`
-	Current    bool   `json:"current,omitempty"`
+	ID    string `json:"id"`
+	Label string `json:"label,omitempty"`
+	// Provider is where the passkey lives when ProviderKnown, otherwise a
+	// kind of passkey ("Synced passkey"), never a place.
+	Provider      string `json:"provider"`
+	ProviderKnown bool   `json:"provider_known"`
+	CreatedAt     string `json:"created_at"`
+	LastUsedAt    string `json:"last_used_at,omitempty"`
+	Current       bool   `json:"current,omitempty"`
 }
 
 // listPasskeys shows the signed-in administrator their own active passkeys
@@ -1057,7 +1067,8 @@ func (h *Handler) listPasskeys(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]passkeyView, 0, len(passkeys))
 	for _, p := range passkeys {
-		view := passkeyView{ID: base64.RawURLEncoding.EncodeToString(p.ID), Label: p.Label, CreatedAt: p.CreatedAt.UTC().Format(time.RFC3339), Current: string(p.ID) == current}
+		provider, _, known := passkey.Provider(p.AAGUID, p.Synced)
+		view := passkeyView{ID: base64.RawURLEncoding.EncodeToString(p.ID), Label: p.Label, Provider: provider, ProviderKnown: known, CreatedAt: p.CreatedAt.UTC().Format(time.RFC3339), Current: string(p.ID) == current}
 		if !p.LastUsedAt.IsZero() {
 			view.LastUsedAt = p.LastUsedAt.UTC().Format(time.RFC3339)
 		}
@@ -1146,6 +1157,54 @@ func (h *Handler) removePasskey(w http.ResponseWriter, r *http.Request) {
 	h.emit(events.Event{Type: events.Type("admin.passkey_removed"), Actor: h.actorOf(r)})
 	writeJSON(w, http.StatusOK, map[string]bool{"removed": true})
 }
+
+// renamePasskey labels one of the signed-in administrator's own passkeys.
+// The bearer alone is not enough: it needs a session opened with a passkey,
+// a fresh passkey proof, and a passkey of that same account.
+func (h *Handler) renamePasskey(w http.ResponseWriter, r *http.Request) {
+	self, _ := h.callerPasskey(r)
+	if self == "" {
+		writeError(w, http.StatusForbidden, "sign in with your passkey to rename one")
+		return
+	}
+	grant, _ := r.Context().Value(operatorKey{}).(operatorGrant)
+	if !h.operators.passkeyFresh(grant.ID, passkeyStepUpMaxAge) {
+		writeErrorCode(w, http.StatusForbidden, "confirm it's you with your passkey", "passkey_required")
+		return
+	}
+	id, err := base64.RawURLEncoding.DecodeString(r.PathValue("id"))
+	if err != nil || len(id) == 0 || len(id) > 1023 {
+		writeError(w, http.StatusNotFound, "no such passkey")
+		return
+	}
+	var req struct {
+		Label string `json:"label"`
+	}
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "send a label")
+		return
+	}
+	label := strings.TrimSpace(req.Label)
+	if label == "" || utf8.RuneCountInString(label) > maxPasskeyLabel || len(label) > 4*maxPasskeyLabel || strings.ContainsFunc(label, unicode.IsControl) {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("a name is 1 to %d characters, without control characters", maxPasskeyLabel))
+		return
+	}
+	h.identityMu.Lock()
+	defer h.identityMu.Unlock()
+	switch err := h.identities.RenamePasskey(r.Context(), self, id, label); {
+	case errors.Is(err, adminid.ErrPasskeyNotFound):
+		writeError(w, http.StatusNotFound, "no such passkey")
+		return
+	case err != nil:
+		writeError(w, http.StatusServiceUnavailable, "the passkey could not be renamed")
+		return
+	}
+	h.emit(events.Event{Type: events.Type("admin.passkey_renamed"), Actor: h.actorOf(r)})
+	writeJSON(w, http.StatusOK, map[string]string{"id": r.PathValue("id"), "label": label})
+}
+
+// maxPasskeyLabel matches the visitor passkeys' limit.
+const maxPasskeyLabel = 60
 
 // callerPasskey is the administrator behind this request's session and the
 // passkey that opened it; both are "" for the admin token or a host login.

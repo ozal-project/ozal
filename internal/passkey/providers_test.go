@@ -10,16 +10,18 @@ func TestProviderName(t *testing.T) {
 		synced bool
 		want   string
 		icon   string
+		known  bool
 	}{
-		"Apple":                      {icloud, true, "Apple Passwords", "apple"},
-		"Google":                     {google, true, "Google Password Manager", "google"},
-		"unknown synced":             {make([]byte, 16), true, "Synced passkey", "synced"},
-		"unknown device-bound":       {make([]byte, 16), false, "Security key or device passkey", "key"},
-		"no AAGUID (no attestation)": {nil, false, "Security key or device passkey", "key"},
+		"Apple":                      {icloud, true, "Apple Passwords", "apple", true},
+		"Google":                     {google, true, "Google Password Manager", "google", true},
+		"unknown synced":             {make([]byte, 16), true, "Synced passkey", "synced", false},
+		"unknown device-bound":       {make([]byte, 16), false, "Security key or device passkey", "key", false},
+		"no AAGUID (no attestation)": {nil, false, "Security key or device passkey", "key", false},
+		"short AAGUID":               {icloud[:8], true, "Synced passkey", "synced", false},
 	} {
-		got, icon := Provider(tc.aaguid, tc.synced)
-		if got != tc.want || icon != tc.icon {
-			t.Errorf("%s: %q %q, want %q %q", name, got, icon, tc.want, tc.icon)
+		got, icon, known := Provider(tc.aaguid, tc.synced)
+		if got != tc.want || icon != tc.icon || known != tc.known {
+			t.Errorf("%s: %q %q %v, want %q %q %v", name, got, icon, known, tc.want, tc.icon, tc.known)
 		}
 	}
 }

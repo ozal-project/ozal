@@ -438,6 +438,8 @@ type finishResponse struct {
 	// visitor is signed in and offer Sites as explicit links.
 	Redirect string   `json:"redirect"`
 	Sites    []string `json:"sites,omitempty"`
+	// Passkey is the one an enrolment just created, for its receipt.
+	Passkey *createdPasskey `json:"passkey,omitempty"`
 }
 
 // destination validates a return address against the configured hosts. It
@@ -605,7 +607,10 @@ func (g *Gate) enrolFinish(w http.ResponseWriter, r *http.Request) (any, *apiErr
 	if apiErr := g.startSession(w, r, user, *credential, true); apiErr != nil {
 		return nil, apiErr
 	}
-	return g.finished(pending.returnTo), nil
+	done := g.finished(pending.returnTo)
+	created := createdView(*credential)
+	done.Passkey = &created
+	return done, nil
 }
 
 // --- sessions, cookies and ceremonies ------------------------------------
