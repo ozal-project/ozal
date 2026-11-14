@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, Navigate, NavLink, Route, Routes, useLocation } from "react-router";
 import { allowed, placeOf, target, visibleGroups } from "$lib/navigation";
 import { SectionSwitcher } from "./SectionSwitcher";
+import { CommandSearch } from "./CommandSearch";
+import { Search } from "lucide-react";
 import { Button } from "$lib/components/ui/button/react";
 import { fetchUpdateStatus } from "$lib/api";
 import { availableUpdateNotice, type AvailableUpdateNotice } from "$lib/updateStatus";
@@ -33,6 +35,16 @@ export default function Console() {
   updateNoticeRef.current = updateNotice;
   const updateRequest = useRef<AbortController | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  // Ctrl K (⌘K on a Mac) opens the search from anywhere in the console.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "k") { event.preventDefault(); setSearchOpen(true); }
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, []);
+  const mac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
   const drawer = useRef<HTMLDialogElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const drawerPath = useRef(location.pathname);
@@ -110,9 +122,9 @@ export default function Console() {
     <a href="#main-content" className="sr-only focus:not-sr-only focus:bg-background focus:text-foreground focus:ring-ring fixed top-2 left-2 z-50 rounded-md px-3 py-2 text-sm focus:ring-2">Skip to content</a>
     <header className="console-header"><div className="console-bar">
       <Link to="/overview" className="console-brand" aria-label="Ozal console home"><Wordmark sub="Private console" animated /></Link>
-      <SectionSwitcher groups={visible} place={place} tools={tools} />
+      <div className="console-bar-places"><SectionSwitcher groups={visible} place={place} tools={tools} /><button type="button" className="console-search" onClick={() => setSearchOpen(true)} aria-keyshortcuts={mac ? "Meta+K" : "Control+K"}><Search className="size-4" aria-hidden="true" /><span>Search</span><kbd>{mac ? "⌘K" : "Ctrl K"}</kbd></button></div>
       <UserMenu />
-      <span className="console-mobile-place" aria-hidden="true">{pageTitle}</span><button ref={trigger} type="button" className="console-menu-toggle" aria-expanded={menuOpen} aria-controls="mobile-menu" aria-label="Open menu" onClick={() => setMenuOpen(true)}><span aria-hidden="true" className="grid gap-1"><i className="bg-current h-0.5 w-4" /><i className="bg-current h-0.5 w-4" /><i className="bg-current h-0.5 w-4" /></span></button>
+      <span className="console-mobile-place" aria-hidden="true">{pageTitle}</span><button type="button" className="console-menu-toggle" aria-label="Search the console" onClick={() => setSearchOpen(true)}><Search className="size-4" aria-hidden="true" /></button><button ref={trigger} type="button" className="console-menu-toggle" aria-expanded={menuOpen} aria-controls="mobile-menu" aria-label="Open menu" onClick={() => setMenuOpen(true)}><span aria-hidden="true" className="grid gap-1"><i className="bg-current h-0.5 w-4" /><i className="bg-current h-0.5 w-4" /><i className="bg-current h-0.5 w-4" /></span></button>
     </div></header>
 
     <dialog ref={drawer} id="mobile-menu" aria-label="Console navigation" className="console-drawer" onClose={closeDrawer} onCancel={() => setMenuOpen(false)} onKeyDown={containDrawerTab}>
@@ -141,6 +153,7 @@ export default function Console() {
     <div className="flex items-start justify-between gap-4"><p className="min-w-0 text-sm font-medium">Ozal {updateNotice.version} is available</p><button type="button" className="link-quiet shrink-0 text-xs" onClick={() => { dismissedVersion.current = updateNotice.version; setUpdateNotice(null); }}>Dismiss</button></div>
     <div className="mt-3 flex justify-end"><Button onClick={() => setUpdateDialogOpen(true)}>Review update</Button></div>
   </aside>}
+  <CommandSearch open={searchOpen} onOpenChange={setSearchOpen} tools={tools} />
   <UpdateDialog open={updateDialogOpen} token={session?.token ?? ""} canInstall={can("updates.install")} onOpenChange={setUpdateDialogOpen} onDone={completeUpdate} />
   </>;
 }
