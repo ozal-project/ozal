@@ -1,5 +1,7 @@
 ---
 import Logo from "./Logo.astro";
+// "docs" marks the Docs link as the current page on the guides.
+const { current } = Astro.props as { current?: "docs" };
 ---
 <a class="skip-link" href="#main-content">Skip to content</a>
 <header class="site-header"><div class="topbar frame">
@@ -9,6 +11,7 @@ import Logo from "./Logo.astro";
     <a href="/#how">How it works</a>
     <a href="/#tour">Console</a>
     <a href="/#status">Status</a>
+    <a href="/docs/" aria-current={current === "docs" ? "page" : undefined}>Docs</a>
   </nav>
   <a class="button header-action" href="/#start">Get started</a>
 </div></header>

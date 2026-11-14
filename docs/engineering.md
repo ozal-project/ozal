@@ -13,7 +13,13 @@ User guides are [installation](operations/download-install.md),
 [applications](operations/first-application.md),
 [administration](operations/administration.md) and [security](security.md).
 Update the existing section with the code; do not open a new report, plan or
-delivery note for each conversation, test or release. Pending state goes to the
+delivery note for each conversation, test or release. The project page publishes
+the user guides listed in `site/src/lib/guides.mjs`, with
+[Start here](START-HERE.md) and the [quickstart](../QUICKSTART.md), at
+`https://ozal.dev/docs/` from these same files: keep links relative, as GitHub
+reads them; the site turns a link to another listed guide into its page and any
+other repository link into its GitHub page, and its browser check fails on a
+broken guide link or anchor. A new user guide is added to that list. Pending state goes to the
 maintainer's tracker, and version limits go to the release notes.
 
 `docs/architecture/design.md` and `stack.md` keep the design rules and

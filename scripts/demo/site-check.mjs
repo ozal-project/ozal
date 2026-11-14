@@ -101,6 +101,42 @@ try {
   await plain.close();
   console.log("PASS JavaScript disabled: explanation, recorded answer and tour steps");
 
+  // The guides at /docs: every guide renders, every link between guides and
+  // every in-page anchor lands on something that exists, and no page scrolls
+  // sideways at a phone's width.
+  const reading = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const reader = await reading.newPage(); checkPage(reader);
+  await reader.goto(new URL("/docs/", url).href);
+  const guides = await reader.locator(".docs-nav a").evaluateAll((links) => links.map((a) => a.getAttribute("href")));
+  assert.ok(guides.length >= 7, "the guide list is complete");
+  const ids = new Map();
+  const links = [];
+  for (const guide of guides) {
+    const response = await reader.goto(new URL(guide, url).href);
+    assert.ok(response?.ok(), `${guide} loads`);
+    assert.equal(await reader.locator("main h1").count(), 1, `${guide} has one title`);
+    assert.equal(await reader.locator(`.docs-nav a[aria-current="page"]`).getAttribute("href"), guide);
+    ids.set(guide, new Set(await reader.locator("[id]").evaluateAll((nodes) => nodes.map((n) => n.id))));
+    for (const href of await reader.locator("main a[href]").evaluateAll((as) => as.map((a) => a.getAttribute("href")))) links.push([guide, href]);
+  }
+  const broken = links.filter(([from, href]) => {
+    if (href.startsWith("#")) return !ids.get(from).has(decodeURIComponent(href.slice(1)));
+    if (!href.startsWith("/docs/")) return false;
+    const [page, anchor] = href.split("#");
+    return !ids.has(page) || (anchor && !ids.get(page).has(decodeURIComponent(anchor)));
+  });
+  assert.deepEqual(broken, [], "links between guides and anchors resolve");
+  assert.ok(links.every(([, href]) => !/\.md(#|$)/.test(href) || href.startsWith("https://github.com/")), "no guide link points at a bare .md file");
+  for (const width of [390, 320]) {
+    await reader.setViewportSize({ width, height: 800 });
+    for (const guide of guides) {
+      await reader.goto(new URL(guide, url).href);
+      assert.ok(await reader.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${guide} overflows at ${width}px`);
+    }
+  }
+  await reading.close();
+  console.log(`PASS docs: ${guides.length} guides, ${links.length} links, anchors and phone widths`);
+
 
   const failing = await browser.newContext();
   const retry = await failing.newPage(); checkPage(retry);

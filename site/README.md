@@ -63,6 +63,20 @@ The page is ordered as a product story:
    commands to try it. Each capability is described once: sign-in lives in the pipeline and the
    tour, the decision record in the tour's last step.
 
+## Documentation at /docs
+
+`/docs/` renders the user guides from the repository's own Markdown at build time; nothing is
+copied into `site/`. `src/lib/guides.mjs` lists them (Start here, the quickstart, install,
+publish an application, administer, security, and configuration and CLI) with their slugs, and
+`src/content.config.ts` loads those files from the repository root. `src/pages/docs/[...slug].astro`
+renders each one with the list of guides, its sections and a link to the file on GitHub, and
+rewrites its links: a link to another listed guide becomes its page with the anchor kept, any
+other repository file (design, engineering, examples) its GitHub page. A link that leaves the
+repository fails the build. Code blocks are plain, like the page's terminals: no highlighting
+styles. Each page says the guides follow main and that "Unreleased" features are not in alpha.1.
+A change to a listed guide republishes the site (`.github/workflows/site.yml` paths), and the
+guides are in `public/sitemap.xml` and `public/llms.txt`.
+
 The site presents capabilities without a public roadmap. The public source is linked; the page
 does not link to release downloads.
 Automatic site publication requires repository variable `OZAL_SITE_DEPLOY_ENABLED=true`,
@@ -127,6 +141,7 @@ node scripts/demo/site-check.mjs --url http://127.0.0.1:4321 --chrome /path/to/c
 
 The check covers 1440/1024/768/390/320 px, horizontal overflow, visible navigation,
 the tour's sticky stage, the doorway's playback and hand-off, the matrix and its live decisions, a failed WASM download and
-retry, Save-Data, and the page with JavaScript disabled. It does not publish the
+retry, Save-Data, the page with JavaScript disabled, and every guide at /docs with its links,
+anchors and phone widths. It does not publish the
 site or exercise a production sign-in. `scripts/verify.sh` remains the full gate;
 the browser check is separate because it requires an installed Chrome/Chromium.
