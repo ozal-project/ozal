@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -55,8 +56,10 @@ func TestIdentityAssertionReachesOnlyItsApplication(t *testing.T) {
 			req.Header["X_Ozal_Assertion"] = []string{forged}
 			handler.ServeHTTP(httptest.NewRecorder(), req)
 			got := <-seen
-			if len(got["X_ozal_assertion"])+len(got["X_Ozal_Assertion"]) > 0 {
-				t.Fatal("an underscore spelling reached the application")
+			for name := range got {
+				if strings.EqualFold(name, "X_Ozal_Assertion") {
+					t.Fatal("an underscore spelling reached the application")
+				}
 			}
 			token := got.Get(assertion.Header)
 			if !tc.signed {
