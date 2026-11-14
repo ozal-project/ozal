@@ -1,8 +1,12 @@
 ---
 import "../styles.css";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 const { title, description } = Astro.props;
 const canonical = new URL(Astro.url.pathname, Astro.site).toString();
-const ogImage = new URL("/og.png", Astro.site).toString();
+// Link previews cache the card by URL: a new og.png gets a new one.
+const ogVersion = createHash("sha256").update(readFileSync(`${process.cwd()}/public/og.png`)).digest("hex").slice(0, 10);
+const ogImage = new URL(`/og.png?v=${ogVersion}`, Astro.site).toString();
 // One machine-readable description of the project for search engines and
 // assistants that read structured data. It repeats only claims the page and
 // the repository already make; there is no rating or review markup.
