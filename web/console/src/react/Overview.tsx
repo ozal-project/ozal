@@ -8,6 +8,7 @@ import { emptyFeed, receive, type FeedState } from "$lib/feed";
 import { openEventStream } from "$lib/eventStream";
 import { subjectsOf } from "$lib/wording.ts";
 import { useSession } from "./session";
+import { SectionHub } from "./SectionHub";
 import { BackupPasskeyNotice } from "./BackupPasskeyNotice";
 
 const maxEvents = 500;
@@ -174,5 +175,6 @@ export function Overview() {
         {certificate && <section className="bg-card rounded-lg px-5 py-4" aria-labelledby="overview-certificate"><p className="plate">Certificate</p><h2 id="overview-certificate" className="mt-1 text-base font-medium">{certificate.tone === "bad" ? "Needs attention" : "Valid"}</h2><dl className="mt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm"><dt className="text-muted-foreground">Covers</dt><dd className="break-words">{certificate.domains.length ? certificate.domains.join(", ") : certificate.names.join(", ")}</dd><dt className="text-muted-foreground">Valid until</dt><dd>{certificate.expires}</dd><dt className="text-muted-foreground">Next renewal</dt><dd>{certificate.renews}</dd></dl></section>}
       </div>
     </div>
+    <SectionHub />
   </div>;
 }

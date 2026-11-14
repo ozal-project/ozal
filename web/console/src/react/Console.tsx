@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, Navigate, NavLink, Route, Routes, useLocation } from "react-router";
+import { allowed, placeOf, target, visibleGroups } from "$lib/navigation";
+import { SectionSwitcher } from "./SectionSwitcher";
 import { Button } from "$lib/components/ui/button/react";
 import { fetchUpdateStatus } from "$lib/api";
 import { availableUpdateNotice, type AvailableUpdateNotice } from "$lib/updateStatus";
@@ -20,24 +22,6 @@ import { UserMenu } from "./UserMenu";
 import { Wordmark } from "./Wordmark";
 
 type Tool = "applications" | "people" | "administrators" | "sites" | "connectors" | "updates" | "updates.install" | "publishing";
-type Item = { path: string; label: string; tool?: Tool; also?: string[] };
-const groups: { name: string; items: Item[] }[] = [
-  { name: "", items: [{ path: "/overview", label: "Overview" }] },
-  { name: "Access", items: [
-    { path: "/applications", label: "Applications", tool: "applications", also: ["/routes"] },
-    { path: "/domains", label: "Domains", tool: "applications" },
-    { path: "/people", label: "People", tool: "people", also: ["/groups", "/administrators"] },
-  ] },
-  { name: "Edge", items: [
-    { path: "/sites", label: "Sites" }, { path: "/connectors", label: "Connectors", tool: "connectors" },
-    { path: "/integrations", label: "Integrations" }, { path: "/activity", label: "Activity" },
-  ] },
-];
-const purpose: Record<string, string> = {
-  "/overview": "What needs you, and what changed", "/applications": "Destinations and who may enter", "/routes": "Destinations and who may enter",
-  "/domains": "Domains and their certificates", "/people": "People, groups and administrators", "/administrators": "People, groups and administrators",
-  "/sites": "Published versions and CI", "/connectors": "Trusted connections to private hosts", "/integrations": "GitHub, DNS and how sign-in works", "/activity": "Access decisions and their reasons",
-};
 
 export default function Console() {
   const { session } = useSession();
@@ -52,12 +36,15 @@ export default function Console() {
   const drawer = useRef<HTMLDialogElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const drawerPath = useRef(location.pathname);
-  const pageTitle = useMemo(() => [...groups.flatMap((group) => group.items), { path: "/routes", label: "Applications" }, { path: "/groups", label: "Groups" }, { path: "/administrators", label: "Administrators" }].find((item) => item.path === location.pathname)?.label ?? "Overview", [location.pathname]);
+  const tools = session?.tools ?? [];
+  const place = placeOf(location.pathname);
+  const pageTitle = place.section.label;
   const can = (tool: Tool) => !!session?.tools.includes(tool);
-  const visible = groups.map((group) => ({ ...group, items: group.items.filter((item) => !item.tool || can(item.tool) || item.path === "/applications" || item.path === "/people" && can("administrators")) })).filter((group) => group.items.length);
-  const current = [...groups.flatMap((group) => group.items), { path: "/groups", label: "Groups", tool: "people" as const }, { path: "/administrators", label: "Administrators", tool: "administrators" as const }, { path: "/routes", label: "Applications", tool: "applications" as const }].find((item) => item.path === location.pathname) ?? groups[0].items[0];
-  const target = (item: Item) => item.path === "/applications" && !can("applications") ? "/routes" : item.path === "/people" && !can("people") && can("administrators") ? "/administrators" : item.path;
-  const blocked = current.path !== "/routes" && !!current.tool && !can(current.tool);
+  const visible = visibleGroups(tools);
+  // The read-only routing view is open to every session.
+  const blocked = location.pathname !== "/routes" && !allowed(place.section, tools);
+  const current = { label: place.section.label, tool: place.section.tool };
+  const here = (paths: string[]) => paths.includes(location.pathname);
 
   const checkUpdateNotice = useCallback(async (signal: AbortSignal) => {
     if (!can("updates")) { setUpdateNotice(null); return; }
@@ -123,13 +110,13 @@ export default function Console() {
     <a href="#main-content" className="sr-only focus:not-sr-only focus:bg-background focus:text-foreground focus:ring-ring fixed top-2 left-2 z-50 rounded-md px-3 py-2 text-sm focus:ring-2">Skip to content</a>
     <header className="console-header"><div className="console-bar">
       <Link to="/overview" className="console-brand" aria-label="Ozal console home"><Wordmark sub="Private console" animated /></Link>
-      <nav className="console-nav" aria-label="Console">{visible.flatMap((group) => group.items).map((item) => <NavLink key={item.path} to={target(item)} className="console-nav-link" aria-current={[item.path, ...(item.also ?? [])].includes(location.pathname) ? "page" : undefined}>{item.label}</NavLink>)}</nav>
+      <SectionSwitcher groups={visible} place={place} tools={tools} />
       <UserMenu />
       <span className="console-mobile-place" aria-hidden="true">{pageTitle}</span><button ref={trigger} type="button" className="console-menu-toggle" aria-expanded={menuOpen} aria-controls="mobile-menu" aria-label="Open menu" onClick={() => setMenuOpen(true)}><span aria-hidden="true" className="grid gap-1"><i className="bg-current h-0.5 w-4" /><i className="bg-current h-0.5 w-4" /><i className="bg-current h-0.5 w-4" /></span></button>
     </div></header>
 
     <dialog ref={drawer} id="mobile-menu" aria-label="Console navigation" className="console-drawer" onClose={closeDrawer} onCancel={() => setMenuOpen(false)} onKeyDown={containDrawerTab}>
-      {menuOpen && <><div className="console-drawer-header"><Link to="/overview" onClick={() => setMenuOpen(false)}><Wordmark sub="Private console" /></Link><button type="button" className="console-menu-toggle" aria-label="Close menu" onClick={() => setMenuOpen(false)}><span aria-hidden="true" className="relative block size-4 before:absolute before:left-0 before:top-1/2 before:h-0.5 before:w-4 before:-rotate-45 before:bg-current after:absolute after:left-0 after:top-1/2 after:h-0.5 after:w-4 after:rotate-45 after:bg-current" /></button></div><nav aria-label="Console">{visible.flatMap((group) => group.items).map((item) => <NavLink key={item.path} to={target(item)} className="console-drawer-link" aria-current={[item.path, ...(item.also ?? [])].includes(location.pathname) ? "page" : undefined} onClick={() => setMenuOpen(false)}><span>{item.label}</span><span className="console-nav-purpose">{purpose[target(item)]}</span></NavLink>)}</nav><div className="console-drawer-account"><UserMenu placement="up" /></div></>}
+      {menuOpen && <><div className="console-drawer-header"><Link to="/overview" onClick={() => setMenuOpen(false)}><Wordmark sub="Private console" /></Link><button type="button" className="console-menu-toggle" aria-label="Close menu" onClick={() => setMenuOpen(false)}><span aria-hidden="true" className="relative block size-4 before:absolute before:left-0 before:top-1/2 before:h-0.5 before:w-4 before:-rotate-45 before:bg-current after:absolute after:left-0 after:top-1/2 after:h-0.5 after:w-4 after:rotate-45 after:bg-current" /></button></div><nav aria-label="Console">{visible.map((group) => <div key={group.name || "home"} className="console-drawer-group">{group.name && <p className="console-drawer-heading">{group.name}</p>}{group.sections.map((section) => <NavLink key={section.path} to={target(section, tools)} className="console-drawer-link" aria-current={here([section.path, ...(section.also ?? [])]) ? "page" : undefined} onClick={() => setMenuOpen(false)}><span>{section.label}</span><span className="console-nav-purpose">{section.purpose}</span></NavLink>)}</div>)}</nav><div className="console-drawer-account"><UserMenu placement="up" /></div></>}
     </dialog>
 
     <main id="main-content" tabIndex={-1} className="console-content outline-none"><div className="page-enter">
