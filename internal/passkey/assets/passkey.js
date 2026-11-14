@@ -303,6 +303,60 @@ function setupLoginPage(button) {
   return { returnTo, passkeys, provider: provider && allows("oidc") ? provider : "" };
 }
 
+// The bridge: after a sign-in with a passkey on another device or a security
+// key, offer to keep one on this device too. It never blocks: Continue goes on
+// at once, and a refusal is remembered on this device. Only where this device
+// has its own authenticator, and never in a step-up, where the site asked for
+// something specific.
+const bridgeKey = "ozal.bridge.never";
+async function offerBridge(credential) {
+  if (!credential || credential.authenticatorAttachment !== "cross-platform") return false;
+  if (new URLSearchParams(location.search).get("reauth")) return false;
+  try { if (localStorage.getItem(bridgeKey)) return false; } catch {}
+  const check = PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable;
+  if (typeof check !== "function") return false;
+  // A browser that does not answer quickly is treated as "no": signing in
+  // must not wait on the offer.
+  const answer = await Promise.race([check.call(PublicKeyCredential).catch(() => false), new Promise((resolve) => setTimeout(() => resolve(false), 1500))]);
+  return answer === true;
+}
+
+function bridge(result) {
+  const section = document.getElementById("bridge");
+  if (!section) return finish(result, "You are signed in.");
+  for (const id of ["title", "intro", "username", "action", "oidc", "choices", "first-time"]) {
+    const el = document.getElementById(id);
+    if (el) el.hidden = true;
+  }
+  const label = document.querySelector("label[for=username]");
+  if (label) label.hidden = true;
+  show("");
+  section.hidden = false;
+  const go = document.getElementById("bridge-continue");
+  const add = document.getElementById("bridge-add");
+  const never = document.getElementById("bridge-never");
+  const done = (message) => { section.hidden = true; finish(result, message); };
+  go.addEventListener("click", () => done("You are signed in."));
+  never.addEventListener("click", () => {
+    try { localStorage.setItem(bridgeKey, "1"); } catch {}
+    done("You are signed in.");
+  });
+  add.addEventListener("click", async () => {
+    add.disabled = true;
+    show("Follow your device's prompt…");
+    try {
+      const options = await post("/_/auth/devices/add/begin", {});
+      const created = await navigator.credentials.create({ publicKey: creationOptions(options, choices.device.hints) });
+      const added = await post("/_/auth/devices/add/finish", credentialJSON(created));
+      done((added.provider_known ? "Passkey saved in " + added.provider + "." : "Passkey saved on this device.") + " You are signed in.");
+    } catch (error) {
+      add.disabled = false;
+      show(explain(error, "enrol") + " You can continue without it.", "error");
+    }
+  });
+  go.focus();
+}
+
 function setupLogin(button, returnTo) {
   let pending = null;
 
@@ -317,7 +371,8 @@ function setupLogin(button, returnTo) {
     button.disabled = true;
     show("Checking…");
     const result = await post("/_/auth/login/finish", credentialJSON(credential));
-    finish(result, "You are signed in.");
+    if (await offerBridge(credential)) bridge(result);
+    else finish(result, "You are signed in.");
   }
 
   function fail(error) {
