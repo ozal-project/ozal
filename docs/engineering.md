@@ -111,6 +111,15 @@ health or transport. `policy replay` evaluates a candidate rule without
 mutating the policy; `who-can` and `review` must not turn missing history into
 "never used".
 
+Where a passkey lives is named only when the authenticator reports an AAGUID
+on the known-provider list (`provider_known`); otherwise the name is a kind of
+passkey ("Synced passkey") and pages never present it as a place. A new
+visitor passkey ends on a receipt with an optional name, saved through the
+ordinary rename on the fresh session. An administrator renames only their own
+active passkey (`PATCH /_/api/admin/passkeys/{id}`), from a session opened with
+a passkey and a passkey proof under five minutes old; another account's passkey
+is not found. The provider is a label for the owner, never a trust decision.
+
 The app may keep its own login. Gateway headers are accepted only from its
 authenticated path; the app keeps its internal authorization. Signed claims that
 the app can verify, token exchange and Ozal as an OIDC provider are distinct

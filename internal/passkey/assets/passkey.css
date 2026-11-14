@@ -129,3 +129,12 @@ footer a { color: inherit; }
 body[data-page="denied"] form { margin-top: 18px; }
 .reference { margin: 12px 0 0; font: 0.75rem var(--mono); color: var(--muted); overflow-wrap: anywhere; }
 .host, .email { overflow-wrap: anywhere; }
+
+/* The receipt after an enrolment: where the passkey went, and a name. */
+.receipt { margin-top: 4px; }
+.receipt-where { display: flex; gap: 10px; align-items: center; margin: 0 0 6px; font-weight: 600; }
+.receipt-where .icon { flex: none; box-sizing: content-box; width: 20px; height: 20px; padding: 6px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); }
+.receipt-where .icon[hidden] { display: none; }
+.receipt form { margin-top: 18px; }
+.receipt .optional { font-weight: 400; }
+.field-hint { margin: -6px 0 14px; font-size: 0.82rem; color: var(--muted); }

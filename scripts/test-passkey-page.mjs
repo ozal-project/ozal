@@ -12,11 +12,11 @@ const src = readFileSync(new URL("../internal/passkey/assets/passkey.js", import
 function render(search, { oidc = "", webauthn = true, page = "login", fetch = () => new Promise(() => {}), assign = () => {}, caps, get = () => new Promise(() => {}), create = () => new Promise(() => {}), hash = "" } = {}) {
   const els = {};
   const el = (id) => (els[id] ??= {
-    id, textContent: "", hidden: id === "oidc" || id === "recovery-warning", open: false, href: "", disabled: false, dataset: {}, children: [], on: {},
+    id, textContent: "", value: "", src: "", hidden: id === "oidc" || id === "recovery-warning" || id === "receipt" || id === "receipt-return" || id === "receipt-icon", open: false, href: "", disabled: false, dataset: {}, children: [], on: {},
     addEventListener(ev, fn) { this.on[ev] = fn; }, focus() {}, setAttribute() {}, append(...c) { this.children.push(...c); }, replaceChildren(...c) { this.children = c; },
     querySelector(q) { return q === "a" ? this.children.find((c) => c.href) || null : null; },
   });
-  ["title", "intro", "action", "oidc", "status", "first-time", "username", "sites", "devices", "who", "email", "signout", "apps", "manage", "choices", "choice-list", "use-phone", "use-key", "recovery-warning", "sessions", "signout-all", "signout-all-confirm", "also-admin"].forEach(el);
+  ["title", "intro", "action", "oidc", "status", "first-time", "username", "sites", "devices", "who", "email", "signout", "apps", "manage", "choices", "choice-list", "use-phone", "use-key", "recovery-warning", "sessions", "signout-all", "signout-all-confirm", "also-admin", "receipt", "receipt-where", "receipt-icon", "receipt-return", "receipt-form", "receipt-name", "receipt-continue"].forEach(el);
   const label = { hidden: false };
   const head = [];
   let ready;
@@ -26,6 +26,7 @@ function render(search, { oidc = "", webauthn = true, page = "login", fetch = ()
     body: { dataset: { page, oidc } },
     getElementById: (id) => els[id],
     querySelector: (q) => (q === "label[for=username]" ? label : null),
+    querySelectorAll: () => [],
     createElement: () => el("x" + Math.random()),
     addEventListener: (ev, fn) => { if (ev === "DOMContentLoaded") ready = fn; },
   };
@@ -204,6 +205,69 @@ assert.equal(page.choices, "hidden", "no passkey guidance where only the provide
 page = render(rt, { webauthn: false });
 assert.equal(page.choices, "open", "a browser without passkeys still learns where a passkey can live");
 assert.match(page.status, /another browser|a device that does/);
+// An enrolment that returns its passkey stops on a receipt: where it was
+// saved only when the provider is known, and an optional name saved with the
+// ordinary rename. A failed name never blocks continuing.
+function receiptPage(passkey, renames, renameFails = false) {
+  return enrol({
+    fetch: async (url, init) => {
+      if (url.endsWith("/info")) return { ok: true, json: async () => ({ recovery: false }) };
+      if (url.endsWith("/begin")) return { ok: true, json: async () => ({ publicKey: { challenge: "AAAA", user: { id: "AAAA" } } }) };
+      if (url.endsWith("/rename")) {
+        renames.push(JSON.parse(init.body));
+        return renameFails ? { ok: false, status: 500, json: async () => ({ error: "storage unavailable" }) } : { ok: true, json: async () => ({}) };
+      }
+      return { ok: true, json: async () => ({ redirect: "", sites: [], passkey }) };
+    },
+    create: async () => credential,
+  });
+}
+const submit = (p) => p.el("receipt-form").on.submit({ preventDefault() {} });
+
+let renames = [];
+page = receiptPage({ id: "abcd", provider: "Bitwarden", provider_known: true, icon: "bitwarden" }, renames);
+await tick();
+await page.click();
+await tick();
+assert.equal(page.el("receipt").hidden, false, "a new passkey is followed by its receipt");
+assert.equal(page.el("receipt-where").textContent, "Saved in Bitwarden.");
+assert.equal(page.el("receipt-icon").src, "/_/auth/icons/bitwarden.svg");
+assert.match(page.el("receipt-return").textContent, /Bitwarden extension/);
+assert.equal(page.el("receipt-return").hidden, false);
+assert.deepEqual(page.siteLinks, [], "nothing moves on before Continue");
+page.el("receipt-name").value = "  Work laptop ";
+await submit(page);
+assert.deepEqual(renames, [{ id: "abcd", label: "Work laptop" }], "the name is saved with the ordinary rename");
+assert.equal(page.el("receipt").hidden, true);
+assert.deepEqual(page.siteLinks, ["Add a backup passkey somewhere else"]);
+
+renames = [];
+page = receiptPage({ id: "abcd", provider: "Synced passkey", provider_known: false, icon: "synced" }, renames);
+await tick();
+await page.click();
+await tick();
+assert.doesNotMatch(page.el("receipt-where").textContent, /Synced passkey/, "a kind of passkey is never shown as a place");
+assert.match(page.el("receipt-where").textContent, /did not say where/);
+assert.equal(page.el("receipt-icon").hidden, true);
+assert.equal(page.el("receipt-return").hidden, true);
+await submit(page);
+assert.deepEqual(renames, [], "no name, no rename");
+assert.deepEqual(page.siteLinks, ["Add a backup passkey somewhere else"]);
+
+renames = [];
+page = receiptPage({ id: "abcd", provider: "Bitwarden", provider_known: true, icon: "bitwarden" }, renames, true);
+await tick();
+await page.click();
+await tick();
+page.el("receipt-name").value = "Laptop";
+await submit(page);
+assert.match(page.status, /name was not saved/);
+assert.equal(page.el("receipt-continue").textContent, "Continue without a name");
+assert.equal(page.el("receipt").hidden, false, "a failed name stays on the receipt once");
+await submit(page);
+assert.equal(renames.length, 1, "the same failed name is not retried");
+assert.equal(page.el("receipt").hidden, true, "the person continues without it");
+
 page = enrol({ webauthn: false });
 assert.notEqual(page.choices, "hidden");
 assert.match(page.status, /Copy this page's address/, "the invitation can move to a browser that supports passkeys");
@@ -422,4 +486,4 @@ assert.equal(shown.page.who(), "", "nothing about a person is shown without a se
   assert.equal(page.el("also-admin").hidden, true, "no notice for a visitor only");
 }
 
-console.log("passkey pages: login, enrolment, recovery preflight, choices, devices, rename and sessions OK");
+console.log("passkey pages: login, enrolment, receipt, recovery preflight, choices, devices, rename and sessions OK");

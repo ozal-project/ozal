@@ -135,7 +135,8 @@ export async function confirmWithPasskey(session: string): Promise<void> {
   await api<{ verified: boolean }>("/_/api/admin/step-up/finish", credentialJSON(credential), begun.ceremony, session);
 }
 
-export type OwnPasskey = { id: string; label?: string; created_at: string; last_used_at?: string; current?: boolean };
+export type { OwnPasskey } from "./passkeyName.ts";
+import type { OwnPasskey } from "./passkeyName.ts";
 
 async function bearerRequest<T>(method: string, path: string, session: string, signal?: AbortSignal): Promise<T> {
   const res = await fetch(path, { method, cache: "no-store", signal: signal ?? AbortSignal.timeout(15_000), headers: { Authorization: `Bearer ${session}` } });
@@ -155,6 +156,19 @@ export type OwnAccount = { email: string; name: string; also_visitor: boolean };
 // email has a visitor account with its own passkeys, never shared access.
 export async function ownAccount(session: string, signal?: AbortSignal): Promise<OwnAccount> {
   return bearerRequest<OwnAccount>("GET", "/_/api/admin/account", session, signal);
+}
+
+// Names one of them. The edge wants a fresh passkey proof: a stale session
+// gets an error with code "passkey_required" (see withPasskeyProof).
+export async function renameOwnPasskey(session: string, id: string, label: string): Promise<{ label: string }> {
+  const res = await fetch(`/_/api/admin/passkeys/${encodeURIComponent(id)}`, {
+    method: "PATCH", cache: "no-store", signal: AbortSignal.timeout(15_000),
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session}` },
+    body: JSON.stringify({ label }),
+  });
+  const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string; label?: string };
+  if (!res.ok) throw Object.assign(new Error(data.error || `HTTP ${res.status}`), { code: data.code });
+  return { label: data.label ?? label };
 }
 
 // Revokes one of them; the sessions it opened end on the edge at once.
