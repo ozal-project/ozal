@@ -13,6 +13,7 @@
   --fg: #eef0f3;
   --muted: #9ca3ac;
   --border: #2a2e34;
+  --input: #646b75;
   --accent: #4f46e5;
   --accent-fg: #ffffff;
   --lamp: #818cf8;
@@ -39,7 +40,7 @@ main { width: 100%; max-width: 420px; background: var(--card); border: 1px solid
 h1 { margin: 0 0 6px; font-size: 1.45rem; font-weight: 700; letter-spacing: -0.02em; }
 p { margin: 0 0 18px; color: var(--muted); }
 label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
-input { width: 100%; padding: 11px 12px; margin-bottom: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--raised); color: inherit; font: inherit; }
+input { width: 100%; padding: 11px 12px; margin-bottom: 12px; border: 1px solid var(--input); border-radius: 10px; background: var(--raised); color: inherit; font: inherit; }
 input:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--lamp); outline-offset: 2px; }
 button, .secondary { display: block; width: 100%; padding: 12px; border-radius: 10px; font: inherit; font-weight: 700; text-align: center; text-decoration: none; cursor: pointer; }
 button { border: 0; background: var(--accent); color: var(--accent-fg); }

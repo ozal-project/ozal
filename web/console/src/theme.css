@@ -31,7 +31,8 @@
   --accent-foreground: #eef0f3;
   --destructive: #ee6b5e;
   --border: #2a2e34;
-  --input: #3a3f47;
+  /* A field border is at least 3:1 on every surface it sits on (WCAG 1.4.11). */
+  --input: #646b75;
   --ring: #818cf8;
   --success: #78cc8a;
   --warning: #e0a84a;

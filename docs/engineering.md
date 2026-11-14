@@ -511,8 +511,8 @@ Offline verification and checkpoints respect the lock.
 <a id="development-and-stack-criteria"></a>
 ## Development and stack criteria
 
-The console uses Ozal's Umbral/Marfil identity with the same typography and
-palette as the site. The authenticated shell is a typographic bar on desktop and
+The console uses Ozal's Umbral mark and the graphite and indigo palette, with
+the same typography and tokens as the site. The authenticated shell is a typographic bar on desktop and
 a modal directory on mobile: it keeps tools, URLs and focus while navigating;
 Escape closes the menu and Tab stays contained. The arch marks the active space
 without inventing service state. Overview uses route names in HTML to stay
