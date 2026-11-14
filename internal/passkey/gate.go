@@ -481,11 +481,12 @@ func (g *Gate) loginFinish(w http.ResponseWriter, r *http.Request) (any, *apiErr
 		return nil, &errExpired
 	}
 	var (
-		found  *webauthnUser
-		usedID []byte
+		found      *webauthnUser
+		usedID     []byte
+		usedHandle []byte
 	)
 	lookup := func(rawID, userHandle []byte) (webauthn.User, error) {
-		usedID = rawID
+		usedID, usedHandle = rawID, userHandle
 		user, credentials, err := g.dir.UserByHandle(r.Context(), userHandle)
 		if err != nil {
 			return nil, err
@@ -503,7 +504,7 @@ func (g *Gate) loginFinish(w http.ResponseWriter, r *http.Request) (any, *apiErr
 		g.emit(r, events.Event{Type: events.LoginFailed, Code: code, Error: errorText(err)})
 		revoked, checkErr := false, error(nil)
 		if len(usedID) > 0 {
-			revoked, checkErr = g.dir.CredentialRevoked(r.Context(), usedID)
+			revoked, checkErr = g.dir.CredentialRevoked(r.Context(), usedHandle, usedID)
 		}
 		refusal.unknown = retired(g.webauthn.Config.RPID, usedID, revoked, checkErr)
 		return nil, &refusal

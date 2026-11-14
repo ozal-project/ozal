@@ -499,9 +499,14 @@ func (s *Identity) RevokeOwnPasskey(ctx context.Context, userID string, credenti
 }
 
 // CredentialRevoked implements passkey.Directory.
-func (s *Identity) CredentialRevoked(ctx context.Context, credentialID []byte) (bool, error) {
+func (s *Identity) CredentialRevoked(ctx context.Context, userHandle, credentialID []byte) (bool, error) {
+	if len(userHandle) == 0 {
+		return false, nil
+	}
 	var revoked int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM passkeys WHERE credential_id = ? AND revoked_at IS NOT NULL`, credentialID).Scan(&revoked)
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM passkeys p JOIN users u ON u.id = p.user_id WHERE p.credential_id = ? AND p.revoked_at IS NOT NULL AND u.handle = ?`,
+		credentialID, userHandle).Scan(&revoked)
 	if err != nil {
 		return false, fmt.Errorf("check passkey: %w", err)
 	}

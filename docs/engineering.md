@@ -136,7 +136,9 @@ not include the passkey that just signed in. Revoking answers with the passkeys
 left, read in the revocation's own transaction, and the page signals them
 although its session has ended. A refused sign-in names
 `unknown_credential` only when this directory holds that credential as
-revoked. A passkey it never held (such as an administrator's), an active one
+revoked for the user handle the authenticator presented. A revoked passkey's
+signature can no longer be checked, so the handle keeps this from answering
+anyone who only knows a credential ID. A passkey it never held (such as an administrator's), an active one
 (a disabled account) and a failed check send nothing. The page never awaits a
 signal and never claims the manager acted. Renaming does not use
 `signalCurrentUserDetails`. Administrator passkeys are not signalled yet.

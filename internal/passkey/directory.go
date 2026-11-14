@@ -98,7 +98,10 @@ type Directory interface {
 	// after the revocation, read in the same transaction.
 	RevokeOwnPasskey(ctx context.Context, userID string, credentialID []byte) (remaining [][]byte, err error)
 	// CredentialRevoked reports whether credentialID is a visitor passkey
-	// that this directory once held and has since revoked. A passkey it
-	// never held, or one still active, is false.
-	CredentialRevoked(ctx context.Context, credentialID []byte) (bool, error)
+	// this directory revoked and whose owner has this user handle. A passkey
+	// it never held, one still active, or one presented with another handle
+	// is false: the signature of a revoked passkey can no longer be checked,
+	// so the handle, which only its authenticator holds, keeps this from
+	// answering anyone who merely knows a credential ID.
+	CredentialRevoked(ctx context.Context, userHandle, credentialID []byte) (bool, error)
 }

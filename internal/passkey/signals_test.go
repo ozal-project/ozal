@@ -26,11 +26,11 @@ func (d *flakyDirectory) ActivePasskeys(ctx context.Context, userID string) ([]p
 	return d.Identity.ActivePasskeys(ctx, userID)
 }
 
-func (d *flakyDirectory) CredentialRevoked(ctx context.Context, id []byte) (bool, error) {
+func (d *flakyDirectory) CredentialRevoked(ctx context.Context, handle, id []byte) (bool, error) {
 	if d.failRevokedCheck {
 		return false, errors.New("storage unavailable")
 	}
-	return d.Identity.CredentialRevoked(ctx, id)
+	return d.Identity.CredentialRevoked(ctx, handle, id)
 }
 
 func hexToB64(t *testing.T, id string) string {
@@ -102,6 +102,15 @@ func TestSignInAndRevokeCarryTheCompleteAcceptedList(t *testing.T) {
 	}
 }
 
+func mustHex(t *testing.T, s string) []byte {
+	t.Helper()
+	raw, err := hex.DecodeString(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
 func mustB64(t *testing.T, s string) []byte {
 	t.Helper()
 	raw, err := base64.RawURLEncoding.DecodeString(s)
@@ -160,6 +169,12 @@ func TestOnlyARevokedPasskeyIsNamedUnknown(t *testing.T) {
 		t.Fatalf("a failed check named the passkey: %v", body)
 	}
 	dir.failRevokedCheck = false
+
+	// Knowing a revoked credential ID is not enough: with another account's
+	// user handle the answer is the same as for a passkey never held.
+	if revoked, err := h.identity.CredentialRevoked(context.Background(), []byte("not-anas-handle-00000000000000000"), mustHex(t, laptopID)); err != nil || revoked {
+		t.Fatalf("a revoked passkey was confirmed under another handle: %v %v", revoked, err)
+	}
 
 	// A passkey from another directory (here, another site's records).
 	other := newHarness(t)
