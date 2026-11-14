@@ -111,7 +111,8 @@ gateway.
 When it finishes, it repeats the trial route and prints the next steps:
 
 1. Open an SSH tunnel to the console.
-2. Create the first administrator with a one-time link: `sudo ozal console enrol`.
+2. Create the first administrator: `sudo ozal console enrol` prints a code to type on your
+   login host, or a one-time link when `admin.login_host` is off.
 3. Add your first application in the console.
 
 To test the installer without root or systemd, use the staging directory:

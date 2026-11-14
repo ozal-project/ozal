@@ -8,6 +8,9 @@ conditions. It is not an ASVS certification or a complete audit of an installati
 
 - The console and the administrative API stay on loopback or a private socket.
   Reach them through a private transport; never publish them as the upstream of a route.
+  Only enrolling a passkey by code happens on the public login host: the code is
+  shown only in the host's terminal, works once for five minutes, and the terminal
+  reports which browser used it.
 - Keep private applications on loopback or a controlled network: an alternative
   address that bypasses the gateway can also bypass its policies.
 - Use a valid public TLS certificate; do not disable verification to work

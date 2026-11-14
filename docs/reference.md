@@ -111,8 +111,10 @@ your own local file and do not commit it to Git. Validation rejects unknown keys
 | `admin.listen` | Loopback administration; default `127.0.0.1:9090` |
 | `admin.socket` | Private Unix socket; its file permission grants local authority |
 | `admin.socket_group` | System group with access to the socket (mode `0660`); its members operate without `sudo` and are audited as `local:<user>`. Requires `admin.socket`; rejects `root`/`wheel`, and startup fails if the service does not belong to the group or the directory is not traversable |
-| `admin.login_host` | Administrator passkeys are created and used at `auth.passkeys.login_url` (HTTPS) instead of `http://ozal.localhost`, where many authenticators do not work; the console stays on loopback and receives the session through a one-time code bound to a verifier in the tab. Requires `auth.passkeys`. Earlier passkeys on `ozal.localhost` keep working. Visitors and administrators then share the login domain: the administrator sign-in names only administrator passkeys to the browser, and an administrator passkey is saved as `<email> · Ozal console` and a visitor passkey as `<email> · sign-in`, so a password manager does not offer a visitor passkey for the console. The visitor sign-in cannot narrow the list the same way without revealing which emails have an account, so a console passkey chosen there gets a message saying to pick the other one |
+| `admin.login_host` | Administrator passkeys are created and used at `auth.passkeys.login_url` (HTTPS) instead of `http://ozal.localhost`, where many authenticators do not work; the console stays on loopback and receives the session through a one-time code bound to a verifier in the tab. Requires `auth.passkeys`. Earlier passkeys on `ozal.localhost` keep working. Visitors and administrators then share the login domain: the administrator sign-in names only administrator passkeys to the browser, and an administrator passkey is saved as `<email> · Ozal console` and a visitor passkey as `<email> · sign-in`, so a password manager does not offer a visitor passkey for the console. The visitor sign-in cannot narrow the list the same way without revealing which emails have an account, so a console passkey chosen there gets a message saying to pick the other one. With it, `console enrol` and `console recover` print a code instead of a link: see [Enrolment by code](#enrolment-by-code) |
 | `admin.update_socket` | Unix socket of the local update executor (`ozal update-executor`). If omitted, the console only reads the status report; it prepares no plans and installs nothing. The executor's root-owned profile fixes the unit, binary, configuration, catalog, key and job directory |
+| `admin.country_database` | Absolute path to a local IP-to-country table (`start,end,country` CSV, optionally `.gz`), such as DB-IP's free [IP to Country Lite](https://db-ip.com/db/download/ip-to-country-lite) (CC BY 4.0). The [enrolment-by-code](#enrolment-by-code) page then shows a flag and country next to the addresses it lists, and the terminal shows the country code. Loaded in the background at start, so it never delays the listeners; never sent anywhere and never used to decide access. A missing or unreadable file only drops the countries. A file named `dbip*` is credited to DB-IP on the page |
+| `admin.country_credit` | Attribution shown with the countries when the table is not DB-IP's and its licence asks for one; plain text, at most 120 characters |
 | `admin.token` | Reference to the full administrative credential |
 | `admin.sites_token` | Reference to a limited site-publisher credential |
 | `runtime_file` | Operational projection of the service: routes, projects and GitHub |
@@ -189,6 +191,40 @@ The field requires `access`, a `target` or `upstreams`, a login URL for the issu
 `identity_assertion.key_dir`. Public routes, sites, redirects and connector routes do
 not get one. A client-supplied `X-Ozal-Assertion`, in any spelling, is removed. If
 signing fails the request is not forwarded.
+
+### Enrolment by code
+
+With `admin.login_host`, `sudo ozal console enrol` (and `console recover -email`)
+prints the login host's `/_/auth/admin/code` page and a code such as `ABCD-EFGH`.
+Open the page on any device and type the code within five minutes. Everything
+else happens on the page. It shows the request so you can recognise your own:
+the server's name, who ran the command and when, the address of their SSH session
+(marked as local network for a LAN address), this browser's address (marked as
+same network when the two match), what the passkey grants, the code and the time
+left. You then enter your name and email and create the passkey, or choose "This
+wasn't me" to cancel the code; the page confirms a cancellation only when the
+server accepts it.
+
+The terminal asks nothing. It reports the browser and address that used the code,
+wrong codes typed on the login host, and who was enrolled; Ctrl-C cancels the
+code. Once the passkey is being saved neither the page nor the terminal can cancel
+it. No tunnel to the console is needed for this step; signing in to the console
+later still uses it.
+
+The page exists only while a code is waiting. A code works for the first browser
+that types it, and the whole enrolment ends after 15 minutes. Five wrong codes
+from one address refuse that address for five minutes, and thirty in total pause
+new claims for five minutes; neither ends a code or an enrolment in progress. A
+pause delays your own code too while it lasts: the terminal says so, and `-link`
+remains. A newer recovery for the same administrator, by code or link, replaces
+the earlier recovery code, and once the first administrator exists other
+first-run codes end; their terminals say so. If the terminal reports a browser
+that was not yours, run `console recover` for the account it created. `-link` prints the one-time console link instead; without
+`admin.login_host` the command prints the link. The page makes no third-party
+request and sends no address anywhere. With `admin.country_database`, the
+addresses also show an approximate country, credited to DB-IP on the page; the
+flags are Radian UI's (MIT), served by the login host when the build includes
+them; otherwise the page shows the two-letter country code.
 
 ## Login and sessions
 
