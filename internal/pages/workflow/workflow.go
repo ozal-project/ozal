@@ -138,7 +138,7 @@ jobs:
           node-version: '24.18.0'
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: '1.27.3'
+          go-version: '1.27.4'
           cache: false
       - name: Install pinned Ozal artifact checker
         working-directory: ${{ runner.temp }}
@@ -175,7 +175,7 @@ jobs:
     steps:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: '1.27.3'
+          go-version: '1.27.4'
           cache: false
       - name: Install pinned Ozal publisher
         working-directory: ${{ runner.temp }}

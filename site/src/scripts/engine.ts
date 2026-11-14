@@ -2,7 +2,7 @@
 // decision the edge runs compiled to WebAssembly, and shows what it answers for
 // a route and a visitor chosen on the page. Everything is rendered with
 // textContent: nothing typed or returned is ever parsed as HTML.
-import { describe, plainDecision, requestFor, stagesFor, type Report, type Visitor, APPS, PEOPLE } from "../lib/engine";
+import { cellWord, describe, plainDecision, requestFor, stagesFor, type Report, type Visitor, APPS, PEOPLE } from "../lib/engine";
 
 declare const Go: new () => { importObject: WebAssembly.Imports; run(instance: WebAssembly.Instance): Promise<void> };
 declare global {
@@ -47,15 +47,20 @@ function ensureEngine(): Promise<void> {
 
 const $ = <T extends HTMLElement>(root: ParentNode, selector: string) => root.querySelector(selector) as T;
 const text = (node: Element, value: string) => (node.textContent = value);
+const personName = (who: string) => (who === "none" ? "No session" : PEOPLE[who] ?? who);
 
-function readVisitor(root: HTMLElement): Visitor {
+type Settings = Omit<Visitor, "who">;
+
+function readSettings(root: HTMLElement): Settings {
   return {
-    who: ($(root, 'input[name="who"]:checked') as HTMLInputElement).value,
     verified: $<HTMLInputElement>(root, 'input[name="verified"]').checked,
     method: $<HTMLSelectElement>(root, 'select[name="method"]').value,
     bound: $<HTMLInputElement>(root, 'input[name="bound"]').checked,
   };
 }
+
+const ask = (app: string, visitor: Visitor): Report | { error: string } =>
+  JSON.parse(window.ozalExplain!(JSON.stringify(requestFor(app, visitor))));
 
 function render(root: HTMLElement, report: Report | { error: string }, app: string, visitor: Visitor) {
   const verdict = $(root, "[data-verdict]");
@@ -73,18 +78,20 @@ function render(root: HTMLElement, report: Report | { error: string }, app: stri
   // The cord from the person to the app shows how far the request got.
   const trace = $(root, "[data-trace]");
   trace.dataset.state = d.state;
-  text($(root, "[data-trace-who]"), visitor.who === "none" ? "No session" : PEOPLE[visitor.who] ?? visitor.who);
+  text($(root, "[data-trace-who]"), personName(visitor.who));
   text($(root, "[data-trace-app]"), APPS[app].host);
-  trace.classList.remove("trace-new");
-  void trace.offsetWidth;
-  trace.classList.add("trace-new");
-  // Restart the arrival animation so each new answer reads as a new answer.
-  verdict.classList.remove("verdict-new");
-  void verdict.offsetWidth;
-  verdict.classList.add("verdict-new");
+  // Restart the arrival so each new answer reads as a new answer.
+  for (const [node, name] of [[trace, "trace-new"], [verdict, "verdict-new"]] as const) {
+    node.classList.remove(name);
+    void node.offsetWidth;
+    node.classList.add(name);
+  }
   text($(root, "[data-verdict-title]"), d.title);
   text($(root, "[data-code]"), report.decision.code);
   text($(root, "[data-reason]"), plainDecision(report, app, visitor));
+  // A narrow screen hides each app's rule in the matrix, so the answer names it.
+  const rule = root.querySelector<HTMLElement>(`[data-cell][data-app="${app}"]`)?.dataset.appRule;
+  text($(root, "[data-rule]"), rule ? `${app.charAt(0).toUpperCase()}${app.slice(1)}'s rule: ${rule}` : "");
   for (const stage of stagesFor(report)) {
     const li = document.createElement("li");
     li.className = "stage";
@@ -103,16 +110,35 @@ function render(root: HTMLElement, report: Report | { error: string }, app: stri
   text($(root, "[data-raw]"), JSON.stringify(report, null, 2));
 }
 
+// run asks the engine for every cell of the matrix, then explains the chosen one.
 function run(root: HTMLElement) {
-  const app = ($(root, 'input[name="app"]:checked') as HTMLInputElement).value;
-  const visitor = readVisitor(root);
+  const settings = readSettings(root);
   const bound = $<HTMLInputElement>(root, 'input[name="bound"]');
-  bound.disabled = visitor.method !== "passkey" || visitor.who === "none";
-  if (bound.disabled) bound.checked = false;
+  bound.disabled = settings.method !== "passkey";
+  if (bound.disabled) settings.bound = bound.checked = false;
+  const cells = [...root.querySelectorAll<HTMLButtonElement>("[data-cell]")];
+  for (const cell of cells) {
+    const { who = "", app = "" } = cell.dataset;
+    const report = ask(app, { who, ...settings });
+    const state = "error" in report ? "error" : describe(report).state;
+    const word = "error" in report ? "Error" : cellWord(report);
+    // A cell whose answer changed says so, once.
+    if (cell.dataset.state && cell.dataset.state !== state) {
+      cell.classList.remove("cell-changed");
+      void cell.offsetWidth;
+      cell.classList.add("cell-changed");
+    }
+    cell.dataset.state = state;
+    text($(cell, ".cell-word"), word);
+    cell.setAttribute("aria-label", `${personName(who)}, ${APPS[app].host}: ${word}`);
+  }
+  const chosen = cells.find((c) => c.getAttribute("aria-pressed") === "true") ?? cells.find((c) => c.dataset.who === "ana" && c.dataset.app === "grafana")!;
+  chosen.setAttribute("aria-pressed", "true");
+  const { who = "", app = "" } = chosen.dataset;
   const config = APPS[app];
   text($(root, "[data-config]"), JSON.stringify({ host: config.host, ...(config.access ? { access: config.access } : {}) }, null, 2));
-  const out = window.ozalExplain!(JSON.stringify(requestFor(app, visitor)));
-  render(root, JSON.parse(out), app, visitor);
+  const visitor = { who, ...settings };
+  render(root, ask(app, visitor), app, visitor);
 }
 
 export function setup(root: HTMLElement) {
@@ -123,6 +149,9 @@ export function setup(root: HTMLElement) {
   const panel = $(root, "[data-panel]");
   const fallback = $(root, "[data-fallback]");
   const start = $<HTMLButtonElement>(root, "[data-start]");
+  // Scripts run, so "needs JavaScript" no longer applies; the status line
+  // says what is happening instead (loading, failed with a retry, or ready).
+  root.querySelector<HTMLElement>("[data-nojs]")?.setAttribute("hidden", "");
 
   async function boot() {
     start.disabled = true;
@@ -144,6 +173,12 @@ export function setup(root: HTMLElement) {
   }
 
   root.addEventListener("input", () => window.ozalExplain && run(root));
+  root.addEventListener("click", (event) => {
+    const cell = (event.target as Element).closest<HTMLElement>("[data-cell]");
+    if (!cell || !window.ozalExplain) return;
+    root.querySelectorAll("[data-cell]").forEach((c) => c.setAttribute("aria-pressed", String(c === cell)));
+    run(root);
+  });
   start.addEventListener("click", boot);
   // Load on arrival unless the visitor asked their browser to save data; then
   // wait for the button.

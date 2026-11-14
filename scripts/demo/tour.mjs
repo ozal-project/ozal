@@ -26,6 +26,8 @@ const shotsDir = join(site, "shots");
 const dataDir = resolve(here, "../../site/src/data");
 const work = join(here, ".recording");
 const SIZE = { width: 1280, height: 800 };
+const STILL_SIZE = { width: 1000, height: 800 };
+const NARROW_SIZE = { width: 420, height: 900 };
 
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -39,7 +41,7 @@ const overlay = () => {
     bar.style.cssText = "position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:2147483647;max-width:min(880px,92vw);padding:12px 20px;border-radius:999px;background:rgba(17,17,20,.94);color:#ededef;font:500 17px/1.35 system-ui,sans-serif;border:1px solid #34343c;box-shadow:0 12px 40px rgba(0,0,0,.5);opacity:0;transition:opacity .35s;pointer-events:none;text-align:center";
     const dot = document.createElement("div");
     dot.id = "tour-pointer";
-    dot.style.cssText = "position:fixed;left:-40px;top:-40px;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;border:2px solid #c4a17c;background:rgba(196,161,124,.28);z-index:2147483647;pointer-events:none;transition:transform .12s";
+    dot.style.cssText = "position:fixed;left:-40px;top:-40px;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;border:2px solid #818cf8;background:rgba(129,140,248,.28);z-index:2147483647;pointer-events:none;transition:transform .12s";
     document.documentElement.append(bar, dot);
     addEventListener("mousemove", (e) => { dot.style.left = e.clientX + "px"; dot.style.top = e.clientY + "px"; }, true);
     addEventListener("mousedown", () => (dot.style.transform = "scale(.7)"), true);
@@ -92,9 +94,38 @@ async function main() {
   // Stills are JPEG at twice the size: they are cropped into tiles on the page.
   // The caption bar and the pointer belong to the film, not to the product: hide them for a still.
   const overlayVisible = (visible) => page.evaluate((v) => { for (const id of ["tour-caption", "tour-pointer"]) document.getElementById(id)?.style.setProperty("visibility", v ? "visible" : "hidden"); }, visible);
-  const shot = async (name, target) => {
+  // A console still is taken at STILL_SIZE, narrower than the film: the
+  // console's content spans the whole window, and the page shows a still in a
+  // tile about 780 px wide, so a narrower window keeps its text readable there.
+  // A console still also gets a phone-width detail (`<name>-narrow.jpg`): the
+  // page shows it below 861 px, where the wide still would be a third of its
+  // size and unreadable. `detail` names the first and last text of the part
+  // the step is about ([text, nth, own]); the clip runs from the card holding
+  // the first to the card holding the last, or from the element itself when
+  // `own` is set.
+  // Focus is cleared first so a focused heading does not carry a focus ring.
+  const shot = async (name, target, detail) => {
     await overlayVisible(false);
+    await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
+    if (detail) {
+      await page.setViewportSize(NARROW_SIZE); await pause(400);
+      const clip = await page.evaluate(([from, to]) => {
+        // The card around a text: climb from the element holding it until an ancestor spans most of the window.
+        const card = ([text, nth = 0, own = false]) => {
+          const hits = [...document.querySelectorAll("#main-content *")].filter((e) => [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.includes(text)));
+          let e = hits[nth];
+          if (!e) throw new Error(`no "${text}" for the narrow still`);
+          while (!own && e.parentElement && e.getBoundingClientRect().width < innerWidth * 0.8) e = e.parentElement;
+          return e.getBoundingClientRect();
+        };
+        const top = card(from).top + scrollY - 16;
+        return { x: 0, y: Math.max(0, top), width: innerWidth, height: card(to).bottom + scrollY + 16 - Math.max(0, top) };
+      }, detail);
+      await page.screenshot({ path: join(shotsDir, `${name}-narrow.jpg`), type: "jpeg", quality: 88, fullPage: true, clip });
+      await page.setViewportSize(STILL_SIZE); await pause(400);
+    }
     await (target ?? page).screenshot({ path: join(shotsDir, `${name}.jpg`), type: "jpeg", quality: 88 });
+    if (!target) { await page.setViewportSize(SIZE); await pause(200); }
     await overlayVisible(true);
   };
   // The console opens only after sign-in, and its session lives in the tab: a
@@ -182,14 +213,15 @@ async function main() {
   await signInConsole("Back in the console: who got in, and why Bob was refused.");
   await pause(2800);
   await move(page.locator("text=Why people were refused"));
-  await shot("overview");
+  await shot("overview", undefined, [["is not answering"], ["grafana.demo.localhost"]]);
   await pause(3400);
   await open("Activity");
   await page.locator("table").getByText("Access denied").first().waitFor();
-  await click(page.locator("button", { hasText: "All events" }).first());
-  await click(page.getByRole("option", { name: "Access decisions" }));
+  // The category filter is a native select: point at it, then choose.
+  await move(page.getByLabel("Event category"));
+  await page.getByLabel("Event category").selectOption("access");
   await say("Every decision, with its reason.");
-  await shot("access-log");
+  await shot("access-log", undefined, [["Access denied", 0], ["Access denied", 1]]);
   await exportAccessSample(edge);
   await pause(3600);
 
@@ -203,7 +235,7 @@ async function main() {
   await pause(3800);
   await say("Ozal: every door to your apps, one place that decides.");
   await open("People");
-  await shot("people");
+  await shot("people", undefined, [["Invite person", 0, true], ["Disable", 2]]);
   await pause(3400);
   await say("");
   await pause(600);

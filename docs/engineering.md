@@ -13,7 +13,13 @@ User guides are [installation](operations/download-install.md),
 [applications](operations/first-application.md),
 [administration](operations/administration.md) and [security](security.md).
 Update the existing section with the code; do not open a new report, plan or
-delivery note for each conversation, test or release. Pending state goes to the
+delivery note for each conversation, test or release. The project page publishes
+the user guides listed in `site/src/lib/guides.mjs`, with
+[Start here](START-HERE.md) and the [quickstart](../QUICKSTART.md), at
+`https://ozal.dev/docs/` from these same files: keep links relative, as GitHub
+reads them; the site turns a link to another listed guide into its page and any
+other repository link into its GitHub page, and its browser check fails on a
+broken guide link or anchor. A new user guide is added to that list. Pending state goes to the
 maintainer's tracker, and version limits go to the release notes.
 
 `docs/architecture/design.md` and `stack.md` keep the design rules and
@@ -528,8 +534,8 @@ Offline verification and checkpoints respect the lock.
 <a id="development-and-stack-criteria"></a>
 ## Development and stack criteria
 
-The console uses Ozal's Umbral/Marfil identity with the same typography and
-palette as the site. The authenticated shell is a typographic bar on desktop and
+The console uses Ozal's Umbral mark and the graphite and indigo palette, with
+the same typography and tokens as the site. The authenticated shell is a typographic bar on desktop and
 a modal directory on mobile: it keeps tools, URLs and focus while navigating;
 Escape closes the menu and Tab stays contained. The arch marks the active space
 without inventing service state. Overview uses route names in HTML to stay

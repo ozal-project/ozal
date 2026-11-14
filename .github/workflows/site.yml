@@ -10,8 +10,9 @@ on:
   push:
     branches: [main]
     # The live demo is the access decision compiled to WebAssembly, so a change
-    # to the engine republishes the page.
-    paths: [site/**, scripts/pages/**, cmd/ozalctl/**, internal/ctl/**, internal/pages/**, scripts/build-site-engine.sh, internal/auth/**, internal/config/**, internal/policycontext/**, internal/policydemo/**, cmd/policywasm/**, .github/workflows/site.yml]
+    # to the engine republishes the page; the user guides are pages of the site
+    # (site/src/lib/guides.mjs), so a guide change republishes it too.
+    paths: [site/**, QUICKSTART.md, docs/START-HERE.md, docs/operations/*.md, docs/security.md, docs/reference.md, scripts/pages/**, cmd/ozalctl/**, internal/ctl/**, internal/pages/**, scripts/build-site-engine.sh, internal/auth/**, internal/config/**, internal/policycontext/**, internal/policydemo/**, cmd/policywasm/**, .github/workflows/site.yml]
   workflow_dispatch:
 
 permissions:

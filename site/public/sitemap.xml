@@ -3,4 +3,25 @@
   <url>
     <loc>https://ozal.dev/</loc>
   </url>
+  <url>
+    <loc>https://ozal.dev/docs/</loc>
+  </url>
+  <url>
+    <loc>https://ozal.dev/docs/quickstart/</loc>
+  </url>
+  <url>
+    <loc>https://ozal.dev/docs/install/</loc>
+  </url>
+  <url>
+    <loc>https://ozal.dev/docs/first-application/</loc>
+  </url>
+  <url>
+    <loc>https://ozal.dev/docs/administration/</loc>
+  </url>
+  <url>
+    <loc>https://ozal.dev/docs/security/</loc>
+  </url>
+  <url>
+    <loc>https://ozal.dev/docs/reference/</loc>
+  </url>
 </urlset>

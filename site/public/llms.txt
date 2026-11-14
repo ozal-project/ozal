@@ -16,6 +16,7 @@ provider, and it does not replace an application's own authorization.
 - Written in Go; one binary for Linux, macOS and Windows.
 - Source: https://github.com/ozal-project/ozal
 - Project page: https://ozal.dev/
+- Documentation: https://ozal.dev/docs/ (the guides from the repository, rendered on the site)
 
 ## What it does
 
@@ -58,7 +59,8 @@ proxy or directly on the host.
 ## Links
 
 - [Project page and live policy demo](https://ozal.dev/)
+- [Documentation: install, publish an application, administer, security, configuration](https://ozal.dev/docs/)
 - [Source, README and quickstart](https://github.com/ozal-project/ozal)
-- [Install and run as a service](https://github.com/ozal-project/ozal/blob/main/docs/operations/download-install.md)
-- [Configuration and CLI reference](https://github.com/ozal-project/ozal/blob/main/docs/reference.md)
-- [Security boundaries](https://github.com/ozal-project/ozal/blob/main/docs/security.md)
+- [Install and run as a service](https://ozal.dev/docs/install/)
+- [Configuration and CLI reference](https://ozal.dev/docs/reference/)
+- [Security boundaries](https://ozal.dev/docs/security/)

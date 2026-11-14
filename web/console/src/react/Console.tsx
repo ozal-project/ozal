@@ -150,7 +150,7 @@ export default function Console() {
       </Routes>}
     </div></main>
   </div>
-  {updateNotice && <aside className="border-primary/30 bg-popover fixed top-20 right-4 z-50 w-[calc(100vw-2rem)] max-w-sm rounded-xl border p-4 shadow-2xl" role="status" aria-live="polite">
+  {updateNotice && <aside className="border-signal/30 bg-popover fixed top-20 right-4 z-50 w-[calc(100vw-2rem)] max-w-sm rounded-xl border p-4 shadow-2xl" role="status" aria-live="polite">
     <div className="flex items-start justify-between gap-4"><p className="min-w-0 text-sm font-medium">Ozal {updateNotice.version} is available</p><button type="button" className="text-muted-foreground hover:text-foreground shrink-0 text-xs underline" onClick={() => { dismissedVersion.current = updateNotice.version; setUpdateNotice(null); }}>Dismiss</button></div>
     <div className="mt-3 flex justify-end"><Button onClick={() => setUpdateDialogOpen(true)}>Review update</Button></div>
   </aside>}

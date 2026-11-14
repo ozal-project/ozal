@@ -1,9 +1,12 @@
 @custom-variant dark (&:is(.dark *));
 
-/* Ozal identity (SITE-005, Marfil): warm ink with three brand colours, each
-   with one meaning and never decoration.
-     ivory   (primary)    Ozal itself: actions, the current place, focus
-     camel   (signal)     what is live: a signal on a cord, a connection up
+/* Ozal identity: a neutral graphite ground and grey-white text, with one
+   accent, indigo, and each brand value has one meaning, never decoration:
+     indigo  (primary)    the next action: a filled button with white text
+                          (#4f46e5, 6.3:1)
+     indigo  (signal)     the current place, focus and what is live: text,
+                          marks and rings on the dark ground (#818cf8, 5.6:1+)
+     ink     (foreground) Ozal itself: text and the arch of the mark
      graphite (depth)     depth: the door leaf of the mark, quiet surfaces
    States stay out of the brand range: green allowed, red refused, blue
    waiting (a check or decision under way), amber only for warnings that need
@@ -12,35 +15,36 @@
    bundled (OFL): no third-party requests. */
 :root {
   --radius: 0.5rem;
-  --background: #0e0e0d;
-  --foreground: #f1ede6;
-  --card: #171716;
-  --card-foreground: #f1ede6;
-  --popover: #1f1f1d;
-  --popover-foreground: #f1ede6;
-  --primary: #f1ece2;
-  --primary-foreground: #0e0e0d;
-  --secondary: #1f1f1d;
-  --secondary-foreground: #f1ede6;
-  --muted: #1f1f1d;
-  --muted-foreground: #a19d96;
-  --accent: #262624;
-  --accent-foreground: #f1ede6;
+  --background: #0b0c0e;
+  --foreground: #eef0f3;
+  --card: #131518;
+  --card-foreground: #eef0f3;
+  --popover: #1b1e22;
+  --popover-foreground: #eef0f3;
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
+  --secondary: #1b1e22;
+  --secondary-foreground: #eef0f3;
+  --muted: #1b1e22;
+  --muted-foreground: #9ca3ac;
+  --accent: #20232a;
+  --accent-foreground: #eef0f3;
   --destructive: #ee6b5e;
-  --border: #2a2927;
-  --input: #3a3833;
-  --ring: #c4a17c;
+  --border: #2a2e34;
+  /* A field border is at least 3:1 on every surface it sits on (WCAG 1.4.11). */
+  --input: #646b75;
+  --ring: #818cf8;
   --success: #78cc8a;
   --warning: #e0a84a;
   --waiting: #86b3e6;
-  /* Camel: what is live. Graphite: depth. */
-  --signal: #c4a17c;
-  --depth: #55514a;
-  --sidebar: #0e0e0d;
-  --sidebar-foreground: #f1ede6;
-  --sidebar-border: #2a2927;
-  --sidebar-accent: #1f1f1d;
-  --sidebar-accent-foreground: #f1ede6;
+  /* Light indigo: the current place, focus, what is live. Graphite: depth. */
+  --signal: #818cf8;
+  --depth: #717883;
+  --sidebar: #0b0c0e;
+  --sidebar-foreground: #eef0f3;
+  --sidebar-border: #2a2e34;
+  --sidebar-accent: #1b1e22;
+  --sidebar-accent-foreground: #eef0f3;
 }
 
 @theme inline {
@@ -111,7 +115,7 @@
   .lamp-off { --lamp: var(--destructive); }
   .lamp-wait { --lamp: var(--waiting); animation: lamp-pulse 1.6s ease-in-out infinite; }
   .lamp-warn { --lamp: var(--warning); }
-  .lamp-idle { --lamp: #3a3833; }
+  .lamp-idle { --lamp: #3a3f47; }
   .lamp-lg { @apply size-3; }
   /* A group name; as a button it adds or removes the group. */
   .chip {
@@ -124,7 +128,7 @@
   }
   .panel-head { @apply flex flex-wrap items-center justify-between gap-3 px-5 py-4; }
   /* A connecting line, as a divider next to labels. */
-  .cord { stroke: #6e6a63; fill: none; stroke-linecap: round; }
+  .cord { stroke: #6b717b; fill: none; stroke-linecap: round; }
 }
 
 @keyframes lamp-pulse { 50% { opacity: 0.45; } }
@@ -181,7 +185,7 @@
 @keyframes auth-rise { from { opacity: 0; transform: translateY(6px); } }
 @media (max-width: 480px) { .auth-card { padding: 22px; } }
 
-.tab[aria-current="page"] { border-color: var(--primary); }
+.tab[aria-current="page"] { border-color: var(--signal); }
 
 /* Navigation as a threshold: the active space opens a small Umbral arch in
    the shared baseline. No extra status, counters or invented workspace. */
@@ -193,7 +197,7 @@
 .console-nav { display: flex; justify-content: center; align-self: stretch; gap: 20px; }
 .console-nav-link { position: relative; display: inline-flex; align-items: center; color: var(--muted-foreground); font-size: 14px; text-decoration: none; white-space: nowrap; transition: color 150ms; }
 .console-nav-link:hover, .console-nav-link[aria-current="page"] { color: var(--foreground); }
-.console-nav-link[aria-current="page"]::after { content: ""; position: absolute; bottom: -1px; left: calc(50% - 7px); width: 14px; height: 9px; border: 2px solid var(--primary); border-bottom: 0; border-radius: 9px 9px 0 0; }
+.console-nav-link[aria-current="page"]::after { content: ""; position: absolute; bottom: -1px; left: calc(50% - 7px); width: 14px; height: 9px; border: 2px solid var(--signal); border-bottom: 0; border-radius: 9px 9px 0 0; }
 .console-nav-link:focus-visible, .console-brand:focus-visible, .console-tab:focus-visible { outline: 2px solid var(--ring); outline-offset: 6px; border-radius: 3px; }
 .console-account { min-width: 0; justify-self: end; max-width: 260px; }
 /* Between the drawer and a wide screen the menu needs the room: the account
@@ -210,13 +214,13 @@
 .console-drawer nav { display: grid; gap: 4px; }
 .console-drawer-link { position: relative; display: grid; gap: 4px; padding: 12px 0 12px 24px; color: var(--muted-foreground); font-size: 22px; font-weight: 500; text-decoration: none; }
 .console-drawer-link[aria-current="page"] { color: var(--foreground); }
-.console-drawer-link[aria-current="page"]::before { content: ""; position: absolute; top: 19px; left: 0; width: 10px; height: 16px; border: 2px solid var(--primary); border-bottom: 0; border-radius: 7px 7px 0 0; }
+.console-drawer-link[aria-current="page"]::before { content: ""; position: absolute; top: 19px; left: 0; width: 10px; height: 16px; border: 2px solid var(--signal); border-bottom: 0; border-radius: 7px 7px 0 0; }
 .console-nav-purpose { font-size: 12px; font-weight: 400; color: var(--muted-foreground); }
 .console-drawer-account { margin-top: auto; padding-top: 24px; }
 .console-tabs { display: flex; gap: 28px; margin-top: 24px; border-bottom: 1px solid var(--border); }
 .console-tab { position: relative; padding-bottom: 14px; font-size: 14px; color: var(--muted-foreground); text-decoration: none; white-space: nowrap; }
 .console-tab[aria-current="page"] { color: var(--foreground); }
-.console-tab[aria-current="page"]::after { content: ""; position: absolute; bottom: -1px; left: 0; right: 0; height: 2px; background: var(--primary); }
+.console-tab[aria-current="page"]::after { content: ""; position: absolute; bottom: -1px; left: 0; right: 0; height: 2px; background: var(--signal); }
 @media (max-width: 1023px) {
   .console-bar { display: flex; min-height: 64px; gap: 16px; }
   .console-nav, .console-account { display: none; }

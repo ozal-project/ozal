@@ -3,217 +3,268 @@ import Base from "../layouts/Base.astro";
 import Header from "../components/Header.astro";
 import Footer from "../components/Footer.astro";
 import Engine from "../components/Engine.astro";
-import EdgeMap from "../components/EdgeMap.astro";
+import Door from "../components/Door.astro";
 import Logo from "../components/Logo.astro";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 
 const repo = "https://github.com/ozal-project/ozal";
-// The Ozal repository is public; Ozal release artifacts are not published yet.
-const sourcePublic = true;
 
+// A still keeps its name when scripts/demo/tour.mjs recaptures it, and
+// browsers cache it for hours, so its URL carries a hash of its content: a
+// new capture is a new URL and nobody sees the old screen. The build runs in
+// site/, so public/ is relative to the working directory.
+const shot = (name: string) => `/shots/${name}.jpg?v=${createHash("sha256").update(readFileSync(`${process.cwd()}/public/shots/${name}.jpg`)).digest("hex").slice(0, 10)}`;
+
+// The usual ways to share an internal tool, and what each one costs.
+const options = [
+  { t: "Open a port", d: "Point the domain at the app and publish it.", cost: "The app's own login is all that stands between it and the internet." },
+  { t: "Rent a gateway", d: "Put a hosted service in front of it.", cost: "Its accounts, its pricing and its outages now sit in your access path." },
+  { t: "Build it by hand", d: "Run a reverse proxy and add the rest yourself.", cost: "Identity, certificates and audit, wired together and kept working by you." },
+];
+
+// The checks a request passes on the edge, in the order they run.
+const pipeline = [
+  { s: "trust", d: "Establishes who is really asking: the client address, trusted proxies and the origin certificate." },
+  { s: "identify", d: "Finds the signed-in person, from a passkey or your OIDC provider. Ozal never stores a password. Nobody signed in means a trip to sign in." },
+  { s: "authorize", d: "Applies the app's rule and returns one decision, with a stable code and a reason." },
+  { s: "route", d: "Looks the hostname up in a routing snapshot that is swapped atomically on every change." },
+  { s: "forward", d: "Sends the request to the app or static site, with the person's identity attached." },
+];
+
+// One story in five screens. Each still is cropped to the part that matters;
+// the crop itself is set per step in styles.css. A console step also has a
+// phone-width still (<img>-narrow.jpg, 840 px wide, narrowH tall) of the one
+// detail it names, shown below 861 px.
+const steps = [
+  { role: "Operator", t: "The operator sees what needs attention", d: "One thing is wrong: an app that does not answer. Below it, who got in and why the others were refused.", img: "overview", w: 2000, h: 1600, narrowH: 1114, alt: "The console Overview with an app that is not answering, and who got in and why others were refused." },
+  { role: "Operator", t: "Inviting Ana", d: "The operator invites her by email. She gets a one-time link and creates a passkey on her own device. There is no password to share.", img: "people", w: 2000, h: 1600, narrowH: 1070, alt: "The People page listing Ana, Bob and Carla with their passkeys." },
+  { role: "Ana", t: "Ana sees only her apps", d: "Grafana, Billing and the wiki. Nothing else is listed, and a sensitive app can ask her to sign in again.", img: "portal", w: 840, h: 1322, narrow: true, alt: "Ana's page lists the apps her account may open." },
+  { role: "Bob", t: "Bob, from another company, is refused", d: "He gets a clear answer with a reference he can pass on, and a way back to his own apps. Not a bare error.", img: "refused", w: 840, h: 898, narrow: true, alt: "Bob's refusal page names the app, his account and a reference code." },
+  { role: "Operator", t: "The log explains both", d: "Every decision with its code and reason: why Ana got in and why Bob did not. A durable audit trail of access and admin changes is available when configured.", img: "access-log", w: 2000, h: 1600, narrowH: 880, alt: "The Activity log listing allowed and refused requests with their reasons." },
+];
+
+// A domain as the console shows it (demo data): its certificate and the one
+// DNS record a new domain needs.
+const zone = { name: "acme.io", state: "Waiting to issue", cert: "Not issued yet", renew: "After the first certificate", apps: "1 · status.acme.io",
+  record: { type: "CNAME", name: "_acme-challenge.acme.io", value: "acme.io.edge.acme.dev" } };
+
+// Only what the rest of the page does not already show: sign-in is in the
+// pipeline and the tour, the record of decisions in the tour's last step.
+const facts = [
+  { t: "Static sites with history", d: "Publish a build from GitHub Actions or upload it. Every deployment is kept, and going back to the previous one is a single step." },
+];
 
 // "In use" runs on the author's server; "Tested" is covered by automated
 // tests only; "Unreleased" is on main but not in alpha.1.
 const works = [
   { t: "Routing by hostname", d: "Any HTTP app, with health checks.", e: "In use" },
   { t: "Automatic HTTPS", d: "Certificates issued and renewed for you.", e: "In use" },
+  { t: "Static sites", d: "Deploys from GitHub Actions, one-step rollback.", e: "In use" },
   { t: "Sign-in per app", d: "Passkeys or your OIDC provider.", e: "Tested" },
   { t: "Explainable decisions", d: "A code and a reason for every answer.", e: "Tested" },
-  { t: "Static sites", d: "Deploys from GitHub Actions, one-step rollback.", e: "In use" },
   { t: "Domains", d: "One certificate per domain, renewed on its own.", e: "Unreleased" },
   { t: "Operator console", d: "Who got in and what changed, in plain words.", e: "Unreleased" },
 ];
-
-const pipeline = [
-  { s: "trust", d: "Who is really asking: client IP, trusted proxies, origin certificate.", state: "built" },
-  { s: "ratelimit", d: "Per visitor and per app limits.", state: "building" },
-  { s: "shield", d: "Rules and challenges for suspicious traffic.", state: "planned" },
-  { s: "identify", d: "Passkeys, or your OIDC provider.", state: "built" },
-  { s: "authorize", d: "One pure decision with a code and a reason.", state: "built" },
-  { s: "route", d: "Host lookup in an atomic snapshot.", state: "built" },
-  { s: "forward", d: "HTTP upstream or a static site. Tunnels are experimental.", state: "built" },
-] as const;
-// Labels for the pipeline stage states.
-const stateWord = { built: "Built", building: "In progress", planned: "Planned" } as const;
-
-// The console's "How private access works", word for word.
-const flow = [
-  { t: "A visitor opens", d: "grafana.acme.dev", mono: true },
-  { t: "Ozal asks them to sign in", d: "With a passkey: fingerprint, face or PIN. No passwords." },
-  { t: "Ozal checks your rule", d: "Only the people you choose get through. Others see a “no access” page." },
-  { t: "Your app receives them", d: "Already signed in, with their email. The app needs no login of its own." },
-];
-
-// A Domains page as the console shows it (demo data): one card per domain,
-// its certificate, and the one DNS record a new domain needs.
-const zones = [
-  { name: "acme.dev", state: "Active", lamp: "ok", cert: "Valid until Jan 28, 2027 · 89 days", renew: "Dec 29, 2026", apps: "3 · grafana.acme.dev, wiki.acme.dev…" },
-  { name: "acme.io", state: "Waiting to issue", lamp: "wait", cert: "Not issued yet", renew: "After the first certificate", apps: "1 · status.acme.io",
-    record: { type: "CNAME", name: "_acme-challenge.acme.io", value: "acme.io.edge.acme.dev" } },
-];
-
-
-const steps = [
-  { short: "What needs you", t: "The operator sees what needs attention", d: "One thing is wrong: an app that does not answer. A live map shows every app behind the edge, with who got in and what changed below it.", img: "overview", w: 2560, h: 1600, alt: "The console Overview with an app that is not answering, recent changes and access decisions." },
-  { short: "Invite Ana", t: "Inviting Ana", d: "The operator invites her by email. She gets a one-time link and creates a passkey on her own device. No password to share.", img: "people", w: 2560, h: 1600, alt: "The People page with an invitation form and the list of invited people." },
-  { short: "Ana's apps", t: "Ana sees only her apps", d: "Grafana, Billing and the wiki. Nothing else is listed, and a sensitive app can ask her to sign in again.", img: "portal", w: 840, h: 1438, narrow: true, alt: "Ana's page lists the apps her account may open." },
-  { short: "Bob is refused", t: "Bob, from another company, is refused", d: "He gets a clear answer with the reason and a way back to his own apps, not a bare error.", img: "refused", w: 840, h: 702, narrow: true, alt: "Bob's refusal page names the reason and links back to his apps." },
-  { short: "The log", t: "The log explains both", d: "Every decision with its reason: why Ana got in and why Bob did not.", img: "access-log", w: 2560, h: 1600, alt: "The access log listing allowed and refused requests with their reasons." },
-];
+const slug = (e: string) => e.toLowerCase().replace(" ", "-");
 ---
 <Base title="Ozal — the front door for your self-hosted apps" description="Put your internal apps on the internet without a VPN. Ozal signs people in, checks your rules and only then lets them reach the app. Self-hosted, one Go binary.">
-  <Header here="home" />
+  <Header />
 
   <main id="main-content" tabindex="-1">
     <section class="hero frame" aria-labelledby="hero-title">
       <div class="hero-copy">
-        <p class="hero-mark"><Logo size={52} entrance id="logo-hero" /><span>Open source · early alpha</span></p>
-        <h1 id="hero-title">The front door for your self&#8209;hosted apps.</h1>
+        <p class="hero-mark"><Logo size={44} entrance id="logo-hero" /><span class="label">Open source · early alpha</span></p>
+        <h1 id="hero-title"><span>The <em class="loud">front door</em></span> <span>for your</span> <span>self&#8209;hosted apps.</span></h1>
         <p class="hero-description">Put Grafana, a wiki or any internal tool on the internet. Ozal signs people in, checks your rules, and only then lets them reach the app. No VPN, one Go binary.</p>
         <div class="hero-actions">
-          <a class="button button-brand" href="#how">See how it works <span aria-hidden="true">↓</span></a>
-          <a class="text-link" href="#engine">Try an access decision <span aria-hidden="true">↓</span></a>
+          <a class="button" href="#start">Get started <span aria-hidden="true">↓</span></a>
+          <a class="text-link" href="#engine">Try the live demo <span aria-hidden="true">↓</span></a>
         </div>
-        <p class="hero-note">Early alpha, running on the author's server. If you know Cloudflare Access or Pomerium: the same idea, on a server you own.</p>
+        <p class="hero-note">If you know Cloudflare Access or Pomerium: the same idea, on a server you own.</p>
       </div>
-      <dl class="compare" aria-label="Before and after Ozal">
-        <div class="compare-before">
-          <dt>Without it</dt>
-          <dd><code>grafana.yourdomain.com</code> answers anyone who finds it. Every app has its own login, or none.</dd>
-        </div>
-        <div class="compare-after">
-          <dt>With Ozal</dt>
-          <dd>People sign in once, with a passkey or the login you already use (Google, Microsoft, any OIDC provider).</dd>
-          <dd>Your rules decide: "only <code>@acme.dev</code> emails open Grafana", "only Ana opens Billing".</dd>
-          <dd>Every attempt is logged with its reason, so you can see who got in and why someone did not.</dd>
-        </div>
-      </dl>
+      <Door />
+    </section>
+
+    <section class="section frame" aria-labelledby="try-title">
+      <div class="head">
+        <p class="label">Live demo</p>
+        <h2 id="try-title">Who can open what. Ask the real engine.</h2>
+        <p>Four people, four apps, sixteen answers from the gateway's own decision code, compiled to WebAssembly and running in your browser. Choose a cell to see why. Nothing is sent anywhere.</p>
+      </div>
+      <Engine />
+    </section>
+
+    <section class="section frame" aria-labelledby="why-title">
+      <div class="head">
+        <p class="label">Why it exists</p>
+        <h2 id="why-title">Sharing an internal tool usually costs you something.</h2>
+      </div>
+      <ul class="options">
+        {options.map((o) => <li><h3>{o.t}</h3><p>{o.d}</p><p class="options-cost">{o.cost}</p></li>)}
+        <li class="options-ozal"><h3>Or one front door</h3><p>A single binary on your server that every request reaches first.</p><p class="options-cost">HTTPS, sign-in, a rule per app and a reason for every answer. Your apps do not change.</p></li>
+      </ul>
     </section>
 
     <section id="how" class="section frame" aria-labelledby="how-title">
-      <div class="section-intro">
-        <h2 id="how-title">Everyone goes through one door.</h2>
-        <p>Your apps stop facing the internet directly. Every request reaches Ozal first, which checks who is asking and either lets them through, asks them to sign in, or refuses with a reason. The apps themselves do not change.</p>
+      <div class="head">
+        <p class="label">How it works</p>
+        <h2 id="how-title">Every request, the same checks, in the same order.</h2>
       </div>
-      <EdgeMap />
       <div class="how">
         <div>
-          <h3 class="sub-title">The same order, every request.</h3>
-          <ol class="pipeline-strip">{pipeline.map((p) => <li><strong>{p.s}</strong><p>{p.d}</p><span class={`small pipeline-state ${p.state}`}>{stateWord[p.state]}</span></li>)}</ol>
+          <ol class="pipeline">{pipeline.map((p) => <li><strong>{p.s}</strong><p>{p.d}</p></li>)}</ol>
+          <p class="pipeline-note small quiet">Rate limiting runs between trust and identify. It is experimental, so it is left out here.</p>
         </div>
-        <div class="terminal" data-ui><pre><code>$ ozal policy explain \
+        <div class="how-side">
+          <figure class="terminal" data-ui data-type>
+            <figcaption class="terminal-title">Ask why, from the command line</figcaption>
+<pre><code><span class="t-dim">$</span> <b>ozal policy explain</b> \
     -host grafana.acme.dev \
     -email bob@other.org -verified
 
 route     grafana.acme.dev (protected)
 policy    allowed_domains=[acme.dev]
-decision  denied
-code      domain_not_allowed
+decision  <span class="t-no">denied</span>
+code      <b>domain_not_allowed</b>
 reason    account's email domain
-          is not on the allowed list</code></pre><p class="small quiet">Any decision can be traced from the CLI, the console's log or the live demo, with the same code.</p></div>
-      </div>
-    </section>
-
-    <section id="private" class="section frame" aria-labelledby="private-title">
-      <div class="section-intro">
-        <h2 id="private-title">Make an app private in four steps.</h2>
-        <p>Pick the people or groups who may open it. Ozal puts a sign-in in front of the app; the app itself does not change and needs no login of its own.</p>
-      </div>
-      <ol class="flow">{flow.map((s, i) => (
-        <li><span class="flow-n" aria-hidden="true">{i + 1}</span><h3>{s.t}</h3><p class:list={[s.mono && "flow-mono"]}>{s.d}</p></li>
-      ))}</ol>
-      <div class="receives">
-        <div>
-          <h3 class="sub-title">What your app receives.</h3>
-          <p class="soft">Every request that reaches the app carries the signed-in person. Ozal removes these headers from what visitors send, so they cannot be faked, and never forwards its session cookie.</p>
-          <p class="quiet small">An app with its own login keeps it: Ozal decides who reaches the app, not what they can do inside.</p>
-        </div>
-        <div class="terminal" data-ui><pre><code>GET /dashboard HTTP/1.1
+          is not on the allowed list</code></pre>
+            <p class="terminal-note">The same code appears in the console's log and on the page the refused person sees.</p>
+          </figure>
+          <figure class="terminal" data-ui>
+            <figcaption class="terminal-title">What your app receives</figcaption>
+<pre><code>GET /dashboard HTTP/1.1
 Host: grafana.acme.dev
-X-Auth-Request-Email: ana@acme.dev
-X-Auth-Request-User: sb:7f3c…e21a</code></pre><p class="small quiet">Use them to show who is signed in or to link records to a person.</p></div>
+<b>X-Auth-Request-Email: ana@acme.dev</b>
+<b>X-Auth-Request-User: sb:7f3c…e21a</b></code></pre>
+            <p class="terminal-note">Ozal strips these headers from what visitors send, so they cannot be faked, and never forwards its session cookie. An app with its own login keeps it: Ozal decides who reaches the app, not what they do inside.</p>
+          </figure>
+        </div>
       </div>
     </section>
 
-    <section id="domains" class="section frame" aria-labelledby="domains-title">
-      <div class="section-intro">
-        <h2 id="domains-title">Your domains, one certificate each.</h2>
-        <p>Add a domain once and every address under it gets HTTPS. Each domain has its own certificate and renews on its own schedule, so one failing renewal never takes the others down. A new domain needs a single DNS record, and Ozal never asks for access to your DNS account.</p>
-      </div>
-      <div class="window zone-window" data-ui>
-        <span class="window-bar" aria-hidden="true"><i></i><i></i><i></i><b>Operator console · Domains · demo workspace</b></span>
-        <ul class="zones" aria-label="Example domains">{zones.map((z) => (
-          <li class="zone-card">
-            <div class="zone-head">
-              <div><h3>{z.name}</h3><p class="quiet small">Covers {z.name} and every address like <code>app.{z.name}</code></p></div>
-              <span class="zone-state"><span class={`lamp lamp-${z.lamp}`} aria-hidden="true"></span>{z.state}</span>
-            </div>
-            <dl class="zone-facts">
-              <div><dt>Certificate</dt><dd>{z.cert}</dd></div>
-              <div><dt>Next renewal</dt><dd>{z.renew}</dd></div>
-              <div><dt>Applications</dt><dd>{z.apps}</dd></div>
-            </dl>
-            {z.record && (
-              <div class="zone-record">
-                <p class="small soft">Create this DNS record at your DNS provider. It lets Ozal prove it controls {z.name} for every renewal.</p>
-                <dl class="dns-record">
-                  <div><dt>Type</dt><dd><code>{z.record.type}</code></dd></div>
-                  <div><dt>Name</dt><dd><code>{z.record.name}</code></dd></div>
-                  <div><dt>Value</dt><dd><code>{z.record.value}</code></dd></div>
-                </dl>
-              </div>
-            )}
-          </li>
-        ))}</ul>
-      </div>
-      <p class="scope-note small quiet">Ozal checks the record before it asks the certificate authority, and keeps serving the current certificate while a renewal runs.</p>
-    </section>
-
-    <section class="try section frame" aria-labelledby="try-title">
-      <div class="section-intro">
-        <h2 id="try-title">Ask it a question.</h2>
-        <p>Pick an app and a person. The answer comes from the real access decision, the same Go code as the gateway, compiled to WebAssembly and running in your browser. Nothing is sent anywhere.</p>
-      </div>
-      <Engine />
-    </section>
 
     <section id="tour" class="section frame" aria-labelledby="tour-title">
-      <div class="section-intro">
-        <h2 id="tour-title">See it work.</h2>
-        <p>One story in five screens: an invitation, an allowed visit, a refusal and the log that explains both. Real screens from a demo workspace.</p>
+      <div class="head">
+        <p class="label">The console</p>
+        <h2 id="tour-title">One afternoon, seen from both sides of the door.</h2>
+        <p>An invitation, an allowed visit, a refusal and the log that explains both. Real screens from a demo workspace.</p>
+        <p class="availability"><span class="works-tag works-unreleased">Unreleased</span> The console is on main, not yet in alpha.1.</p>
       </div>
-      <div class="walk">
-        <fieldset class="walk-tabs">
-          <legend class="sr-only">Choose a step</legend>
-          {steps.map((st, i) => <label><input type="radio" name="walk" id={`walk-${i + 1}`} checked={i === 0} /><span><b>{i + 1}</b>{st.short}</span></label>)}
-        </fieldset>
+      <div class="walk" data-walk>
         {steps.map((st, i) => (
-          <article class="step" id={`step-${i + 1}`}>
-            <div class="step-copy"><h3>{st.t}</h3><p>{st.d}</p>{i < steps.length - 1 && <label class="walk-next" for={`walk-${i + 2}`}>Next: {steps[i + 1].short} <span aria-hidden="true">→</span></label>}</div>
-            <figure class={`step-shot ${st.narrow ? "step-narrow" : ""}`}>
-              <div class="window"><span class="window-bar" aria-hidden="true"><i></i><i></i><i></i><b>{st.narrow ? "Ana's browser" : "Operator console"} · demo workspace</b></span><a href={`/shots/${st.img}.jpg`} aria-label={`Open full size: ${st.alt}`}><img src={`/shots/${st.img}.jpg`} width={st.w} height={st.h} loading={i === 0 ? "eager" : "lazy"} alt={st.alt} /></a></div>
-              <figcaption><a class="text-link" href={`/shots/${st.img}.jpg`}>Open full size <span aria-hidden="true">↗</span></a></figcaption>
+          <article class:list={["step", st.narrow && "step-narrow", i === 0 && "is-active"]} id={`step-${i + 1}`}>
+            <div class="step-copy">
+              <p class="label">{st.role}<span class="walk-count"> · {i + 1} of {steps.length}</span></p>
+              <h3>{st.t}</h3>
+              <p>{st.d}</p>
+              <p class="step-links"><a class="text-link" href={shot(st.img)}>Open full size <span aria-hidden="true">↗</span></a></p>
+            </div>
+            <figure class="step-shot">
+              <div class="window"><span class="window-bar" aria-hidden="true"><i></i><i></i><i></i><b>{st.narrow ? `${st.role}'s browser` : "Operator console"} · demo workspace</b></span><a class={`crop crop-${st.img}`} href={shot(st.img)} aria-label={`Open full size: ${st.alt}`}><picture>{st.narrowH && <source media="(max-width: 860px)" srcset={shot(`${st.img}-narrow`)} width="840" height={st.narrowH} />}<img src={shot(st.img)} width={st.w} height={st.h} loading={i === 0 ? "eager" : "lazy"} alt={st.alt} /></picture></a></div>
             </figure>
           </article>
         ))}
       </div>
     </section>
 
-    <section id="today" class="section frame" aria-labelledby="today-title">
-      <div class="section-intro"><h2 id="today-title">What works today.</h2><p>An early alpha, used every day by one operator. Each feature says how far it has been proven.</p></div>
-      <ul class="works">{works.map((w) => (
-        <li class={`works-${w.e.toLowerCase().replace(" ", "-")}`}><span class="works-tag">{w.e}</span><h3>{w.t}</h3><p>{w.d}</p></li>
-      ))}<li class="works-next"><span class="works-tag">Experimental</span><h3>Outside the alpha</h3><p>Tunnels, rate limiting and Telegram alerts.</p></li></ul>
-      <dl class="works-legend small quiet" aria-label="What the tags mean">
-        <div><dt class="works-tag works-in-use">In use</dt><dd>runs on the author's server</dd></div>
-        <div><dt class="works-tag">Tested</dt><dd>covered by automated tests</dd></div>
-        <div><dt class="works-tag works-unreleased">Unreleased</dt><dd>on main, not in alpha.1</dd></div>
-      </dl>
+    <section class="section frame" aria-labelledby="more-title">
+      <div class="head">
+        <p class="label">Also in the binary</p>
+        <h2 id="more-title">The rest of a front door, included.</h2>
+      </div>
+      <div class="more">
+        <div>
+          <div class="window" data-ui>
+            <span class="window-bar" aria-hidden="true"><i></i><i></i><i></i><b>Operator console · Domains · demo workspace</b></span>
+            <div class="zones">
+              <div class="zone-card">
+                <div class="zone-head">
+                  <div><h3>{zone.name}</h3><p class="quiet small">Covers {zone.name} and every address like <code>app.{zone.name}</code></p></div>
+                  <span class="zone-state"><span class="lamp lamp-wait" aria-hidden="true"></span>{zone.state}</span>
+                </div>
+                <dl class="zone-facts">
+                  <div><dt>Certificate</dt><dd>{zone.cert}</dd></div>
+                  <div><dt>Next renewal</dt><dd>{zone.renew}</dd></div>
+                  <div><dt>Applications</dt><dd>{zone.apps}</dd></div>
+                </dl>
+                <div class="zone-record">
+                  <p class="small soft">Create this DNS record at your DNS provider. It lets Ozal prove it controls {zone.name} for every renewal.</p>
+                  <dl class="dns-record">
+                    <div><dt>Type</dt><dd><code>{zone.record.type}</code></dd></div>
+                    <div><dt>Name</dt><dd><code>{zone.record.name}</code></dd></div>
+                    <div><dt>Value</dt><dd><code>{zone.record.value}</code></dd></div>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="more-caption small quiet">Ozal checks the record before it asks the certificate authority, and keeps serving the current certificate while a renewal runs.</p>
+          <p class="availability"><span class="works-tag works-unreleased">Unreleased</span> Domains are on main, not yet in alpha.1.</p>
+        </div>
+        <ul class="facts">
+          <li><h3>HTTPS for every address, one certificate per domain</h3><p>Add a domain once and every address under it gets HTTPS. Each domain renews on its own schedule, so one failing renewal never takes the others down. A new domain needs a single DNS record, and Ozal never asks for access to your DNS account.</p></li>
+          {facts.map((f) => <li><h3>{f.t}</h3><p>{f.d}</p></li>)}
+        </ul>
+      </div>
     </section>
 
+    <section id="status" class="section frame" aria-labelledby="status-title">
+      <div class="head">
+        <p class="label">Status</p>
+        <h2 id="status-title">What works today, and how far it is proven.</h2>
+        <p>An early alpha, used every day by one operator. Interfaces and configuration may still change.</p>
+      </div>
+      <div class="status">
+        <div>
+          <ul class="works">{works.map((w) => (
+            <li class={`works-${slug(w.e)}`}><h3>{w.t}</h3><p>{w.d}</p><span class="works-tag">{w.e}</span></li>
+          ))}<li class="works-next"><h3>Outside the alpha</h3><p>Tunnels, rate limiting and Telegram alerts.</p><span class="works-tag">Experimental</span></li></ul>
+          <dl class="works-legend small quiet" aria-label="What the tags mean">
+            <div><dt class="works-tag works-in-use">In use</dt><dd>runs on the author's server</dd></div>
+            <div><dt class="works-tag">Tested</dt><dd>covered by automated tests</dd></div>
+            <div><dt class="works-tag works-unreleased">Unreleased</dt><dd>on main, not in alpha.1</dd></div>
+          </dl>
+        </div>
+        <div class="fit">
+          <div class="fit-for">
+            <h3>Made for</h3>
+            <ul>
+              <li>A small team, or one person with a homelab.</li>
+              <li>Sharing dashboards, previews and admin panels with a few people you know.</li>
+              <li>Anyone who wants to see exactly who can open an app, and remove access at once.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Not for</h3>
+            <ul>
+              <li>Arbitrary TCP or UDP traffic. Ozal is not a VPN.</li>
+              <li>Replacing an app's own permissions. Ozal decides who reaches the app, not what they do inside.</li>
+              <li>Production you cannot afford to lose. It is an early alpha.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
 
-    <section id="start" class="availability frame section" aria-labelledby="start-title">
-      <div><h2 id="start-title">Explore the alpha.</h2><p>{sourcePublic ? "Explore the source and quickstart. Ozal release downloads are not published yet." : "The code and downloads are private for now."}</p></div>
-      <div class="availability-actions">{sourcePublic ? <a class="button button-brand" href={repo}>Source on GitHub <span aria-hidden="true">↗</span></a> : <a class="button button-brand" href="https://octaviosantacruz.com">Visit the maintainer's site <span aria-hidden="true">↗</span></a>}<a class="text-link" href="#how">Back to how it works ↑</a></div>
+    <section id="start" class="start frame section" aria-labelledby="start-title">
+      <div class="start-copy">
+        <p class="label">Get started</p>
+        <h2 id="start-title">Put it in front of an app on port 3000.</h2>
+        <p>Build the binary and run one command. It creates a new private installation on your machine and prints how to start it, invite yourself and sign in. Nothing is published yet: it does not change DNS or expose the app to the internet.</p>
+        <p>When it works locally, the guide takes you from there to a protected address and your own domain.</p>
+        <div class="start-actions">
+          <a class="button" href="/docs/first-application/">Publish your first application <span aria-hidden="true">→</span></a>
+          <a class="text-link" href={repo}>Source on GitHub <span aria-hidden="true">↗</span></a>
+        </div>
+      </div>
+      <figure class="terminal" data-ui>
+        <figcaption class="terminal-title"><span>Needs Go and an app listening on 127.0.0.1:3000</span><button type="button" class="copy" data-copy hidden>Copy</button></figcaption>
+<pre><code data-copy-source>git clone https://github.com/ozal-project/ozal
+cd ozal
+go build ./cmd/ozal
+./ozal setup -dir ./my-edge -target http://127.0.0.1:3000</code></pre>
+      </figure>
     </section>
   </main>
   <Footer />
