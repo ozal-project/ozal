@@ -124,7 +124,24 @@ is not found. Confirmation for a session opened on the HTTPS login host returns
 to that host for a full sign-in; after returning, the person retries the action
 with the fresh session. It never tries that RP's passkey on loopback or replays
 a mutation across navigation. Sessions opened on loopback still confirm there.
-The provider is a label for the owner, never a trust decision.
+The provider is a label for the owner, never a trust decision. An unknown provider's
+receipt asks where the visitor saved the passkey without inferring that place.
+Continue receives focus, so the optional name does not open a mobile keyboard.
+
+Visitor enrolment checks the invitation before opening an authenticator prompt.
+An unavailable link offers sign-in with an existing passkey and keeps the requested
+destination for server validation; a missing fragment asks for the original link.
+A network failure leaves a retry, and closing a creation prompt does not consume
+the invitation. Help during creation opens in a separate tab without the invitation or a
+referrer: navigating away would discard the fragment already removed from history.
+The browser acceptance in `scripts/demo/visitor-passkeys-acceptance.mjs` exercises
+these paths on a disposable edge with virtual authenticators and checks 320 px and
+390 px layouts. Its simulated capabilities do not prove Firefox or password-manager
+compatibility.
+The visitor sign-in shows the saved-account field only after the browser confirms
+conditional mediation. Missing or failed detection leaves the ordinary sign-in
+button available, and a late answer never replaces a manually started prompt.
+
 After a visitor signs in with a passkey on another device or a security key
 (`authenticatorAttachment` is `cross-platform`) on a device that reports its
 own authenticator, the login page offers to add one there, through the

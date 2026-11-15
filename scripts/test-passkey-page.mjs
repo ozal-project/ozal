@@ -12,12 +12,13 @@ const src = readFileSync(new URL("../internal/passkey/assets/passkey.js", import
 function render(search, { oidc = "", webauthn = true, page = "login", fetch = () => new Promise(() => {}), assign = () => {}, caps, get = () => new Promise(() => {}), create = () => new Promise(() => {}), hash = "", uvpa, storage = {}, signals = {}, timer = setTimeout } = {}) {
   const els = {};
   const el = (id) => (els[id] ??= {
-    id, textContent: "", value: "", src: "", hidden: id === "oidc" || id === "recovery-warning" || id === "receipt" || id === "receipt-return" || id === "receipt-icon" || id === "bridge" || id === "backup-hint", open: false, href: "", disabled: false, dataset: {}, children: [], on: {},
-    addEventListener(ev, fn) { this.on[ev] = fn; }, focus() {}, setAttribute() {}, append(...c) { this.children.push(...c); }, replaceChildren(...c) { this.children = c; },
+    id, textContent: "", value: "", src: "", hidden: id === "oidc" || id === "recovery-warning" || id === "receipt" || id === "receipt-return" || id === "receipt-icon" || id === "bridge" || id === "backup-hint" || id === "invitation-unavailable", open: false, href: "", disabled: false, dataset: {}, children: [], on: {},
+    addEventListener(ev, fn) { this.on[ev] = fn; }, focus() { this.focused = true; }, setAttribute() {}, append(...c) { this.children.push(...c); }, replaceChildren(...c) { this.children = c; },
     querySelector(q) { return q === "a" ? this.children.find((c) => c.href) || null : null; },
   });
   ["title", "intro", "action", "oidc", "status", "first-time", "username", "sites", "devices", "who", "email", "signout", "apps", "manage", "choices", "choice-list", "use-phone", "use-key", "recovery-warning", "sessions", "signout-all", "signout-all-confirm", "also-admin", "receipt", "receipt-skip", "receipt-where", "receipt-icon", "receipt-return", "receipt-form", "receipt-name", "receipt-continue", "bridge", "bridge-continue", "bridge-add", "bridge-never", "backup-hint"].forEach(el);
   const label = { hidden: false };
+  ["enrol-help", "invitation-unavailable", "invitation-signin", "receipt-name-label"].forEach(el);
   const head = [];
   let ready;
   const document = {
@@ -192,12 +193,81 @@ for (const broken of [async () => { throw new Error("offline"); }, async () => (
   });
   await tick();
   assert.equal(page.actionLabel, "Check link again");
+  assert.equal(page.el("invitation-unavailable").hidden, true, "a network or metadata failure does not declare the link unusable");
+  assert.match(page.status, /Check your connection/);
   assert.equal(page.recoveryWarning, false);
   failInfo = false;
   await page.click();
   assert.equal(page.recoveryWarning, true);
   assert.equal(page.actionLabel, "Replace my passkeys");
   assert.ok(calls.every((url) => url.endsWith("/info")), "a retry checks metadata; the person must click again to replace");
+}
+
+// Unavailable invitations offer an existing sign-in without repeatedly
+// checking a consumed link or opening a passkey creation prompt. A missing
+// fragment, including a reload, sends the person back to the original link.
+{
+  let prompts = 0;
+  const calls = [];
+  page = render(rt, {
+    page: "enrol", hash: "#used-invitation",
+    fetch: async (url) => { calls.push(url); return { ok: false, status: 400, json: async () => ({ error: "Link unavailable" }) }; },
+    create: async () => { prompts++; return credential; },
+  });
+  await tick();
+  assert.equal(page.title, "This invitation is unavailable");
+  assert.equal(page.passkey, "hidden");
+  assert.equal(page.choices, "hidden");
+  assert.equal(page.el("enrol-help").hidden, true);
+  assert.equal(page.el("invitation-unavailable").hidden, false);
+  assert.equal(page.el("invitation-signin").href, "/_/auth/login" + rt, "existing sign-in keeps the destination for server validation");
+  assert.equal(page.el("invitation-signin").focused, true, "the available action takes focus when creation disappears");
+  assert.deepEqual(calls, ["/_/auth/enrol/info"]);
+  assert.equal(prompts, 0);
+
+  page = render(rt, { page: "enrol", fetch: async () => { throw new Error("must not send a missing invitation"); } });
+  assert.equal(page.title, "Open your invitation link");
+  assert.match(page.intro, /original invitation/);
+  assert.equal(page.choices, "hidden");
+  assert.equal(page.el("invitation-unavailable").hidden, false);
+  assert.equal(page.el("invitation-signin").href, "/_/auth/login" + rt);
+
+  page = enrol({
+    fetch: async (url) => url.endsWith("/info") ? creationReply(url) : { ok: false, status: 400, json: async () => ({ error: "Link unavailable" }) },
+    create: async () => { prompts++; return credential; },
+  });
+  await tick();
+  await page.click();
+  assert.equal(page.title, "This invitation is unavailable", "an invitation may expire after the initial check");
+  assert.equal(page.passkey, "hidden");
+  assert.equal(prompts, 0, "a failed begin never reaches the authenticator");
+}
+
+// Closing an enrolment prompt consumes no invitation; retrying in a
+// different place uses the same link and still shows the creation receipt.
+{
+  const sent = [];
+  let attempts = 0;
+  page = enrol({
+    fetch: async (url, init) => {
+      if (url.endsWith("/begin")) sent.push(JSON.parse(init.body));
+      return creationReply(url);
+    },
+    create: async () => {
+      if (++attempts === 1) throw new DOMException("technical browser detail", "NotAllowedError");
+      return credential;
+    },
+  });
+  await tick();
+  await page.click();
+  assert.match(page.status, /invitation has not been used/);
+  assert.doesNotMatch(page.status, /technical browser detail/);
+  assert.equal(page.passkey, "shown");
+  page.pick("manager");
+  await page.click();
+  assert.equal(attempts, 2);
+  assert.equal(sent.length, 2);
+  assert.deepEqual(sent[0], sent[1]);
 }
 
 page = render(rt + "&reauth=method&methods=oidc", { oidc: "Okta" });
@@ -234,6 +304,7 @@ assert.equal(page.el("receipt-where").textContent, "Saved in Bitwarden.");
 assert.equal(page.el("receipt-icon").src, "/_/auth/icons/bitwarden.svg");
 assert.match(page.el("receipt-return").textContent, /Bitwarden extension/);
 assert.equal(page.el("receipt-return").hidden, false);
+assert.equal(page.el("receipt-continue").focused, true, "Continue gets focus; an optional name does not open a phone keyboard");
 assert.deepEqual(page.siteLinks, [], "nothing moves on before Continue");
 page.el("receipt-name").value = "  Work laptop ";
 await submit(page);
@@ -248,6 +319,7 @@ await page.click();
 await tick();
 assert.doesNotMatch(page.el("receipt-where").textContent, /Synced passkey/, "a kind of passkey is never shown as a place");
 assert.match(page.el("receipt-where").textContent, /did not say where/);
+assert.equal(page.el("receipt-name-label").textContent, "Where did you save it?", "an unknown provider invites the person to record the place without guessing");
 assert.equal(page.el("receipt-icon").hidden, true);
 assert.equal(page.el("receipt-return").hidden, true);
 await submit(page);
@@ -337,6 +409,49 @@ await tick();
 page.click("use-key");
 await tick();
 assert.deepEqual(asked, [undefined, ["hybrid"], ["security-key"]], "the main button adds no hint; the shortcuts steer to the phone or the key");
+
+// Only a browser that confirms conditional mediation gets a saved-account
+// field. Missing, false or failed detection leaves the ordinary button usable.
+for (const support of [undefined, async () => false, async () => { throw new Error("not available"); }, () => { throw new Error("not available"); }]) {
+  let prompts = 0;
+  page = render(rt, {
+    signals: support ? { isConditionalMediationAvailable: support } : {},
+    fetch: async () => ({ ok: true, json: async () => ({ publicKey: { challenge: "AAAA" } }) }),
+    get: async () => { prompts++; throw notAllowed; },
+  });
+  await tick();
+  assert.equal(page.el("username").hidden, true);
+  page.click();
+  await tick();
+  assert.equal(prompts, 1, "manual sign-in works without autofill support");
+  assert.equal(page.passkey, "shown");
+}
+{
+  const mediations = [];
+  page = render(rt, {
+    signals: { isConditionalMediationAvailable: async () => true },
+    fetch: async () => ({ ok: true, json: async () => ({ publicKey: { challenge: "AAAA" } }) }),
+    get: (request) => { mediations.push(request.mediation); return new Promise(() => {}); },
+  });
+  await tick();
+  assert.equal(page.el("username").hidden, false);
+  assert.deepEqual(mediations, ["conditional"]);
+
+  let answer;
+  page = render(rt, {
+    signals: { isConditionalMediationAvailable: () => new Promise((resolve) => { answer = resolve; }) },
+    fetch: async () => ({ ok: true, json: async () => ({ publicKey: { challenge: "AAAA" } }) }),
+    get: (request) => { mediations.push(request.mediation); return new Promise(() => {}); },
+  });
+  await tick();
+  page.click();
+  await tick();
+  answer(true);
+  await tick();
+  assert.deepEqual(mediations, ["conditional", undefined], "late autofill detection never cancels a sign-in the person already started");
+  assert.equal(page.el("username").hidden, true);
+}
+
 page = render("", { page: "devices", fetch: () => new Promise(() => {}) });
 assert.equal(page.choices, "closed", "adding a passkey asks where to keep it too");
 

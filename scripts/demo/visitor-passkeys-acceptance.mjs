@@ -1,4 +1,4 @@
-// Browser acceptance for a visitor's own passkeys and sessions against an
+// Browser acceptance for visitor onboarding, passkeys and sessions against an
 // isolated real edge: each passkey is named after the browser it was made
 // in and renamed in place, the one behind this sign-in is marked, and each
 // session names its browser. A synced passkey is the same credential copied
@@ -35,6 +35,15 @@ const device = async (userAgent, viewport) => {
   return { context, page, cdp, authenticatorId };
 };
 const shot = async (page, name) => { if (shots) await page.screenshot({ path: join(shots, `${name}.png`), fullPage: true }); };
+const narrowCheck = async (page, name) => {
+  const original = page.viewportSize();
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), `${name} overflows at ${width}px`);
+    await shot(page, `${name}-${width}`);
+  }
+  await page.setViewportSize(original);
+};
 
 try {
   edge = await startDemoEdge({ binary, dir: root, dynamicPorts: true });
@@ -43,9 +52,73 @@ try {
 
   step = "Ana enrols on her laptop";
   const laptop = await device(MAC, { width: 1280, height: 900 });
-  await laptop.page.goto((await edge.invite("ana@acme.dev", "Ana")).link);
+  // Simulate an unavailable platform and one closed creation prompt. This
+  // exercises fallback UI, not Firefox or a real password-manager integration.
+  await laptop.page.addInitScript(() => {
+    Object.defineProperty(PublicKeyCredential, "getClientCapabilities", {
+      value: async () => ({ userVerifyingPlatformAuthenticator: false, hybridTransport: false }),
+    });
+    Object.defineProperty(PublicKeyCredential, "isConditionalMediationAvailable", { value: async () => false });
+    const create = navigator.credentials.create.bind(navigator.credentials);
+    navigator.credentials.create = async (options) => {
+      if (!sessionStorage.getItem("onboarding-prompt-closed")) {
+        sessionStorage.setItem("onboarding-prompt-closed", "1");
+        throw new DOMException("Closed by the visitor", "NotAllowedError");
+      }
+      return create(options);
+    };
+  });
+  const invitation = new URL((await edge.invite("ana@acme.dev", "Ana")).link);
+  invitation.searchParams.set("return_to", edge.appURL("grafana"));
+  const originalLink = invitation.href;
+  await laptop.page.route("**/_/auth/enrol/info", (route) => route.abort());
+  await laptop.page.goto(originalLink);
+  await laptop.page.getByRole("button", { name: "Check link again" }).waitFor();
+  assert.match(await laptop.page.locator("#status").textContent(), /Check your connection/);
+  assert.equal(await laptop.page.locator("#invitation-unavailable").isHidden(), true);
+  await laptop.page.unroute("**/_/auth/enrol/info");
+  await laptop.page.getByRole("button", { name: "Check link again" }).click();
+  await laptop.page.getByRole("button", { name: "Create passkey", exact: true }).waitFor();
+  assert.equal(new URL(laptop.page.url()).hash, "", "the invitation is removed from browser history");
+  await laptop.page.locator('[data-choice="manager"] input:checked').waitFor();
+  assert.equal(await laptop.page.locator("#choice-list label").count(), 4, "all places stay available");
+  await narrowCheck(laptop.page, "enrol-options");
+
+  step = "help opens separately without losing the invitation";
+  const popup = laptop.page.waitForEvent("popup");
+  await laptop.page.getByRole("link", { name: "Compare options (opens in a new tab)" }).click();
+  const help = await popup;
+  await help.waitForLoadState();
+  assert.equal(new URL(help.url()).hash, "#places");
+  assert.equal(await help.evaluate(() => window.opener === null), true);
+  await help.close();
+
+  step = "closing a prompt keeps the same invitation available";
   await laptop.page.locator("#action").click();
+  await laptop.page.locator("#status", { hasText: "Your invitation has not been used." }).waitFor();
+  assert.equal((await laptop.cdp.send("WebAuthn.getCredentials", { authenticatorId: laptop.authenticatorId })).credentials.length, 0);
+  await laptop.page.locator("#action").click();
+  await laptop.page.locator("#receipt:not([hidden])").waitFor();
+  assert.match(await laptop.page.locator("#receipt-where").textContent(), /did not say where/);
+  assert.equal(await laptop.page.locator("#receipt-name-label").textContent(), "Where did you save it?");
+  assert.equal(await laptop.page.evaluate(() => document.activeElement.id), "receipt-continue");
+  await shot(laptop.page, "enrol-receipt-desktop");
+  await narrowCheck(laptop.page, "enrol-receipt");
+  await laptop.page.getByRole("button", { name: "Continue", exact: true }).click();
+  await laptop.page.waitForURL(edge.appURL("grafana"));
+  await laptop.page.goto(`${LOGIN}/_/auth/me`);
   await laptop.page.waitForSelector("#who:not([hidden])", { timeout: 20_000 });
+
+  step = "a consumed invitation offers sign-in and retains the app destination";
+  await laptop.page.goto(originalLink);
+  await laptop.page.getByRole("heading", { name: "This invitation is unavailable" }).waitFor();
+  assert.equal(await laptop.page.locator("#choices").isHidden(), true);
+  assert.equal(await laptop.page.locator("#action").isHidden(), true);
+  assert.equal(new URL(await laptop.page.locator("#invitation-signin").getAttribute("href"), LOGIN).searchParams.get("return_to"), edge.appURL("grafana"));
+  await narrowCheck(laptop.page, "invitation-used");
+  await laptop.page.reload();
+  await laptop.page.getByRole("heading", { name: "Open your invitation link" }).waitFor();
+  assert.equal(await laptop.page.locator("#invitation-unavailable").isVisible(), true);
 
   step = "the passkey is named after the browser it was made in and marked as this sign-in";
   await laptop.page.goto(`${LOGIN}/_/auth/devices`);
@@ -109,10 +182,43 @@ try {
   await phone.page.locator("#sessions li").nth(1).waitFor({ state: "detached" });
   await laptop.page.goto(`${LOGIN}/_/auth/me`);
   await laptop.page.waitForURL((u) => u.pathname === "/_/auth/login", { timeout: 20_000 });
+  assert.equal(await laptop.page.locator("#username").isHidden(), true, "no saved-account field when autofill is unsupported");
+  const firstTime = laptop.page.locator("#first-time");
+  assert.equal(await firstTime.getAttribute("open"), null, "invitation instructions stay folded for returning visitors");
+  await firstTime.locator("summary").focus();
+  await laptop.page.keyboard.press("Enter");
+  assert.notEqual(await firstTime.getAttribute("open"), null, "first-time help opens by keyboard");
+  await laptop.page.keyboard.press("Enter");
   await shot(laptop.page, "laptop-signed-out");
 
+  step = "two named passkeys remain distinguishable and the second can sign in";
+  await phone.cdp.send("WebAuthn.removeVirtualAuthenticator", { authenticatorId: phone.authenticatorId });
+  const spare = await phone.cdp.send("WebAuthn.addVirtualAuthenticator", {
+    options: { protocol: "ctap2", transport: "internal", hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true },
+  });
+  await phone.page.goto(`${LOGIN}/_/auth/devices`);
+  await phone.page.locator("#action").click();
+  await phone.page.locator("#devices li").nth(1).waitFor();
+  const second = phone.page.locator("#devices li", { hasText: "Safari on iPhone" }).filter({ hasNot: phone.page.locator(".badge.current") });
+  await second.getByRole("button", { name: /^Rename / }).click();
+  await second.getByRole("textbox", { name: "Name for this passkey" }).fill("Spare phone");
+  await second.getByRole("button", { name: "Save", exact: true }).click();
+  await phone.page.locator("#devices li .provider", { hasText: "Spare phone" }).waitFor();
+  assert.equal((await phone.cdp.send("WebAuthn.getCredentials", { authenticatorId: spare.authenticatorId })).credentials.length, 1);
+  await phone.page.goto(`${LOGIN}/_/auth/me`);
+  await phone.page.locator("#signout").click();
+  await phone.page.waitForURL((url) => url.pathname === "/_/auth/login");
+  const again = phone.page.locator("#action").click({ timeout: 5_000 }).catch(() => {});
+  await phone.page.waitForURL(`${LOGIN}/_/auth/me`, { timeout: 20_000 });
+  await again;
+  await phone.page.goto(`${LOGIN}/_/auth/devices`);
+  const spareItem = phone.page.locator("#devices li", { hasText: "Spare phone" });
+  await spareItem.locator(".badge.current").waitFor();
+  assert.equal(await phone.page.locator("#devices li").count(), 2);
+  await shot(phone.page, "two-named-passkeys");
+
   assert.deepEqual(errors, [], "page errors");
-  console.log("Visitor passkeys acceptance passed: browser-named passkeys, rename in place, this-sign-in mark, synced passkey on a second browser, sessions named by browser, ending another session, no sideways scroll on a phone.");
+  console.log("Visitor acceptance passed: invitation retry, separate help, cancelled creation, receipt, used and missing invitations, named passkeys, second-browser sign-in, two passkeys, sessions and narrow layouts.");
 } catch (error) {
   console.error(`FAILED at: ${step}`);
   throw error;

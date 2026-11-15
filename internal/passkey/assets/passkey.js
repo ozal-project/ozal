@@ -28,7 +28,7 @@ async function post(path, body, signal) {
     body: JSON.stringify(body),
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw Object.assign(new Error(data.error || "The request failed."), { data });
+  if (!response.ok) throw Object.assign(new Error(data.error || "The request failed."), { data, status: response.status });
   return data;
 }
 
@@ -107,10 +107,10 @@ function show(message, kind) {
 function explain(error, page) {
   if (error.name === "NotAllowedError") {
     return page === "login"
-      ? "The sign-in did not finish: the prompt was closed, it timed out, or this device has no passkey for this site. If you have not created one yet, you need the invitation link (see below)."
-      : "The passkey was not created: the prompt was closed or it timed out. If it asked for something you do not have, choose another place to keep it and try again.";
+      ? "Sign-in did not finish. The prompt may have been closed, timed out, or found no passkey for this site. Try again, or check the other places below."
+      : "The passkey was not created. The prompt may have been closed, timed out, or found no available place to save it. Choose another option and try again.";
   }
-  if (error.name === "InvalidStateError") return "This device already has a passkey for this account.";
+  if (error.name === "InvalidStateError") return "A passkey for this account is already available here. Try signing in with it, or choose another place to save a new one.";
   // Other browser errors carry technical text meant for developers; say what
   // the visitor can do instead. Server errors are plain Errors with a message
   // written for people, and are shown as they are.
@@ -132,7 +132,7 @@ const choices = {
   device: { label: "This device", detail: "Windows Hello, Touch ID or the screen lock of this phone or tablet.", hints: ["client-device"] },
   manager: {
     label: "My password manager",
-    detail: "Its browser extension takes the prompt: for example Bitwarden (or self-hosted Vaultwarden), 1Password, Proton Pass or KeePassXC, or any other that saves passkeys.",
+    detail: "Unlock your manager's passkey extension in this browser.",
     hints: [],
   },
   phone: { label: "My phone", detail: "Scan the QR code the browser shows; this computer needs Bluetooth.", hints: ["hybrid"] },
@@ -381,8 +381,13 @@ function bridge(result) {
 
 function setupLogin(button, returnTo) {
   let pending = null;
+  let interacted = false;
+  const username = document.getElementById("username");
+  const label = document.querySelector("label[for=username]");
+  username.hidden = label.hidden = true;
 
   async function login(conditional, hints) {
+    if (!conditional) interacted = true;
     if (pending) pending.abort();
     const controller = new AbortController();
     pending = controller;
@@ -416,12 +421,16 @@ function setupLogin(button, returnTo) {
     const other = document.getElementById(id);
     if (other) other.addEventListener("click", () => login(false, choices[choice].hints).catch(fail));
   }
-  if (PublicKeyCredential.isConditionalMediationAvailable) {
-    PublicKeyCredential.isConditionalMediationAvailable().then((ok) => {
+  if (typeof PublicKeyCredential.isConditionalMediationAvailable === "function") {
+    Promise.resolve().then(() => PublicKeyCredential.isConditionalMediationAvailable()).then((ok) => {
       // The silent autofill attempt fails quietly: the button is still
       // there, and its errors are the ones worth showing.
-      if (ok) login(true).catch((error) => { button.disabled = false; if (error.name !== "AbortError") console.debug("passkey autofill:", error.name); });
-    });
+      if (ok && !interacted) {
+        username.hidden = label.hidden = false;
+        if (!new URLSearchParams(location.search).get("reauth")) document.getElementById("intro").textContent = "Choose the account saved in your browser or password manager, or use the button below.";
+        login(true).catch((error) => { button.disabled = false; if (error.name !== "AbortError") console.debug("passkey autofill:", error.name); });
+      }
+    }).catch(() => {});
   }
 }
 
@@ -432,9 +441,22 @@ function setupEnrol(button) {
   const returnTo = new URLSearchParams(location.search).get("return_to") || pendingReturn();
   if (returnTo) warm(returnTo);
   history.replaceState(null, "", location.pathname);
+  function unavailable(missing) {
+    button.hidden = true;
+    for (const id of ["choices", "enrol-help", "recovery-warning"]) document.getElementById(id).hidden = true;
+    document.getElementById("title").textContent = missing ? "Open your invitation link" : "This invitation is unavailable";
+    document.getElementById("intro").textContent = missing
+      ? "Open the original invitation from the message you received. Reloading this page does not restore it."
+      : "The link may have expired, been used already, or be incomplete.";
+    const signIn = document.getElementById("invitation-signin");
+    signIn.href = "/_/auth/login" + (returnTo ? "?return_to=" + encodeURIComponent(returnTo) : "");
+    document.getElementById("invitation-unavailable").hidden = false;
+    show("");
+    signIn.focus();
+  }
   if (!token) {
     button.disabled = true;
-    show("This link has no invitation in it. Ask the operator for a new one.", "error");
+    unavailable(true);
     return;
   }
   let ready = false;
@@ -449,8 +471,9 @@ function setupEnrol(button) {
       ready = true;
       show("");
     } catch (error) {
+      if (error.status === 400) { unavailable(false); return; }
       button.textContent = "Check link again";
-      show(error.message, "error");
+      show(error.data ? error.message : "Could not check your invitation. Check your connection and try again.", "error");
     } finally {
       button.disabled = false;
     }
@@ -461,14 +484,17 @@ function setupEnrol(button) {
     if (!ready) { await checkLink(); return; }
     button.disabled = true;
     show("Waiting for your device…");
+    let began = false;
     try {
       const options = await post("/_/auth/enrol/begin", { token, return_to: returnTo });
+      began = true;
       const credential = await navigator.credentials.create({ publicKey: creationOptions(options, keepHints()) });
       const result = await post("/_/auth/enrol/finish", credentialJSON(credential));
       receipt(result);
     } catch (error) {
+      if (!began && error.status === 400) { unavailable(false); return; }
       button.disabled = false;
-      show(explain(error, "enrol"), "error");
+      show(explain(error, "enrol") + (error.name === "NotAllowedError" ? " Your invitation has not been used." : ""), "error");
       openChoices(error);
     }
   });
@@ -514,7 +540,8 @@ function receipt(result) {
       line.hidden = false;
     }
   } else {
-    where.textContent = "Your device did not say where it saved it. A name helps you find it later, such as where you chose to keep it.";
+    where.textContent = "Your device did not say where it saved it. You can record the place you chose below.";
+    document.getElementById("receipt-name-label").textContent = "Where did you save it?";
   }
   document.getElementById("receipt").hidden = false;
   show("");
@@ -572,7 +599,7 @@ function receipt(result) {
     document.getElementById("receipt").hidden = true;
     finish(result, named ? "Saved as “" + label + "”." : "Your passkey is saved.", true);
   });
-  input.focus();
+  go.focus();
 }
 
 // ago turns a timestamp into "just now", "3 hours ago", "Oct 21".

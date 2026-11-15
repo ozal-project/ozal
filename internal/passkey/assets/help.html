@@ -17,7 +17,7 @@
 </header>
 <main class="help">
   <h1>Ways to sign in</h1>
-  <p>This site uses passkeys instead of passwords. A passkey lives in one place you choose; you confirm it there with your face, fingerprint or PIN, and this site keeps only a public key. Pick the place that suits the device you are on: this site treats every option the same, and none is required.</p>
+  <p>A device, password manager or security key saves your passkey. You confirm sign-in there with your face, fingerprint or PIN. Ozal keeps only a public key.</p>
 
   <section id="cant-find" class="triage">
     <h2>Can't find your passkey?</h2>
@@ -27,12 +27,12 @@
     <h3>It is on my phone</h3>
     <p>Choose <a href="/_/auth/login">Sign in</a>, then "Passkey somewhere else?" and "Use my phone", and scan the code with the phone. The computer needs Bluetooth, and the phone must be nearby.</p>
     <h3>I use a password manager</h3>
-    <p>Unlock it and check that its browser extension is on and allowed to save and use passkeys. Then sign in again.</p>
+    <p>Unlock it and check that its browser extension is on and allowed to save and use passkeys, including in Firefox. Then sign in again. If it offers several entries, choose the account you want; an entry marked “Ozal console” is for administrators, not this sign-in.</p>
     <h3>I lost every place I kept one</h3>
-    <p>Ask the person who runs this site for a new invitation. Only this case needs one: a different browser or device does not.</p>
+    <p>Ask the person who runs this site to recover your account. Recovery replaces your previous passkeys and ends your sessions. Changing browser or device alone does not need recovery.</p>
   </section>
 
-  <h2 class="places-title">Where a passkey can live</h2>
+  <h2 id="places" class="places-title">Where a passkey can live</h2>
 
   <section>
     <h3>This device</h3>
@@ -44,7 +44,7 @@
   <section>
     <h3>A password manager</h3>
     <p><strong>Good for</strong> Linux, several computers, or keeping passkeys off a personal device.</p>
-    <p><strong>You need</strong> a password manager that saves passkeys, with its browser extension installed: the extension takes over the browser's prompt. For example Bitwarden (or a self-hosted Vaultwarden server), 1Password, Proton Pass or KeePassXC (open source, kept on your computer), or any other that saves passkeys.</p>
+    <p><strong>You need</strong> a password manager that supports passkeys in this browser, with its extension installed and unlocked. Examples include Bitwarden (or self-hosted Vaultwarden), 1Password, Proton Pass and KeePassXC. The available options depend on the manager and browser.</p>
   </section>
 
   <section>
