@@ -18,25 +18,29 @@
 </header>
 <main>
   <h1 id="title">Create your passkey</h1>
-  <p id="intro">Where you keep it will ask for your face, fingerprint or PIN. They never reach Ozal, which keeps only a public key.</p>
+  <p id="intro">Choose a place you can use again when you sign in.</p>
   <fieldset id="choices" class="choices" hidden>
     <legend>Where will you keep this passkey?</legend>
     <div id="choice-list"></div>
   </fieldset>
-  <p class="hint"><a href="/_/auth/help">Not sure which? Compare the ways to sign in</a></p>
+  <p id="enrol-help" class="hint">Check where your browser offers to save it. <a href="/_/auth/help#places" target="_blank" rel="noreferrer">Compare options (opens in a new tab)</a></p>
   <p id="recovery-warning" class="hint" role="note" hidden>This is an account recovery. Creating this passkey replaces all your previous passkeys, signs out your previous sessions and invalidates your other recovery links. Only continue if you asked the operator to recover your account.</p>
   <button id="action" type="button" disabled>Create passkey</button>
-  <section id="receipt" class="receipt" hidden aria-labelledby="receipt-title">
+  <section id="invitation-unavailable" hidden aria-labelledby="title">
+    <p>If you already created a passkey, sign in with it. Otherwise, ask the person who invited you for a new link.</p>
+    <a id="invitation-signin" class="secondary" href="/_/auth/login" aria-describedby="intro">Sign in with an existing passkey</a>
+  </section>
+  <section id="receipt" class="receipt" hidden aria-labelledby="title">
     <p class="receipt-where"><img id="receipt-icon" class="icon" alt="" width="20" height="20" hidden><span id="receipt-where"></span></p>
     <p id="receipt-return" class="hint" hidden></p>
     <form id="receipt-form" novalidate>
-      <label for="receipt-name">Name it <span class="optional">(optional)</span></label>
+      <label for="receipt-name"><span id="receipt-name-label">Name this passkey</span> <span class="optional">(optional)</span></label>
       <input id="receipt-name" maxlength="60" autocomplete="off" aria-describedby="receipt-name-hint">
       <p id="receipt-name-hint" class="field-hint">So you recognise it later, for example “Work laptop”, “Bitwarden” or “YubiKey”.</p>
       <button id="receipt-continue" type="submit">Continue</button>
     </form>
     <button id="receipt-skip" class="secondary" type="button" hidden>Continue without a name</button>
-    <p class="hint">A second passkey in another place (another device, your password manager or a key) keeps you from being locked out if you lose this one. You can add it from Your passkeys.</p>
+    <p class="hint">You can add a backup later from Your passkeys. Choose a different password manager or security key.</p>
   </section>
   <p id="status" role="status" aria-live="polite"></p>
   <nav id="sites" class="sites" aria-label="Your sites" hidden></nav>

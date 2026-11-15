@@ -41,6 +41,7 @@ h1 { margin: 0 0 6px; font-size: 1.45rem; font-weight: 700; letter-spacing: -0.0
 p { margin: 0 0 18px; color: var(--muted); }
 label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
 input { width: 100%; padding: 11px 12px; margin-bottom: 12px; border: 1px solid var(--input); border-radius: 10px; background: var(--raised); color: inherit; font: inherit; }
+input::placeholder { color: var(--muted); opacity: 1; }
 input:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--lamp); outline-offset: 2px; }
 button, .secondary { display: block; width: 100%; padding: 12px; border-radius: 10px; font: inherit; font-weight: 700; text-align: center; text-decoration: none; cursor: pointer; }
 button { border: 0; background: var(--accent); color: var(--accent-fg); }
@@ -50,9 +51,11 @@ button:disabled { opacity: 0.55; cursor: progress; }
 #status:empty { display: none; }
 #status[data-kind="ok"] { color: var(--ok); }
 #status[data-kind="error"] { color: var(--err); }
-.first-time { margin-top: 20px; padding: 12px 14px; border: 1px solid var(--border); border-left: 3px solid var(--muted); background: var(--raised); border-radius: 10px; }
-.first-time strong { display: block; margin-bottom: 4px; }
+.first-time { margin-top: 20px; font-size: 0.88rem; }
+.first-time summary { cursor: pointer; color: var(--muted); }
+.first-time summary:hover, .first-time[open] summary { color: var(--fg); }
 .first-time p, .hint { margin: 0; font-size: 0.88rem; }
+.first-time p { margin-top: 8px; }
 .hint { margin-top: 14px; }
 .choices { margin: 16px 0 0; padding: 0; border: 0; font-size: 0.88rem; }
 .choices[hidden] { display: none; }
