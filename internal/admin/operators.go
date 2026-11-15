@@ -32,7 +32,7 @@ var operatorTools = []string{"administrators", "applications", "connectors", "pe
 // passkey proof and the host's executor profile.
 var defaultOperatorTools = []string{"administrators", "applications", "connectors", "people", "publishing", "sites", "updates"}
 
-// passkeyStepUpMaxAge is how old a passkey proof may be before installing.
+// passkeyStepUpMaxAge is the maximum proof age for sensitive administrator actions.
 const passkeyStepUpMaxAge = 5 * time.Minute
 
 type operatorGrant struct {

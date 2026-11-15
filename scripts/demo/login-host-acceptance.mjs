@@ -39,7 +39,7 @@ try {
   const inConsole = () => page.locator("#main-content h1", { hasText: "Overview" }).waitFor();
 
   step = "first administrator, passkey made on the login host";
-  const { stdout } = await exec(binary, ["console", "enrol", "-config", join(edge.dir, "config.json"), "-url", consoleURL]);
+  const { stdout } = await exec(binary, ["console", "enrol", "-link", "-config", join(edge.dir, "config.json"), "-url", consoleURL]);
   const link = stdout.split("\n").find((l) => l.includes("#enrol=")).trim();
   await page.goto(link);
   await page.getByText("this edge's sign-in address").waitFor();
@@ -65,6 +65,26 @@ try {
   await page.getByRole("button", { name: "Continue with a passkey" }).click();
   await inConsole();
 
+  step = "a device-link confirmation returns to the login RP without replaying the mutation";
+  let deviceRequests = 0;
+  await page.route("**/_/api/admin/devices", async (route) => {
+    if (++deviceRequests === 1) return route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ code: "passkey_required", error: "Confirm it's you with your passkey" }) });
+    return route.continue();
+  });
+  await page.getByRole("button", { name: "Olivia Owner", exact: true }).click();
+  await page.getByRole("dialog", { name: "Your session" }).getByRole("button", { name: "Sign in on another browser" }).click();
+  await page.waitForURL((url) => url.origin === loginURL && url.pathname === "/_/auth/admin");
+  await page.getByRole("button", { name: "Continue with a passkey" }).click();
+  await inConsole();
+  assert.equal(deviceRequests, 1, "the device-link request is not replayed across navigation");
+  assert.equal((await cdp.send("WebAuthn.getCredentials", { authenticatorId })).credentials.length, 1, "confirmation does not register a localhost credential");
+  await page.getByRole("button", { name: "Olivia Owner", exact: true }).click();
+  await page.getByRole("dialog", { name: "Your session" }).getByRole("button", { name: "Sign in on another browser" }).click();
+  await page.locator("#device-link").waitFor();
+  assert.equal(deviceRequests, 2, "the fresh session issues the link when the person retries");
+  await page.unroute("**/_/api/admin/devices");
+  await page.keyboard.press("Escape");
+
   step = "the login host hides the ceremony without a transaction";
   const unknown = await fetch(`${loginURL}/_/auth/does-not-exist`);
   for (const path of ["/_/auth/admin", "/_/auth/admin?tx=forged", "/_/auth/admin.js"]) {
@@ -83,6 +103,8 @@ try {
   });
   await portal.goto((await edge.invite("olivia@acme.dev", "Olivia")).link);
   await portal.locator("#action").click();
+  await portal.locator("#receipt:not([hidden])").waitFor();
+  await portal.getByRole("button", { name: "Continue", exact: true }).click();
   await portal.waitForSelector("#who:not([hidden])", { timeout: 20_000 });
   await portal.goto(`${loginURL}/_/auth/me`);
   const notice = portal.locator("#also-admin");

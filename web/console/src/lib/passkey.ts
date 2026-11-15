@@ -3,6 +3,7 @@
 // back. The ceremony ID travels in a header, never in a cookie or URL.
 import { withHints } from "./passkeyChoices.ts";
 import { reauthenticateOnLoginHost } from "./loginHost.ts";
+import { withPasskeyProof } from "./accessRequests.ts";
 
 export type AdminSession = { token: string; name: string; expires: string; tools: string[]; renewable?: boolean };
 
@@ -73,7 +74,7 @@ export function explainPasskeyError(e: unknown, phase: "sign-in" | "create" = "c
 // A one-use link (10 minutes) that adds a passkey from another browser for the
 // signed-in administrator and signs that browser in.
 export async function issueDeviceLink(session: string): Promise<{ token: string; expires: string }> {
-  return api("/_/api/admin/devices", {}, undefined, session);
+  return withPasskeyProof(session, () => api("/_/api/admin/devices", {}, undefined, session), confirmWithPasskey);
 }
 
 // renewSession extends an active passkey session; the answer carries the new end.
@@ -113,14 +114,17 @@ export async function adminState(signal?: AbortSignal): Promise<{ enrolled: bool
 // Adds another passkey to the signed-in administrator, so losing one device
 // does not lock them out.
 export async function addPasskey(session: string): Promise<void> {
-  const begun = await api<Begun>("/_/api/admin/passkeys/begin", {}, undefined, session);
+  const begun = await withPasskeyProof(session, () => api<Begun>("/_/api/admin/passkeys/begin", {}, undefined, session), confirmWithPasskey);
   const pk = begun.options.publicKey;
   pk.challenge = decode(pk.challenge);
   pk.user.id = decode(pk.user.id);
   for (const c of pk.excludeCredentials ?? []) c.id = decode(c.id);
   const credential = (await navigator.credentials.create({ publicKey: pk as PublicKeyCredentialCreationOptions })) as PublicKeyCredential | null;
   if (!credential) throw new Error("No passkey was created.");
-  await api<{ added: boolean }>("/_/api/admin/passkeys/finish", credentialJSON(credential), begun.ceremony, session);
+  // Keep the created credential and ceremony on a local confirmation; never
+  // repeat creation. HTTPS confirmation navigates and does not replay it.
+  const response = credentialJSON(credential);
+  await withPasskeyProof(session, () => api<{ added: boolean }>("/_/api/admin/passkeys/finish", response, begun.ceremony, session), confirmWithPasskey);
 }
 
 // confirmWithPasskey proves the signed-in administrator is still present

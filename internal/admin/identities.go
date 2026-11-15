@@ -937,9 +937,8 @@ func (h *Handler) recoverAdmin(w http.ResponseWriter, r *http.Request) {
 // administrator's own account, so losing one device never locks them out.
 func (h *Handler) addPasskeyBegin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	self := h.callerAccount(r)
+	self := h.freshPasskeyAccount(w, r)
 	if self == "" {
-		writeError(w, http.StatusForbidden, "sign in with your passkey to add another one")
 		return
 	}
 	rp, err := h.relyingParty(r)
@@ -968,7 +967,12 @@ func (h *Handler) addPasskeyBegin(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) addPasskeyFinish(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	self := h.callerAccount(r)
+	// A stale proof must not consume the registration: a local step-up can
+	// confirm with an existing passkey and retry this exact response once.
+	self := h.freshPasskeyAccount(w, r)
+	if self == "" {
+		return
+	}
 	pending, ok := h.ceremonies.take(r.Header.Get(adminCeremony), true, r.Header.Get("Origin"))
 	if self == "" || !ok || pending.kind != "add" || pending.account.ID != self {
 		h.failedSignIn(r, "add_passkey_unknown", nil)
@@ -996,6 +1000,9 @@ func (h *Handler) addPasskeyFinish(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "your session ended; sign in again")
 		return
 	}
+	if h.freshPasskeyAccount(w, r) == "" {
+		return
+	}
 	if err := h.identities.AddPasskey(r.Context(), self, *credential, useragent.Label(r.UserAgent())); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "the passkey could not be saved")
 		return
@@ -1010,9 +1017,12 @@ func (h *Handler) addPasskeyFinish(w http.ResponseWriter, r *http.Request) {
 // offered by Firefox.
 func (h *Handler) issueDeviceLink(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	self := h.callerAccount(r)
+	// Serialize the authority check and issuance with recovery and disable,
+	// which revoke this session and its outstanding links under this lock.
+	h.identityMu.Lock()
+	defer h.identityMu.Unlock()
+	self := h.freshPasskeyAccount(w, r)
 	if self == "" {
-		writeError(w, http.StatusForbidden, "sign in with your passkey to add another browser")
 		return
 	}
 	token, expires, err := h.devices.issue(self)

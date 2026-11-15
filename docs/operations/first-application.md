@@ -111,6 +111,11 @@ started from it, that address answers like an unknown route.
 
 ### Other ways in
 
+Adding a console passkey or creating a link for another browser asks for another
+confirmation if your last passkey proof is more than five minutes old. For a
+session opened on the HTTPS sign-in address, confirmation returns there; after
+coming back, choose the action again. A local confirmation continues in place.
+
 - **Moving from localhost.** Passkeys are bound to their name and are not copied to a
   new domain. Sign in at `http://localhost:PORT`, open your menu and choose **Sign in
   on another browser**. Open the link it gives you on `ozal.localhost` and create a

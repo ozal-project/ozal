@@ -124,6 +124,14 @@ is not found. Confirmation for a session opened on the HTTPS login host returns
 to that host for a full sign-in; after returning, the person retries the action
 with the fresh session. It never tries that RP's passkey on loopback or replays
 a mutation across navigation. Sessions opened on loopback still confirm there.
+Adding an administrator passkey requires the same recent proof at registration
+begin, finish, and immediately before storage under the identity lock. A stale
+proof rejected before the ceremony is consumed can be confirmed locally and the
+same registration response retried once, without creating another credential.
+Issuing a one-use link for another browser also requires a recent proof and is
+serialized with recovery and disable. An issued link retains its own ten-minute
+lifetime; its recipient does not need the issuer's session. Neither a host login,
+the host socket nor the admin token grants these account-bound operations.
 The provider is a label for the owner, never a trust decision. An unknown provider's
 receipt asks where the visitor saved the passkey without inferring that place.
 Continue receives focus, so the optional name does not open a mobile keyboard.

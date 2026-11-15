@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { confirmWithPasskey } from "./passkey.ts";
+import { addPasskey, confirmWithPasskey, issueDeviceLink } from "./passkey.ts";
 import { withPasskeyProof } from "./accessRequests.ts";
 
 test("HTTPS confirmation navigates without retrying a mutation with the old session", { timeout: 10_000 }, async () => {
@@ -42,3 +42,35 @@ test("HTTPS confirmation navigates without retrying a mutation with the old sess
     }
   }
 });
+
+for (const action of ["add", "link"]) {
+  test(`${action}: HTTPS confirmation never replays access creation with the old session`, async () => {
+    const originalFetch = globalThis.fetch;
+    const originals = new Map(["location", "sessionStorage"].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+    const calls: string[] = [];
+    let navigate!: () => void;
+    const navigated = new Promise<void>((resolve) => { navigate = resolve; });
+    Object.defineProperty(globalThis, "location", { configurable: true, value: { assign: () => navigate() } });
+    Object.defineProperty(globalThis, "sessionStorage", { configurable: true, value: { setItem() {} } });
+    const path = action === "add" ? "/_/api/admin/passkeys/begin" : "/_/api/admin/devices";
+    try {
+      globalThis.fetch = (async (url: string) => {
+        calls.push(url);
+        if (url === path) return new Response(JSON.stringify({ code: "passkey_required" }), { status: 403 });
+        if (url.endsWith("/step-up/begin")) return new Response(JSON.stringify({ code: "login_host_required" }), { status: 409 });
+        if (url.endsWith("/state")) return new Response(JSON.stringify({ login_host: "https://auth.example.com" }));
+        if (url.endsWith("/remote/start")) return new Response(JSON.stringify({ url: "https://auth.example.com/_/auth/admin?tx=confirm" }));
+        assert.fail(`unexpected request ${url}`);
+      }) as typeof fetch;
+      const creating = action === "add" ? addPasskey("old-session") : issueDeviceLink("old-session");
+      assert.equal(await Promise.race([creating.then(() => "created"), navigated.then(() => "navigating")]), "navigating");
+      assert.deepEqual(calls, [path, "/_/api/admin/step-up/begin", "/_/api/admin/state", "/_/api/admin/remote/start"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+      for (const [key, descriptor] of originals) {
+        if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+        else Reflect.deleteProperty(globalThis, key);
+      }
+    }
+  });
+}
