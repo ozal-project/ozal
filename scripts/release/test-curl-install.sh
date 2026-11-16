@@ -107,6 +107,9 @@ if [ "$1" = -v ]; then
   exit 0
 fi
 [ "$1" != /usr/local/lib/ozal/ozal ] || exit 0
+if [ "$1" = cp ] && [ "${OZAL_INSTALL_SUDO_TAMPER:-0}" = 1 ]; then
+  "$@" && printf 'tampered' >> "$3"; exit
+fi
 exec "$@"
 SUDO
 chmod +x "$work/tools/curl" "$work/tools/id" "$work/tools/sudo"
@@ -163,7 +166,13 @@ OZAL_INSTALL_EXPECT_APPLY=1 run -- -target http://127.0.0.1:3000
 require_status 0
 grep -Fxq -- '-apply' "$OZAL_INSTALL_CALLS"
 [[ $(head -n 1 "$OZAL_INSTALL_SUDO") == -v ]]
-grep -q '^\./bin/ozal install service .* -apply$' "$OZAL_INSTALL_SUDO"
+# The executable run as root is the one re-verified in a sudo-created directory.
+[[ $(sed -n 2p "$OZAL_INSTALL_SUDO") == 'mktemp -d' ]]
+[[ $(sed -n 3p "$OZAL_INSTALL_SUDO") == cp\ * ]]
+grep -q '^/.*/bin/ozal install service -archive /.* -apply$' "$OZAL_INSTALL_SUDO"
+if grep -q '^\./bin/ozal' "$OZAL_INSTALL_SUDO"; then
+  echo 'root ran the binary from the user workspace' >&2; exit 1
+fi
 grep -Fxq '/usr/local/lib/ozal/ozal install updates -channel stable -apply' "$OZAL_INSTALL_SUDO"
 if grep -q 'version' "$OZAL_INSTALL_SUDO"; then
   echo 'verification ran as root' >&2; exit 1
@@ -184,6 +193,14 @@ OZAL_INSTALL_UID=0 OZAL_INSTALL_EXPECT_APPLY=1 run --no-updates
 require_status 0
 grep -Fxq -- '-apply' "$OZAL_INSTALL_CALLS"
 [[ ! -s "$OZAL_INSTALL_SUDO" ]]
+
+# A file changed after verification is refused before root runs anything.
+OZAL_INSTALL_SUDO_TAMPER=1 run
+require_status 1
+grep -Fq 'changed after verification' "$work/output"
+if grep -q 'install service' "$OZAL_INSTALL_SUDO"; then
+  echo 'root ran an altered archive' >&2; exit 1
+fi
 
 # A refused sudo stops an ordinary user before any download.
 OZAL_INSTALL_SUDO_REFUSE=1 run

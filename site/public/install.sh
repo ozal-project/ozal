@@ -99,7 +99,8 @@ case "$keep" in
 esac
 
 work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT INT TERM
+staged=""
+trap 'rm -rf "$work"; [ -z "$staged" ] || sudo rm -rf "$staged"' EXIT INT TERM
 cd "$work"
 
 fetch() { curl -fsSL --proto '=https' --tlsv1.2 --retry 2 -o "$2" "$1"; }
@@ -192,7 +193,20 @@ if [ "$apply" = 0 ]; then
   exit 0
 fi
 
-$as_root ./bin/ozal install service -archive "$archive" -sha256 "$sum" "$@" -apply
+# Root never runs a file this user could still change. Through sudo, copy the
+# archive into a directory only root can write, check it against the signed
+# checksum again as root and extract it there.
+ozal=./bin/ozal
+if [ -n "$as_root" ]; then
+  staged=$(sudo mktemp -d) || fail "could not create a root-owned directory"
+  sudo cp "$archive" "$staged/$archive" || fail "could not stage $archive"
+  # shellcheck disable=SC2016
+  sudo sh -c 'cd "$1" && [ "$(sha256sum "$2" | cut -d" " -f1)" = "$3" ] && mkdir bin && tar -xzf "$2" -C bin ozal' \
+    sh "$staged" "$archive" "$sum" || fail "$archive changed after verification"
+  ozal=$staged/bin/ozal
+  archive=$staged/$archive
+fi
+$as_root "$ozal" install service -archive "$archive" -sha256 "$sum" "$@" -apply
 if [ "$updates" = 1 ]; then
   if [ -n "$channel" ]; then
     (cd / && $as_root /usr/local/lib/ozal/ozal install updates -channel "$channel" -apply)

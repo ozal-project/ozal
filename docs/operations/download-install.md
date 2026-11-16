@@ -37,7 +37,9 @@ stops it before anything runs. By default it then installs the service with
 later releases; `--no-updates` skips the second step and `--plan` installs
 nothing. Downloading and verifying run as you; only the two installation steps
 run as root, through `sudo` when you are not root (it asks before any download,
-so a refused password costs nothing). `--apply` and `--updates` from older
+so a refused password costs nothing). Before root runs anything, the archive is
+copied into a directory only root can write, checked against the signed
+checksum again and extracted there. `--apply` and `--updates` from older
 instructions are still accepted and change nothing. `--version vX`
 installs a given release. `--keep DIR` keeps the verified files; a relative path
 is resolved from the directory where you run the script. Arguments after `--`
