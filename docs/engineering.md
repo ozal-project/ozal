@@ -102,6 +102,25 @@ book with an earlier recovery, expiry, a second browser, a forged claim, a
 cross-origin claim, the address and total limits, a code in the URL, host-only
 terminal endpoints and recovery.
 
+The remote console (`admin.remote`) is the pure `consoleaccess.Decide` in front
+of every console handler on that host, applied inside the public trust and
+rate-limit stages before any route. In order it requires the visitor's HTTPS as the
+trust stage decided it, the exact console `Origin` on anything that is not a read,
+and refuses the host-only endpoints (link enrolment, loopback ceremonies, host
+logins, access requests, enrolment codes) even with a session. It allows without a
+session only the console's files, the sign-in settings, the login-host round trip
+and resume. Everything else needs a live administrator passkey session whose grant
+was opened on that host; the handler's own bearer check refuses tokens and
+non-remote sessions there as a second layer, and the request never carries the
+socket's authority. Remote grants slide on 15 minutes up to 12 hours. The install
+hook ends them when the host changes or is removed, and a socket-only
+`DELETE /_/api/operators` ends every session. Regression tests cover sign-in through
+the login host, the cookie flags, every listed API without a session and with the
+admin token or a loopback session, host-only endpoints with a session, cross-origin
+and missing-origin changes, plain HTTP, resume of each session kind, enrolment links
+refused, step-up through the login host, the kill switch and the trust stage in the
+route manager; `FuzzDecide` checks the decision's invariants.
+
 <a id="identidad-y-aplicaciones"></a>
 ## Identity and applications
 

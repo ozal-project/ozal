@@ -204,6 +204,9 @@ func main() {
 	var configuredEdge *configuredTunnel
 	var pagesStore *pages.Store
 	var deployReplays *sqlite.DeployReplays
+	// The remote console (admin.remote) needs the administrator directory,
+	// so it exists only with the state database.
+	var remoteConsole *admin.RemoteConsole
 	if loaded.Tunnel != nil && *dbPath == "" {
 		log.Fatal("tunnel configuration requires -db pointing at migrated state")
 	}
@@ -272,6 +275,11 @@ func main() {
 		// the HTTPS login host; the book is shared by the console and the gate.
 		remoteLogin := admin.NewRemoteLogin()
 		adminOpts = append(adminOpts, admin.WithRemoteLogin(remoteLogin))
+		// admin.remote serves the same console on its own HTTPS host through
+		// the public listener; the admin listener stays loopback-only.
+		remoteConsole = admin.NewRemoteConsole()
+		adminOpts = append(adminOpts, admin.WithRemoteConsole(remoteConsole))
+		managerOpts = append(managerOpts, routemanager.WithRemoteConsole(remoteConsole))
 		// The country next to an address on the enrolment page is cosmetic:
 		// the table loads in the background, off the listeners' path, and a
 		// table that cannot be read only drops it.
@@ -338,7 +346,13 @@ func main() {
 		}
 	}
 	zoneChanges := make(zoneUpdates, 1)
-	managerOpts = append(managerOpts, routemanager.WithInstallHook(zoneChanges.publish))
+	managerOpts = append(managerOpts, routemanager.WithInstallHook(func(installed config.Config) {
+		zoneChanges.publish(installed)
+		if remoteConsole != nil {
+			// Removing or changing admin.remote ends its sessions.
+			remoteConsole.Configured(installed)
+		}
+	}))
 	managerOpts = append(managerOpts, routemanager.WithAssertionKeys(loadAssertionSigner))
 	manager, err := routemanager.New(ctx, *configPath, healthCheckInterval, managerOpts...)
 	if err != nil {
@@ -803,10 +817,13 @@ func startTLS(cfg *config.Config, handler http.Handler, sink events.Sink, certif
 // visitor cannot make the edge order certificates for names it does not serve.
 func routeHostPolicy(configured []string, current func() config.Config) autocert.HostPolicy {
 	return func(_ context.Context, host string) error {
-		routes := current().Routes
-		hosts := make([]string, 0, len(routes))
-		for _, route := range routes {
+		cfg := current()
+		hosts := make([]string, 0, len(cfg.Routes)+1)
+		for _, route := range cfg.Routes {
 			hosts = append(hosts, route.Host)
+		}
+		if remote := cfg.RemoteConsoleHost(); remote != "" {
+			hosts = append(hosts, remote)
 		}
 		if !certs.AutomaticName(host, configured, hosts) {
 			return fmt.Errorf("certificate for %q is not allowed: no configured route serves it", host)

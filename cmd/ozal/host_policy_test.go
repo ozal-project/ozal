@@ -36,3 +36,21 @@ func TestRouteHostPolicyFollowsTheCurrentRoutes(t *testing.T) {
 		t.Fatalf("a configured certificate name stopped being allowed: %v", err)
 	}
 }
+
+// The remote console host gets a certificate while admin.remote names it,
+// and stops getting one when it is removed.
+func TestRouteHostPolicyIncludesTheRemoteConsole(t *testing.T) {
+	var mu sync.Mutex
+	cfg := config.Config{Admin: config.Admin{Remote: &config.AdminRemote{Host: "console.example.com"}}}
+	current := func() config.Config { mu.Lock(); defer mu.Unlock(); return cfg }
+	policy := routeHostPolicy(nil, current)
+	if err := policy(context.Background(), "console.example.com"); err != nil {
+		t.Fatalf("remote console host refused: %v", err)
+	}
+	mu.Lock()
+	cfg.Admin.Remote = nil
+	mu.Unlock()
+	if err := policy(context.Background(), "console.example.com"); err == nil {
+		t.Fatal("a removed remote console host still gets certificates")
+	}
+}

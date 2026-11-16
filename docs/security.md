@@ -6,9 +6,14 @@ conditions. It is not an ASVS certification or a complete audit of an installati
 
 ## Deployment rules
 
-- The console and the administrative API stay on loopback or a private socket.
+- The admin listener and the administrative API stay on loopback or a private socket.
   Reach them through a private transport; never publish them as the upstream of a route.
-  Only enrolling a passkey by code happens on the public login host: the code is
+  The one public way to the console is the opt-in [remote console](reference.md#remote-console)
+  (`admin.remote`): its own HTTPS host, where only the administrator passkey sign-in
+  answers until a session opened there is presented. It adds Internet-reachable
+  surface; turn it on only where you need it, and prefer a hostname outside the
+  domain of the applications you protect.
+  Enrolling a passkey by code also happens on the public login host: the code is
   shown only in the host's terminal, works once for five minutes, and the terminal
   reports which browser used it.
 - Keep private applications on loopback or a controlled network: an alternative
@@ -34,7 +39,7 @@ conditions. It is not an ASVS certification or a complete audit of an installati
 | Browser → login | OIDC or WebAuthn validation, state/challenges, sessions and revocation | Correctly configured IdP, RP/domain and authenticators |
 | Edge → application | Identity generated after authorization; session cookie removed; optional signed assertion per request | The app trusts only the authorized gateway (or verifies the assertion with a pinned key) and keeps its own permissions |
 | Edge → connector | mTLS, enrolled fingerprint, fixed resources and revocation | CA distribution, local keys and permitted transport |
-| Operator → administration | Host/socket, or a session with the required tool | Unix permissions, browser security and host access |
+| Operator → administration | Host/socket, or a session with the required tool; on the remote console only a passkey session opened there, an exact `Origin` on every change | Unix permissions, browser security and host access |
 | CI → publishing | Dedicated handler, repo/ref/workflow/audience/event and replay protection | Protecting the workflow, its credentials and build artifacts |
 | Process → state | Validation, migrations, snapshots and private permissions | Trusted backups, disk, ACLs and host |
 | Audit → external evidence | Signed chain and checkpoints | Copy and public key pinned outside host control |

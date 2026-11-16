@@ -316,6 +316,13 @@ func (h *Handler) adminState(w http.ResponseWriter, r *http.Request) {
 		// ID-021: ceremonies run there, where every authenticator works.
 		state["login_host"] = origin
 	}
+	if _, remote := remoteOrigin(r); remote {
+		// The remote console signs in on the login host and nothing else:
+		// no host command, no access requests from people without an account.
+		state["remote"] = true
+		writeJSON(w, http.StatusOK, state)
+		return
+	}
 	if !enrolled && h.enrolCommand != "" {
 		state["enrol_command"] = h.enrolCommand
 	}
@@ -765,13 +772,24 @@ func (h *Handler) startAdminSession(w http.ResponseWriter, r *http.Request, acco
 }
 
 func (h *Handler) startPasskeySession(w http.ResponseWriter, r *http.Request, account adminid.Account, credentialID []byte, loginHost bool) {
-	token, grant, err := h.operators.issuePasskey(account.Name, loginHost, account.Tools...)
+	_, remote := remoteOrigin(r)
+	issue := func() (string, operatorGrant, error) {
+		if remote {
+			return h.operators.issueRemote(account.Name, account.Tools...)
+		}
+		return h.operators.issuePasskey(account.Name, loginHost, account.Tools...)
+	}
+	token, grant, err := issue()
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "the session could not be opened")
 		return
 	}
 	h.operators.bind(grant.ID, account.ID, credentialID)
-	h.emit(events.Event{Type: events.Type("operator.signed_in"), Actor: "admin:" + account.Email, Code: grant.ID, Reason: "passkey"})
+	if remote {
+		h.emit(events.Event{Type: events.Type("operator.signed_in"), Actor: "admin:" + account.Email, Code: grant.ID, Reason: "passkey, remote console", RemoteAddr: clientAddr(r)})
+	} else {
+		h.emit(events.Event{Type: events.Type("operator.signed_in"), Actor: "admin:" + account.Email, Code: grant.ID, Reason: "passkey"})
+	}
 	h.rememberSession(w, r, token, grant)
 	writeJSON(w, http.StatusOK, map[string]any{"token": token, "name": grant.Name, "id": grant.ID, "expires": grant.Expires, "tools": grant.Tools, "renewable": true})
 }

@@ -223,9 +223,13 @@ func (h *Handler) loginSite() (*webauthn.WebAuthn, string, bool) {
 	return rp, origin, true
 }
 
-// consoleOrigin is the private console's origin when r comes from its own
-// page on a loopback name, the only place a login-host ceremony may return to.
+// consoleOriginOf is the console's origin when r comes from its own page: the
+// private console on a loopback name, or the remote console host. Those are
+// the only places a login-host ceremony may return to.
 func consoleOriginOf(r *http.Request) (string, bool) {
+	if origin, ok := remoteOrigin(r); ok {
+		return origin, sameOrigin(r)
+	}
 	if !sameOrigin(r) || r.TLS != nil {
 		return "", false
 	}
@@ -272,6 +276,12 @@ func (h *Handler) remoteStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tx := remoteTx{challenge: [32]byte(challenge), origin: origin}
+	if _, remote := remoteOrigin(r); remote && req.Token != "" {
+		// The remote console only signs in; links create passkeys on the
+		// host's console, and codes on the login host.
+		writeError(w, http.StatusForbidden, "open this link on the host's console; the remote console only signs in")
+		return
+	}
 	if req.Token != "" {
 		enrol := req.enrolRequest
 		tx.enrol = &enrol

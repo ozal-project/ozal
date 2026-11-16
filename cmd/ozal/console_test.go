@@ -115,3 +115,40 @@ func TestPasskeyPlaceNamesTheLoginHostWhenAdministratorsUseIt(t *testing.T) {
 		})
 	}
 }
+
+// `ozal console revoke -all` ends every session on the edge through the
+// host socket, and refuses to be combined with -id.
+func TestConsoleRevokeAll(t *testing.T) {
+	dir, err := os.MkdirTemp("", "ozal-revoke")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	socket := filepath.Join(dir, "admin.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	calls := make(chan string, 2)
+	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls <- r.Method + " " + r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"revoked":3}`))
+	})}
+	go server.Serve(listener)
+	t.Cleanup(func() { server.Close() })
+
+	var out bytes.Buffer
+	if err := runConsole(context.Background(), []string{"revoke", "-all", "-admin", "unix:" + socket}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-calls; got != "DELETE /_/api/operators" {
+		t.Fatalf("request = %q", got)
+	}
+	if !strings.Contains(out.String(), "Console sessions revoked: 3") {
+		t.Fatalf("output = %q", out.String())
+	}
+	if err := runConsole(context.Background(), []string{"revoke", "-all", "-id", "abc", "-admin", "unix:" + socket}, io.Discard); err == nil {
+		t.Fatal("-all with -id was accepted")
+	}
+}
