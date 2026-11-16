@@ -36,6 +36,9 @@ stops it before anything runs. Without `--apply` it only shows the plan of
 installs a given release. `--keep DIR` keeps the verified files; a relative path
 is resolved from the directory where you run the script. Arguments after `--`
 go to `ozal install service` (for example `-- -target http://127.0.0.1:4000`).
+Installation mode belongs to the script: put `--apply` before `--`. Forwarded
+`-apply` or `--apply` flags, including explicit boolean values, are rejected
+before any download.
 It needs Linux, `curl`, OpenSSL 3 and root for `--apply`.
 
 The limit: piped from `https://ozal.dev`, the script and the key in it come from the

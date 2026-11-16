@@ -8,6 +8,7 @@ trap 'rm -rf -- "$work"' EXIT
 mkdir -p "$work/tools" "$work/pack" "$work/fixtures" "$work/caller"
 export OZAL_INSTALL_FIXTURES="$work/fixtures"
 export OZAL_INSTALL_CALLS="$work/calls"
+export OZAL_INSTALL_FETCHES="$work/fetches"
 
 # Only this temporary copy trusts the disposable signing key. Production's
 # pinned key is checked separately by TestCurlInstallerPinsThePublishedReleaseKey.
@@ -26,7 +27,9 @@ case "$1" in
   version) echo 'ozal fixture' ;;
   install)
     [ "$2" = service ] || exit 90
-    for arg do [ "$arg" != -apply ] || exit 91; done
+    applied=0
+    for arg do [ "$arg" != -apply ] || applied=1; done
+    [ "$applied" = "${OZAL_INSTALL_EXPECT_APPLY:-0}" ] || exit 91
     echo 'Fixture service plan'
     exit "${OZAL_INSTALL_PLAN_STATUS:-0}"
     ;;
@@ -83,13 +86,20 @@ case "$url" in
   https://github.com/ozal-project/ozal/releases/download/v0.1.0/*) file=${url##*/} ;;
   *) echo 'unexpected fixture URL' >&2; exit 93 ;;
 esac
+printf '%s\n' "$url" >> "$OZAL_INSTALL_FETCHES"
 cp "$OZAL_INSTALL_FIXTURES/$file" "$out"
 CURL
-chmod +x "$work/tools/curl"
+cat > "$work/tools/id" <<'ID'
+#!/bin/sh
+[ "$*" = '-u' ] || exit 93
+printf '%s\n' "${OZAL_INSTALL_UID:-1000}"
+ID
+chmod +x "$work/tools/curl" "$work/tools/id"
 export PATH="$work/tools:$PATH"
 
 run() {
   : > "$OZAL_INSTALL_CALLS"
+  : > "$OZAL_INSTALL_FETCHES"
   status=0
   # stdin matches curl | sh, including preservation of arguments after --.
   (cd "$work/caller" && sh -s -- "$@" < "$work/install.sh") > "$work/output" 2>&1 || status=$?
@@ -111,6 +121,34 @@ run -- -target 'http://127.0.0.1:3000/path with spaces'
 require_status 0
 grep -Fq 'Nothing was installed. To install the service:' "$work/output"
 grep -Fxq 'http://127.0.0.1:3000/path with spaces' "$OZAL_INSTALL_CALLS"
+
+# The outer installer owns application mode. Reject every spelling of the
+# inner apply flag before downloading or executing a release, even if the
+# caller also supplied the outer --apply flag.
+for flag in -apply --apply -apply=true --apply=true -apply=1 --apply=TRUE -apply=false --apply=false; do
+  for mode in plan apply; do
+    if [[ $mode == apply ]]; then
+      run --apply -- -target http://127.0.0.1:3000 "$flag"
+    else
+      run -- -target http://127.0.0.1:3000 "$flag"
+    fi
+    require_status 1
+    require_refusal 'pass --apply before --'
+    [[ ! -s "$OZAL_INSTALL_FETCHES" ]]
+  done
+done
+
+# Simulate root only in the fixture; the extracted binary records arguments
+# instead of installing a service. Outer --apply still reaches the child.
+OZAL_INSTALL_UID=0 OZAL_INSTALL_EXPECT_APPLY=1 run --apply -- -target http://127.0.0.1:3000
+require_status 0
+grep -Fxq -- '-apply' "$OZAL_INSTALL_CALLS"
+
+# Root validation must still stop an ordinary user before any download.
+run --apply
+require_status 1
+require_refusal 'run it with sudo'
+[[ ! -s "$OZAL_INSTALL_FETCHES" ]]
 
 export OZAL_INSTALL_PLAN_STATUS=42
 run
@@ -162,4 +200,4 @@ printf 'tampered' >> "$work/fixtures/$archive"
 run
 require_refusal 'does not match its signed checksum'
 
-echo 'public installer: plan success/failure, retained files, preview fallback, pinned version and signature/checksum refusals OK'
+echo 'public installer: apply boundary, plan success/failure, retained files, preview fallback, pinned version and signature/checksum refusals OK'
