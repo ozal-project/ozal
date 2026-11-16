@@ -43,9 +43,20 @@ const installedConfigJSON = `{
 }
 `
 
+// realTempDir is t.TempDir without symlinks: macOS puts it under /var, a link
+// the installer refuses to write through.
+func realTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
 func stagedInstallation(t *testing.T, configJSON string) string {
 	t.Helper()
-	root := t.TempDir()
+	root := realTempDir(t)
 	for path, data := range map[string]string{
 		installedBinary: "binary", installedUnit: "[Unit]\n", installedConfig: configJSON,
 	} {
@@ -157,7 +168,7 @@ func TestInstallUpdatesRefusesToReplaceOtherSettings(t *testing.T) {
 }
 
 func TestInstallUpdatesNeedsAnInstallationAndAChannel(t *testing.T) {
-	if err := Updates(context.Background(), &bytes.Buffer{}, nil, UpdatesRequest{Root: t.TempDir(), Installed: "v0.1.0"}); err == nil || !strings.Contains(err.Error(), "install the service first") {
+	if err := Updates(context.Background(), &bytes.Buffer{}, nil, UpdatesRequest{Root: realTempDir(t), Installed: "v0.1.0"}); err == nil || !strings.Contains(err.Error(), "install the service first") {
 		t.Fatalf("without an installation: %v", err)
 	}
 	root := stagedInstallation(t, installedConfigJSON)
