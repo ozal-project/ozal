@@ -461,8 +461,11 @@ archive with the asset's size and address and the checksum's hash, signs it, and
 it back with `release.ParseCatalog` under the same rules an edge applies before writing
 it. The sequence is the signing time in Unix seconds, so a re-signed catalog of the
 same release supersedes the previous one and an edge refuses a replay of the older.
-Catalogs expire after 14 days (at most 31). Because a deploy replaces the whole site,
-a deploy without the key fails and the live site keeps its catalogs. The
+Catalogs expire after 14 days (at most 31). The key is used only in the site workflow's
+`catalogs` job, which builds `cmd/ozal` from the checkout without a module cache and runs
+no npm or site tooling; the deploy job receives the signed files as a job output and
+cannot sign anything itself. Because a deploy replaces the whole site, a run without
+the key deploys nothing and the live site keeps its catalogs. The
 `release-catalog` workflow dispatches a deploy weekly and when a release is published;
 it dispatches rather than deploys because the deploy trust accepts only `push` and
 `workflow_dispatch`. `migrations` is set when the schema directory changed since the
