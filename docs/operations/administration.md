@@ -162,7 +162,28 @@ reintroduce an older version. A plan expires after ten minutes and is consumed
 once. Do not change `-api` to `https://ozal.dev`: the GitHub adapter and the
 catalog adapter use different formats.
 
-The console can install the same plan if the host configures the local executor.
+The project publishes these catalogs at `https://ozal.dev/api/v1/releases/<channel>/<os>/<arch>`
+(and `.sig`) for the newest published release of each channel: `preview` follows
+prereleases, `stable` only stable releases and has nothing to offer until the
+first one. They are re-signed at least weekly and expire two weeks after signing,
+so a host whose clock or network keeps it from reading a fresh catalog stops
+being offered updates instead of being offered an old one.
+
+The console can install the same plan once the host runs the local executor.
+Turn it on once, on the host:
+
+```sh
+sudo ozal install updates          # plan: files, the configuration change and the restart
+sudo ozal install updates -apply
+```
+
+It writes the executor's unit, a root-owned profile and the pinned release key
+(`/etc/ozal/release.pub`, the key built into the binary unless `-public-key FILE`),
+sets `admin.update_socket`, starts `ozal-update-executor.service` and restarts Ozal.
+The channel follows the installed build (`preview` for a prerelease) unless
+`-channel` says otherwise. It only adds: a different key, profile, unit or socket
+already in place stops it before it writes anything. The console's update dialog
+shows this command while installs are off. The manual equivalent follows.
 Without `admin.update_socket` the console only checks. With the socket, the
 install path requires an administrator session with the separate `updates.install`
 tool, a passkey confirmed within the last five minutes, and it rejects

@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/ed25519"
@@ -483,6 +484,11 @@ func checkCatalog(ctx context.Context, env updateEnv, pub ed25519.PublicKey, cat
 	raw, err := download(ctx, env.client, catalogURL, maxCatalog)
 	if err != nil {
 		return release.Decision{}, updateCandidate{}, nil, fmt.Errorf("read the release catalog: %w", err)
+	}
+	if trimmed := bytes.TrimSpace(raw); len(trimmed) == 0 || trimmed[0] != '{' {
+		// A site answers a path it does not have with its own page; that is
+		// "nothing published here", not a forged catalog.
+		return release.Decision{}, updateCandidate{}, nil, fmt.Errorf("no signed release catalog is published at %s for the %s channel yet", catalogURL, channel)
 	}
 	sigURL, err := release.ParseCatalogURL(catalogURL)
 	if err != nil {

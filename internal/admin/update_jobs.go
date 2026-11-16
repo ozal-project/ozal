@@ -32,7 +32,7 @@ func WithUpdateExecutor(executor updateExecutor) Option {
 func (h *Handler) updatePlan(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if h.updatesExecutor == nil {
-		writeError(w, http.StatusServiceUnavailable, "the update executor is not configured on this host")
+		writeExecutorMissing(w)
 		return
 	}
 	plan, err := h.updatesExecutor.Plan(r.Context())
@@ -46,7 +46,7 @@ func (h *Handler) updatePlan(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) startUpdateJob(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if h.updatesExecutor == nil {
-		writeError(w, http.StatusServiceUnavailable, "the update executor is not configured on this host")
+		writeExecutorMissing(w)
 		return
 	}
 	grant, ok := r.Context().Value(operatorKey{}).(operatorGrant)
@@ -91,7 +91,7 @@ func (h *Handler) startUpdateJob(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) latestUpdateJob(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if h.updatesExecutor == nil {
-		writeError(w, http.StatusServiceUnavailable, "the update executor is not configured on this host")
+		writeExecutorMissing(w)
 		return
 	}
 	job, err := h.updatesExecutor.Latest(r.Context())
@@ -109,7 +109,7 @@ func (h *Handler) latestUpdateJob(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) updateJob(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if h.updatesExecutor == nil {
-		writeError(w, http.StatusServiceUnavailable, "the update executor is not configured on this host")
+		writeExecutorMissing(w)
 		return
 	}
 	id := r.PathValue("id")
@@ -155,4 +155,19 @@ func writeUpdateExecutorError(w http.ResponseWriter, err error) {
 		}
 	}
 	writeError(w, http.StatusServiceUnavailable, "the local update executor is unavailable or refused the request")
+}
+
+// enableUpdatesCommand turns on the local update executor on a service
+// installation. The console shows it; only root on the host can run it,
+// because the executor it starts runs as root.
+const enableUpdatesCommand = "sudo ozal install updates -apply"
+
+// writeExecutorMissing tells the console that installs are off on this host
+// and how the host turns them on.
+func writeExecutorMissing(w http.ResponseWriter) {
+	writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+		"error":   "installing updates from the console is not turned on for this host",
+		"code":    "executor_missing",
+		"command": enableUpdatesCommand,
+	})
 }

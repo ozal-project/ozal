@@ -1,0 +1,29 @@
+name: release-catalog
+
+# The signed update catalogs at ozal.dev/api/v1/releases expire two weeks after
+# they are signed, and must name a release as soon as it is published. They are
+# written by the site workflow on every deploy, so this workflow only asks for a
+# deploy: weekly, and when a release is published. The site's deploy trust
+# accepts push and workflow_dispatch only, which is why this dispatches instead
+# of deploying itself.
+on:
+  release:
+    types: [published]
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  redeploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Redeploy the site with fresh catalogs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run site.yml -R "$GITHUB_REPOSITORY" --ref main

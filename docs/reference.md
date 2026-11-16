@@ -909,6 +909,21 @@ undoes it. Afterwards, CI must publish with `DEPLOY_PROJECT` equal to the new na
 (`POST /_/api/projects/{name}/rename` with `to`, `expected` and `apply`); the remote variant is
 `ozalctl project rename`.
 
+`ozal install updates [-channel stable|preview] [-public-key FILE] [-catalog URL] [-apply]` turns on
+installing signed releases from the console on a service installation: it adds the update executor's
+unit, profile and pinned key, sets `admin.update_socket` and restarts Ozal. Without `-apply` it prints
+the plan. It never replaces a different key, profile, unit or socket. See
+[administration](operations/administration.md).
+
+Projects that publish their own releases write the update catalogs with
+`ozal release catalog -channel stable|preview -release release.json -checksums checksums.txt
+-signature checksums.txt.sig -commit SHA -out DIR [-ttl 336h] [-migrations] [-min-version V]`: it
+proves the checksums with the public half of `-key` (an `env:` or `file:` reference,
+`env:OZAL_RELEASE_KEY` by default), and writes `DIR/<channel>/<os>/<arch>` and `.sig` for every
+`tar.gz` archive, each checked as an edge would read it. `release.json` is the GitHub release object.
+`ozal release latest -releases list.json -channel C` prints the release a channel offers and the one
+before it. `scripts/release/publish-catalogs.sh` combines them for this repository.
+
 `audit` has `dir`, `include` (`access`, `admin`), `admin_mode` and `max_segment_bytes`. For `access`,
 private routes default to required and public ones to best_effort; a route's `audit_mode` allows an
 explicit choice. For admin, required is the default when the family is included. A durable intent is not

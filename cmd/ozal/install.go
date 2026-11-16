@@ -11,8 +11,11 @@ import (
 )
 
 func runInstall(ctx context.Context, args []string, out io.Writer) error {
+	if len(args) > 0 && args[0] == "updates" {
+		return runInstallUpdates(ctx, args[1:], out)
+	}
 	if len(args) == 0 || (args[0] != "binary" && args[0] != "service") {
-		return errors.New("usage: ozal install binary -archive FILE -sha256 HEX -destination PATH [-apply] | ozal install service [flags]")
+		return errors.New("usage: ozal install binary -archive FILE -sha256 HEX -destination PATH [-apply] | ozal install service [flags] | ozal install updates [flags]")
 	}
 	fs := flag.NewFlagSet("install "+args[0], flag.ContinueOnError)
 	fs.SetOutput(out)
@@ -70,4 +73,25 @@ func runUninstall(ctx context.Context, args []string, out io.Writer) error {
 		return errors.New("unexpected uninstall arguments")
 	}
 	return install.Uninstall(ctx, out, install.LinuxHost{}, install.UninstallRequest{Root: *root, Apply: *apply, PurgeState: *purge})
+}
+
+// runInstallUpdates turns on installing signed releases from the console on
+// an existing service installation (`ozal install service`).
+func runInstallUpdates(ctx context.Context, args []string, out io.Writer) error {
+	fs := flag.NewFlagSet("install updates", flag.ContinueOnError)
+	fs.SetOutput(out)
+	channel := fs.String("channel", "", "stable or preview (default: preview for a prerelease build, stable otherwise)")
+	publicKey := fs.String("public-key", "", "file with the release public key to pin (default: the project's key built into this binary)")
+	catalog := fs.String("catalog", install.DefaultCatalogBase, "HTTPS base of the signed release catalogs")
+	root := fs.String("root", "", "stage files under an absolute directory; no systemd changes")
+	apply := fs.Bool("apply", false, "make the changes (default: plan only)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("unexpected install updates arguments")
+	}
+	return install.Updates(ctx, out, install.LinuxHost{}, install.UpdatesRequest{
+		Root: *root, Channel: *channel, Installed: buildVersion, PublicKey: *publicKey, CatalogBase: *catalog, Apply: *apply,
+	})
 }

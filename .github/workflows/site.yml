@@ -12,7 +12,7 @@ on:
     # The live demo is the access decision compiled to WebAssembly, so a change
     # to the engine republishes the page; the user guides are pages of the site
     # (site/src/lib/guides.mjs), so a guide change republishes it too.
-    paths: [site/**, QUICKSTART.md, docs/START-HERE.md, docs/operations/*.md, docs/security.md, docs/reference.md, scripts/pages/**, cmd/ozalctl/**, internal/ctl/**, internal/pages/**, scripts/build-site-engine.sh, internal/auth/**, internal/config/**, internal/policycontext/**, internal/policydemo/**, cmd/policywasm/**, .github/workflows/site.yml]
+    paths: [site/**, scripts/release/publish-catalogs.sh, internal/release/**, QUICKSTART.md, docs/START-HERE.md, docs/operations/*.md, docs/security.md, docs/reference.md, scripts/pages/**, cmd/ozalctl/**, internal/ctl/**, internal/pages/**, scripts/build-site-engine.sh, internal/auth/**, internal/config/**, internal/policycontext/**, internal/policydemo/**, cmd/policywasm/**, .github/workflows/site.yml]
   workflow_dispatch:
 
 permissions:
@@ -31,9 +31,50 @@ env:
   INDEXNOW_KEY: dbf559d9287e461377dc87aeba5091c5
 
 jobs:
+  # Edges update from ozal.dev/api/v1/releases: a signed catalog per channel and
+  # platform for the newest published release. Every deploy replaces the whole
+  # site, so every deploy writes and re-signs them; the release-catalog workflow
+  # redeploys weekly and on each release so they never expire. The release key
+  # is used only here: Go from this checkout and gh, no npm or site tooling, so
+  # no third-party install script runs next to it. Without the key this job
+  # fails, nothing is deployed, and the live site keeps its catalogs.
+  catalogs:
+    if: vars.OZAL_SITE_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      archive: ${{ steps.sign.outputs.archive }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Build ozal
+        run: go build -trimpath -o "$RUNNER_TEMP/ozal" ./cmd/ozal
+
+      - name: Sign the update catalogs
+        id: sign
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OZAL_RELEASE_KEY: ${{ secrets.OZAL_RELEASE_KEY }}
+        run: |
+          out="$RUNNER_TEMP/catalogs"
+          OZAL="$RUNNER_TEMP/ozal" scripts/release/publish-catalogs.sh "$out"
+          mkdir -p "$out"
+          # A few kilobytes: passed to the deploy job as an output.
+          echo "archive=$(tar -czf - -C "$out" . | base64 -w0)" >> "$GITHUB_OUTPUT"
+
   deploy:
     # Enable only after the edge trusts this repository's owner/workflow.
     if: vars.OZAL_SITE_DEPLOY_ENABLED == 'true'
+    needs: catalogs
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -67,6 +108,17 @@ jobs:
         run: |
           npm ci
           npm run build
+
+      # The catalogs signed by the catalogs job, which never runs npm. This job
+      # can only copy them: it has no key to sign anything else, and an edge
+      # refuses a catalog that is not signed by it.
+      - name: Add the signed update catalogs
+        env:
+          CATALOGS: ${{ needs.catalogs.outputs.archive }}
+        run: |
+          test -n "$CATALOGS" || { echo "the catalogs job produced nothing" >&2; exit 1; }
+          mkdir -p site/dist/api/v1/releases
+          printf '%s' "$CATALOGS" | base64 -d | tar -xzf - -C site/dist/api/v1/releases
 
       - name: Build the native operator
         run: go build -trimpath -o "$RUNNER_TEMP/ozalctl" ./cmd/ozalctl
