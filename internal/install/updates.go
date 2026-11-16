@@ -14,6 +14,7 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/ozal-project/ozal/internal/config"
 	relversion "github.com/ozal-project/ozal/internal/release"
@@ -43,6 +44,12 @@ const (
 	installedConfig     = "/etc/ozal/config.json"
 	installedBinary     = "/usr/local/lib/ozal/ozal"
 	installedUnit       = "/etc/systemd/system/ozal.service"
+)
+
+// How long the installer waits for the edge after restarting it.
+const (
+	updatesReadiness = 30 * time.Second
+	updatesPoll      = time.Second
 )
 
 // ExecutorUnit is the embedded systemd unit of the update executor.
@@ -234,15 +241,38 @@ func Updates(ctx context.Context, out io.Writer, host UpdatesHost, r UpdatesRequ
 		fmt.Fprintln(out, "Staged. No service was started.")
 		return nil
 	}
-	for _, args := range [][]string{{"daemon-reload"}, {"enable", "--now", "ozal-update-executor.service"}, {"restart", "ozal.service"}} {
+	if err := activateUpdates(ctx, host, changed); err != nil {
+		return err
+	}
+	fmt.Fprintln(out, "Updates are on. In the console, open the update notice or Settings to review and install a signed release; installing needs the updates.install tool and a passkey.")
+	return nil
+}
+
+// activateUpdates starts the executor and, when the configuration changed,
+// restarts the edge so it reads admin.update_socket, then waits for the edge
+// to answer.
+func activateUpdates(ctx context.Context, host UpdatesHost, changed bool) error {
+	steps := [][]string{{"daemon-reload"}, {"enable", "--now", "ozal-update-executor.service"}}
+	if changed {
+		// admin.update_socket is read at startup.
+		steps = append(steps, []string{"restart", "ozal.service"})
+	}
+	for _, args := range steps {
 		if err := host.Systemctl(ctx, args...); err != nil {
 			return fmt.Errorf("systemctl %s: %w", strings.Join(args, " "), err)
 		}
 	}
-	if !host.Healthy(ctx) {
-		return errors.New("ozal did not come back after the restart; check: journalctl -u ozal -n 50")
+	// The restarted edge takes a moment to listen again: wait for it as
+	// `ozal install service` does, instead of judging the first instant.
+	deadline, cancel := context.WithTimeout(ctx, updatesReadiness)
+	defer cancel()
+	for !host.Healthy(deadline) {
+		select {
+		case <-deadline.Done():
+			return errors.New("ozal did not come back after the restart; check: journalctl -u ozal -n 50")
+		case <-time.After(updatesPoll):
+		}
 	}
-	fmt.Fprintln(out, "Updates are on. In the console, open the update notice or Settings to review and install a signed release; installing needs the updates.install tool and a passkey.")
 	return nil
 }
 
