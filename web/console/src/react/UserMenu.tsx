@@ -110,7 +110,7 @@ export function UserMenu({ placement = "down" }: { placement?: "up" | "down" }) 
         </div>}
 
         {account?.also_visitor && <div className="border-border bg-muted/40 border-t px-4 py-3 text-xs">
-          <p className="text-muted-foreground">This email also signs in as a <span className="text-foreground">visitor</span>, with its own passkeys.{visitorPortal && <> <a className="text-foreground underline underline-offset-4" href={visitorPortal} target="_blank" rel="noreferrer">Visitor account</a></>}</p>
+          <p className="text-muted-foreground">This email also signs in as a <span className="text-foreground">visitor</span>, with its own passkeys.{visitorPortal && <> <a className="link" href={visitorPortal} target="_blank" rel="noreferrer">Visitor account</a></>}</p>
         </div>}
 
         {notice && <p className="text-muted-foreground border-border border-t px-4 py-2 text-xs" role="status">{notice}</p>}

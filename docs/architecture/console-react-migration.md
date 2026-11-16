@@ -22,7 +22,7 @@ bundle.
 
 - Any Go handler, API shape, JSON field or route in `internal/admin`.
 - The admin listener (loopback or Unix socket only) and its authentication.
-- Design, tokens, typography and the Umbral/Marfil identity.
+- Design, tokens, typography and the Umbral mark with the graphite and indigo palette.
 - Permissions, tools and the session model.
 - Server-side rendering, a Node runtime or a meta-framework.
 - New product behavior. API or permission changes need their own security

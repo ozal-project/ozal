@@ -166,3 +166,36 @@ func TestPortalSaysTheEmailIsAlsoAnAdministrator(t *testing.T) {
 		}
 	}
 }
+
+// An enrolment's answer says what was created, so the page can show a
+// receipt and let the person name the passkey there and then. An unknown
+// provider is reported as unknown, never as a place. A sign-in carries no
+// receipt.
+func TestEnrolmentReceiptNamesTheNewPasskey(t *testing.T) {
+	h := newHarness(t)
+	ana := h.browser()
+	device := newAuthenticator(t)
+	device.backupEligible = true
+	code, result := ana.enrolTo(t, device, h.invite(t, "ana@example.com", false), "")
+	if code != http.StatusOK {
+		t.Fatalf("enrol = %d", code)
+	}
+	created, ok := result["passkey"].(map[string]any)
+	if !ok {
+		t.Fatalf("no receipt in %v", result)
+	}
+	id, _ := created["id"].(string)
+	if id == "" || id != passkeysOf(t, ana)[0]["id"] || created["provider_known"] != false || created["provider"] != "Synced passkey" {
+		t.Fatalf("receipt = %v", created)
+	}
+	if rec, body := ana.post(t, "/_/auth/devices/rename", map[string]string{"id": id, "label": "Work laptop"}); rec.Code != http.StatusOK || body["label"] != "Work laptop" {
+		t.Fatalf("naming from the receipt = %d %v", rec.Code, body)
+	}
+	if listed := passkeysOf(t, ana)[0]; listed["label"] != "Work laptop" || listed["provider_known"] != false {
+		t.Fatalf("listed = %v", listed)
+	}
+	_, login := h.browser().login(t, device, "", loginOrigin)
+	if _, has := login["passkey"]; has {
+		t.Fatalf("a sign-in carried a receipt: %v", login)
+	}
+}

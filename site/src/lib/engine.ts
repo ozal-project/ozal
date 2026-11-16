@@ -87,9 +87,20 @@ export function plainDecision(report: Report, app: string, visitor: Visitor): st
 
 export function describe(report: Report): { state: "allowed" | "refused" | "again"; title: string } {
   const d = report.decision;
+  // Nobody is signed in: the visitor is sent to sign in, which is not a refusal.
+  if (report.scope === "gate_only") return { state: "again", title: "Sign in first" };
   if (d.step_up) return { state: "again", title: "Asks to sign in again" };
   if (!d.allowed) return { state: "refused", title: "Refused" };
   return hasCondition(d.reason) ? { state: "again", title: "Let in, if the login qualifies" } : { state: "allowed", title: "Let in" };
+}
+
+// cellWord is the answer in one or two words, for a cell of the access matrix.
+export function cellWord(report: Report): string {
+  const d = report.decision;
+  if (report.scope === "gate_only") return "Sign in";
+  if (d.step_up) return "Sign in again";
+  if (!d.allowed) return "Refused";
+  return hasCondition(d.reason) ? "Conditional" : "Let in";
 }
 
 export type Stage = { name: string; state: "ok" | "no" | "skip"; note: string };

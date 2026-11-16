@@ -8,12 +8,19 @@ conditions. It is not an ASVS certification or a complete audit of an installati
 
 - The console and the administrative API stay on loopback or a private socket.
   Reach them through a private transport; never publish them as the upstream of a route.
+  Only enrolling a passkey by code happens on the public login host: the code is
+  shown only in the host's terminal, works once for five minutes, and the terminal
+  reports which browser used it.
 - Keep private applications on loopback or a controlled network: an alternative
   address that bypasses the gateway can also bypass its policies.
 - Use a valid public TLS certificate; do not disable verification to work
   around certificate problems, staging tests or connections to the origin.
 - Keep private keys on their host. Configure secrets through `file:`/`env:`
   references and minimal permissions. Never paste them into chats, URLs or repositories.
+  To connect Cloudflare from the console, paste an API token scoped to the zones Ozal
+  serves, with the four permissions **Domains** lists. The edge stores it in a 0600 file
+  beside its state and never shows it again. Moving certificates to DNS-01 with it still
+  takes a command on the host.
 - Distinguish visitors, CI publishers, connectors and administrators. A valid
   identity in one scope grants no authority in the others.
 - Back up and rehearse recovery of keys, configuration and data. An old copy can
@@ -25,7 +32,7 @@ conditions. It is not an ASVS certification or a complete audit of an installati
 |---|---|---|
 | Client → edge | Configured hosts, sanitized identity/IP headers, policy and limits | DNS, firewall, capacity and network protection |
 | Browser → login | OIDC or WebAuthn validation, state/challenges, sessions and revocation | Correctly configured IdP, RP/domain and authenticators |
-| Edge → application | Identity generated after authorization; session cookie removed | The app trusts only the authorized gateway and keeps its own permissions |
+| Edge → application | Identity generated after authorization; session cookie removed; optional signed assertion per request | The app trusts only the authorized gateway (or verifies the assertion with a pinned key) and keeps its own permissions |
 | Edge → connector | mTLS, enrolled fingerprint, fixed resources and revocation | CA distribution, local keys and permitted transport |
 | Operator → administration | Host/socket, or a session with the required tool | Unix permissions, browser security and host access |
 | CI → publishing | Dedicated handler, repo/ref/workflow/audience/event and replay protection | Protecting the workflow, its credentials and build artifacts |
@@ -35,7 +42,9 @@ conditions. It is not an ASVS certification or a complete audit of an installati
 A client cannot create a trusted identity with `X-Auth-Request-*`,
 `X-Ozal-Visitor-*` (nor the former `X-Switchboard-Visitor-*`), or variants with
 underscores. The tunnel carries assertions authenticated by mTLS; they are not
-JWTs that any app can verify. Keeping an application's own login is coexistence,
+JWTs that any app can verify. For that, a route can opt into a signed
+[identity assertion](reference.md#identity-assertion): a 60-second EdDSA JWS for that
+application's audience, which it verifies with a pinned key and a replay check. Keeping an application's own login is coexistence,
 not automatic SSO.
 See [identity](architecture/identity-login.md) and
 [host sessions](architecture/host-sessions.md).

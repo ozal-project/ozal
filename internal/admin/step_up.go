@@ -11,6 +11,23 @@ import (
 	"github.com/ozal-project/ozal/internal/events"
 )
 
+// freshPasskeyAccount admits a credential-management mutation only for the
+// account behind a session with a recent proof of an existing passkey.
+// Call it again immediately before persistence if the operation can wait.
+func (h *Handler) freshPasskeyAccount(w http.ResponseWriter, r *http.Request) string {
+	self, credential := h.callerPasskey(r)
+	if self == "" || credential == "" {
+		writeError(w, http.StatusForbidden, "sign in with an administrator passkey first")
+		return ""
+	}
+	grant, _ := r.Context().Value(operatorKey{}).(operatorGrant)
+	if !h.operators.passkeyFresh(grant.ID, passkeyStepUpMaxAge) {
+		writeErrorCode(w, http.StatusForbidden, "confirm it's you with your passkey, then try again", "passkey_required")
+		return ""
+	}
+	return self
+}
+
 // stepUpBegin starts a passkey assertion for the signed-in administrator.
 // It never opens a new session and never accepts the admin token or the host
 // socket: only a session already bound to a passkey account can be confirmed.
@@ -23,6 +40,10 @@ func (h *Handler) stepUpBegin(w http.ResponseWriter, r *http.Request) {
 	}
 	if h.identities == nil {
 		writeError(w, http.StatusServiceUnavailable, "administrator passkeys are not configured on this host")
+		return
+	}
+	if grant.loginHost {
+		writeErrorCode(w, http.StatusConflict, "sign in again on the sign-in site, then retry this action", "login_host_required")
 		return
 	}
 	rp, err := h.relyingParty(r)

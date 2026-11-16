@@ -1,9 +1,12 @@
 @custom-variant dark (&:is(.dark *));
 
-/* Ozal identity (SITE-005, Marfil): warm ink with three brand colours, each
-   with one meaning and never decoration.
-     ivory   (primary)    Ozal itself: actions, the current place, focus
-     camel   (signal)     what is live: a signal on a cord, a connection up
+/* Ozal identity: a neutral graphite ground and grey-white text, with one
+   accent, indigo, and each brand value has one meaning, never decoration:
+     indigo  (primary)    the next action: a filled button with white text
+                          (#4f46e5, 6.3:1)
+     indigo  (signal)     the current place, focus and what is live: text,
+                          marks and rings on the dark ground (#818cf8, 5.6:1+)
+     ink     (foreground) Ozal itself: text and the arch of the mark
      graphite (depth)     depth: the door leaf of the mark, quiet surfaces
    States stay out of the brand range: green allowed, red refused, blue
    waiting (a check or decision under way), amber only for warnings that need
@@ -12,35 +15,36 @@
    bundled (OFL): no third-party requests. */
 :root {
   --radius: 0.5rem;
-  --background: #0e0e0d;
-  --foreground: #f1ede6;
-  --card: #171716;
-  --card-foreground: #f1ede6;
-  --popover: #1f1f1d;
-  --popover-foreground: #f1ede6;
-  --primary: #f1ece2;
-  --primary-foreground: #0e0e0d;
-  --secondary: #1f1f1d;
-  --secondary-foreground: #f1ede6;
-  --muted: #1f1f1d;
-  --muted-foreground: #a19d96;
-  --accent: #262624;
-  --accent-foreground: #f1ede6;
+  --background: #0b0c0e;
+  --foreground: #eef0f3;
+  --card: #131518;
+  --card-foreground: #eef0f3;
+  --popover: #1b1e22;
+  --popover-foreground: #eef0f3;
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
+  --secondary: #1b1e22;
+  --secondary-foreground: #eef0f3;
+  --muted: #1b1e22;
+  --muted-foreground: #9ca3ac;
+  --accent: #20232a;
+  --accent-foreground: #eef0f3;
   --destructive: #ee6b5e;
-  --border: #2a2927;
-  --input: #3a3833;
-  --ring: #c4a17c;
+  --border: #2a2e34;
+  /* A field border is at least 3:1 on every surface it sits on (WCAG 1.4.11). */
+  --input: #646b75;
+  --ring: #818cf8;
   --success: #78cc8a;
   --warning: #e0a84a;
   --waiting: #86b3e6;
-  /* Camel: what is live. Graphite: depth. */
-  --signal: #c4a17c;
-  --depth: #55514a;
-  --sidebar: #0e0e0d;
-  --sidebar-foreground: #f1ede6;
-  --sidebar-border: #2a2927;
-  --sidebar-accent: #1f1f1d;
-  --sidebar-accent-foreground: #f1ede6;
+  /* Light indigo: the current place, focus, what is live. Graphite: depth. */
+  --signal: #818cf8;
+  --depth: #717883;
+  --sidebar: #0b0c0e;
+  --sidebar-foreground: #eef0f3;
+  --sidebar-border: #2a2e34;
+  --sidebar-accent: #1b1e22;
+  --sidebar-accent-foreground: #eef0f3;
 }
 
 @theme inline {
@@ -111,7 +115,7 @@
   .lamp-off { --lamp: var(--destructive); }
   .lamp-wait { --lamp: var(--waiting); animation: lamp-pulse 1.6s ease-in-out infinite; }
   .lamp-warn { --lamp: var(--warning); }
-  .lamp-idle { --lamp: #3a3833; }
+  .lamp-idle { --lamp: #3a3f47; }
   .lamp-lg { @apply size-3; }
   /* A group name; as a button it adds or removes the group. */
   .chip {
@@ -124,8 +128,30 @@
   }
   .panel-head { @apply flex flex-wrap items-center justify-between gap-3 px-5 py-4; }
   /* A connecting line, as a divider next to labels. */
-  .cord { stroke: #6e6a63; fill: none; stroke-linecap: round; }
+  .cord { stroke: #6b717b; fill: none; stroke-linecap: round; }
+  /* One link style: light indigo with a soft underline that firms on hover.
+     link-quiet is for secondary links in muted text (an event's host). */
+  .link {
+    color: var(--signal);
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--signal) 45%, transparent);
+    text-underline-offset: 4px;
+    cursor: pointer;
+  }
+  .link:hover { text-decoration-color: currentColor; }
+  .link-quiet {
+    color: var(--muted-foreground);
+    text-decoration: underline;
+    text-decoration-color: var(--border);
+    text-underline-offset: 4px;
+    cursor: pointer;
+  }
+  .link-quiet:hover { color: var(--foreground); text-decoration-color: var(--signal); }
 }
+
+/* A page title takes focus after navigation so screen readers announce the
+   new page; it is not a control, so it draws no focus box. */
+h1[tabindex="-1"]:focus { outline: none; }
 
 @keyframes lamp-pulse { 50% { opacity: 0.45; } }
 
@@ -176,30 +202,47 @@
 .auth-mark { display: grid; justify-items: center; gap: 14px; text-align: center; }
 .auth-name { font-size: 22px; font-weight: 500; letter-spacing: -0.02em; line-height: 1; animation: auth-rise 0.6s 1.1s ease-out both; }
 .auth-sub { margin-top: 6px; color: var(--muted-foreground); font-size: 13px; animation: auth-rise 0.6s 1.25s ease-out both; }
-.auth-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 28px; animation: auth-rise 0.6s 1.35s ease-out both; }
-.auth-links { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px 20px; animation: auth-rise 0.6s 1.5s ease-out both; }
+/* The task never waits for the brand: the card and its links appear at once
+   with a short rise, while the mark's entrance plays on its own. */
+.auth-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 28px; animation: auth-rise 0.25s ease-out both; }
+.auth-links { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px 20px; animation: auth-rise 0.25s 0.05s ease-out both; }
 @keyframes auth-rise { from { opacity: 0; transform: translateY(6px); } }
 @media (max-width: 480px) { .auth-card { padding: 22px; } }
 
-.tab[aria-current="page"] { border-color: var(--primary); }
+.tab[aria-current="page"] { border-color: var(--signal); }
 
 /* Navigation as a threshold: the active space opens a small Umbral arch in
    the shared baseline. No extra status, counters or invented workspace. */
 .console-workspace { display: flex; min-height: 100svh; flex-direction: column; }
 .console-header { position: sticky; top: 0; z-index: 30; background: var(--background); border-bottom: 1px solid var(--border); }
 .console-bar, .console-content { width: min(1360px, 100%); margin-inline: auto; padding-inline: 32px; }
-.console-bar { display: grid; grid-template-columns: 160px minmax(0, 1fr) auto; align-items: center; gap: 24px; min-height: 76px; }
+.console-bar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 28px; min-height: 76px; }
 .console-brand { display: inline-flex; width: fit-content; text-decoration: none; }
-.console-nav { display: flex; justify-content: center; align-self: stretch; gap: 20px; }
-.console-nav-link { position: relative; display: inline-flex; align-items: center; color: var(--muted-foreground); font-size: 14px; text-decoration: none; white-space: nowrap; transition: color 150ms; }
-.console-nav-link:hover, .console-nav-link[aria-current="page"] { color: var(--foreground); }
-.console-nav-link[aria-current="page"]::after { content: ""; position: absolute; bottom: -1px; left: calc(50% - 7px); width: 14px; height: 9px; border: 2px solid var(--primary); border-bottom: 0; border-radius: 9px 9px 0 0; }
-.console-nav-link:focus-visible, .console-brand:focus-visible, .console-tab:focus-visible { outline: 2px solid var(--ring); outline-offset: 6px; border-radius: 3px; }
+/* The place switcher: "Access › Applications", a bordered pill like the rest
+   of the bar's controls, lit in indigo while open. */
+.console-switcher { justify-self: start; display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px 0 14px; border: 1px solid var(--border); border-radius: 10px; background: rgb(255 255 255 / 0.03); font-size: 14px; color: var(--foreground); cursor: pointer; transition: border-color 150ms, background 150ms; }
+.console-switcher:hover, .console-switcher[data-state="open"] { border-color: color-mix(in srgb, var(--signal) 45%, transparent); background: color-mix(in srgb, var(--signal) 10%, transparent); }
+.console-switcher:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+.console-switcher-group { color: var(--muted-foreground); }
+.console-switcher-sep { color: var(--depth); }
+.console-switcher-here { font-weight: 600; }
+.console-switcher-chevron { color: var(--muted-foreground); transition: transform 150ms; }
+.console-switcher[data-state="open"] .console-switcher-chevron { transform: rotate(180deg); }
+/* Every place of the console, grouped and explained, in two columns. */
+.console-sections { z-index: 50; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 18px; width: min(640px, calc(100vw - 32px)); padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--popover); box-shadow: 0 30px 80px -30px rgb(0 0 0 / 0.8); }
+.console-sections-group { display: grid; align-content: start; gap: 2px; }
+.console-sections-group:first-child { grid-column: 1 / -1; }
+.console-sections-heading { padding: 10px 10px 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-foreground); }
+.console-sections-item { position: relative; display: grid; gap: 2px; padding: 9px 10px 9px 24px; border-radius: 8px; text-decoration: none; color: var(--foreground); outline: none; }
+.console-sections-item[data-highlighted] { background: color-mix(in srgb, var(--signal) 10%, transparent); }
+.console-sections-item[aria-current="page"]::before { content: ""; position: absolute; top: 13px; left: 9px; width: 8px; height: 12px; border: 2px solid var(--signal); border-bottom: 0; border-radius: 6px 6px 0 0; }
+.console-sections-label { font-size: 14px; font-weight: 600; }
+.console-sections-purpose { font-size: 12px; color: var(--muted-foreground); }
+.console-brand:focus-visible, .console-tab:focus-visible { outline: 2px solid var(--ring); outline-offset: 6px; border-radius: 3px; }
 .console-account { min-width: 0; justify-self: end; max-width: 260px; }
 /* Between the drawer and a wide screen the menu needs the room: the account
    shows its initial, and its full name on hover and in the menu itself. */
 @media (min-width: 1024px) and (max-width: 1279px) {
-  .console-nav { gap: 16px; }
   .console-account-name { display: none; }
 }
 .console-content { flex: 1; padding-block: 40px; }
@@ -207,19 +250,21 @@
 .console-drawer { position: fixed; inset: 0; margin: 0; width: 100%; max-width: none; height: 100svh; max-height: none; padding: 24px; color: var(--foreground); background: var(--background); border: 0; }
 .console-drawer[open] { display: flex; flex-direction: column; }
 .console-drawer-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; }
-.console-drawer nav { display: grid; gap: 4px; }
-.console-drawer-link { position: relative; display: grid; gap: 4px; padding: 12px 0 12px 24px; color: var(--muted-foreground); font-size: 22px; font-weight: 500; text-decoration: none; }
+.console-drawer nav { display: grid; gap: 18px; overflow-y: auto; }
+.console-drawer-group { display: grid; gap: 2px; }
+.console-drawer-heading { padding-left: 24px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-foreground); }
+.console-drawer-link { position: relative; display: grid; gap: 2px; padding: 8px 0 8px 24px; color: var(--muted-foreground); font-size: 18px; font-weight: 500; text-decoration: none; }
 .console-drawer-link[aria-current="page"] { color: var(--foreground); }
-.console-drawer-link[aria-current="page"]::before { content: ""; position: absolute; top: 19px; left: 0; width: 10px; height: 16px; border: 2px solid var(--primary); border-bottom: 0; border-radius: 7px 7px 0 0; }
+.console-drawer-link[aria-current="page"]::before { content: ""; position: absolute; top: 13px; left: 0; width: 10px; height: 16px; border: 2px solid var(--signal); border-bottom: 0; border-radius: 7px 7px 0 0; }
 .console-nav-purpose { font-size: 12px; font-weight: 400; color: var(--muted-foreground); }
 .console-drawer-account { margin-top: auto; padding-top: 24px; }
 .console-tabs { display: flex; gap: 28px; margin-top: 24px; border-bottom: 1px solid var(--border); }
 .console-tab { position: relative; padding-bottom: 14px; font-size: 14px; color: var(--muted-foreground); text-decoration: none; white-space: nowrap; }
 .console-tab[aria-current="page"] { color: var(--foreground); }
-.console-tab[aria-current="page"]::after { content: ""; position: absolute; bottom: -1px; left: 0; right: 0; height: 2px; background: var(--primary); }
+.console-tab[aria-current="page"]::after { content: ""; position: absolute; bottom: -1px; left: 0; right: 0; height: 2px; background: var(--signal); }
 @media (max-width: 1023px) {
   .console-bar { display: flex; min-height: 64px; gap: 16px; }
-  .console-nav, .console-account { display: none; }
+  .console-switcher, .console-account { display: none; }
   .console-mobile-place { display: block; margin-left: auto; color: var(--muted-foreground); font-size: 12px; }
   .console-menu-toggle { display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 6px; }
   .console-menu-toggle:hover { background: var(--muted); }
@@ -238,3 +283,41 @@
 .edge-live { --lamp: var(--signal); }
 
 .ozal-modal::backdrop { background: rgb(0 0 0 / 60%); }
+
+/* The Overview's map of the console: groups side by side, each place a row
+   with what it is for, lit in indigo on hover. */
+.section-hub { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.section-hub-group { display: grid; align-content: start; gap: 4px; }
+.section-hub-heading { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-foreground); padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.section-hub ul { display: grid; gap: 2px; }
+.section-hub-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 8px; border-radius: 8px; text-decoration: none; color: var(--foreground); }
+.section-hub-item:hover { background: color-mix(in srgb, var(--signal) 10%, transparent); }
+.section-hub-item:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.section-hub-label { display: block; font-size: 14px; font-weight: 600; }
+.section-hub-purpose { display: block; font-size: 12px; color: var(--muted-foreground); }
+.section-hub-arrow { flex: none; color: var(--muted-foreground); transition: transform 150ms, color 150ms; }
+.section-hub-item:hover .section-hub-arrow { color: var(--signal); transform: translateX(2px); }
+
+/* The header's place switcher and search sit together on the left. */
+.console-bar-places { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.console-search { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 8px 0 12px; border: 1px solid var(--border); border-radius: 10px; background: rgb(255 255 255 / 0.03); color: var(--muted-foreground); font-size: 14px; cursor: pointer; transition: border-color 150ms, background 150ms, color 150ms; }
+.console-search:hover { color: var(--foreground); border-color: color-mix(in srgb, var(--signal) 45%, transparent); background: color-mix(in srgb, var(--signal) 10%, transparent); }
+.console-search:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+.console-search kbd, .command-search-key { padding: 2px 6px; border: 1px solid var(--border); border-radius: 6px; font: 500 11px var(--font-mono); color: var(--muted-foreground); }
+@media (max-width: 1023px) { .console-bar-places { display: none; } }
+@media (min-width: 1024px) and (max-width: 1279px) { .console-search span { display: none; } }
+
+/* Ctrl K: a field and a ranked list, the active row lit in indigo. */
+.command-search { width: min(620px, calc(100vw - 32px)); max-height: min(560px, calc(100svh - 120px)); margin: 12vh auto auto; padding: 0; border: 1px solid var(--border); border-radius: 14px; background: var(--popover); color: var(--foreground); box-shadow: 0 30px 80px -30px rgb(0 0 0 / 0.85); }
+.command-search[open] { display: flex; flex-direction: column; }
+.command-search::backdrop { background: rgb(0 0 0 / 0.55); }
+.command-search-field { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.command-search-field input { flex: 1; min-width: 0; background: transparent; border: 0; outline: none; font-size: 15px; color: var(--foreground); }
+.command-search-field input::placeholder { color: var(--muted-foreground); }
+.command-search-list { overflow-y: auto; padding: 8px; }
+.command-search-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 10px; border-radius: 8px; cursor: pointer; }
+.command-search-item[aria-selected="true"] { background: color-mix(in srgb, var(--signal) 12%, transparent); }
+.command-search-label { display: block; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.command-search-detail { display: block; font-size: 12px; color: var(--muted-foreground); overflow-wrap: anywhere; }
+.command-search-kind { flex: none; font-size: 11px; color: var(--muted-foreground); }
+.command-search-empty { padding: 16px 10px; font-size: 14px; color: var(--muted-foreground); }

@@ -149,10 +149,10 @@ func (c *CloudflareClient) call(ctx context.Context, method, path string, payloa
 	if res.StatusCode >= 500 {
 		// A 5xx may have applied the change; never treat it as a clean
 		// failure on a create.
-		return fmt.Errorf("%w: %s %s: server error %d: %s", ErrAmbiguous, method, path, res.StatusCode, firstCloudflareMessage(envelope))
+		return fmt.Errorf("%w: %s %s: server error %d: %s", ErrAmbiguous, method, path, res.StatusCode, strings.ReplaceAll(firstCloudflareMessage(envelope), c.token, "[redacted]"))
 	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 || !envelope.Success {
-		return fmt.Errorf("cloudflare: %s %s: API error %d: %s", method, path, res.StatusCode, firstCloudflareMessage(envelope))
+		return fmt.Errorf("cloudflare: %s %s: API error %d: %s", method, path, res.StatusCode, strings.ReplaceAll(firstCloudflareMessage(envelope), c.token, "[redacted]"))
 	}
 	if out != nil {
 		if err := json.Unmarshal(envelope.Result, out); err != nil {

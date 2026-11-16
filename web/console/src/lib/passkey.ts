@@ -1,7 +1,9 @@
 // Administrator passkeys. The edge sends WebAuthn options with binary fields
 // as base64url; the browser wants ArrayBuffers and the edge wants base64url
 // back. The ceremony ID travels in a header, never in a cookie or URL.
-import { withHints } from "$lib/passkeyChoices";
+import { withHints } from "./passkeyChoices.ts";
+import { reauthenticateOnLoginHost } from "./loginHost.ts";
+import { withPasskeyProof } from "./accessRequests.ts";
 
 export type AdminSession = { token: string; name: string; expires: string; tools: string[]; renewable?: boolean };
 
@@ -26,7 +28,7 @@ async function api<T>(path: string, body: unknown, ceremony?: string, bearer?: s
     body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as { error?: string }).error || "The request failed.");
+  if (!res.ok) throw Object.assign(new Error((data as { error?: string }).error || "The request failed."), { code: (data as { code?: string }).code });
   return data as T;
 }
 
@@ -49,9 +51,10 @@ function credentialJSON(credential: PublicKeyCredential) {
   return out;
 }
 
-// Passkeys live in the password manager that saved them: one saved by Chrome's
-// Google Password Manager is not offered by Firefox, and the reverse.
-const otherBrowser = "Passkeys stay in the password manager that saved them, so a passkey made in another browser is not offered here. From a browser where you are signed in, open your name in the header and choose “Sign in on another browser”.";
+// Whether a passkey made in one browser is offered in another depends on the
+// password manager, the system and how they are connected, so the text names
+// where to look and never says it cannot be here.
+const otherBrowser = "Your passkey may still be available in this browser: check the password manager, phone or security key you used when creating it. If it is not, from a browser where you are signed in, open your name in the header and choose “Sign in on another browser”.";
 
 // The browser reports a closed prompt, a timeout and "no passkey here" alike.
 export function explainPasskeyError(e: unknown, phase: "sign-in" | "create" = "create"): string {
@@ -71,7 +74,7 @@ export function explainPasskeyError(e: unknown, phase: "sign-in" | "create" = "c
 // A one-use link (10 minutes) that adds a passkey from another browser for the
 // signed-in administrator and signs that browser in.
 export async function issueDeviceLink(session: string): Promise<{ token: string; expires: string }> {
-  return api("/_/api/admin/devices", {}, undefined, session);
+  return withPasskeyProof(session, () => api("/_/api/admin/devices", {}, undefined, session), confirmWithPasskey);
 }
 
 // renewSession extends an active passkey session; the answer carries the new end.
@@ -111,21 +114,35 @@ export async function adminState(signal?: AbortSignal): Promise<{ enrolled: bool
 // Adds another passkey to the signed-in administrator, so losing one device
 // does not lock them out.
 export async function addPasskey(session: string): Promise<void> {
-  const begun = await api<Begun>("/_/api/admin/passkeys/begin", {}, undefined, session);
+  const begun = await withPasskeyProof(session, () => api<Begun>("/_/api/admin/passkeys/begin", {}, undefined, session), confirmWithPasskey);
   const pk = begun.options.publicKey;
   pk.challenge = decode(pk.challenge);
   pk.user.id = decode(pk.user.id);
   for (const c of pk.excludeCredentials ?? []) c.id = decode(c.id);
   const credential = (await navigator.credentials.create({ publicKey: pk as PublicKeyCredentialCreationOptions })) as PublicKeyCredential | null;
   if (!credential) throw new Error("No passkey was created.");
-  await api<{ added: boolean }>("/_/api/admin/passkeys/finish", credentialJSON(credential), begun.ceremony, session);
+  // Keep the created credential and ceremony on a local confirmation; never
+  // repeat creation. HTTPS confirmation navigates and does not replay it.
+  const response = credentialJSON(credential);
+  await withPasskeyProof(session, () => api<{ added: boolean }>("/_/api/admin/passkeys/finish", response, begun.ceremony, session), confirmWithPasskey);
 }
 
 // confirmWithPasskey proves the signed-in administrator is still present
 // before a sensitive operation such as installing a release. It never opens
-// a new session; the edge marks this one as recently confirmed.
+// a new session on loopback; a configured login host reauthenticates there.
+// After that round trip the person retries the action with the new session.
 export async function confirmWithPasskey(session: string): Promise<void> {
-  const begun = await api<Begun>("/_/api/admin/step-up/begin", {}, undefined, session);
+  // The HTTPS RP's passkey cannot confirm on ozal.localhost. Navigation
+  // starts a fresh sign-in; keep the caller from retrying with its old token.
+  let begun: Begun;
+  try {
+    begun = await api<Begun>("/_/api/admin/step-up/begin", {}, undefined, session);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "login_host_required" && await reauthenticateOnLoginHost()) {
+      return new Promise<void>(() => {});
+    }
+    throw error;
+  }
   const pk = begun.options.publicKey;
   pk.challenge = decode(pk.challenge);
   for (const c of pk.allowCredentials ?? []) c.id = decode(c.id);
@@ -134,7 +151,8 @@ export async function confirmWithPasskey(session: string): Promise<void> {
   await api<{ verified: boolean }>("/_/api/admin/step-up/finish", credentialJSON(credential), begun.ceremony, session);
 }
 
-export type OwnPasskey = { id: string; label?: string; created_at: string; last_used_at?: string; current?: boolean };
+export type { OwnPasskey } from "./passkeyName.ts";
+import type { OwnPasskey } from "./passkeyName.ts";
 
 async function bearerRequest<T>(method: string, path: string, session: string, signal?: AbortSignal): Promise<T> {
   const res = await fetch(path, { method, cache: "no-store", signal: signal ?? AbortSignal.timeout(15_000), headers: { Authorization: `Bearer ${session}` } });
@@ -154,6 +172,19 @@ export type OwnAccount = { email: string; name: string; also_visitor: boolean };
 // email has a visitor account with its own passkeys, never shared access.
 export async function ownAccount(session: string, signal?: AbortSignal): Promise<OwnAccount> {
   return bearerRequest<OwnAccount>("GET", "/_/api/admin/account", session, signal);
+}
+
+// Names one of them. The edge wants a fresh passkey proof: a stale session
+// gets an error with code "passkey_required" (see withPasskeyProof).
+export async function renameOwnPasskey(session: string, id: string, label: string): Promise<{ label: string }> {
+  const res = await fetch(`/_/api/admin/passkeys/${encodeURIComponent(id)}`, {
+    method: "PATCH", cache: "no-store", signal: AbortSignal.timeout(15_000),
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session}` },
+    body: JSON.stringify({ label }),
+  });
+  const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string; label?: string };
+  if (!res.ok) throw Object.assign(new Error(data.error || `HTTP ${res.status}`), { code: data.code });
+  return { label: data.label ?? label };
 }
 
 // Revokes one of them; the sessions it opened end on the edge at once.

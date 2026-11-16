@@ -47,3 +47,7 @@ config.json
 /.local/docs-archive/
 /docs/local/
 /.local/
+
+# Country flag SVGs, imported locally by scripts/flags/import.mjs; the login
+# host serves them when present and shows the country code otherwise.
+/internal/admin/loginhost/flags/

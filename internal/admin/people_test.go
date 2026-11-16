@@ -87,7 +87,7 @@ func TestPeopleInviteListDisable(t *testing.T) {
 	audit := &recordingMutationAudit{}
 	handler, identity, recorder := peopleHandler(t, WithAdminMutationAudit(audit, true))
 
-	invite := `{"email":"Ana@Example.com","name":"Ana","groups":["owner"," "],"return_to":"https://private.example.com/notes"}`
+	invite := `{"email":"Ana@Example.com","name":"Ana","groups":["owner"," "],"new_group":true,"return_to":"https://private.example.com/notes"}`
 	if rec := request(handler, http.MethodPost, "/_/api/people/invite", "", invite); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("invite without token = %d", rec.Code)
 	}
@@ -210,7 +210,7 @@ func TestRecoveryIsRefusedOnTheAdminAPI(t *testing.T) {
 // is accepted there and its event says so.
 func TestRecoveryIsAcceptedOnTheSocket(t *testing.T) {
 	handler, _, recorder := peopleHandler(t)
-	if rec := request(handler, http.MethodPost, "/_/api/people/invite", "secret", `{"email":"ana@example.com","groups":["owner"]}`); rec.Code != http.StatusCreated {
+	if rec := request(handler, http.MethodPost, "/_/api/people/invite", "secret", `{"email":"ana@example.com","groups":["owner"],"new_group":true}`); rec.Code != http.StatusCreated {
 		t.Fatalf("first invite = %d %s", rec.Code, rec.Body)
 	}
 	req := localRequest(http.MethodPost, "/_/api/people/invite")
@@ -302,5 +302,51 @@ func TestPeopleShowsTheAdministratorWithTheSameEmail(t *testing.T) {
 	}
 	if len(limited) != 0 {
 		t.Fatalf("administrator = %v; without the administrators tool no account detail is shown", limited)
+	}
+}
+
+// An invitation names a real address and existing groups, and says what the
+// person will be able to open. A typo in either is refused before anything
+// is created; a new group needs new_group.
+func TestInviteRefusesTyposAndSaysWhatThePersonCanOpen(t *testing.T) {
+	handler, identity, _ := peopleHandler(t)
+	h := handler.(*Handler)
+	h.manager.(*fakeManager).cfg.Routes = append(h.manager.(*fakeManager).cfg.Routes,
+		config.Route{Host: "wiki.example.com", Access: &config.AccessPolicy{RequiredGroups: []string{"engineering"}}})
+
+	for _, body := range []string{
+		`{"email":"tu@correo","groups":["engineering"]}`,
+		`{"email":"Ana <ana@example.com>"}`,
+	} {
+		if rec := request(handler, http.MethodPost, "/_/api/people/invite", "secret", body); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "not an email address") {
+			t.Fatalf("%s = %d %s", body, rec.Code, rec.Body)
+		}
+	}
+	rec := request(handler, http.MethodPost, "/_/api/people/invite", "secret", `{"email":"ana@example.com","groups":["enginering"]}`)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "group_unknown") || !strings.Contains(rec.Body.String(), `did you mean \"engineering\"`) {
+		t.Fatalf("typo group = %d %s", rec.Code, rec.Body)
+	}
+	if users, _ := identity.Users(context.Background()); len(users) != 0 {
+		t.Fatalf("a refused invitation created %v", users)
+	}
+
+	rec = request(handler, http.MethodPost, "/_/api/people/invite", "secret", `{"email":"ana@example.com","groups":["engineering"]}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("invite = %d %s", rec.Code, rec.Body)
+	}
+	var created struct {
+		Groups []string `json:"groups"`
+		Apps   []string `json:"apps"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(created.Groups, ",") != "engineering" || strings.Join(created.Apps, ",") != "private.example.com,wiki.example.com" {
+		t.Fatalf("created = %+v", created)
+	}
+
+	rec = request(handler, http.MethodPost, "/_/api/people/invite", "secret", `{"email":"bo@example.com","groups":["design"],"new_group":true}`)
+	if rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), `"groups":["design"]`) {
+		t.Fatalf("confirmed new group = %d %s", rec.Code, rec.Body)
 	}
 }

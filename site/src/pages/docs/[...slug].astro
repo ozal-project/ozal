@@ -1,0 +1,50 @@
+---
+// One page per public guide, rendered from the repository's Markdown at
+// build time (src/content.config.ts, src/lib/guides.mjs). The guide is the
+// source; this page adds the site's frame, a list of guides and a link back
+// to the file on GitHub.
+import Base from "../../layouts/Base.astro";
+import Header from "../../components/Header.astro";
+import Footer from "../../components/Footer.astro";
+import { getCollection } from "astro:content";
+import { GUIDES, REPO, rewriteGuideLinks } from "../../lib/guides.mjs";
+
+export async function getStaticPaths() {
+  const entries = await getCollection("guides");
+  return entries.map((entry) => ({ params: { slug: entry.id === "index" ? undefined : entry.id }, props: { entry } }));
+}
+
+const { entry } = Astro.props;
+const guide = GUIDES.find((g) => (g.slug || "index") === entry.id);
+if (!guide || !entry.rendered) throw new Error(`no rendered guide for ${entry.id}`);
+const headings = (entry.rendered.metadata?.headings ?? []) as { depth: number; slug: string; text: string }[];
+// A wide table scrolls sideways on a phone, so the keyboard must reach it.
+const html = rewriteGuideLinks(entry.rendered.html, guide.path).replaceAll("<table>", '<table tabindex="0">');
+const href = (slug: string) => (slug ? `/docs/${slug}/` : "/docs/");
+const title = headings.find((h) => h.depth === 1)?.text ?? guide.nav;
+const sections = headings.filter((h) => h.depth === 2);
+// The first paragraph of the guide, as plain text, describes the page.
+const lead = (entry.body ?? "").split(/\n\s*\n/).map((b) => b.trim()).find((b) => b && !/^[#>|`<-]/.test(b)) ?? "";
+const description = lead.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").replace(/[`*_]/g, "").replace(/\s+/g, " ").slice(0, 200);
+---
+<Base title={`${title} · Ozal docs`} description={description || `${guide.nav}: Ozal documentation.`}>
+  <Header current="docs" />
+  <main id="main-content" tabindex="-1" class="docs frame">
+    <nav class="docs-nav" aria-label="Guides">
+      <p class="label">Documentation</p>
+      <ul>{GUIDES.map((g) => <li><a href={href(g.slug)} aria-current={g === guide ? "page" : undefined}>{g.nav}</a></li>)}</ul>
+    </nav>
+    <article class="prose">
+      <p class="docs-note">These guides follow the main branch. A feature marked “Unreleased” in the <a href="/#status">status list</a> is not in alpha.1 yet.</p>
+      <Fragment set:html={html} />
+      <p class="docs-source"><a class="text-link" href={`${REPO}/blob/main/${guide.path}`}>This page on GitHub <span aria-hidden="true">↗</span></a></p>
+    </article>
+    {sections.length > 2 && (
+      <nav class="docs-toc" aria-label="On this page">
+        <p class="label">On this page</p>
+        <ul>{sections.map((h) => <li><a href={`#${h.slug}`}>{h.text}</a></li>)}</ul>
+      </nav>
+    )}
+  </main>
+  <Footer />
+</Base>

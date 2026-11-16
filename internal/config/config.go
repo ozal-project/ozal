@@ -45,6 +45,16 @@ type Route struct {
 	// top-level audit settings are enabled. Empty selects required for protected
 	// routes and best_effort for public routes.
 	AuditMode string `json:"audit_mode,omitempty"`
+	// IdentityAssertion sends the application a signed, short-lived
+	// assertion of the person this edge authorized (X-Ozal-Assertion).
+	IdentityAssertion *RouteAssertion `json:"identity_assertion,omitempty"`
+}
+
+// RouteAssertion names the application the assertion is for. The
+// application accepts only its own audience, so an assertion for one route
+// cannot be replayed against another.
+type RouteAssertion struct {
+	Audience string `json:"audience"`
 }
 
 // RouteResource describes what a route protects. Access remains the route's
@@ -331,6 +341,17 @@ type Admin struct {
 	// it empty keeps the console consultation-only. The executor profile, not
 	// this file, owns the unit, binary, catalog and key paths.
 	UpdateSocket string `json:"update_socket,omitempty"`
+	// CountryDatabase is a local IP-to-country table (start,end,country CSV,
+	// optionally .gz, such as DB-IP's free country table). When set, the
+	// enrolment-by-code page shows the country of the addresses it lists.
+	// It is read once at start, never sent anywhere and never used to decide
+	// access; a missing or broken file only drops the flags.
+	CountryDatabase string `json:"country_database,omitempty"`
+	// CountryCredit is the attribution shown with the countries, when the
+	// table's licence asks for one and it is not DB-IP's (which is credited
+	// automatically for a file named dbip*). Plain text, at most 120
+	// characters.
+	CountryCredit string `json:"country_credit,omitempty"`
 }
 
 // Notify configures outbound notifications (NTF-001). Channels are opt-in:
@@ -407,7 +428,10 @@ type Config struct {
 	Tunnel    *Tunnel      `json:"tunnel,omitempty"`
 	Pages     *Pages       `json:"pages,omitempty"`
 	DNS       *DNS         `json:"dns,omitempty"`
-	Projects  []Project    `json:"projects,omitempty"`
+	// IdentityAssertion holds the signing key for routes with
+	// identity_assertion.
+	IdentityAssertion *IdentityAssertion `json:"identity_assertion,omitempty"`
+	Projects          []Project          `json:"projects,omitempty"`
 	// UpstreamTimeoutSeconds is how long an upstream may take to start
 	// answering before the visitor gets a 504. Zero means the default (60);
 	// the response body is never limited.
@@ -532,6 +556,12 @@ func Validate(cfg Config) (*Config, error) {
 	if cfg.Admin.UpdateSocket != "" && (!filepath.IsAbs(cfg.Admin.UpdateSocket) || filepath.Clean(cfg.Admin.UpdateSocket) != cfg.Admin.UpdateSocket) {
 		return nil, fmt.Errorf("config: admin.update_socket must be an absolute clean path")
 	}
+	if cfg.Admin.CountryDatabase != "" && (!filepath.IsAbs(cfg.Admin.CountryDatabase) || filepath.Clean(cfg.Admin.CountryDatabase) != cfg.Admin.CountryDatabase) {
+		return nil, fmt.Errorf("config: admin.country_database must be an absolute clean path")
+	}
+	if len(cfg.Admin.CountryCredit) > 120 || strings.ContainsFunc(cfg.Admin.CountryCredit, unicode.IsControl) {
+		return nil, fmt.Errorf("config: admin.country_credit must be plain text of at most 120 characters")
+	}
 	if len(cfg.Routes) == 0 {
 		return nil, fmt.Errorf("config: at least one route is required")
 	}
@@ -619,6 +649,9 @@ func Validate(cfg Config) (*Config, error) {
 			}
 		}
 		if err := validateRouteResource(host, r.Resource); err != nil {
+			return nil, err
+		}
+		if err := validateRouteAssertion(&cfg, r); err != nil {
 			return nil, err
 		}
 		if r.Redirect != "" {
@@ -1529,6 +1562,10 @@ func Clone(source Config) Config {
 		clone.DNS = &dns
 	}
 	clone.TrustedProxies = slices.Clone(source.TrustedProxies)
+	if source.IdentityAssertion != nil {
+		assertion := *source.IdentityAssertion
+		clone.IdentityAssertion = &assertion
+	}
 	if source.Notify != nil {
 		notifyCopy := *source.Notify
 		if source.Notify.Telegram != nil {
@@ -1594,6 +1631,10 @@ func CloneRoute(route Route) Route {
 		resource := *route.Resource
 		resource.RiskyActions = slices.Clone(route.Resource.RiskyActions)
 		clone.Resource = &resource
+	}
+	if route.IdentityAssertion != nil {
+		assertion := *route.IdentityAssertion
+		clone.IdentityAssertion = &assertion
 	}
 	return clone
 }

@@ -31,6 +31,26 @@ func TestStepUpConfirmsTheSignedInAdministratorsOwnPasskey(t *testing.T) {
 	}
 }
 
+func TestLocalSessionStillConfirmsLocallyWithALoginHostConfigured(t *testing.T) {
+	h, _, _ := loginHostHandler(t, true)
+	token, _ := hostEnrolment(t, h, "bootstrap", "")
+	device := newAuthenticator(t)
+	session := decode(t, enrol(t, h, device, token, "Owner", "owner@example.com"))["token"].(string)
+	begin := browserAs(h, "ozal.localhost:9091", "/_/api/admin/step-up/begin", "", session, map[string]any{})
+	if begin.Code != http.StatusOK {
+		t.Fatalf("local confirmation = %d %s", begin.Code, begin.Body)
+	}
+	begun := decode(t, begin)
+	options := begun["options"].(map[string]any)
+	if rp := options["publicKey"].(map[string]any)["rpId"]; rp != "ozal.localhost" {
+		t.Fatalf("local passkey was sent to %v", rp)
+	}
+	finish := browserAs(h, "ozal.localhost:9091", "/_/api/admin/step-up/finish", begun["ceremony"].(string), session, device.get(t, options, consoleOrigin))
+	if finish.Code != http.StatusOK {
+		t.Fatalf("local confirmation finish = %d %s", finish.Code, finish.Body)
+	}
+}
+
 func TestStepUpRefusesAnotherAdministratorsPasskeyAndDoesNotOpenASession(t *testing.T) {
 	h, _ := identityHandler(t)
 	first, _ := hostEnrolment(t, h, "bootstrap", "")

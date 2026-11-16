@@ -4,6 +4,7 @@ package proxy
 import (
 	"errors"
 	"fmt"
+	"github.com/ozal-project/ozal/internal/assertion"
 	"log/slog"
 	"net"
 	"net/http"
@@ -41,6 +42,21 @@ type options struct {
 	tunnelTrust           bool
 	identityLimiter       pipeline.Allower
 	sites                 SiteDirs
+	assertionSigner       AssertionSigner
+	assertionIssuer       string
+}
+
+// AssertionSigner signs the identity assertion of routes with
+// identity_assertion (assertion.Signer implements it).
+type AssertionSigner interface {
+	Sign(issuer, audience string, p assertion.Person) (string, error)
+}
+
+// WithIdentityAssertion signs, for every authorized request to a route with
+// identity_assertion, an assertion from issuer that the application verifies.
+// A route that asks for one fails construction without it.
+func WithIdentityAssertion(signer AssertionSigner, issuer string) Option {
+	return func(o *options) { o.assertionSigner, o.assertionIssuer = signer, issuer }
 }
 
 // SiteDirs resolves a deployed site to what it currently serves: directory
@@ -150,6 +166,8 @@ type route struct {
 	access        config.AccessPolicy
 	resource      *config.RouteResource
 	auditRequired bool
+	// assertionAudience is set for routes with identity_assertion.
+	assertionAudience string
 }
 
 type routeUpstream struct {
@@ -300,15 +318,23 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 				routeUpstreams = append(routeUpstreams, routeUpstream{target: target, handler: upstreamHandler})
 			}
 		}
+		audience := ""
+		if r.IdentityAssertion != nil {
+			if cfg.assertionSigner == nil || cfg.assertionIssuer == "" {
+				return nil, fmt.Errorf("route %s: identity_assertion requires this edge's signing key", r.Host)
+			}
+			audience = r.IdentityAssertion.Audience
+		}
 		byHost[host] = route{
-			target:        r.Destination(),
-			handler:       handler,
-			upstreams:     routeUpstreams,
-			selector:      &routeSelector{},
-			authRequired:  r.RequiresAuth(),
-			access:        r.Policy(),
-			resource:      cloneRouteResource(r.Resource),
-			auditRequired: r.AuditRequired(),
+			assertionAudience: audience,
+			target:            r.Destination(),
+			handler:           handler,
+			upstreams:         routeUpstreams,
+			selector:          &routeSelector{},
+			authRequired:      r.RequiresAuth(),
+			access:            r.Policy(),
+			resource:          cloneRouteResource(r.Resource),
+			auditRequired:     r.AuditRequired(),
 		}
 	}
 
@@ -462,6 +488,18 @@ func New(routes []config.Route, checker HealthChecker, gate AuthGate, opts ...Op
 				return
 			}
 			req = req.WithContext(pipeline.WithVisitor(req.Context(), pipeline.Visitor{Subject: principal.Subject, Email: principal.Email}))
+			if rt.assertionAudience != "" {
+				// Signed for this request and this application only. Without
+				// it the application would refuse the request anyway, so a
+				// signing failure stops here instead of forwarding without it.
+				token, err := cfg.assertionSigner.Sign(cfg.assertionIssuer, rt.assertionAudience, assertion.Person{Subject: principal.Subject, Email: principal.Email, Groups: principal.Groups})
+				if err != nil {
+					cfg.logger.LogAttrs(req.Context(), slog.LevelError, "proxy.assertion_failed", slog.String("host", host))
+					http.Error(w, "identity assertion unavailable", http.StatusInternalServerError)
+					return
+				}
+				req.Header.Set(assertion.Header, token)
+			}
 		}
 		// The identity the application trusts: the one this edge just
 		// authorized, or on a connector the one the edge asserted through

@@ -56,7 +56,7 @@ func (g *Gate) sessionsRevoke(w http.ResponseWriter, r *http.Request) (any, *api
 	}
 	if err := store.RevokeOwned(r.Context(), principal.Subject, req.ID, req.All); err != nil {
 		if errors.Is(err, auth.ErrSessionNotFound) {
-			missing := apiError{404, "That session is not yours or has already ended."}
+			missing := apiError{404, "That session is not yours or has already ended.", nil}
 			return nil, &missing
 		}
 		return nil, &errInternal

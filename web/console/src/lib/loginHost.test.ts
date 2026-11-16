@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { challengeFor, finishLoginHost, newVerifier, startLoginHost } from "./loginHost.ts";
+import { challengeFor, finishLoginHost, newVerifier, startLoginHost, reauthenticateOnLoginHost } from "./loginHost.ts";
 
 test("the edge receives only the SHA-256 of a fresh verifier", async () => {
   const a = newVerifier(), b = newVerifier();
@@ -30,4 +30,26 @@ test("the verifier stays in this tab and is used once", async () => {
   assert.equal(sent[1].verifier, verifier);
   assert.equal(stored.size, 0, "used once");
   await assert.rejects(finishLoginHost("code", store), /another tab/, "a tab without the verifier cannot redeem");
+});
+
+
+test("a stale proof returns to the HTTPS RP instead of requesting a localhost passkey", async () => {
+  const urls: string[] = [];
+  const went: string[] = [];
+  const stored = new Map<string, string>();
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = (async (url: string) => {
+      urls.push(url);
+      return new Response(JSON.stringify(url.endsWith("/state") ? { login_host: "https://auth.example.com" } : { url: "https://auth.example.com/_/auth/admin?tx=fresh" }));
+    }) as typeof fetch;
+    assert.equal(await reauthenticateOnLoginHost((url) => went.push(url), { setItem: (k, v) => void stored.set(k, v) }), true);
+    assert.deepEqual(urls, ["/_/api/admin/state", "/_/api/admin/remote/start"]);
+    assert.deepEqual(went, ["https://auth.example.com/_/auth/admin?tx=fresh"]);
+    assert.equal(stored.size, 1);
+    globalThis.fetch = (async () => new Response("{}")) as typeof fetch;
+    assert.equal(await reauthenticateOnLoginHost(() => assert.fail("local installations never navigate")), false);
+    globalThis.fetch = (async () => new Response("{}", { status: 503 })) as typeof fetch;
+    await assert.rejects(reauthenticateOnLoginHost(), /settings could not be read/);
+  } finally { globalThis.fetch = originalFetch; }
 });

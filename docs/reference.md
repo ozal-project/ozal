@@ -111,8 +111,10 @@ your own local file and do not commit it to Git. Validation rejects unknown keys
 | `admin.listen` | Loopback administration; default `127.0.0.1:9090` |
 | `admin.socket` | Private Unix socket; its file permission grants local authority |
 | `admin.socket_group` | System group with access to the socket (mode `0660`); its members operate without `sudo` and are audited as `local:<user>`. Requires `admin.socket`; rejects `root`/`wheel`, and startup fails if the service does not belong to the group or the directory is not traversable |
-| `admin.login_host` | Administrator passkeys are created and used at `auth.passkeys.login_url` (HTTPS) instead of `http://ozal.localhost`, where many authenticators do not work; the console stays on loopback and receives the session through a one-time code bound to a verifier in the tab. Requires `auth.passkeys`. Earlier passkeys on `ozal.localhost` keep working. Visitors and administrators then share the login domain: the administrator sign-in names only administrator passkeys to the browser, and an administrator passkey is saved as `<email> · Ozal console` and a visitor passkey as `<email> · sign-in`, so a password manager does not offer a visitor passkey for the console. The visitor sign-in cannot narrow the list the same way without revealing which emails have an account, so a console passkey chosen there gets a message saying to pick the other one |
+| `admin.login_host` | Administrator passkeys are created and used at `auth.passkeys.login_url` (HTTPS) instead of `http://ozal.localhost`, where many authenticators do not work; the console stays on loopback and receives the session through a one-time code bound to a verifier in the tab. Requires `auth.passkeys`. Earlier passkeys on `ozal.localhost` keep working. Visitors and administrators then share the login domain: the administrator sign-in names only administrator passkeys to the browser, and an administrator passkey is saved as `<email> · Ozal console` and a visitor passkey as `<email> · sign-in`, so a password manager does not offer a visitor passkey for the console. The visitor sign-in cannot narrow the list the same way without revealing which emails have an account, so a console passkey chosen there gets a message saying to pick the other one. With it, `console enrol` and `console recover` print a code instead of a link: see [Enrolment by code](#enrolment-by-code) |
 | `admin.update_socket` | Unix socket of the local update executor (`ozal update-executor`). If omitted, the console only reads the status report; it prepares no plans and installs nothing. The executor's root-owned profile fixes the unit, binary, configuration, catalog, key and job directory |
+| `admin.country_database` | Absolute path to a local IP-to-country table (`start,end,country` CSV, optionally `.gz`), such as DB-IP's free [IP to Country Lite](https://db-ip.com/db/download/ip-to-country-lite) (CC BY 4.0). The [enrolment-by-code](#enrolment-by-code) page then shows a flag and country next to the addresses it lists, and the terminal shows the country code. Loaded in the background at start, so it never delays the listeners; never sent anywhere and never used to decide access. A missing or unreadable file only drops the countries. A file named `dbip*` is credited to DB-IP on the page |
+| `admin.country_credit` | Attribution shown with the countries when the table is not DB-IP's and its licence asks for one; plain text, at most 120 characters |
 | `admin.token` | Reference to the full administrative credential |
 | `admin.sites_token` | Reference to a limited site-publisher credential |
 | `runtime_file` | Operational projection of the service: routes, projects and GitHub |
@@ -146,10 +148,83 @@ only there and takes priority. Unknown hosts do not reveal the public catalog.
 | `access.context_rule` | Condition with explicit sources; unknown required evidence denies |
 | `resource` | Declared owner, class, sensitivity and actions; not inferred evidence |
 | `audit_mode` | `required` or `best_effort` for access when the family is enabled |
+| `identity_assertion.audience` | Sends the application a signed assertion of the authorized person; see [Identity assertion](#identity-assertion) |
 
 An unavailable upstream answers 502; header timeout 504; no healthy upstream 503. A
 disconnected connector answers 502 and has no TCP fallback. Connectors can be protected
 through `access` in the integrated process.
+
+### Identity assertion
+
+`X-Auth-Request-Email` and `X-Auth-Request-User` are only as trustworthy as the hop
+between Ozal and the application. A route with `identity_assertion` also sends
+`X-Ozal-Assertion`: a JWS (EdDSA, Ed25519) that this edge signs for each authorized
+request, which the application verifies with a public key it pins.
+
+```json
+"identity_assertion": { "key_dir": "/var/lib/ozal/assertion" },
+"routes": [{
+  "host": "custodia.example.com", "target": "http://127.0.0.1:8090",
+  "access": { "required_groups": ["security"] },
+  "identity_assertion": { "audience": "custodia" }
+}]
+```
+
+| Claim | Value |
+|---|---|
+| `iss` | Origin of `auth.passkeys.login_url` (or of `auth.redirect_url` with OIDC only) |
+| `aud` | The route's `identity_assertion.audience` |
+| `sub`, `email`, `groups` | The person this edge authorized |
+| `iat`, `exp` | Issued now, valid for 60 seconds |
+| `jti` | Random, once per request |
+
+The protected header carries `kid`, the first 16 bytes of the SHA-256 of the public
+key in hex. The key is created on first use in `key_dir` (directory `0700`, file
+`0600`); `sudo -u ozal ozal assertion public-key` prints the public key (PEM) to pin.
+To rotate, pin the new key next to the old one, replace the key file and restart.
+
+The application must check the signature with a pinned key (never a key named by the
+token), `iss`, `aud`, `exp`/`iat` with a small clock tolerance, and reject a repeated
+`jti`. `assertion.Verify` in this repository is a reference.
+
+The field requires `access`, a `target` or `upstreams`, a login URL for the issuer and
+`identity_assertion.key_dir`. Public routes, sites, redirects and connector routes do
+not get one. A client-supplied `X-Ozal-Assertion`, in any spelling, is removed. If
+signing fails the request is not forwarded.
+
+### Enrolment by code
+
+With `admin.login_host`, `sudo ozal console enrol` (and `console recover -email`)
+prints the login host's `/_/auth/admin/code` page and a code such as `ABCD-EFGH`.
+Open the page on any device and type the code within five minutes. Everything
+else happens on the page. It shows the request so you can recognise your own:
+the server's name, who ran the command and when, the address of their SSH session
+(marked as local network for a LAN address), this browser's address (marked as
+same network when the two match), what the passkey grants, the code and the time
+left. You then enter your name and email and create the passkey, or choose "This
+wasn't me" to cancel the code; the page confirms a cancellation only when the
+server accepts it.
+
+The terminal asks nothing. It reports the browser and address that used the code,
+wrong codes typed on the login host, and who was enrolled; Ctrl-C cancels the
+code. Once the passkey is being saved neither the page nor the terminal can cancel
+it. No tunnel to the console is needed for this step; signing in to the console
+later still uses it.
+
+The page exists only while a code is waiting. A code works for the first browser
+that types it, and the whole enrolment ends after 15 minutes. Five wrong codes
+from one address refuse that address for five minutes, and thirty in total pause
+new claims for five minutes; neither ends a code or an enrolment in progress. A
+pause delays your own code too while it lasts: the terminal says so, and `-link`
+remains. A newer recovery for the same administrator, by code or link, replaces
+the earlier recovery code, and once the first administrator exists other
+first-run codes end; their terminals say so. If the terminal reports a browser
+that was not yours, run `console recover` for the account it created. `-link` prints the one-time console link instead; without
+`admin.login_host` the command prints the link. The page makes no third-party
+request and sends no address anywhere. With `admin.country_database`, the
+addresses also show an approximate country, credited to DB-IP on the page; the
+flags are Radian UI's (MIT), served by the login host when the build includes
+them; otherwise the page shows the two-letter country code.
 
 ## Login and sessions
 
@@ -186,9 +261,31 @@ outside `cookie_domain` with central passkey login use host sessions; the protoc
 limits are in [host sessions](architecture/host-sessions.md). A code change is not the
 same as HTTPS, browser or real-domain acceptance; see the host-sessions guide.
 
-Invitations and recovery: [first application](operations/first-application.md). The
+Invitations: [first application](operations/first-application.md). The
 administrative identity is separate from visitor identities and has its own session
 lifecycle; the times in this section are not the console's.
+
+### People from the host
+
+Inviting people and managing their accounts happen in the console (**People**). The host
+commands below do the same through the admin socket, for automation and for emergencies;
+they are not a second way to onboard people.
+
+```sh
+ozal user invite -config /path/config.json -email ana@example.com -group members
+ozal user list|passkeys|revoke|disable|enable -config /path/config.json [-email ...]
+```
+
+- `invite` refuses an address without a real domain (`ana@example`) and a group that no
+  application, person or console group uses, suggesting the closest name; `-new-group`
+  creates one on purpose. It prints the person's groups and the applications they will be
+  able to open. `-return-to` names a protected URL to open after the passkey is created;
+  `-ttl` sets the link's life (15 minutes by default, at most 24 hours).
+- `invite -recover` replaces the passkeys of a person who lost them: completing the link
+  revokes the old ones and ends their sessions. It runs only on the host, the root of
+  trust, never through the admin token.
+- `-db PATH` is the break-glass: it changes the state database directly when the process
+  cannot start, and records what it did.
 
 ## Secrets
 
@@ -294,6 +391,36 @@ of other names) and answers `ok` or `bad` with the exact record to create.
 `POST /_/api/zones/{zone}/renew` requests an attempt now, without waiting for the backoff:
 it answers 202, 409 if one is already running or queued, and 429 if the last one was less
 than a minute ago or the CA asked to wait.
+
+**Connecting Cloudflare from the console.** On an edge that does not yet own its
+certificates, **Domains** connects Cloudflare. The operator pastes an API token with *Zone ·
+Read*, *DNS · Edit*, *Zone Settings · Edit* and *SSL and Certificates · Edit* over the zones
+Ozal serves, and this edge's public address (the console suggests the sign-in host's). The
+edge checks the token with Cloudflare and keeps it in `cloudflare.token` (0600) beside the
+state database (`-db`), with the zones it sees in `cloudflare.json`. The token is never in
+`config.json`, never returned and never logged (`GET /_/api/cloudflare` and
+`POST`/`DELETE /_/api/cloudflare/token`, *applications* tool). The page then shows the plan: one certificate per zone (`zone` and
+`*.zone`) and the addresses each covers. A plan that would leave an address the token
+cannot reach without a certificate is refused. The page also shows the one host command
+that applies it:
+
+```sh
+sudo ozal cloudflare enable -config /etc/ozal/config.json \
+  -token-file /var/lib/ozal/cloudflare.token -target 203.0.113.10 -apply -restart ozal.service
+```
+
+Changing how the public listener gets its certificates needs a restart and stays with the
+host. The command:
+
+1. checks the token again;
+2. writes `tls.domains`, `tls.dns01` (state in `dns01/` beside the token), `dns.cloudflare`
+   and `dns.target` to the host configuration, never the runtime file;
+3. keeps the previous file as `config.json.before-dns01-<time>`, with its permissions and
+   owner;
+4. restarts the unit.
+
+Without `-apply` it only shows the plan. Afterwards **Domains** lists the zones and sets each
+one up (below). A token the edge uses cannot be replaced or forgotten from the console.
 
 **Provider setup.** `GET /_/api/zones/{zone}/setup` returns what the zone still needs outside
 the edge, as steps `challenge` (the CNAME above), `encryption` (the proxy's SSL mode),

@@ -22,6 +22,7 @@ import (
 
 	"github.com/ozal-project/ozal/internal/adminid"
 	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/passkey"
 )
 
 // Administrator passkeys on the HTTPS login host (ID-021). Many authenticators
@@ -318,7 +319,7 @@ func (h *Handler) remoteFinish(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "that administrator is no longer active")
 		return
 	}
-	h.startAdminSession(w, r, account, code.credentialID)
+	h.startPasskeySession(w, r, account, code.credentialID, true)
 }
 
 // IsAdministrator reports whether email belongs to an enabled administrator
@@ -357,24 +358,23 @@ func (rl *RemoteLogin) ServeAdminLogin(w http.ResponseWriter, r *http.Request) b
 	if !ok {
 		return false
 	}
+	if strings.HasPrefix(r.URL.Path, codePath) {
+		return rl.serveCode(w, r, h, rp, loginOrigin)
+	}
 	id := r.URL.Query().Get("tx")
 	tx, ok := rl.lookup(id)
 	if !ok {
 		return false
 	}
-	loginHeaders(w.Header())
-	post := r.Method == http.MethodPost
-	if post && r.Header.Get("Origin") != loginOrigin {
-		writeError(w, http.StatusForbidden, "open this page from its own address")
+	post, ok := loginHostRequest(w, r, loginOrigin)
+	if !ok {
 		return true
 	}
 	switch {
 	case r.URL.Path == remotePath && !post:
 		rl.servePage(w, tx, id)
 	case r.URL.Path == remotePath+".js" && !post:
-		body, _ := loginHostAssets.ReadFile("loginhost/admin-login.js")
-		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-		_, _ = w.Write(body)
+		serveAsset(w, "loginhost/admin-login.js", "text/javascript; charset=utf-8")
 	case r.URL.Path == remotePath+"/begin" && post:
 		if tx.enrol != nil {
 			h.beginEnrol(w, r, rp, *tx.enrol, id)
@@ -412,7 +412,21 @@ func (rl *RemoteLogin) handBack(id string) ceremonyDone {
 		if h := rl.handler.Load(); h != nil {
 			h.emit(events.Event{Type: events.Type("admin.login_host_ceremony"), Actor: "admin:" + account.Email})
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"redirect": origin + "/overview#admin_code=" + url.QueryEscape(code)})
+		answer := map[string]any{"redirect": origin + "/overview#admin_code=" + url.QueryEscape(code)}
+		if h := rl.handler.Load(); h != nil {
+			if rp, _, ok := h.loginSite(); ok {
+				if keys, err := h.identities.Passkeys(r.Context(), account.ID); err == nil {
+					ids := make([][]byte, 0, len(keys))
+					for _, key := range keys {
+						ids = append(ids, key.ID)
+					}
+					if list := passkey.AcceptedPasskeys(rp.Config.RPID, account.Handle, ids, credentialID); list != nil {
+						answer["accepted"] = list
+					}
+				}
+			}
+		}
+		writeJSON(w, http.StatusOK, answer)
 	}
 }
 
@@ -433,6 +447,20 @@ func (rl *RemoteLogin) servePage(w http.ResponseWriter, tx remoteTx, id string) 
 	).Replace(string(body))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(page))
+}
+
+// loginHostRequest applies what every login-host answer here shares: the page
+// headers and, for a POST, an Origin equal to the login host. It reports
+// whether the request is a POST and whether it may go on; when it may not,
+// the refusal has been written.
+func loginHostRequest(w http.ResponseWriter, r *http.Request, loginOrigin string) (post, ok bool) {
+	loginHeaders(w.Header())
+	post = r.Method == http.MethodPost
+	if post && r.Header.Get("Origin") != loginOrigin {
+		writeError(w, http.StatusForbidden, "open this page from its own address")
+		return post, false
+	}
+	return post, true
 }
 
 // loginHeaders are the login host's page headers (internal/passkey pageHeaders).

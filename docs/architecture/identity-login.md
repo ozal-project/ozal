@@ -130,7 +130,9 @@ sign-in page shows one primary action for the state of the installation:
 
 - **No administrator yet:** a numbered setup. The first administrator is created
   with a one-use link that only the host's shell or the installer output can
-  read (`console enrol`), so nobody can get ahead of the operator. Once any
+  read (`console enrol`), or with `admin.login_host` a code that only the
+  host's terminal shows and the person types on the login host, so nobody can
+  get ahead of the operator. Once any
   administrator exists the setup path is closed and `bootstrap` is refused.
 - **Administrators exist:** passkey sign-in. A host login stays as a secondary
   path for whoever runs the server.

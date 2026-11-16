@@ -1,0 +1,41 @@
+---
+// The doorway: one request at a time walks the checks and gets an answer.
+// Three recorded requests, the same ones the live engine answers below: Ana
+// is let in, Bob is refused with a reason, and a visitor without a session is
+// sent to sign in. Native radios choose who is at the door, so it works
+// without scripts; page.ts only plays the three in turn, twice, and stops at
+// the first click or key.
+type Stage = [name: string, state: "ok" | "no" | "wait" | "skip", note: string];
+const scenes: { id: string; name: string; initial: string; who: string; state: "ok" | "no" | "wait"; title: string; code: string; reason: string; stages: Stage[] }[] = [
+  {
+    id: "ana", name: "Ana", initial: "A", who: "ana@acme.dev", state: "ok", title: "Let in", code: "allowed",
+    reason: "Her address is at acme.dev, and this app allows acme.dev.",
+    stages: [["trust", "ok", "client address established"], ["identify", "ok", "passkey · ana@acme.dev"], ["authorize", "ok", "acme.dev may open it"], ["forward", "ok", "sent on, with her identity"]],
+  },
+  {
+    id: "bob", name: "Bob", initial: "B", who: "bob@other.org", state: "no", title: "Refused", code: "domain_not_allowed",
+    reason: "Only addresses at acme.dev may open it. Bob is told so, and the log keeps the reason.",
+    stages: [["trust", "ok", "client address established"], ["identify", "ok", "passkey · bob@other.org"], ["authorize", "no", "other.org is not on the list"], ["forward", "skip", "not reached"]],
+  },
+  {
+    id: "anon", name: "No session", initial: "?", who: "not signed in", state: "wait", title: "Sign in first", code: "authentication_required",
+    reason: "Nobody is signed in, so the visitor is sent to sign in and then brought back.",
+    stages: [["trust", "ok", "client address established"], ["identify", "wait", "no session: sent to sign in"], ["authorize", "skip", "not reached"], ["forward", "skip", "not reached"]],
+  },
+];
+---
+<div class="door" data-door data-ui>
+  <p class="label door-title">Who is at the door</p>
+  <fieldset class="door-tabs">
+    <legend class="sr-only">Choose who asks for grafana.acme.dev</legend>
+    {scenes.map((s, i) => <label><input type="radio" name="scene" id={`scene-${s.id}`} checked={i === 0} /><span><i class={`avatar avatar-${s.id}`} aria-hidden="true">{s.initial}</i>{s.name}</span></label>)}
+  </fieldset>
+  {scenes.map((s) => (
+    <article class="door-card" id={`door-${s.id}`} data-state={s.state} aria-label={`${s.name} asks for grafana.acme.dev`}>
+      <p class="door-req"><b>GET grafana.acme.dev</b><span>{s.who}</span></p>
+      <ol class="door-stages">{s.stages.map(([name, state, note]) => <li data-state={state}><i class="lamp" aria-hidden="true"></i><b>{name}</b><span>{note}</span></li>)}</ol>
+      <div class="door-verdict"><strong>{s.title}</strong><code>{s.code}</code><p>{s.reason}</p></div>
+    </article>
+  ))}
+  <p class="door-foot">Recorded examples. <a class="text-link" href="#engine">Ask the real engine <span aria-hidden="true">↓</span></a></p>
+</div>
