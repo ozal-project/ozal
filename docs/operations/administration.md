@@ -669,8 +669,6 @@ and evidence to restore. A domain associated with Pages may require manual remov
 there. Check the plan and keep the evidence; rolling back content does not revert
 DNS or databases automatically.
 
-<a id="ante-un-fallo"></a>
-
 <a id="console-on-a-remote-host-or-vm"></a>
 
 ## Console on a remote host or VM
@@ -690,6 +688,11 @@ ssh -t -L 8787:127.0.0.1:8787 USER@HOST \
 Then open `http://ozal.localhost:8787` (never an IP address: passkeys need a name).
 A host with a socket group (see [Operate without `sudo`](#operate-without-sudo-socket-group))
 can forward the socket directly: `ssh -N -L 8787:/run/ozal/admin.sock USER@HOST`.
+
+With [`admin.login_host`](../reference.md#enrolment-by-code) set, `console enrol`
+and `console recover` print a code to type on the public sign-in page instead of a
+link, so creating or replacing an administrator passkey needs no tunnel. The
+tunnel is still how you open the console itself.
 
 Console commands, run on the host. Pass `-url` with the address your browser uses
 (the local end of the tunnel) so the printed link opens there:
@@ -730,6 +733,8 @@ back, stop the service, put the previous executable back and restore that copy
 
 Diagnose a service that will not stay up with `systemctl status ozal` and
 `journalctl -u ozal -n 50 --no-pager`.
+
+<a id="ante-un-fallo"></a>
 
 ## When something fails
 
