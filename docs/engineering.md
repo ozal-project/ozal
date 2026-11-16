@@ -465,7 +465,8 @@ and the checksum's hash, signs it, and parses it back with `release.ParseCatalog
 the same rules an edge applies before writing it. The sequence is the signing time in
 Unix seconds, so a re-signed catalog of the same release supersedes the previous one
 and an edge refuses a replay of the older. Catalogs expire after 14 days (at most 31).
-The key and write access never meet: the `sign` job holds the key with read access,
+Only `main`'s code runs with the key: every run checks out `main`, and a manual run
+from another branch is skipped. The key and write access never meet: the `sign` job holds the key with read access,
 builds `cmd/ozal` from the checkout without a module cache and runs no npm or site
 tooling; the `publish` job holds write access without the key and force-pushes only
 what `sign` produced, as a single commit. Without the key `sign` fails and the branch
