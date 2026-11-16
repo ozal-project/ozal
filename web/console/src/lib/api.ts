@@ -476,3 +476,21 @@ export async function removeZone(token: string, name: string, expected: string):
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error ?? `The domain could not be removed (HTTP ${res.status}).`);
 }
+
+// Connecting Cloudflare (Domains). The token goes up once and never comes
+// back; the status says what the edge learnt and the host command to run.
+export type CloudflarePlan = { zones: string[]; covers: Record<string, string>; local: string[] };
+export type CloudflareStatus = {
+  available: boolean; active: boolean; saved: boolean; permissions: string[];
+  zones?: string[]; target?: string; verified_at?: string; suggested_target?: string;
+  plan?: CloudflarePlan; plan_error?: string; command?: string;
+};
+export const fetchCloudflare = (signal?: AbortSignal) => getJSON<CloudflareStatus>("/_/api/cloudflare", signal);
+export const saveCloudflareToken = (token: string, target: string) => postJSON<CloudflareStatus>("/_/api/cloudflare/token", { token, target }, undefined, 30_000);
+export async function forgetCloudflareToken(): Promise<void> {
+  const res = await sessionFetch("/_/api/cloudflare/token", { method: "DELETE" });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new ApiError(typeof data?.error === "string" ? data.error : `HTTP ${res.status}`, res.status);
+  }
+}

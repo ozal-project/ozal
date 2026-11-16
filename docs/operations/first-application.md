@@ -63,10 +63,18 @@ On a service installation, use `sudo ozal console enrol`. Over SSH, the command 
 prints the `ssh -N -L` line you need to open the link from your own machine. With a
 configuration outside `/etc/ozal`, set `OZAL_CONFIG=/path/config.json`.
 
-The command prints a link that works once, for ten minutes. Open it in the browser
-that reaches the console. You enter your full name and an email address (no message
-is sent) and create the passkey. That person becomes the first administrator, with
-every tool.
+With `admin.login_host` on, the command prints a page on your login host and a
+short code. Open the page on any device and type the code; the page shows who
+asked for it on the server and when, so you can recognise your own request. You
+then enter your full name and an email address (no message is sent) and create
+the passkey there; no tunnel is needed for this step. The terminal reports which
+browser used the code and who was enrolled. See
+[Enrolment by code](../reference.md#enrolment-by-code).
+
+Otherwise, or with `-link`, the command prints a link that works once, for ten
+minutes. Open it in the browser that reaches the console and create the passkey
+the same way. Either way, that person becomes the first administrator, with every
+tool.
 
 Open the console as `http://ozal.localhost:PORT`, where `PORT` is the local end of
 your tunnel. Do not use `127.0.0.1`: WebAuthn does not accept IP addresses. The name
@@ -103,6 +111,11 @@ started from it, that address answers like an unknown route.
 
 ### Other ways in
 
+Adding a console passkey or creating a link for another browser asks for another
+confirmation if your last passkey proof is more than five minutes old. For a
+session opened on the HTTPS sign-in address, confirmation returns there; after
+coming back, choose the action again. A local confirmation continues in place.
+
 - **Moving from localhost.** Passkeys are bound to their name and are not copied to a
   new domain. Sign in at `http://localhost:PORT`, open your menu and choose **Sign in
   on another browser**. Open the link it gives you on `ozal.localhost` and create a
@@ -134,12 +147,9 @@ Create a visitor account for someone who should reach the application, in the gr
 that grants access. In the console, open **People → Invite person**, pick the group and
 copy the one-time link. Groups are picked from the existing ones: a group an application
 requires is already there, and a new one is created first in **People → Groups → New
-group**, with or without members. From the host:
-
-```sh
-ozal user invite -config /path/to/my-edge/config.json \
-  -email ana@example.com -group members -return-to http://localhost:8888/
-```
+group**, with or without members. After the first administrator, this and the rest of the
+day-to-day work happen in the console; the host commands for people are for automation
+and emergencies ([reference](../reference.md#people-from-the-host)).
 
 The invitation is a visitor credential. It is separate from the administrator link in
 step 2. Send it to its recipient over a trusted channel.

@@ -31,21 +31,23 @@ var providers = map[string]struct{ name, icon string }{
 
 // Provider names a passkey for its owner and picks its icon: the provider
 // when its AAGUID is known, otherwise what the backup flag says about it.
-func Provider(aaguid []byte, synced bool) (name, icon string) {
+// known reports which: only a known provider says where the passkey lives;
+// the fallbacks describe a kind of passkey, not a place.
+func Provider(aaguid []byte, synced bool) (name, icon string, known bool) {
 	if len(aaguid) == 16 {
 		id := fmt.Sprintf("%x-%x-%x-%x-%x", aaguid[0:4], aaguid[4:6], aaguid[6:8], aaguid[8:10], aaguid[10:16])
 		if p, ok := providers[id]; ok {
-			return p.name, p.icon
+			return p.name, p.icon, true
 		}
 	}
 	if synced {
-		return "Synced passkey", "synced"
+		return "Synced passkey", "synced", false
 	}
-	return "Security key or device passkey", "key"
+	return "Security key or device passkey", "key", false
 }
 
 // ProviderName is Provider without the icon.
 func ProviderName(aaguid []byte, synced bool) string {
-	name, _ := Provider(aaguid, synced)
+	name, _, _ := Provider(aaguid, synced)
 	return name
 }

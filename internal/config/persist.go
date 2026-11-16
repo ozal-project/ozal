@@ -33,8 +33,10 @@ func writeBytesAtomic(path string, data []byte) (err error) {
 	}
 
 	mode := os.FileMode(0o600)
+	var previous os.FileInfo
 	if info, statErr := os.Stat(path); statErr == nil {
 		mode = info.Mode().Perm()
+		previous = info
 	} else if !os.IsNotExist(statErr) {
 		return fmt.Errorf("stat config: %w", statErr)
 	}
@@ -54,6 +56,9 @@ func writeBytesAtomic(path string, data []byte) (err error) {
 
 	if err = tmp.Chmod(mode); err != nil {
 		return fmt.Errorf("set temporary config permissions: %w", err)
+	}
+	if err = keepOwner(tmp, previous); err != nil {
+		return fmt.Errorf("keep config owner: %w", err)
 	}
 	if _, err = tmp.Write(data); err != nil {
 		return fmt.Errorf("write temporary config: %w", err)

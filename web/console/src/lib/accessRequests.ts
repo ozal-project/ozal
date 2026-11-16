@@ -76,8 +76,8 @@ export const denyAccessRequest = (token: string, id: string) =>
 export const approveAccessRequest = (token: string, id: string, tools: string[]) =>
   adminCall<{ approved: boolean; email: string; tools: string[] }>("POST", token, `/_/api/admins/requests/${encodeURIComponent(id)}/approve`, { tools });
 
-// Approving needs a passkey proof from the last few minutes. Ask for one only
-// when the edge says so, and retry exactly once on the same session.
+// Sensitive mutations need a recent passkey proof. Ask for one only when
+// the edge says so, and retry exactly once on the same session.
 export async function withPasskeyProof<T>(token: string, run: () => Promise<T>, confirm: (token: string) => Promise<void>): Promise<T> {
   try {
     return await run();

@@ -8,12 +8,19 @@ conditions. It is not an ASVS certification or a complete audit of an installati
 
 - The console and the administrative API stay on loopback or a private socket.
   Reach them through a private transport; never publish them as the upstream of a route.
+  Only enrolling a passkey by code happens on the public login host: the code is
+  shown only in the host's terminal, works once for five minutes, and the terminal
+  reports which browser used it.
 - Keep private applications on loopback or a controlled network: an alternative
   address that bypasses the gateway can also bypass its policies.
 - Use a valid public TLS certificate; do not disable verification to work
   around certificate problems, staging tests or connections to the origin.
 - Keep private keys on their host. Configure secrets through `file:`/`env:`
   references and minimal permissions. Never paste them into chats, URLs or repositories.
+  To connect Cloudflare from the console, paste an API token scoped to the zones Ozal
+  serves, with the four permissions **Domains** lists. The edge stores it in a 0600 file
+  beside its state and never shows it again. Moving certificates to DNS-01 with it still
+  takes a command on the host.
 - Distinguish visitors, CI publishers, connectors and administrators. A valid
   identity in one scope grants no authority in the others.
 - Back up and rehearse recovery of keys, configuration and data. An old copy can

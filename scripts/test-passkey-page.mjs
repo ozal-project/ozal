@@ -9,15 +9,16 @@ import assert from "node:assert/strict";
 
 const src = readFileSync(new URL("../internal/passkey/assets/passkey.js", import.meta.url), "utf8");
 
-function render(search, { oidc = "", webauthn = true, page = "login", fetch = () => new Promise(() => {}), assign = () => {}, caps, get = () => new Promise(() => {}), create = () => new Promise(() => {}), hash = "" } = {}) {
+function render(search, { oidc = "", webauthn = true, page = "login", fetch = () => new Promise(() => {}), assign = () => {}, caps, get = () => new Promise(() => {}), create = () => new Promise(() => {}), hash = "", uvpa, storage = {}, signals = {}, timer = setTimeout } = {}) {
   const els = {};
   const el = (id) => (els[id] ??= {
-    id, textContent: "", hidden: id === "oidc" || id === "recovery-warning", open: false, href: "", disabled: false, dataset: {}, children: [], on: {},
-    addEventListener(ev, fn) { this.on[ev] = fn; }, focus() {}, setAttribute() {}, append(...c) { this.children.push(...c); }, replaceChildren(...c) { this.children = c; },
+    id, textContent: "", value: "", src: "", hidden: id === "oidc" || id === "recovery-warning" || id === "receipt" || id === "receipt-return" || id === "receipt-icon" || id === "bridge" || id === "backup-hint" || id === "invitation-unavailable", open: false, href: "", disabled: false, dataset: {}, children: [], on: {},
+    addEventListener(ev, fn) { this.on[ev] = fn; }, focus() { this.focused = true; }, setAttribute() {}, append(...c) { this.children.push(...c); }, replaceChildren(...c) { this.children = c; },
     querySelector(q) { return q === "a" ? this.children.find((c) => c.href) || null : null; },
   });
-  ["title", "intro", "action", "oidc", "status", "first-time", "username", "sites", "devices", "who", "email", "signout", "apps", "manage", "choices", "choice-list", "use-phone", "use-key", "recovery-warning", "sessions", "signout-all", "signout-all-confirm", "also-admin"].forEach(el);
+  ["title", "intro", "action", "oidc", "status", "first-time", "username", "sites", "devices", "who", "email", "signout", "apps", "manage", "choices", "choice-list", "use-phone", "use-key", "recovery-warning", "sessions", "signout-all", "signout-all-confirm", "also-admin", "receipt", "receipt-skip", "receipt-where", "receipt-icon", "receipt-return", "receipt-form", "receipt-name", "receipt-continue", "bridge", "bridge-continue", "bridge-add", "bridge-never", "backup-hint"].forEach(el);
   const label = { hidden: false };
+  ["enrol-help", "invitation-unavailable", "invitation-signin", "receipt-name-label"].forEach(el);
   const head = [];
   let ready;
   const document = {
@@ -26,18 +27,19 @@ function render(search, { oidc = "", webauthn = true, page = "login", fetch = ()
     body: { dataset: { page, oidc } },
     getElementById: (id) => els[id],
     querySelector: (q) => (q === "label[for=username]" ? label : null),
+    querySelectorAll: () => [],
     createElement: () => el("x" + Math.random()),
     addEventListener: (ev, fn) => { if (ev === "DOMContentLoaded") ready = fn; },
   };
   const ctx = {
     document, URL, URLSearchParams, encodeURIComponent, AbortController, atob, btoa, JSON, Date, String, Uint8Array, DOMException,
     window: webauthn ? { PublicKeyCredential: Object.assign(function () {}, caps === undefined ? {} : { getClientCapabilities: caps }) } : {},
-    setTimeout,
+    setTimeout: timer, clearTimeout,
     location: { search, hash, pathname: "/_/auth/" + page, origin: "https://auth.example.com", assign },
     history: { replaceState() {} },
-    localStorage: { setItem() {}, getItem: () => null, removeItem() {} },
+    localStorage: { setItem(k, v) { storage[k] = String(v); }, getItem: (k) => storage[k] ?? null, removeItem(k) { delete storage[k]; } },
     navigator: webauthn ? { credentials: { get, create } } : {},
-    PublicKeyCredential: webauthn ? {} : undefined,
+    PublicKeyCredential: webauthn ? { ...(uvpa == null ? {} : { isUserVerifyingPlatformAuthenticatorAvailable: uvpa }), ...signals } : undefined,
     fetch,
   };
   vm.createContext(ctx);
@@ -191,6 +193,8 @@ for (const broken of [async () => { throw new Error("offline"); }, async () => (
   });
   await tick();
   assert.equal(page.actionLabel, "Check link again");
+  assert.equal(page.el("invitation-unavailable").hidden, true, "a network or metadata failure does not declare the link unusable");
+  assert.match(page.status, /Check your connection/);
   assert.equal(page.recoveryWarning, false);
   failInfo = false;
   await page.click();
@@ -199,11 +203,189 @@ for (const broken of [async () => { throw new Error("offline"); }, async () => (
   assert.ok(calls.every((url) => url.endsWith("/info")), "a retry checks metadata; the person must click again to replace");
 }
 
+// Unavailable invitations offer an existing sign-in without repeatedly
+// checking a consumed link or opening a passkey creation prompt. A missing
+// fragment, including a reload, sends the person back to the original link.
+{
+  let prompts = 0;
+  const calls = [];
+  page = render(rt, {
+    page: "enrol", hash: "#used-invitation",
+    fetch: async (url) => { calls.push(url); return { ok: false, status: 400, json: async () => ({ error: "Link unavailable" }) }; },
+    create: async () => { prompts++; return credential; },
+  });
+  await tick();
+  assert.equal(page.title, "This invitation is unavailable");
+  assert.equal(page.passkey, "hidden");
+  assert.equal(page.choices, "hidden");
+  assert.equal(page.el("enrol-help").hidden, true);
+  assert.equal(page.el("invitation-unavailable").hidden, false);
+  assert.equal(page.el("invitation-signin").href, "/_/auth/login" + rt, "existing sign-in keeps the destination for server validation");
+  assert.equal(page.el("invitation-signin").focused, true, "the available action takes focus when creation disappears");
+  assert.deepEqual(calls, ["/_/auth/enrol/info"]);
+  assert.equal(prompts, 0);
+
+  page = render(rt, { page: "enrol", fetch: async () => { throw new Error("must not send a missing invitation"); } });
+  assert.equal(page.title, "Open your invitation link");
+  assert.match(page.intro, /original invitation/);
+  assert.equal(page.choices, "hidden");
+  assert.equal(page.el("invitation-unavailable").hidden, false);
+  assert.equal(page.el("invitation-signin").href, "/_/auth/login" + rt);
+
+  page = enrol({
+    fetch: async (url) => url.endsWith("/info") ? creationReply(url) : { ok: false, status: 400, json: async () => ({ error: "Link unavailable" }) },
+    create: async () => { prompts++; return credential; },
+  });
+  await tick();
+  await page.click();
+  assert.equal(page.title, "This invitation is unavailable", "an invitation may expire after the initial check");
+  assert.equal(page.passkey, "hidden");
+  assert.equal(prompts, 0, "a failed begin never reaches the authenticator");
+}
+
+// Closing an enrolment prompt consumes no invitation; retrying in a
+// different place uses the same link and still shows the creation receipt.
+{
+  const sent = [];
+  let attempts = 0;
+  page = enrol({
+    fetch: async (url, init) => {
+      if (url.endsWith("/begin")) sent.push(JSON.parse(init.body));
+      return creationReply(url);
+    },
+    create: async () => {
+      if (++attempts === 1) throw new DOMException("technical browser detail", "NotAllowedError");
+      return credential;
+    },
+  });
+  await tick();
+  await page.click();
+  assert.match(page.status, /invitation has not been used/);
+  assert.doesNotMatch(page.status, /technical browser detail/);
+  assert.equal(page.passkey, "shown");
+  page.pick("manager");
+  await page.click();
+  assert.equal(attempts, 2);
+  assert.equal(sent.length, 2);
+  assert.deepEqual(sent[0], sent[1]);
+}
+
 page = render(rt + "&reauth=method&methods=oidc", { oidc: "Okta" });
 assert.equal(page.choices, "hidden", "no passkey guidance where only the provider is allowed");
 page = render(rt, { webauthn: false });
 assert.equal(page.choices, "open", "a browser without passkeys still learns where a passkey can live");
 assert.match(page.status, /another browser|a device that does/);
+// An enrolment that returns its passkey stops on a receipt: where it was
+// saved only when the provider is known, and an optional name saved with the
+// ordinary rename. A failed name never blocks continuing.
+function receiptPage(passkey, renames, renameFails = false) {
+  return enrol({
+    fetch: async (url, init) => {
+      if (url.endsWith("/info")) return { ok: true, json: async () => ({ recovery: false }) };
+      if (url.endsWith("/begin")) return { ok: true, json: async () => ({ publicKey: { challenge: "AAAA", user: { id: "AAAA" } } }) };
+      if (url.endsWith("/rename")) {
+        renames.push(JSON.parse(init.body));
+        return renameFails ? { ok: false, status: 500, json: async () => ({ error: "storage unavailable" }) } : { ok: true, json: async () => ({}) };
+      }
+      return { ok: true, json: async () => ({ redirect: "", sites: [], passkey }) };
+    },
+    create: async () => credential,
+  });
+}
+const submit = (p) => p.el("receipt-form").on.submit({ preventDefault() {} });
+
+let renames = [];
+page = receiptPage({ id: "abcd", provider: "Bitwarden", provider_known: true, icon: "bitwarden" }, renames);
+await tick();
+await page.click();
+await tick();
+assert.equal(page.el("receipt").hidden, false, "a new passkey is followed by its receipt");
+assert.equal(page.el("receipt-where").textContent, "Saved in Bitwarden.");
+assert.equal(page.el("receipt-icon").src, "/_/auth/icons/bitwarden.svg");
+assert.match(page.el("receipt-return").textContent, /Bitwarden extension/);
+assert.equal(page.el("receipt-return").hidden, false);
+assert.equal(page.el("receipt-continue").focused, true, "Continue gets focus; an optional name does not open a phone keyboard");
+assert.deepEqual(page.siteLinks, [], "nothing moves on before Continue");
+page.el("receipt-name").value = "  Work laptop ";
+await submit(page);
+assert.deepEqual(renames, [{ id: "abcd", label: "Work laptop" }], "the name is saved with the ordinary rename");
+assert.equal(page.el("receipt").hidden, true);
+assert.deepEqual(page.siteLinks, ["Add a backup passkey somewhere else"]);
+
+renames = [];
+page = receiptPage({ id: "abcd", provider: "Synced passkey", provider_known: false, icon: "synced" }, renames);
+await tick();
+await page.click();
+await tick();
+assert.doesNotMatch(page.el("receipt-where").textContent, /Synced passkey/, "a kind of passkey is never shown as a place");
+assert.match(page.el("receipt-where").textContent, /did not say where/);
+assert.equal(page.el("receipt-name-label").textContent, "Where did you save it?", "an unknown provider invites the person to record the place without guessing");
+assert.equal(page.el("receipt-icon").hidden, true);
+assert.equal(page.el("receipt-return").hidden, true);
+await submit(page);
+assert.deepEqual(renames, [], "no name, no rename");
+assert.deepEqual(page.siteLinks, ["Add a backup passkey somewhere else"]);
+
+renames = [];
+page = receiptPage({ id: "abcd", provider: "Bitwarden", provider_known: true, icon: "bitwarden" }, renames, true);
+await tick();
+await page.click();
+await tick();
+page.el("receipt-name").value = "Laptop";
+await submit(page);
+assert.match(page.status, /name was not saved/);
+assert.equal(page.el("receipt-continue").textContent, "Continue without a name");
+assert.equal(page.el("receipt").hidden, false, "a failed name stays on the receipt once");
+await submit(page);
+assert.equal(renames.length, 1, "the same failed name is not retried");
+assert.equal(page.el("receipt").hidden, true, "the person continues without it");
+
+// A hung optional rename still offers a way into the destination. A late
+// response must not navigate a second time or replace the successful state.
+const receiptWent = [];
+let settleName;
+const hungReceipt = enrol({
+  assign: (url) => receiptWent.push(url),
+  fetch: async (url) => {
+    if (url.endsWith("/info")) return { ok: true, json: async () => ({ recovery: false }) };
+    if (url.endsWith("/begin")) return { ok: true, json: async () => ({ publicKey: { challenge: "AAAA", user: { id: "AAAA" } } }) };
+    if (url.endsWith("/rename")) return new Promise((resolve) => { settleName = resolve; });
+    return { ok: true, json: async () => ({ redirect: "https://private.example.com/x", passkey: { id: "ab", provider_known: false } }) };
+  },
+  create: async () => credential,
+});
+await tick();
+await hungReceipt.click();
+hungReceipt.el("receipt-name").value = "Laptop";
+const savingName = submit(hungReceipt);
+await tick();
+assert.equal(hungReceipt.el("receipt-skip").hidden, false);
+await hungReceipt.click("receipt-skip");
+await savingName;
+assert.deepEqual(receiptWent, ["https://private.example.com/x"]);
+settleName({ ok: true, json: async () => ({}) });
+await tick();
+assert.deepEqual(receiptWent, ["https://private.example.com/x"], "a late name never navigates twice");
+
+const timeoutReceipt = enrol({
+  timer: (fn, ms) => setTimeout(fn, ms === 10_000 ? 0 : ms),
+  fetch: async (url) => {
+    if (url.endsWith("/info")) return { ok: true, json: async () => ({ recovery: false }) };
+    if (url.endsWith("/begin")) return { ok: true, json: async () => ({ publicKey: { challenge: "AAAA", user: { id: "AAAA" } } }) };
+    if (url.endsWith("/rename")) return new Promise(() => {});
+    return { ok: true, json: async () => ({ passkey: { id: "ab", provider_known: false }, redirect: "" }) };
+  },
+  create: async () => credential,
+});
+await tick();
+await timeoutReceipt.click();
+timeoutReceipt.el("receipt-name").value = "Laptop";
+await submit(timeoutReceipt);
+assert.equal(timeoutReceipt.el("receipt-continue").disabled, false);
+assert.match(timeoutReceipt.status, /continue without it/);
+await submit(timeoutReceipt);
+assert.equal(timeoutReceipt.el("receipt").hidden, true);
+
 page = enrol({ webauthn: false });
 assert.notEqual(page.choices, "hidden");
 assert.match(page.status, /Copy this page's address/, "the invitation can move to a browser that supports passkeys");
@@ -227,8 +409,166 @@ await tick();
 page.click("use-key");
 await tick();
 assert.deepEqual(asked, [undefined, ["hybrid"], ["security-key"]], "the main button adds no hint; the shortcuts steer to the phone or the key");
+
+// Only a browser that confirms conditional mediation gets a saved-account
+// field. Missing, false or failed detection leaves the ordinary button usable.
+for (const support of [undefined, async () => false, async () => { throw new Error("not available"); }, () => { throw new Error("not available"); }]) {
+  let prompts = 0;
+  page = render(rt, {
+    signals: support ? { isConditionalMediationAvailable: support } : {},
+    fetch: async () => ({ ok: true, json: async () => ({ publicKey: { challenge: "AAAA" } }) }),
+    get: async () => { prompts++; throw notAllowed; },
+  });
+  await tick();
+  assert.equal(page.el("username").hidden, true);
+  page.click();
+  await tick();
+  assert.equal(prompts, 1, "manual sign-in works without autofill support");
+  assert.equal(page.passkey, "shown");
+}
+{
+  const mediations = [];
+  page = render(rt, {
+    signals: { isConditionalMediationAvailable: async () => true },
+    fetch: async () => ({ ok: true, json: async () => ({ publicKey: { challenge: "AAAA" } }) }),
+    get: (request) => { mediations.push(request.mediation); return new Promise(() => {}); },
+  });
+  await tick();
+  assert.equal(page.el("username").hidden, false);
+  assert.deepEqual(mediations, ["conditional"]);
+
+  let answer;
+  page = render(rt, {
+    signals: { isConditionalMediationAvailable: () => new Promise((resolve) => { answer = resolve; }) },
+    fetch: async () => ({ ok: true, json: async () => ({ publicKey: { challenge: "AAAA" } }) }),
+    get: (request) => { mediations.push(request.mediation); return new Promise(() => {}); },
+  });
+  await tick();
+  page.click();
+  await tick();
+  answer(true);
+  await tick();
+  assert.deepEqual(mediations, ["conditional", undefined], "late autofill detection never cancels a sign-in the person already started");
+  assert.equal(page.el("username").hidden, true);
+}
+
 page = render("", { page: "devices", fetch: () => new Promise(() => {}) });
 assert.equal(page.choices, "closed", "adding a passkey asks where to keep it too");
+
+// The bridge: a sign-in with a passkey on another device or a key offers to
+// keep one here too, only where this device has its own authenticator, and
+// never in the way: Continue goes on at once.
+const buf = () => new Uint8Array([1]).buffer;
+const signedWith = (attachment) => ({ id: "c", rawId: buf(), type: "public-key", authenticatorAttachment: attachment, getClientExtensionResults: () => ({}), response: { clientDataJSON: buf(), authenticatorData: buf(), signature: buf(), userHandle: buf() } });
+async function bridgePage({ attachment = "cross-platform", uvpa = async () => true, storage = {}, search = rt, addFails = false, signals = {}, finish, added = { id: "ab", provider: "Bitwarden", provider_known: true } } = {}) {
+  const went = [];
+  const madeWith = [];
+  const p = render(search, {
+    uvpa, storage, signals,
+    assign: (url) => went.push(url),
+    fetch: async (url) => {
+      if (url.endsWith("/login/begin")) return { ok: true, json: async () => ({ publicKey: { challenge: "AAAA" } }) };
+      if (url.endsWith("/login/finish")) return finish ? finish() : { ok: true, json: async () => ({ redirect: "https://private.example.com/x" }) };
+      if (url.endsWith("/add/begin")) return addFails ? { ok: false, status: 403, json: async () => ({ error: "Confirm it's you" }) } : { ok: true, json: async () => ({ publicKey: { challenge: "AAAA", user: { id: "AAAA" } } }) };
+      if (url.endsWith("/add/finish")) return { ok: true, json: async () => added };
+      return { ok: true, json: async () => ({}) };
+    },
+    get: async (request) => (request.mediation ? new Promise(() => {}) : signedWith(attachment)),
+    create: async (request) => { madeWith.push(request.publicKey.hints && [...request.publicKey.hints]); return credential; },
+  });
+  await tick();
+  p.click();
+  await tick(20);
+  return { p, went, madeWith };
+}
+
+let b = await bridgePage();
+assert.equal(b.p.el("bridge").hidden, false, "another device's passkey offers one for this device");
+assert.deepEqual(b.went, [], "the offer waits for the person");
+await b.p.click("bridge-continue");
+assert.deepEqual(b.went, ["https://private.example.com/x"], "Continue goes on without creating anything");
+assert.deepEqual(b.madeWith, []);
+
+b = await bridgePage();
+await b.p.click("bridge-add");
+await tick();
+assert.deepEqual(b.madeWith, [["client-device"]], "the new passkey is steered to this device");
+assert.deepEqual(b.went, ["https://private.example.com/x"]);
+assert.match(b.p.status, /Bitwarden/);
+
+b = await bridgePage({ added: { id: "ab", provider: "Synced passkey", provider_known: false } });
+await b.p.click("bridge-add");
+assert.match(b.p.status, /Your passkey is saved/);
+assert.doesNotMatch(b.p.status, /saved on this device|Synced passkey/);
+
+b = await bridgePage({ addFails: true });
+await b.p.click("bridge-add");
+await tick();
+assert.match(b.p.status, /continue without it/);
+assert.deepEqual(b.went, [], "a failed add leaves the choice to the person");
+assert.equal(b.p.el("bridge").hidden, false);
+await b.p.click("bridge-continue");
+assert.deepEqual(b.went, ["https://private.example.com/x"]);
+
+const kept = {};
+b = await bridgePage({ storage: kept });
+await b.p.click("bridge-never");
+assert.deepEqual(b.went, ["https://private.example.com/x"]);
+b = await bridgePage({ storage: kept });
+assert.equal(b.p.el("bridge").hidden, true, "a refusal is remembered on this device");
+assert.deepEqual(b.went, ["https://private.example.com/x"]);
+
+for (const [why, options] of [
+  ["a passkey of this device", { attachment: "platform" }],
+  ["no authenticator here", { uvpa: async () => false }],
+  ["a browser that cannot tell", { uvpa: null }],
+  ["a failing check", { uvpa: async () => { throw new Error("no"); } }],
+  ["a step-up", { search: rt + "&reauth=1" }],
+]) {
+  b = await bridgePage(options);
+  assert.equal(b.p.el("bridge").hidden, true, `no offer after ${why}`);
+  assert.deepEqual(b.went, ["https://private.example.com/x"], `${why}: straight on`);
+}
+// The Signal API: a sign-in passes the server's whole list on; a refusal
+// that names a retired passkey passes that on; neither is awaited, and a
+// browser without the API or a refused signal changes nothing.
+const sent = [];
+const plain = (v) => JSON.parse(JSON.stringify(v));
+const recordingSignals = (fail = false) => ({
+  signalAllAcceptedCredentials: async (o) => { sent.push(["all", o]); if (fail) throw new Error("refused"); },
+  signalUnknownCredential: async (o) => { sent.push(["unknown", o]); if (fail) throw new Error("refused"); },
+});
+const list = { rp_id: "example.com", user_id: "dXNlcg", ids: ["YQ", "Yg"] };
+b = await bridgePage({ attachment: "platform", signals: recordingSignals(), finish: () => ({ ok: true, json: async () => ({ redirect: "https://private.example.com/x", accepted: list }) }) });
+assert.deepEqual(plain(sent), [["all", { rpId: "example.com", userId: "dXNlcg", allAcceptedCredentialIds: ["YQ", "Yg"] }]]);
+assert.deepEqual(b.went, ["https://private.example.com/x"]);
+
+sent.length = 0;
+for (const partial of [undefined, { ...list, ids: [] }, { ...list, rp_id: "" }, { ...list, user_id: "" }]) {
+  b = await bridgePage({ attachment: "platform", signals: recordingSignals(), finish: () => ({ ok: true, json: async () => ({ redirect: "https://private.example.com/x", accepted: partial }) }) });
+  assert.deepEqual(b.went, ["https://private.example.com/x"]);
+}
+assert.deepEqual(sent, [], "no list, an empty one or one without its keys is never sent");
+
+b = await bridgePage({ attachment: "platform", signals: recordingSignals(true), finish: () => ({ ok: true, json: async () => ({ redirect: "https://private.example.com/x", accepted: list }) }) });
+await tick();
+assert.deepEqual(b.went, ["https://private.example.com/x"], "a refused signal does not hold the sign-in");
+b = await bridgePage({ attachment: "platform", finish: () => ({ ok: true, json: async () => ({ redirect: "https://private.example.com/x", accepted: list }) }) });
+assert.deepEqual(b.went, ["https://private.example.com/x"], "a browser without the API signs in the same");
+
+sent.length = 0;
+const refused = (body) => () => ({ ok: false, status: 401, json: async () => body });
+b = await bridgePage({ signals: recordingSignals(), finish: refused({ error: "That passkey was not accepted.", unknown_credential: { rp_id: "example.com", credential_id: "YQ" } }) });
+assert.deepEqual(plain(sent), [["unknown", { rpId: "example.com", credentialId: "YQ" }]]);
+assert.match(b.p.status, /not accepted/, "the refusal is still explained");
+sent.length = 0;
+b = await bridgePage({ signals: recordingSignals(), finish: refused({ error: "That passkey was not accepted." }) });
+assert.deepEqual(sent, [], "a refusal without a retired passkey signals nothing");
+
+b = await bridgePage({ uvpa: () => new Promise(() => {}) });
+await tick(1600);
+assert.equal(b.p.el("bridge").hidden, true, "a browser that never answers does not hold the sign-in");
+assert.deepEqual(b.went, ["https://private.example.com/x"]);
 
 // Browser errors other than NotAllowedError name what the person can do.
 for (const [name, said] of [["NotSupportedError", /cannot use this kind of passkey/], ["SecurityError", /Open the sign-in link again/], ["UnknownError", /could not use a passkey here/]]) {
@@ -298,6 +638,25 @@ shown = await portal({ ok: false, status: 401, json: async () => ({ error: "You 
 assert.deepEqual(shown.assigned, ["/_/auth/login?return_to=" + encodeURIComponent("https://auth.example.com/_/auth/me")], "a signed-out person logs in and comes back to the portal");
 assert.equal(shown.page.who(), "", "nothing about a person is shown without a session");
 
+// The backup hint reads providers as a hint: only one passkey, or all synced
+// in one provider, suggests another place; nothing claims protection.
+{
+  const kp = (id, provider, known, synced) => ({ id, provider, provider_known: known, synced, icon: "key", created: "2026-10-21T12:00:00Z" });
+  const hintFor = async (passkeys) => {
+    const p = render("", { page: "devices", fetch: (url) => Promise.resolve({ ok: true, json: () => Promise.resolve(url.endsWith("/list") ? { email: "ana@example.com", passkeys, sites: [] } : {}) }) });
+    await settle();
+    return p.el("backup-hint").hidden ? "" : p.el("backup-hint").textContent;
+  };
+  assert.match(await hintFor([kp("aa", "Bitwarden", true, true)]), /only passkey/);
+  assert.match(await hintFor([kp("aa", "Bitwarden", true, true), kp("bb", "Bitwarden", true, true)]), /all in Bitwarden/);
+  assert.equal(await hintFor([kp("aa", "Bitwarden", true, true), kp("bb", "Google Password Manager", true, true)]), "", "different providers: no claim either way");
+  assert.equal(await hintFor([kp("aa", "Windows Hello", true, false), kp("bb", "Windows Hello", true, false)]), "", "two device-bound passkeys of one model may be independent");
+  assert.equal(await hintFor([kp("aa", "Bitwarden", true, true), kp("bb", "Synced passkey", false, true)]), "", "an unknown provider tells nothing");
+  for (const passkeys of [[kp("aa", "Bitwarden", true, true), kp("bb", "Google Password Manager", true, true)], [kp("aa", "Bitwarden", true, true)]]) {
+    assert.doesNotMatch(await hintFor(passkeys), /protected|safe|secure/i, "never a verdict");
+  }
+}
+
 // Destructive actions ask in the page, never through confirm() (this fake
 // window has none, so a native dialog would throw here).
 {
@@ -329,6 +688,23 @@ assert.equal(shown.page.who(), "", "nothing about a person is shown without a se
   ask.children[1].on.click();
   await settle();
   assert.ok(posts.some((u) => u.includes("/_/auth/devices/revoke")), "confirming removes the passkey");
+}
+// The revocation's answer carries the passkeys left; the page passes them
+// on at once, since its session has just ended.
+{
+  const signalled = [];
+  const left = { rp_id: "example.com", user_id: "dXNlcg", ids: ["YQ"] };
+  page = render("", {
+    page: "devices",
+    signals: { signalAllAcceptedCredentials: async (o) => { signalled.push(JSON.parse(JSON.stringify(o))); } },
+    fetch: (url) => Promise.resolve({ ok: true, json: () => Promise.resolve(url.endsWith("/list") ? { email: "ana@example.com", passkeys: [key("aa11", false), key("dd44", true)], sites: [] } : url.endsWith("/revoke") ? { signed_out: true, accepted: left } : {}) }),
+  });
+  await settle();
+  page.devices[1].children[1].on.click();
+  page.devices[1].children[4].children[1].on.click();
+  await settle();
+  assert.deepEqual(signalled, [{ rpId: "example.com", userId: "dXNlcg", allAcceptedCredentialIds: ["YQ"] }]);
+  assert.match(page.status, /Removed/);
 }
 {
   const posts = [];
@@ -422,4 +798,61 @@ assert.equal(shown.page.who(), "", "nothing about a person is shown without a se
   assert.equal(page.el("also-admin").hidden, true, "no notice for a visitor only");
 }
 
-console.log("passkey pages: login, enrolment, recovery preflight, choices, devices, rename and sessions OK");
+console.log("passkey pages: login, bridge, signals, enrolment, receipt, recovery preflight, choices, devices, rename and sessions OK");
+
+
+// The administrator login host runs on the HTTPS RP. Signals must remain
+// optional here too, including a pending, rejected or synchronously thrown call.
+const adminLoginScript = readFileSync(new URL("../internal/admin/loginhost/admin-login.js", import.meta.url), "utf8");
+async function adminLoginPage({ result = {}, ok = true, signals = {} } = {}) {
+  const sent = [];
+  const went = [];
+  const nodes = Object.fromEntries(["action", "status", "title"].map((id) => [id, {
+    textContent: "", dataset: {}, disabled: false,
+    addEventListener(_, fn) { this.click = fn; },
+  }]));
+  const context = {
+    document: {
+      body: { dataset: { tx: "t", kind: "sign-in" } },
+      getElementById: (id) => nodes[id],
+      addEventListener(_, fn) { fn(); },
+    },
+    window: { PublicKeyCredential: {} }, PublicKeyCredential: signals,
+    URLSearchParams, atob, btoa, Uint8Array, DOMException,
+    navigator: { credentials: { get: async () => signedWith("platform") } },
+    location: { assign: (url) => went.push(url) },
+    fetch: async (url) => {
+      sent.push(url);
+      return { ok: url.includes("/begin") || ok, json: async () => url.includes("/begin")
+        ? { ceremony: "c", options: { publicKey: { challenge: "AAAA" } } }
+        : { redirect: "http://ozal.localhost:9091/overview#admin_code=one-use", ...result } };
+    },
+  };
+  vm.runInNewContext(adminLoginScript, context);
+  await nodes.action.click();
+  await tick();
+  return { went, status: nodes.status.textContent };
+}
+const adminAccepted = { rp_id: "example.com", user_id: "YWRtaW4", ids: ["YQ"] };
+for (const signalMode of ["missing", "works", "rejects", "throws", "pending"]) {
+  const calls = [];
+  const signals = signalMode === "missing" ? {} : { signalAllAcceptedCredentials: (options) => {
+    calls.push(JSON.parse(JSON.stringify(options)));
+    if (signalMode === "throws") throw new Error("refused");
+    if (signalMode === "rejects") return Promise.reject(new Error("refused"));
+    if (signalMode === "pending") return new Promise(() => {});
+    return Promise.resolve();
+  } };
+  const admin = await adminLoginPage({ result: { accepted: adminAccepted }, signals });
+  assert.equal(admin.went.length, 1, `${signalMode}: the console return is never held`);
+  if (signalMode !== "missing") assert.deepEqual(calls, [{ rpId: "example.com", userId: "YWRtaW4", allAcceptedCredentialIds: ["YQ"] }]);
+}
+const retiredCalls = [];
+const retiredSignals = { signalUnknownCredential: async (options) => { retiredCalls.push(JSON.parse(JSON.stringify(options))); } };
+let admin = await adminLoginPage({ ok: false, result: { error: "retired", unknown_credential: { rp_id: "example.com", credential_id: "YQ" } }, signals: retiredSignals });
+assert.deepEqual(retiredCalls, [{ rpId: "example.com", credentialId: "YQ" }]);
+assert.deepEqual(admin.went, []);
+retiredCalls.length = 0;
+await adminLoginPage({ ok: false, result: { error: "ambiguous" }, signals: retiredSignals });
+assert.deepEqual(retiredCalls, []);
+console.log("administrator login host: optional accepted and retired signals OK");

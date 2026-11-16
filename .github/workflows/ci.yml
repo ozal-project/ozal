@@ -23,8 +23,8 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
       # Pinned: an unpinned linter changes the gate without any commit.
@@ -35,7 +35,7 @@ jobs:
           go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
       # REL-014: the console's embedded build and the project page are
       # checked from a clean checkout, not only where node_modules exists.
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: startsWith(matrix.os, 'ubuntu')
         with:
           node-version-file: .node-version

@@ -19,16 +19,38 @@ const b64url = {
   },
 };
 
-async function post(path, body) {
+async function post(path, body, signal) {
   const response = await fetch(path, {
     method: "POST",
+    signal,
     headers: { "Content-Type": "application/json" },
     credentials: "same-origin",
     body: JSON.stringify(body),
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "The request failed.");
+  if (!response.ok) throw Object.assign(new Error(data.error || "The request failed."), { data, status: response.status });
   return data;
+}
+
+// The Signal API tells the browser or password manager which of this site's
+// passkeys still work, so a revoked one stops being offered. The server sends
+// a list only when it read it whole, and names a passkey as gone only when it
+// revoked it. Nothing here is awaited: a browser without the API, or one that
+// refuses, changes nothing, and a resolved promise does not prove the manager
+// acted, so the page never says it did.
+function signalAccepted(list) {
+  try {
+    const signal = typeof PublicKeyCredential !== "undefined" && PublicKeyCredential.signalAllAcceptedCredentials;
+    if (!list || !list.rp_id || !list.user_id || !Array.isArray(list.ids) || list.ids.length === 0 || typeof signal !== "function") return;
+    signal.call(PublicKeyCredential, { rpId: list.rp_id, userId: list.user_id, allAcceptedCredentialIds: list.ids }).catch(() => {});
+  } catch {}
+}
+function signalUnknown(gone) {
+  try {
+    const signal = typeof PublicKeyCredential !== "undefined" && PublicKeyCredential.signalUnknownCredential;
+    if (!gone || !gone.rp_id || !gone.credential_id || typeof signal !== "function") return;
+    signal.call(PublicKeyCredential, { rpId: gone.rp_id, credentialId: gone.credential_id }).catch(() => {});
+  } catch {}
 }
 
 // hints, when the person said where they keep passkeys, steer the browser's
@@ -85,10 +107,10 @@ function show(message, kind) {
 function explain(error, page) {
   if (error.name === "NotAllowedError") {
     return page === "login"
-      ? "The sign-in did not finish: the prompt was closed, it timed out, or this device has no passkey for this site. If you have not created one yet, you need the invitation link (see below)."
-      : "The passkey was not created: the prompt was closed or it timed out. If it asked for something you do not have, choose another place to keep it and try again.";
+      ? "Sign-in did not finish. The prompt may have been closed, timed out, or found no passkey for this site. Try again, or check the other places below."
+      : "The passkey was not created. The prompt may have been closed, timed out, or found no available place to save it. Choose another option and try again.";
   }
-  if (error.name === "InvalidStateError") return "This device already has a passkey for this account.";
+  if (error.name === "InvalidStateError") return "A passkey for this account is already available here. Try signing in with it, or choose another place to save a new one.";
   // Other browser errors carry technical text meant for developers; say what
   // the visitor can do instead. Server errors are plain Errors with a message
   // written for people, and are shown as they are.
@@ -110,7 +132,7 @@ const choices = {
   device: { label: "This device", detail: "Windows Hello, Touch ID or the screen lock of this phone or tablet.", hints: ["client-device"] },
   manager: {
     label: "My password manager",
-    detail: "Its browser extension takes the prompt: for example Bitwarden (or self-hosted Vaultwarden), 1Password, Proton Pass or KeePassXC, or any other that saves passkeys.",
+    detail: "Unlock your manager's passkey extension in this browser.",
     hints: [],
   },
   phone: { label: "My phone", detail: "Scan the QR code the browser shows; this computer needs Bluetooth.", hints: ["hybrid"] },
@@ -303,10 +325,69 @@ function setupLoginPage(button) {
   return { returnTo, passkeys, provider: provider && allows("oidc") ? provider : "" };
 }
 
+// The bridge: after a sign-in with a passkey on another device or a security
+// key, offer to keep one on this device too. It never blocks: Continue goes on
+// at once, and a refusal is remembered on this device. Only where this device
+// has its own authenticator, and never in a step-up, where the site asked for
+// something specific.
+const bridgeKey = "ozal.bridge.never";
+async function offerBridge(credential) {
+  if (!credential || credential.authenticatorAttachment !== "cross-platform") return false;
+  if (new URLSearchParams(location.search).get("reauth")) return false;
+  try { if (localStorage.getItem(bridgeKey)) return false; } catch {}
+  const check = PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable;
+  if (typeof check !== "function") return false;
+  // A browser that does not answer quickly is treated as "no": signing in
+  // must not wait on the offer.
+  const answer = await Promise.race([check.call(PublicKeyCredential).catch(() => false), new Promise((resolve) => setTimeout(() => resolve(false), 1500))]);
+  return answer === true;
+}
+
+function bridge(result) {
+  const section = document.getElementById("bridge");
+  if (!section) return finish(result, "You are signed in.");
+  for (const id of ["title", "intro", "username", "action", "oidc", "choices", "first-time"]) {
+    const el = document.getElementById(id);
+    if (el) el.hidden = true;
+  }
+  const label = document.querySelector("label[for=username]");
+  if (label) label.hidden = true;
+  show("");
+  section.hidden = false;
+  const go = document.getElementById("bridge-continue");
+  const add = document.getElementById("bridge-add");
+  const never = document.getElementById("bridge-never");
+  const done = (message) => { section.hidden = true; finish(result, message); };
+  go.addEventListener("click", () => done("You are signed in."));
+  never.addEventListener("click", () => {
+    try { localStorage.setItem(bridgeKey, "1"); } catch {}
+    done("You are signed in.");
+  });
+  add.addEventListener("click", async () => {
+    add.disabled = true;
+    show("Follow your device's prompt…");
+    try {
+      const options = await post("/_/auth/devices/add/begin", {});
+      const created = await navigator.credentials.create({ publicKey: creationOptions(options, choices.device.hints) });
+      const added = await post("/_/auth/devices/add/finish", credentialJSON(created));
+      done((added.provider_known ? "Passkey saved in " + added.provider + "." : "Your passkey is saved.") + " You are signed in.");
+    } catch (error) {
+      add.disabled = false;
+      show(explain(error, "enrol") + " You can continue without it.", "error");
+    }
+  });
+  go.focus();
+}
+
 function setupLogin(button, returnTo) {
   let pending = null;
+  let interacted = false;
+  const username = document.getElementById("username");
+  const label = document.querySelector("label[for=username]");
+  username.hidden = label.hidden = true;
 
   async function login(conditional, hints) {
+    if (!conditional) interacted = true;
     if (pending) pending.abort();
     const controller = new AbortController();
     pending = controller;
@@ -316,8 +397,16 @@ function setupLogin(button, returnTo) {
     const credential = await navigator.credentials.get(request);
     button.disabled = true;
     show("Checking…");
-    const result = await post("/_/auth/login/finish", credentialJSON(credential));
-    finish(result, "You are signed in.");
+    let result;
+    try {
+      result = await post("/_/auth/login/finish", credentialJSON(credential));
+    } catch (error) {
+      signalUnknown(error.data && error.data.unknown_credential);
+      throw error;
+    }
+    signalAccepted(result.accepted);
+    if (await offerBridge(credential)) bridge(result);
+    else finish(result, "You are signed in.");
   }
 
   function fail(error) {
@@ -332,12 +421,16 @@ function setupLogin(button, returnTo) {
     const other = document.getElementById(id);
     if (other) other.addEventListener("click", () => login(false, choices[choice].hints).catch(fail));
   }
-  if (PublicKeyCredential.isConditionalMediationAvailable) {
-    PublicKeyCredential.isConditionalMediationAvailable().then((ok) => {
+  if (typeof PublicKeyCredential.isConditionalMediationAvailable === "function") {
+    Promise.resolve().then(() => PublicKeyCredential.isConditionalMediationAvailable()).then((ok) => {
       // The silent autofill attempt fails quietly: the button is still
       // there, and its errors are the ones worth showing.
-      if (ok) login(true).catch((error) => { button.disabled = false; if (error.name !== "AbortError") console.debug("passkey autofill:", error.name); });
-    });
+      if (ok && !interacted) {
+        username.hidden = label.hidden = false;
+        if (!new URLSearchParams(location.search).get("reauth")) document.getElementById("intro").textContent = "Choose the account saved in your browser or password manager, or use the button below.";
+        login(true).catch((error) => { button.disabled = false; if (error.name !== "AbortError") console.debug("passkey autofill:", error.name); });
+      }
+    }).catch(() => {});
   }
 }
 
@@ -348,9 +441,22 @@ function setupEnrol(button) {
   const returnTo = new URLSearchParams(location.search).get("return_to") || pendingReturn();
   if (returnTo) warm(returnTo);
   history.replaceState(null, "", location.pathname);
+  function unavailable(missing) {
+    button.hidden = true;
+    for (const id of ["choices", "enrol-help", "recovery-warning"]) document.getElementById(id).hidden = true;
+    document.getElementById("title").textContent = missing ? "Open your invitation link" : "This invitation is unavailable";
+    document.getElementById("intro").textContent = missing
+      ? "Open the original invitation from the message you received. Reloading this page does not restore it."
+      : "The link may have expired, been used already, or be incomplete.";
+    const signIn = document.getElementById("invitation-signin");
+    signIn.href = "/_/auth/login" + (returnTo ? "?return_to=" + encodeURIComponent(returnTo) : "");
+    document.getElementById("invitation-unavailable").hidden = false;
+    show("");
+    signIn.focus();
+  }
   if (!token) {
     button.disabled = true;
-    show("This link has no invitation in it. Ask the operator for a new one.", "error");
+    unavailable(true);
     return;
   }
   let ready = false;
@@ -365,8 +471,9 @@ function setupEnrol(button) {
       ready = true;
       show("");
     } catch (error) {
+      if (error.status === 400) { unavailable(false); return; }
       button.textContent = "Check link again";
-      show(error.message, "error");
+      show(error.data ? error.message : "Could not check your invitation. Check your connection and try again.", "error");
     } finally {
       button.disabled = false;
     }
@@ -377,17 +484,122 @@ function setupEnrol(button) {
     if (!ready) { await checkLink(); return; }
     button.disabled = true;
     show("Waiting for your device…");
+    let began = false;
     try {
       const options = await post("/_/auth/enrol/begin", { token, return_to: returnTo });
+      began = true;
       const credential = await navigator.credentials.create({ publicKey: creationOptions(options, keepHints()) });
       const result = await post("/_/auth/enrol/finish", credentialJSON(credential));
-      finish(result, "Your passkey is saved and you are signed in. A second one in another place (another device, your password manager or a key) keeps you from being locked out if you lose this one.", true);
+      receipt(result);
     } catch (error) {
+      if (!began && error.status === 400) { unavailable(false); return; }
       button.disabled = false;
-      show(explain(error, "enrol"), "error");
+      show(explain(error, "enrol") + (error.name === "NotAllowedError" ? " Your invitation has not been used." : ""), "error");
       openChoices(error);
     }
   });
+}
+
+// Where a known provider's passkeys can be used again. Only for providers
+// whose reach is documented; the wording stays conditional because it also
+// depends on the browser and the system.
+const returnHints = {
+  "Bitwarden": "To use it in another browser, install the Bitwarden extension there and unlock it.",
+  "1Password": "To use it in another browser, install the 1Password extension there and unlock it.",
+  "Google Password Manager": "Chrome signed in to the same Google account, and your Android phone, can offer it.",
+  "Apple Passwords": "Your Apple devices signed in to the same Apple Account can offer it.",
+};
+
+// receipt follows a new enrolment: where the passkey was saved when the
+// provider says so (never a guess), an optional name, then the destination.
+// The name uses the ordinary rename, which the fresh session allows; a name
+// that cannot be saved never keeps the person from continuing.
+function receipt(result) {
+  const created = result.passkey;
+  if (!created || !created.id) {
+    finish(result, "Your passkey is saved and you are signed in. A second one in another place (another device, your password manager or a key) keeps you from being locked out if you lose this one.", true);
+    return;
+  }
+  for (const id of ["choices", "action", "recovery-warning"]) {
+    const el = document.getElementById(id);
+    if (el) el.hidden = true;
+  }
+  document.querySelectorAll("main > .hint").forEach((el) => { el.hidden = true; });
+  document.getElementById("title").textContent = "Your passkey is saved";
+  document.getElementById("intro").textContent = "You are signed in.";
+  const where = document.getElementById("receipt-where");
+  const icon = document.getElementById("receipt-icon");
+  if (created.provider_known) {
+    where.textContent = "Saved in " + created.provider + ".";
+    icon.src = "/_/auth/icons/" + created.icon + ".svg";
+    icon.hidden = false;
+    const hint = returnHints[created.provider];
+    if (hint) {
+      const line = document.getElementById("receipt-return");
+      line.textContent = hint;
+      line.hidden = false;
+    }
+  } else {
+    where.textContent = "Your device did not say where it saved it. You can record the place you chose below.";
+    document.getElementById("receipt-name-label").textContent = "Where did you save it?";
+  }
+  document.getElementById("receipt").hidden = false;
+  show("");
+  const input = document.getElementById("receipt-name");
+  const go = document.getElementById("receipt-continue");
+  // A name that fails is reported once; submitting the same name again
+  // continues without it, a different name is tried.
+  let failed = null;
+  let completed = false;
+  let saving = false;
+  let controller;
+  const skip = document.getElementById("receipt-skip");
+  skip.addEventListener("click", () => {
+    if (completed) return;
+    completed = true;
+    controller?.abort();
+    document.getElementById("receipt").hidden = true;
+    finish(result, "Your passkey is saved.", true);
+  });
+  input.addEventListener("input", () => {
+    go.textContent = input.value.trim() === failed ? "Continue without a name" : "Continue";
+  });
+  document.getElementById("receipt-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (completed || saving) return;
+    const label = input.value.trim();
+    let named = false;
+    if (label && label !== failed) {
+      go.disabled = true;
+      saving = true;
+      skip.hidden = false;
+      controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10_000);
+      try {
+        await Promise.race([
+          post("/_/auth/devices/rename", { id: created.id, label }, controller.signal),
+          new Promise((_, reject) => controller.signal.addEventListener("abort", () => reject(new Error("Saving the name was interrupted. You can continue without it.")), { once: true })),
+        ]);
+        named = true;
+      } catch (error) {
+        if (completed) return;
+        failed = label;
+        go.disabled = false;
+        go.textContent = "Continue without a name";
+        show("The name was not saved: " + error.message, "error");
+        return;
+      } finally {
+        clearTimeout(timer);
+        saving = false;
+        skip.hidden = true;
+      }
+    }
+    if (completed) return;
+    completed = true;
+    document.getElementById("receipt").hidden = true;
+    finish(result, named ? "Saved as “" + label + "”." : "Your passkey is saved.", true);
+  });
+  go.focus();
 }
 
 // ago turns a timestamp into "just now", "3 hours ago", "Oct 21".
@@ -438,6 +650,27 @@ function askInline(button, box, question, action, onYes) {
 // setupDevices lists the visitor's passkeys and lets them add or remove one
 // (ID-008). The server checks every request against a recent passkey proof;
 // when that lapses it answers 403 and the page sends the visitor to confirm.
+// backupState reads the providers as a hint, never as proof (the console's
+// lib/backupPasskey.ts decides the same way). An AAGUID names a provider or
+// a model, not a vault: two synced passkeys of one provider may hang on one
+// vault, two device-bound ones of one model may be independent, and an
+// unknown provider tells nothing. Only "one" and "same-provider" suggest
+// another place; nothing ever says the account is protected.
+function backupState(passkeys) {
+  if (!Array.isArray(passkeys) || passkeys.length === 0) return "unknown";
+  if (passkeys.length === 1) return "one";
+  if (passkeys.some((p) => !p.provider_known || !p.provider)) return "unknown";
+  if (new Set(passkeys.map((p) => p.provider)).size > 1) return "separate";
+  return passkeys.every((p) => p.synced === true) ? "same-provider" : "unknown";
+}
+
+function backupHint(passkeys) {
+  const state = backupState(passkeys);
+  if (state === "one") return "This is your only passkey. If you lose it, you need a new invitation. Add another in a different place: a security key, a password manager or another device.";
+  if (state === "same-provider") return "Your passkeys are all in " + passkeys[0].provider + ". If you lose access to it, you may lose all of them. Keep one somewhere else, such as a security key or another device.";
+  return "";
+}
+
 function setupDevices(button) {
   const list = document.getElementById("devices");
   const relogin = () => location.assign("/_/auth/login?return_to=" + encodeURIComponent(location.origin + "/_/auth/devices") + "&reauth=1&methods=passkey");
@@ -495,6 +728,11 @@ function setupDevices(button) {
       item.append(title, remove, meta, icon, ask, form, renameButton);
       return item;
     }));
+    const hint = document.getElementById("backup-hint");
+    if (hint) {
+      hint.textContent = backupHint(data.passkeys);
+      hint.hidden = !hint.textContent;
+    }
     const nav = document.getElementById("sites");
     const sites = data.sites || [];
     nav.replaceChildren(nav.querySelector("h2") || el("span"), ...sites.map((url) => {
@@ -549,7 +787,8 @@ function setupDevices(button) {
 
   async function revoke(id) {
     show("Removing…");
-    await post("/_/auth/devices/revoke", { id });
+    const result = await post("/_/auth/devices/revoke", { id });
+    signalAccepted(result.accepted);
     show("Removed. You are signed out everywhere; sign in again with another passkey.", "ok");
     list.replaceChildren();
     button.disabled = true;

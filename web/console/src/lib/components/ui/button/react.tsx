@@ -6,12 +6,15 @@ export const buttonVariants = tv({
   base: "focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 aria-invalid:border-destructive rounded-lg border border-transparent bg-clip-padding text-sm font-medium focus-visible:ring-3 active:translate-y-px [&_svg:not([class*='size-'])]:size-4 group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   variants: {
     variant: {
-      default: "bg-primary text-primary-foreground hover:bg-primary/80",
-      outline: "border-border bg-background hover:bg-muted hover:text-foreground",
+      // The next action: filled indigo.
+      default: "bg-primary text-primary-foreground hover:bg-primary/85",
+      // Other actions: a see-through surface that sits on the page or on a
+      // card alike (never a black hole), lit in indigo on hover.
+      outline: "border-border bg-white/[0.03] text-foreground hover:border-signal/45 hover:bg-signal/10",
       secondary: "bg-secondary text-secondary-foreground hover:bg-accent",
-      ghost: "hover:bg-muted hover:text-foreground",
-      destructive: "bg-destructive/10 hover:bg-destructive/20 text-destructive",
-      link: "text-signal underline-offset-4 hover:underline",
+      ghost: "text-foreground hover:bg-signal/10",
+      destructive: "border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/20",
+      link: "text-signal underline decoration-signal/45 underline-offset-4 hover:decoration-current",
     },
     size: {
       default: "h-9 gap-1.5 px-3",

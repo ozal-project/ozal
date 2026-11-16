@@ -40,6 +40,7 @@ import (
 	"github.com/ozal-project/ozal/internal/domaincheck/probe"
 	"github.com/ozal-project/ozal/internal/events"
 	"github.com/ozal-project/ozal/internal/githubapp"
+	"github.com/ozal-project/ozal/internal/ipcountry"
 	"github.com/ozal-project/ozal/internal/notify"
 	"github.com/ozal-project/ozal/internal/notify/telegram"
 	"github.com/ozal-project/ozal/internal/originauth"
@@ -85,6 +86,7 @@ func subcommands() map[string]func(context.Context, []string, io.Writer) error {
 		"site":            runSite,
 		"schema":          runSchema,
 		"setup":           runSetup,
+		"cloudflare":      runCloudflare,
 		"runtime":         runRuntime,
 		"user":            runUser,
 		"validate":        runValidate,
@@ -228,6 +230,19 @@ func main() {
 	}
 	if *dbPath != "" {
 		adminOpts = append(adminOpts, admin.WithUpdateStatusFile(filepath.Join(filepath.Dir(*dbPath), "update-status.json")))
+		// The console keeps a Cloudflare token beside the state; the host
+		// command it prints moves certificates to DNS-01 with it.
+		// The host command refuses a token path reached through a link, so
+		// the console names the directory as it really is.
+		stateDir, err := cloudflareStateDir(*dbPath)
+		if err != nil {
+			log.Fatalf("resolve Cloudflare state directory: %v", err)
+		}
+		adminOpts = append(adminOpts, admin.WithCloudflareSetup(admin.CloudflareSetup{
+			Dir:     stateDir,
+			Verify:  verifyCloudflareToken,
+			Command: hostCloudflareCommand(*configPath, systemdUnit()),
+		}))
 		// PAGES-010: a GitHub App connected from the console keeps its key
 		// beside the state database, readable by this service only.
 		adminOpts = append(adminOpts, admin.WithGitHubKeyDir(filepath.Dir(*dbPath)))
@@ -257,6 +272,19 @@ func main() {
 		// the HTTPS login host; the book is shared by the console and the gate.
 		remoteLogin := admin.NewRemoteLogin()
 		adminOpts = append(adminOpts, admin.WithRemoteLogin(remoteLogin))
+		// The country next to an address on the enrolment page is cosmetic:
+		// the table loads in the background, off the listeners' path, and a
+		// table that cannot be read only drops it.
+		if path := loaded.Admin.CountryDatabase; path != "" {
+			table := ipcountry.LoadAsync(ctx, path, func(t *ipcountry.Table, err error) {
+				if err != nil {
+					log.Printf("admin.country_database: %v; the enrolment page shows addresses without a country", err)
+					return
+				}
+				log.Printf("admin.country_database: %d ranges loaded", t.Len())
+			})
+			adminOpts = append(adminOpts, admin.WithCountries(table, countryCredit(loaded.Admin.CountryCredit, path)))
+		}
 		managerOpts = append(managerOpts, routemanager.WithAdminLogin(remoteLogin))
 		// A fresh install needs no command: until the first administrator
 		// exists, a one-use setup link is kept in a file only root and the
@@ -982,6 +1010,10 @@ func runCertificateManager(ctx context.Context, manager certificateWorker, relea
 
 // hostEnrolCommand describes how to enrol on this host from its own paths.
 func hostEnrolCommand(configPath string) string {
+	return hostActionCommand(configPath, "console enrol")
+}
+
+func hostActionCommand(configPath, action string) string {
 	exe, err := os.Executable()
 	if err != nil {
 		return ""
@@ -992,7 +1024,7 @@ func hostEnrolCommand(configPath string) string {
 	if abs, err := filepath.Abs(configPath); err == nil {
 		configPath = abs
 	}
-	return enrolCommand(exe, configPath, func(name string) string {
+	return actionCommand(exe, configPath, action, func(name string) string {
 		found, err := exec.LookPath(name)
 		if err != nil {
 			return ""
@@ -1142,4 +1174,17 @@ func loadAssertionSigner(dir string) (proxy.AssertionSigner, error) {
 		return nil, err
 	}
 	return assertion.NewSigner(key)
+}
+
+// countryCredit is the attribution the enrolment page shows for the country
+// table: the operator's own (admin.country_credit), or DB-IP's when the file
+// is one of theirs, as their licence asks; otherwise none.
+func countryCredit(configured, path string) admin.CountryCredit {
+	if configured != "" {
+		return admin.CountryCredit{Text: configured}
+	}
+	if strings.HasPrefix(strings.ToLower(filepath.Base(path)), "dbip") {
+		return admin.CountryCredit{Text: "IP Geolocation by DB-IP", URL: "https://db-ip.com"}
+	}
+	return admin.CountryCredit{}
 }

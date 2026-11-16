@@ -77,6 +77,31 @@ route manager loads the key once per `key_dir`. Regression tests cover a forged
 header, underscore spellings, another audience, routes without the field, a
 missing signer and a failing signer.
 
+**Enrolment by code.** `enrolcode.Book` is the pure core: a host-issued code
+(8 symbols from a 32-letter alphabet without I, O, 0 and 1, 40 bits) is claimed
+by one browser at most once within 5 minutes, and only that browser's claim
+token can create the passkey; the whole enrolment ends within 15 minutes. Wrong
+codes are limited per address and in total, and neither limit ends a code or an
+enrolment in progress, so a guesser cannot end someone else's onboarding, though
+reaching the total limit pauses every claim while it lasts (the terminal reports
+it and the link remains); fewer than sixty guesses fit in a code's window. A newer
+recovery, or the first administrator being created, marks the codes that can no
+longer succeed as replaced. Storing the passkey first
+reserves the enrolment, so a withdrawal or a host cancellation racing with the
+store is refused rather than reported as done, and a failed store releases it.
+The code is reserved in the book before the enrolment is stored, so a full book
+leaves an earlier recovery link intact. There is no second factor on the host:
+the first browser to type a valid code wins, bounded by the window, the limits and
+the terminal's report. The code and the browser's claim token are compared by
+hash, and the terminal's poll secret is never sent to the browser. `admin` stores
+the enrolment token, serves `/_/auth/admin/code` on the login host only while a
+code is live, never reads a code from the page URL, and runs the ceremony on a
+transaction that the console's own enrolment path refuses. Regression tests cover
+the claim, withdrawal, a withdrawal during a real store, a failed store, a full
+book with an earlier recovery, expiry, a second browser, a forged claim, a
+cross-origin claim, the address and total limits, a code in the URL, host-only
+terminal endpoints and recovery.
+
 <a id="identidad-y-aplicaciones"></a>
 ## Identity and applications
 
@@ -102,6 +127,80 @@ See `policy explain -h` for options; it does not prove OIDC, TLS, a real session
 health or transport. `policy replay` evaluates a candidate rule without
 mutating the policy; `who-can` and `review` must not turn missing history into
 "never used".
+
+Where a passkey lives is named only when the authenticator reports an AAGUID
+on the known-provider list (`provider_known`); otherwise the name is a kind of
+passkey ("Synced passkey") and pages never present it as a place. A new
+visitor passkey ends on a receipt with an optional name, saved through the
+ordinary rename on the fresh session. Saving the optional name has a ten-second
+timeout and a separate Continue without a name action; neither a hung request
+nor a late response keeps the visitor from their destination. An administrator
+renames only their own active passkey (`PATCH /_/api/admin/passkeys/{id}`), from a session opened with
+a passkey and a passkey proof under five minutes old; another account's passkey
+is not found. Confirmation for a session opened on the HTTPS login host returns
+to that host for a full sign-in; after returning, the person retries the action
+with the fresh session. It never tries that RP's passkey on loopback or replays
+a mutation across navigation. Sessions opened on loopback still confirm there.
+Adding an administrator passkey requires the same recent proof at registration
+begin, finish, and immediately before storage under the identity lock. A stale
+proof rejected before the ceremony is consumed can be confirmed locally and the
+same registration response retried once, without creating another credential.
+Issuing a one-use link for another browser also requires a recent proof and is
+serialized with recovery and disable. An issued link retains its own ten-minute
+lifetime; its recipient does not need the issuer's session. Neither a host login,
+the host socket nor the admin token grants these account-bound operations.
+The provider is a label for the owner, never a trust decision. An unknown provider's
+receipt asks where the visitor saved the passkey without inferring that place.
+Continue receives focus, so the optional name does not open a mobile keyboard.
+
+Visitor enrolment checks the invitation before opening an authenticator prompt.
+An unavailable link offers sign-in with an existing passkey and keeps the requested
+destination for server validation; a missing fragment asks for the original link.
+A network failure leaves a retry, and closing a creation prompt does not consume
+the invitation. Help during creation opens in a separate tab without the invitation or a
+referrer: navigating away would discard the fragment already removed from history.
+The browser acceptance in `scripts/demo/visitor-passkeys-acceptance.mjs` exercises
+these paths on a disposable edge with virtual authenticators and checks 320 px and
+390 px layouts. Its simulated capabilities do not prove Firefox or password-manager
+compatibility.
+The visitor sign-in shows the saved-account field only after the browser confirms
+conditional mediation. Missing or failed detection leaves the ordinary sign-in
+button available, and a late answer never replaces a manually started prompt.
+
+After a visitor signs in with a passkey on another device or a security key
+(`authenticatorAttachment` is `cross-platform`) on a device that reports its
+own authenticator, the login page offers to add one there, through the
+ordinary add on the fresh session. Continue is the default and goes on at
+once; a refusal is remembered on that device; a step-up never shows the offer,
+and a browser that does not answer within 1.5 seconds is treated as having no
+authenticator. Administrators get no such offer: their login host returns a
+code to the console and keeps no session.
+
+Visitor pages use the WebAuthn Signal API so that a revoked passkey stops
+being offered. A successful sign-in answers with `accepted` (relying party,
+user handle and every active credential of that account, base64url), read
+after the sign-in. It is absent when the read fails, would be empty, or does
+not include the passkey that just signed in. Revoking answers with the passkeys
+left, read in the revocation's own transaction, and the page signals them
+although its session has ended. If this optional snapshot fails, revocation
+and session termination still commit, and no list is sent. A refused sign-in
+names `unknown_credential` only when this directory holds that credential as
+revoked for the user handle the authenticator presented. A revoked passkey's
+signature can no longer be checked, so the handle keeps this from answering
+anyone who only knows a credential ID. A passkey it never held (such as an administrator's), an active one
+(a disabled account) and a failed check send nothing. The page never awaits a
+signal and never claims the manager acted. Renaming does not use
+`signalCurrentUserDetails`. The administrator login host sends the same signals
+for its separate directory, using its own account handle and complete active credential list. Failed reads,
+unrelated credentials and disabled administrator accounts send no signal.
+No signals run on the loopback console; an administrator revocation is reflected
+on their next successful login on the HTTPS host.
+
+The backup suggestion reads providers as a hint, never as proof: an AAGUID
+names a provider or a model, not a vault or a device. One passkey, or several
+all synced in one known provider, suggests keeping one in another place. Known
+providers that differ, two device-bound passkeys of one model, or any unknown
+provider claim nothing either way. No page says an account is protected.
 
 The app may keep its own login. Gateway headers are accepted only from its
 authenticated path; the app keeps its internal authorization. Signed claims that

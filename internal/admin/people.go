@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/ozal-project/ozal/internal/config"
 	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/invitation"
 	"github.com/ozal-project/ozal/internal/passkey"
 	"github.com/ozal-project/ozal/internal/store/sqlite"
 )
@@ -155,6 +157,8 @@ type inviteRequest struct {
 	Recover    bool     `json:"recover"`
 	ReturnTo   string   `json:"return_to"`
 	TTLMinutes int      `json:"ttl_minutes"`
+	// NewGroup confirms that a group nothing uses yet is meant to be created.
+	NewGroup bool `json:"new_group"`
 }
 
 // invitePerson issues a one-time enrolment link. The link carries the
@@ -193,15 +197,31 @@ func (h *Handler) invitePerson(w http.ResponseWriter, r *http.Request) {
 			groups = append(groups, g)
 		}
 	}
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	if !invitation.ValidEmail(email) {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("%q is not an email address with a domain, such as ana@example.com", req.Email))
+		return
+	}
+	if !req.Recover && !req.NewGroup && len(groups) > 0 {
+		known, err := h.knownGroups(r.Context(), cfg)
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "groups could not be read")
+			return
+		}
+		if unknown := invitation.UnknownGroups(groups, known); len(unknown) > 0 {
+			writeErrorCode(w, http.StatusBadRequest, unknownGroupsMessage(unknown, known), "group_unknown")
+			return
+		}
+	}
 	if !h.recordMutationIntent(w, r, "user.invite", req.Email) {
 		return
 	}
-	invitation, err := h.people.Invite(r.Context(), req.Email, strings.TrimSpace(req.Name), groups, req.Recover, ttl)
+	invited, err := h.people.Invite(r.Context(), req.Email, strings.TrimSpace(req.Name), groups, req.Recover, ttl)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	link, err := passkey.InviteLink(cfg, invitation.Token, strings.TrimSpace(req.ReturnTo))
+	link, err := passkey.InviteLink(cfg, invited.Token, strings.TrimSpace(req.ReturnTo))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -210,8 +230,52 @@ func (h *Handler) invitePerson(w http.ResponseWriter, r *http.Request) {
 	if req.Recover {
 		code = "recover"
 	}
-	h.emit(events.Event{Type: events.UserInvited, Actor: actor(r), Host: invitation.User.Email, Code: code})
-	writeJSON(w, http.StatusCreated, map[string]any{"email": invitation.User.Email, "link": link, "expires_at": invitation.ExpiresAt.UTC()})
+	h.emit(events.Event{Type: events.UserInvited, Actor: actor(r), Host: invited.User.Email, Code: code})
+	// What the person will be able to open, from the groups they really hold
+	// (an existing account keeps its own), so an empty portal is no surprise.
+	apps := invitation.OpenableHosts(cfg.Routes, invited.User.Email, invited.User.Groups, time.Now())
+	writeJSON(w, http.StatusCreated, map[string]any{"email": invited.User.Email, "link": link, "expires_at": invited.ExpiresAt.UTC(), "groups": nonNil(invited.User.Groups), "apps": nonNil(apps)})
+}
+
+// knownGroups are the groups this edge has: created, held or required.
+func (h *Handler) knownGroups(ctx context.Context, cfg config.Config) (map[string]bool, error) {
+	var defined []string
+	if h.groupCatalog != nil {
+		var err error
+		if defined, err = h.groupCatalog.Defined(ctx); err != nil {
+			return nil, err
+		}
+	}
+	users, err := h.people.Users(ctx)
+	if err != nil {
+		return nil, err
+	}
+	held := make([][]string, 0, len(users))
+	for _, u := range users {
+		held = append(held, u.Groups)
+	}
+	return invitation.KnownGroups(defined, held, cfg.Routes), nil
+}
+
+// unknownGroupsMessage names the groups nothing uses, a likely intended one,
+// and how to create a new group on purpose.
+func unknownGroupsMessage(unknown []string, known map[string]bool) string {
+	parts := make([]string, 0, len(unknown))
+	for _, g := range unknown {
+		if near := invitation.Suggest(g, known); near != "" {
+			parts = append(parts, fmt.Sprintf("%q (did you mean %q?)", g, near))
+		} else {
+			parts = append(parts, fmt.Sprintf("%q", g))
+		}
+	}
+	return "no application or person uses group " + strings.Join(parts, ", ") + "; check the name, or confirm a new group (ozal user invite -new-group)"
+}
+
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }
 
 func (h *Handler) setPersonDisabled(disabled bool) http.HandlerFunc {

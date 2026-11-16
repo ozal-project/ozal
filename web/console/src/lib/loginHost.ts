@@ -53,3 +53,18 @@ export async function finishLoginHost(code: string, store: Pick<Storage, "getIte
   if (!res.ok) throw new Error((data as { error?: string }).error || "The sign-in could not be completed. Start again.");
   return data as AdminSession;
 }
+
+// Confirmation on the public RP is a full sign-in round trip. The original
+// mutation is not replayed across navigation: retry it after returning with
+// a freshly authenticated session. A loopback-only installation stays local.
+export async function reauthenticateOnLoginHost(
+  navigate: (url: string) => void = (url) => location.assign(url),
+  store?: Pick<Storage, "setItem">,
+): Promise<boolean> {
+  const res = await fetch("/_/api/admin/state", { cache: "no-store", signal: AbortSignal.timeout(15_000) });
+  if (!res.ok) throw new Error("The sign-in settings could not be read. Try again.");
+  const state = await res.json() as { login_host?: string };
+  if (!state.login_host) return false;
+  navigate(await startLoginHost({}, store));
+  return true;
+}

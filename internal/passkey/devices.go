@@ -23,10 +23,10 @@ import (
 const selfServiceMaxAge = 5 * time.Minute
 
 var (
-	errStale       = apiError{http.StatusForbidden, "Confirm it's you first: sign in with your passkey again."}
-	errLastPasskey = apiError{http.StatusConflict, "This is your only passkey. Add another one before removing it."}
-	errNoPasskey   = apiError{http.StatusNotFound, "That passkey is not one of yours, or it is already removed."}
-	errBadLabel    = apiError{http.StatusBadRequest, "Use 1 to 60 characters for the name, without line breaks."}
+	errStale       = apiError{http.StatusForbidden, "Confirm it's you first: sign in with your passkey again.", nil}
+	errLastPasskey = apiError{http.StatusConflict, "This is your only passkey. Add another one before removing it.", nil}
+	errNoPasskey   = apiError{http.StatusNotFound, "That passkey is not one of yours, or it is already removed.", nil}
+	errBadLabel    = apiError{http.StatusBadRequest, "Use 1 to 60 characters for the name, without line breaks.", nil}
 )
 
 // maxLabel is the longest passkey name the store accepts.
@@ -64,6 +64,9 @@ func (g *Gate) serveDevicesPage(w http.ResponseWriter, r *http.Request) {
 type deviceView struct {
 	ID       string `json:"id"`
 	Provider string `json:"provider"`
+	// ProviderKnown says Provider names where the passkey lives, rather than
+	// a kind of passkey.
+	ProviderKnown bool `json:"provider_known"`
 	// Label is the owner's name for it; the page falls back to Provider.
 	Label string `json:"label,omitempty"`
 	// Current marks the passkey that signed this session in, and LastClient
@@ -89,18 +92,19 @@ func (g *Gate) devicesList(w http.ResponseWriter, r *http.Request) (any, *apiErr
 	lastClient := g.lastClients(r, principal.Subject)
 	views := make([]deviceView, 0, len(keys))
 	for _, k := range keys {
-		name, icon := Provider(k.Credential.Authenticator.AAGUID, k.Synced())
+		name, icon, known := Provider(k.Credential.Authenticator.AAGUID, k.Synced())
 		id := hex.EncodeToString(k.Credential.ID)
 		views = append(views, deviceView{
-			ID:         id,
-			Provider:   name,
-			Label:      k.Label,
-			Current:    principal.Passkey == id,
-			LastClient: lastClient[id],
-			Icon:       icon,
-			Created:    k.CreatedAt,
-			LastUsed:   k.LastUsedAt,
-			Synced:     k.Synced(),
+			ID:            id,
+			Provider:      name,
+			ProviderKnown: known,
+			Label:         k.Label,
+			Current:       principal.Passkey == id,
+			LastClient:    lastClient[id],
+			Icon:          icon,
+			Created:       k.CreatedAt,
+			LastUsed:      k.LastUsedAt,
+			Synced:        k.Synced(),
 		})
 	}
 	return map[string]any{"email": user.Email, "passkeys": views, "sites": g.protected}, nil
@@ -160,8 +164,7 @@ func (g *Gate) devicesAddFinish(w http.ResponseWriter, r *http.Request) (any, *a
 	// Alerted like an enrolment: a passkey nobody expected is the sign of a
 	// stolen session.
 	g.emit(r, events.Event{Type: events.PasskeyRegistered, Actor: user.Subject(), Code: kind, Reason: "added from a signed-in session"})
-	name, icon := Provider(credential.Authenticator.AAGUID, credential.Flags.BackupEligible)
-	return map[string]string{"id": hex.EncodeToString(credential.ID), "provider": name, "icon": icon}, nil
+	return createdView(*credential), nil
 }
 
 // lastClients maps each passkey to the browser of the newest open session
@@ -236,7 +239,8 @@ func (g *Gate) devicesRevoke(w http.ResponseWriter, r *http.Request) (any, *apiE
 	if err != nil || len(id) == 0 || len(id) > 1023 {
 		return nil, &errBadRequest
 	}
-	switch err := g.dir.RevokeOwnPasskey(r.Context(), user.ID, id); {
+	remaining, err := g.dir.RevokeOwnPasskey(r.Context(), user.ID, id)
+	switch {
 	case errors.Is(err, ErrLastPasskey):
 		return nil, &errLastPasskey
 	case errors.Is(err, ErrNotFound):
@@ -247,5 +251,25 @@ func (g *Gate) devicesRevoke(w http.ResponseWriter, r *http.Request) (any, *apiE
 	g.emit(r, events.Event{Type: events.PasskeyRevoked, Actor: user.Subject(), Reason: "revoked from a signed-in session"})
 	// The revocation ended every session of the user, this one included.
 	http.SetCookie(w, &http.Cookie{Name: auth.SessionCookieName, Value: "", Domain: g.cookieDomain, Path: "/", MaxAge: -1, HttpOnly: true, Secure: g.secure, SameSite: http.SameSiteLaxMode})
-	return map[string]bool{"signed_out": true}, nil
+	// The passkeys left, read in the revocation's own transaction: the page
+	// can tell the browser right away, though this session just ended.
+	answer := map[string]any{"signed_out": true}
+	if list := AcceptedPasskeys(g.webauthn.Config.RPID, user.Handle, remaining, nil); list != nil {
+		answer["accepted"] = list
+	}
+	return answer, nil
+}
+
+// createdPasskey tells the page that just created a passkey where it was
+// saved, when the provider says so, and its id for naming it.
+type createdPasskey struct {
+	ID            string `json:"id"`
+	Provider      string `json:"provider"`
+	ProviderKnown bool   `json:"provider_known"`
+	Icon          string `json:"icon"`
+}
+
+func createdView(credential webauthn.Credential) createdPasskey {
+	name, icon, known := Provider(credential.Authenticator.AAGUID, credential.Flags.BackupEligible)
+	return createdPasskey{ID: hex.EncodeToString(credential.ID), Provider: name, ProviderKnown: known, Icon: icon}
 }

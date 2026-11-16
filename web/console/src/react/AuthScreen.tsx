@@ -88,25 +88,41 @@ export function AuthScreen() {
       <h1 id="auth-title" className="text-lg font-semibold">{enrol ? "Create your passkey" : mode === "host" ? "Host login" : mode === "request" ? "Request access" : enrolled === false ? "Set up the first administrator" : "Sign in"}</h1>
       {enrol ? <EnrolPanel token={enrol} loginHost={loginHost} /> : mode === "host" ? <HostPanel /> : mode === "request" && accessRequests ? <RequestPanel /> : enrolled === false ? <>
         {notice && <p className="text-muted-foreground mt-1 mb-4 text-sm" role="status">{notice}</p>}
-        <p className="text-muted-foreground mt-1 mb-4 text-sm">Nobody has an account on this console yet. The first administrator is created with a one-time setup link that only someone with access to the server can read, so nobody can get ahead of you.</p>
-        <ol className="mb-5 grid gap-4 text-sm">
-          <li><p className="font-medium">1. Get the setup link</p><p className="text-muted-foreground mt-1 text-xs leading-relaxed">The installer printed it when it finished. If it is gone or expired (it lasts 15 minutes), run this on the server for a new one:</p><code className="mt-2 block break-all text-xs">{enrolCommand}</code><div className="mt-2"><CopyText value={enrolCommand} label="Copy command" /></div></li>
-          <li><p className="font-medium">2. Paste it here</p>
+        {loginHost ? <>
+          <p className="text-muted-foreground mt-1 mb-4 text-sm">Nobody has an account on this console yet. The first administrator is created with a code that only someone with access to the server can see, so nobody can get ahead of you.</p>
+          <ol className="mb-5 grid gap-4 text-sm">
+            <li><p className="font-medium">1. Get a code on the server</p><p className="text-muted-foreground mt-1 text-xs leading-relaxed">Run this in a terminal on the server. It prints a code that works once, for five minutes:</p><code className="mt-2 block break-all text-xs">{enrolCommand}</code><div className="mt-2"><CopyText value={enrolCommand} label="Copy command" /></div></li>
+            <li><p className="font-medium">2. Type it on {new URL(loginHost).host}</p><p className="text-muted-foreground mt-1 text-xs leading-relaxed">Open <a className="link" href={loginHost + "/_/auth/admin/code"} target="_blank" rel="noreferrer">{new URL(loginHost).host}/_/auth/admin/code</a> on any device, type the code and create your passkey there.</p></li>
+            <li><p className="font-medium">3. Come back and sign in</p><p className="text-muted-foreground mt-1 text-xs leading-relaxed">You become the administrator with every tool. After that, this page only offers sign-in: setup never appears again.</p></li>
+          </ol>
+          <details className="mb-4 text-xs"><summary className="text-muted-foreground cursor-pointer">I have a setup link from the installer</summary>
             <form className="mt-2 flex items-center gap-2" onSubmit={submitPasted}>
               <Label htmlFor={`${id}-setup`} className="sr-only">Setup link</Label><Input id={`${id}-setup`} value={pasted} onChange={(event) => setPasted(event.target.value)} autoComplete="off" spellCheck={false} placeholder="http://ozal.localhost:…#enrol=…" />
               <Button type="submit" size="sm" disabled={!pasted.trim()}>Continue</Button>
             </form>
             {pasteError && <p className="text-destructive mt-2 text-xs" role="alert">{pasteError}</p>}
-          </li>
-          <li><p className="font-medium">3. Create your passkey</p><p className="text-muted-foreground mt-1 text-xs leading-relaxed">You become the administrator with every tool. After that, this page only offers sign-in: setup never appears again.</p></li>
-        </ol>
+          </details>
+        </> : <>
+          <p className="text-muted-foreground mt-1 mb-4 text-sm">Nobody has an account on this console yet. The first administrator is created with a one-time setup link that only someone with access to the server can read, so nobody can get ahead of you.</p>
+          <ol className="mb-5 grid gap-4 text-sm">
+            <li><p className="font-medium">1. Get the setup link</p><p className="text-muted-foreground mt-1 text-xs leading-relaxed">The installer printed it when it finished. If it is gone or expired (it lasts 15 minutes), run this on the server for a new one:</p><code className="mt-2 block break-all text-xs">{enrolCommand}</code><div className="mt-2"><CopyText value={enrolCommand} label="Copy command" /></div></li>
+            <li><p className="font-medium">2. Paste it here</p>
+              <form className="mt-2 flex items-center gap-2" onSubmit={submitPasted}>
+                <Label htmlFor={`${id}-setup`} className="sr-only">Setup link</Label><Input id={`${id}-setup`} value={pasted} onChange={(event) => setPasted(event.target.value)} autoComplete="off" spellCheck={false} placeholder="http://ozal.localhost:…#enrol=…" />
+                <Button type="submit" size="sm" disabled={!pasted.trim()}>Continue</Button>
+              </form>
+              {pasteError && <p className="text-destructive mt-2 text-xs" role="alert">{pasteError}</p>}
+            </li>
+            <li><p className="font-medium">3. Create your passkey</p><p className="text-muted-foreground mt-1 text-xs leading-relaxed">You become the administrator with every tool. After that, this page only offers sign-in: setup never appears again.</p></li>
+          </ol>
+        </>}
         <p className="text-muted-foreground text-xs leading-relaxed">This computer cannot create a passkey? A host login lets you in for a while without creating the account.</p>
       </> : enrolled ? <>
         {notice && !error ? <p className="text-muted-foreground mt-1 text-sm" role="status">{notice}</p> : <p className="text-muted-foreground mt-1 text-sm">Administrators sign in with their passkey.</p>}
         {error && <p className="text-destructive mt-3 text-sm" role="alert">{error}</p>}
         <Button className="mt-6 w-full" onClick={() => void passkey()} disabled={waiting || !localHost}>{waiting ? "Waiting for your device…" : "Sign in with passkey"}</Button>
         {stuck && <div className="mt-3 flex flex-wrap gap-2">{(Object.keys(choices) as Choice[]).map((choice) => <Button key={choice} variant="outline" size="sm" onClick={() => void passkey(choices[choice].hints)}>{choices[choice].label}</Button>)}</div>}
-        {loginHost && <p className="text-muted-foreground mt-3 text-xs leading-relaxed">You confirm it's you on <span className="text-foreground">{new URL(loginHost).host}</span>, this edge's sign-in address, where every kind of passkey works, and come back here. <button type="button" className="underline underline-offset-4" disabled={waiting || !localHost} onClick={() => void passkey(undefined, true)}>Use a passkey made for this console's own address</button></p>}
+        {loginHost && <p className="text-muted-foreground mt-3 text-xs leading-relaxed">You confirm it's you on <span className="text-foreground">{new URL(loginHost).host}</span>, this edge's sign-in address, where every kind of passkey works, and come back here. <button type="button" className="link" disabled={waiting || !localHost} onClick={() => void passkey(undefined, true)}>Use a passkey made for this console's own address</button></p>}
       </> : <p className="text-muted-foreground mt-2 text-sm" role="status">Checking…</p>}
       {!localHost && !enrol && mode === "passkey" && enrolled !== undefined && <p className="border-warning/40 bg-warning/[0.06] mt-4 rounded-md border px-3 py-2 text-xs" role="status">Open this console as <span className="font-mono">ozal.localhost:{location.port || "9091"}</span>: passkeys do not work on an IP address.</p>}
     </section>

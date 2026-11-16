@@ -7,19 +7,22 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
-	"net/mail"
 	"strings"
 	"sync"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 
 	"github.com/ozal-project/ozal/internal/adminid"
 	"github.com/ozal-project/ozal/internal/events"
+	"github.com/ozal-project/ozal/internal/invitation"
+	"github.com/ozal-project/ozal/internal/passkey"
 	"github.com/ozal-project/ozal/internal/useragent"
 )
 
@@ -65,6 +68,10 @@ type identities interface {
 	Passkeys(ctx context.Context, accountID string) ([]adminid.Passkey, error)
 	// RemovePasskey revokes one; the account's last passkey is refused.
 	RemovePasskey(ctx context.Context, accountID string, credentialID []byte) error
+	// RenamePasskey labels one of the account's active passkeys.
+	RenamePasskey(ctx context.Context, accountID string, credentialID []byte, label string) error
+	// CredentialRevoked checks a retired credential and its owner handle.
+	CredentialRevoked(ctx context.Context, handle, credentialID []byte) (bool, error)
 	// RecordLogin stores a credential's new counter; it fails for a revoked one.
 	RecordLogin(ctx context.Context, credential webauthn.Credential) error
 	// AccessRequests reports whether the sign-in page accepts requests for
@@ -230,6 +237,7 @@ func (h *Handler) registerIdentities() {
 	h.mux.HandleFunc("GET /_/api/admin/passkeys", h.requireBearer(h.listPasskeys))
 	h.mux.HandleFunc("GET /_/api/admin/account", h.requireBearer(h.ownAccount))
 	h.mux.HandleFunc("DELETE /_/api/admin/passkeys/{id}", h.requireBearer(h.removePasskey))
+	h.mux.HandleFunc("PATCH /_/api/admin/passkeys/{id}", h.requireBearer(h.renamePasskey))
 	h.mux.HandleFunc("POST /_/api/admin/enrolments", h.requireLocal(h.issueEnrolment))
 	h.mux.HandleFunc("POST /_/api/admin/enrol/info", h.enrolInfo)
 	h.mux.HandleFunc("POST /_/api/admin/enrol/begin", h.enrolBegin)
@@ -240,6 +248,7 @@ func (h *Handler) registerIdentities() {
 	h.mux.HandleFunc("POST /_/api/admin/requests/status", h.accessRequestStatus)
 	h.mux.HandleFunc("POST /_/api/admin/remote/start", h.remoteStart)
 	h.mux.HandleFunc("POST /_/api/admin/remote/finish", h.remoteFinish)
+	h.registerCodeEnrolment()
 	h.mux.HandleFunc("GET /_/api/admins", h.requireTool("administrators", h.listAdmins))
 	h.mux.HandleFunc("POST /_/api/admins/invite", h.requireTool("administrators", h.inviteAdmin))
 	h.mux.HandleFunc("GET /_/api/admins/requests", h.requireTool("administrators", h.listAccessRequests))
@@ -316,14 +325,26 @@ func (h *Handler) adminState(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, state)
 }
 
-// issueEnrolment is the host's one door: a printed link, valid ten minutes.
+// issueEnrolment is the host's one door: a printed link valid ten minutes, or
+// with mode "code" a short code typed on the login host and approved in the
+// terminal (code_enrolment.go).
 func (h *Handler) issueEnrolment(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Kind  string `json:"kind"`
 		Email string `json:"email"`
+		Mode  string `json:"mode"`
+		// Operator is who ran the command on the host and From the address
+		// of their SSH session; the code page shows both so the person
+		// recognises their own request.
+		Operator string `json:"operator"`
+		From     string `json:"from"`
 	}
 	if err := decodeJSON(w, r, &req); err != nil || (req.Kind != enrolBootstrap && req.Kind != enrolRecover) {
 		writeError(w, http.StatusBadRequest, "kind must be bootstrap or recover")
+		return
+	}
+	if req.Mode != "" && req.Mode != "link" && req.Mode != "code" {
+		writeError(w, http.StatusBadRequest, "mode must be link or code")
 		return
 	}
 	email := strings.ToLower(strings.TrimSpace(req.Email))
@@ -331,30 +352,44 @@ func (h *Handler) issueEnrolment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "recover needs the administrator's email")
 		return
 	}
+	if req.Mode == "code" {
+		h.issueCode(w, r, req.Kind, email, codeRequest{Operator: req.Operator, From: req.From})
+		return
+	}
 	if !h.recordMutationIntent(w, r, "admin.enrolment", req.Kind) {
 		return
 	}
-	raw := make([]byte, 32)
-	if _, err := rand.Read(raw); err != nil {
+	token, hash, err := newEnrolmentToken()
+	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "enrolment could not be issued")
 		return
 	}
-	token := base64.RawURLEncoding.EncodeToString(raw)
-	hash := sha256.Sum256([]byte(token))
 	expires := time.Now().Add(enrolmentTTL)
-	switch err := h.identities.IssueEnrolment(r.Context(), adminid.EnrolmentRequest{Kind: req.Kind, Email: email}, hash[:], expires); {
-	case errors.Is(err, adminid.ErrAlreadyEnrolled):
-		writeError(w, http.StatusConflict, "an administrator already exists; use recover with their email")
+	if !h.storeEnrolment(w, r, req.Kind, email, hash, expires) {
 		return
-	case errors.Is(err, adminid.ErrAccountNotFound):
-		writeError(w, http.StatusNotFound, "no administrator has that email")
-		return
-	case err != nil:
-		writeError(w, http.StatusServiceUnavailable, "enrolment could not be issued")
-		return
+	}
+	if req.Kind == enrolRecover {
+		// A recovery link retires earlier unused recoveries, codes included.
+		h.codes.Supersede("", req.Kind, email)
 	}
 	h.emit(events.Event{Type: events.Type("admin.enrolment_issued"), Actor: localActor(r), Code: req.Kind})
 	writeJSON(w, http.StatusCreated, map[string]any{"token": token, "expires": expires})
+}
+
+// storeEnrolment keeps the hash of a host-issued token, or answers why not.
+func (h *Handler) storeEnrolment(w http.ResponseWriter, r *http.Request, kind, email string, hash []byte, expires time.Time) bool {
+	switch err := h.identities.IssueEnrolment(r.Context(), adminid.EnrolmentRequest{Kind: kind, Email: email}, hash, expires); {
+	case errors.Is(err, adminid.ErrAlreadyEnrolled):
+		writeError(w, http.StatusConflict, "an administrator already exists; use recover with their email")
+		return false
+	case errors.Is(err, adminid.ErrAccountNotFound):
+		writeError(w, http.StatusNotFound, "no administrator has that email")
+		return false
+	case err != nil:
+		writeError(w, http.StatusServiceUnavailable, "enrolment could not be issued")
+		return false
+	}
+	return true
 }
 
 // newEnrolmentToken makes a one-use token and the hash that is stored.
@@ -395,12 +430,9 @@ func IssueFirstRun(ctx context.Context, store identities) (string, time.Time, er
 	return token, expires, nil
 }
 
+// validEmail is the same rule as a visitor invitation's.
 func validEmail(email string) bool {
-	if len(email) < 3 || len(email) > 254 {
-		return false
-	}
-	addr, err := mail.ParseAddress(email)
-	return err == nil && addr.Address == email
+	return invitation.ValidEmail(email)
 }
 
 func cleanName(name string) (string, bool) {
@@ -681,7 +713,9 @@ func (h *Handler) adminLoginFinish(w http.ResponseWriter, r *http.Request) {
 // hands the account to done.
 func (h *Handler) finishLogin(w http.ResponseWriter, r *http.Request, rp *webauthn.WebAuthn, pending pendingCeremony, done ceremonyDone) {
 	var found adminid.Account
-	lookup := func(_, handle []byte) (webauthn.User, error) {
+	var usedID, usedHandle []byte
+	lookup := func(rawID, handle []byte) (webauthn.User, error) {
+		usedID, usedHandle = rawID, handle
 		account, credentials, err := h.identities.AccountByHandle(r.Context(), handle)
 		if err != nil {
 			return nil, err
@@ -692,6 +726,15 @@ func (h *Handler) finishLogin(w http.ResponseWriter, r *http.Request, rp *webaut
 	_, credential, err := rp.FinishPasskeyLogin(lookup, pending.session, r)
 	if err != nil || found.ID == "" {
 		h.failedSignIn(r, "passkey_invalid", err)
+		// Signals belong only on the HTTPS RP, never on the console's
+		// loopback origin. An unrelated or unreadable credential sends none.
+		if pending.tx != "" {
+			revoked, checkErr := h.identities.CredentialRevoked(r.Context(), usedHandle, usedID)
+			if gone := passkey.RetiredPasskey(rp.Config.RPID, usedID, revoked, checkErr); gone != nil {
+				writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "that passkey is not an administrator of this edge", "unknown_credential": gone})
+				return
+			}
+		}
 		writeError(w, http.StatusUnauthorized, "that passkey is not an administrator of this edge")
 		return
 	}
@@ -718,7 +761,11 @@ func (h *Handler) finishLogin(w http.ResponseWriter, r *http.Request, rp *webaut
 // startAdminSession turns a verified administrator into the same short
 // operator session the host login produces.
 func (h *Handler) startAdminSession(w http.ResponseWriter, r *http.Request, account adminid.Account, credentialID []byte) {
-	token, grant, err := h.operators.issueSliding(account.Name, account.Tools...)
+	h.startPasskeySession(w, r, account, credentialID, false)
+}
+
+func (h *Handler) startPasskeySession(w http.ResponseWriter, r *http.Request, account adminid.Account, credentialID []byte, loginHost bool) {
+	token, grant, err := h.operators.issuePasskey(account.Name, loginHost, account.Tools...)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "the session could not be opened")
 		return
@@ -890,9 +937,8 @@ func (h *Handler) recoverAdmin(w http.ResponseWriter, r *http.Request) {
 // administrator's own account, so losing one device never locks them out.
 func (h *Handler) addPasskeyBegin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	self := h.callerAccount(r)
+	self := h.freshPasskeyAccount(w, r)
 	if self == "" {
-		writeError(w, http.StatusForbidden, "sign in with your passkey to add another one")
 		return
 	}
 	rp, err := h.relyingParty(r)
@@ -921,7 +967,12 @@ func (h *Handler) addPasskeyBegin(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) addPasskeyFinish(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	self := h.callerAccount(r)
+	// A stale proof must not consume the registration: a local step-up can
+	// confirm with an existing passkey and retry this exact response once.
+	self := h.freshPasskeyAccount(w, r)
+	if self == "" {
+		return
+	}
 	pending, ok := h.ceremonies.take(r.Header.Get(adminCeremony), true, r.Header.Get("Origin"))
 	if self == "" || !ok || pending.kind != "add" || pending.account.ID != self {
 		h.failedSignIn(r, "add_passkey_unknown", nil)
@@ -949,6 +1000,9 @@ func (h *Handler) addPasskeyFinish(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "your session ended; sign in again")
 		return
 	}
+	if h.freshPasskeyAccount(w, r) == "" {
+		return
+	}
 	if err := h.identities.AddPasskey(r.Context(), self, *credential, useragent.Label(r.UserAgent())); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "the passkey could not be saved")
 		return
@@ -963,9 +1017,12 @@ func (h *Handler) addPasskeyFinish(w http.ResponseWriter, r *http.Request) {
 // offered by Firefox.
 func (h *Handler) issueDeviceLink(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	self := h.callerAccount(r)
+	// Serialize the authority check and issuance with recovery and disable,
+	// which revoke this session and its outstanding links under this lock.
+	h.identityMu.Lock()
+	defer h.identityMu.Unlock()
+	self := h.freshPasskeyAccount(w, r)
 	if self == "" {
-		writeError(w, http.StatusForbidden, "sign in with your passkey to add another browser")
 		return
 	}
 	token, expires, err := h.devices.issue(self)
@@ -1007,8 +1064,14 @@ func (h *Handler) finishDevice(w http.ResponseWriter, r *http.Request, rp *webau
 }
 
 type passkeyView struct {
-	ID         string `json:"id"`
-	Label      string `json:"label,omitempty"`
+	ID    string `json:"id"`
+	Label string `json:"label,omitempty"`
+	// Provider is where the passkey lives when ProviderKnown, otherwise a
+	// kind of passkey ("Synced passkey"), never a place.
+	Provider      string `json:"provider"`
+	ProviderKnown bool   `json:"provider_known"`
+	// Synced says the provider reported it may copy the passkey elsewhere.
+	Synced     bool   `json:"synced"`
 	CreatedAt  string `json:"created_at"`
 	LastUsedAt string `json:"last_used_at,omitempty"`
 	Current    bool   `json:"current,omitempty"`
@@ -1030,7 +1093,8 @@ func (h *Handler) listPasskeys(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]passkeyView, 0, len(passkeys))
 	for _, p := range passkeys {
-		view := passkeyView{ID: base64.RawURLEncoding.EncodeToString(p.ID), Label: p.Label, CreatedAt: p.CreatedAt.UTC().Format(time.RFC3339), Current: string(p.ID) == current}
+		provider, _, known := passkey.Provider(p.AAGUID, p.Synced)
+		view := passkeyView{ID: base64.RawURLEncoding.EncodeToString(p.ID), Label: p.Label, Provider: provider, ProviderKnown: known, Synced: p.Synced, CreatedAt: p.CreatedAt.UTC().Format(time.RFC3339), Current: string(p.ID) == current}
 		if !p.LastUsedAt.IsZero() {
 			view.LastUsedAt = p.LastUsedAt.UTC().Format(time.RFC3339)
 		}
@@ -1119,6 +1183,54 @@ func (h *Handler) removePasskey(w http.ResponseWriter, r *http.Request) {
 	h.emit(events.Event{Type: events.Type("admin.passkey_removed"), Actor: h.actorOf(r)})
 	writeJSON(w, http.StatusOK, map[string]bool{"removed": true})
 }
+
+// renamePasskey labels one of the signed-in administrator's own passkeys.
+// The bearer alone is not enough: it needs a session opened with a passkey,
+// a fresh passkey proof, and a passkey of that same account.
+func (h *Handler) renamePasskey(w http.ResponseWriter, r *http.Request) {
+	self, _ := h.callerPasskey(r)
+	if self == "" {
+		writeError(w, http.StatusForbidden, "sign in with your passkey to rename one")
+		return
+	}
+	grant, _ := r.Context().Value(operatorKey{}).(operatorGrant)
+	if !h.operators.passkeyFresh(grant.ID, passkeyStepUpMaxAge) {
+		writeErrorCode(w, http.StatusForbidden, "confirm it's you with your passkey", "passkey_required")
+		return
+	}
+	id, err := base64.RawURLEncoding.DecodeString(r.PathValue("id"))
+	if err != nil || len(id) == 0 || len(id) > 1023 {
+		writeError(w, http.StatusNotFound, "no such passkey")
+		return
+	}
+	var req struct {
+		Label string `json:"label"`
+	}
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "send a label")
+		return
+	}
+	label := strings.TrimSpace(req.Label)
+	if label == "" || utf8.RuneCountInString(label) > maxPasskeyLabel || len(label) > 4*maxPasskeyLabel || strings.ContainsFunc(label, unicode.IsControl) {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("a name is 1 to %d characters, without control characters", maxPasskeyLabel))
+		return
+	}
+	h.identityMu.Lock()
+	defer h.identityMu.Unlock()
+	switch err := h.identities.RenamePasskey(r.Context(), self, id, label); {
+	case errors.Is(err, adminid.ErrPasskeyNotFound):
+		writeError(w, http.StatusNotFound, "no such passkey")
+		return
+	case err != nil:
+		writeError(w, http.StatusServiceUnavailable, "the passkey could not be renamed")
+		return
+	}
+	h.emit(events.Event{Type: events.Type("admin.passkey_renamed"), Actor: h.actorOf(r)})
+	writeJSON(w, http.StatusOK, map[string]string{"id": r.PathValue("id"), "label": label})
+}
+
+// maxPasskeyLabel matches the visitor passkeys' limit.
+const maxPasskeyLabel = 60
 
 // callerPasskey is the administrator behind this request's session and the
 // passkey that opened it; both are "" for the admin token or a host login.

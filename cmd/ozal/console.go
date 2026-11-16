@@ -27,6 +27,7 @@ func runConsole(ctx context.Context, args []string, out io.Writer) error {
 	email := fs.String("email", "", "recover: email of the administrator who lost their passkeys")
 	id := fs.String("id", "", "session id to revoke")
 	origin := fs.String("url", "", "private browser URL (default: the admin.listen port of the config; use the locally forwarded port when it differs)")
+	link := fs.Bool("link", false, "enrol/recover: print a one-time console link instead of a code to type on the login host")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -55,6 +56,22 @@ func runConsole(ctx context.Context, args []string, out io.Writer) error {
 		base, err := adminBase(*origin)
 		if err != nil {
 			return err
+		}
+		if !*link {
+			// A code typed on the login host needs no tunnel to the console;
+			// without admin.login_host the edge says so and the link remains.
+			done, err := enrolByCode(ctx, c, kind, *email, out)
+			if done || err != nil {
+				if err == nil {
+					fmt.Fprintf(out, "Sign in to the console with this passkey: %s/overview\n", passkeyOrigin(base))
+					fmt.Fprint(out, sshHint(os.Getenv("SSH_CONNECTION"), invokingUser(), base))
+				} else if kind == "bootstrap" && isStatus(err, http.StatusConflict) {
+					fmt.Fprint(out, sshHint(os.Getenv("SSH_CONNECTION"), invokingUser(), base))
+					return errors.New(administratorExists(base))
+				}
+				return err
+			}
+			fmt.Fprintln(out, "This edge does not offer enrolment codes (they need admin.login_host); printing a console link instead.")
 		}
 		var answer struct {
 			Token string `json:"token"`
@@ -207,13 +224,27 @@ func sshHint(sshConnection, user, base string) string {
 // the config is at the installed path, explicit otherwise. lookPath resolves
 // a command name to the file it runs ("" when absent).
 func enrolCommand(exe, configPath string, lookPath func(string) string) string {
+	return actionCommand(exe, configPath, "console enrol", lookPath)
+}
+
+func actionCommand(exe, configPath, action string, lookPath func(string) string) string {
 	name := exe
 	if found := lookPath("ozal"); found != "" && found == exe {
 		name = "ozal"
 	}
-	command := "sudo " + name + " console enrol"
+	command := "sudo " + shellArg(name) + " " + action
 	if configPath != installedConfig {
-		command += " -config " + configPath
+		command += " -config " + shellArg(configPath)
 	}
 	return command
+}
+
+// shellArg preserves one literal argument when an operator copies a command.
+func shellArg(value string) string {
+	if value != "" && strings.IndexFunc(value, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("_@%+=:,./-", r))
+	}) < 0 {
+		return value
+	}
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }

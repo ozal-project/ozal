@@ -46,8 +46,7 @@ const menu = async (page, name) => { await page.getByRole("button", { name, exac
 // A revoked session ends on the console's next request: either the page
 // already noticed (event stream, renewal) or the next navigation makes it.
 const endedOnNextRequest = async (page) => {
-  const people = page.locator('nav a[href="/people"]');
-  if (await people.isVisible()) await people.click({ timeout: 5_000 }).catch(() => {});
+  await page.reload();
   await signedOut(page);
 };
 const signOut = async (page, name) => { await (await menu(page, name)).getByRole("button", { name: "Sign out" }).click(); await signedOut(page); };
@@ -89,11 +88,25 @@ try {
   await laptop.page.keyboard.press("Escape");
 
   step = "another browser through a one-use device link";
+  // Request a fresh proof once without waiting five minutes in the browser
+  // suite. Go regressions cover real expiry; the assertion itself is real.
+  let linkAttempts = 0;
+  let confirmations = 0;
+  const countProof = (request) => { if (new URL(request.url()).pathname === "/_/api/admin/step-up/finish") confirmations++; };
+  laptop.page.on("request", countProof);
+  await laptop.page.route("**/_/api/admin/devices", async (route) => {
+    if (++linkAttempts === 1) return route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ code: "passkey_required", error: "Confirm it's you with your passkey" }) });
+    return route.continue();
+  });
   const deviceLink = await (async () => {
     const m = await menu(laptop.page, "Olivia Owner");
     await m.getByRole("button", { name: "Sign in on another browser" }).click();
     return await m.locator("#device-link").inputValue();
   })();
+  assert.equal(linkAttempts, 2, "device-link creation retries once after confirmation");
+  assert.equal(confirmations, 1, "the existing administrator passkey confirms the action");
+  await laptop.page.unroute("**/_/api/admin/devices");
+  laptop.page.off("request", countProof);
   await laptop.page.keyboard.press("Escape");
   const phone = await device();
   await phone.page.goto(deviceLink);
@@ -150,8 +163,7 @@ try {
   assert.equal(await phone.page.locator("#main-content h1").count(), 0, "the removed passkey still signed in");
 
   step = "invite an administrator with one tool";
-  await laptop.page.locator('nav[aria-label="Console"] a[href="/people"]').first().click();
-  await laptop.page.locator('nav[aria-label="People views"] a[href="/administrators"]').click();
+  await laptop.page.goto(`${consoleURL}/administrators`);
   await laptop.page.locator("#main-content h1", { hasText: "Administrators" }).waitFor();
   await laptop.page.getByRole("button", { name: "Add administrator" }).first().click();
   await laptop.page.locator("#adm-email").fill("bea@acme.dev");
