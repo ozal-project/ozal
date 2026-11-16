@@ -251,8 +251,8 @@ Host: grafana.acme.dev
       <div class="start-copy">
         <p class="label">Get started</p>
         <h2 id="start-title">Install it on a server in one command.</h2>
-        <p>The installer checks the signed release before anything runs: the catalog's signature, the signed checksums and the archive's hash. Any mismatch stops it. Without <code>--apply</code> it only shows the plan.</p>
-        <p>It installs the Linux service on loopback, so nothing is exposed yet, and with <code>--updates</code> later releases install from the console. The guide takes you from there to a protected address and your own domain.</p>
+        <p>The installer checks the signed release before anything runs: the catalog's signature, the signed checksums and the archive's hash. Any mismatch stops it. Only the installation itself asks for <code>sudo</code>.</p>
+        <p>It installs the Linux service on loopback, so nothing is exposed yet, and later releases install from the console. The guide takes you from there to a protected address and your own domain.</p>
         <div class="start-actions">
           <a class="button" href="/docs/first-application/">Publish your first application <span aria-hidden="true">→</span></a>
           <a class="text-link" href="/docs/install/#install-in-one-command">What the installer checks <span aria-hidden="true">→</span></a>
@@ -260,9 +260,8 @@ Host: grafana.acme.dev
       </div>
       <div class="start-terminals">
         <figure class="terminal" data-ui>
-          <figcaption class="terminal-title"><span>Linux server · review the plan, then install</span><button type="button" class="copy" data-copy hidden>Copy</button></figcaption>
-<pre><code data-copy-source>curl -fsSL https://ozal.dev/install.sh | sh
-curl -fsSL https://ozal.dev/install.sh | sudo sh -s -- --apply --updates</code></pre>
+          <figcaption class="terminal-title"><span>Linux server · verify and install</span><button type="button" class="copy" data-copy hidden>Copy</button></figcaption>
+<pre><code data-copy-source>curl -fsSL https://ozal.dev/install.sh | sh</code></pre>
         </figure>
         <figure class="terminal" data-ui>
           <figcaption class="terminal-title"><span>Or try it from source, with an app on 127.0.0.1:3000</span><button type="button" class="copy" data-copy hidden>Copy</button></figcaption>

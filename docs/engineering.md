@@ -743,9 +743,12 @@ spaces), preview fallback, a pinned version and rejection of altered catalogs,
 checksums and archives before any release executable runs. This fixture
 uses no network and installs no services; it does not prove live downloads or a
 real host installation.
-The fixture also checks that forwarded apply flags are rejected before any
-download, the outer `--apply` reaches the service command, and a non-root caller
-cannot apply. Root is simulated and the fixture binary only records arguments.
+The fixture also checks that the bare command installs: a non-root caller is
+asked for `sudo` before any download, verification runs unprivileged, and only
+the service and updates installation run through `sudo`; a refused `sudo` stops
+before any download, `--no-updates` skips updates, `--plan` needs no root, and
+forwarded apply flags are rejected before any download. Root and `sudo` are
+simulated and the fixture binary only records arguments.
 
 Browser and integration fixtures used by the project:
 

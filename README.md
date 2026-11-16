@@ -61,10 +61,10 @@ For a minimal routing example with no TLS and no identity provider, see [QUICKST
 On a Linux server, one command verifies the newest signed release and installs the service with updates from the console:
 
 ```sh
-curl -fsSL https://ozal.dev/install.sh | sudo sh -s -- --apply --updates
+curl -fsSL https://ozal.dev/install.sh | sh
 ```
 
-Without `--apply` it only verifies and shows the plan. See [installation](docs/operations/download-install.md#install-in-one-command) for what it checks and its trust limit.
+It asks for `sudo` only for the installation itself; add `| sh -s -- --plan` to only verify and see the plan. See [installation](docs/operations/download-install.md#install-in-one-command) for what it checks and its trust limit.
 
 ## Documentation
 
