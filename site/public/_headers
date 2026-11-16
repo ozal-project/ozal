@@ -1,4 +1,0 @@
-# Update catalogs change with every release and re-signing: never serve a
-# cached copy past its revalidation.
-/api/v1/releases/*
-  Cache-Control: no-cache

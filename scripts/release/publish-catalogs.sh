@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Writes the signed update catalogs edges read under OUT/<channel>/<os>/<arch>
 # (`ozal update -catalog`, the update executor's catalog_base), for the
-# newest published release of each channel. The site workflow runs it on every
-# deploy, so the catalogs ship with ozal.dev at /api/v1/releases and are
-# re-signed with a fresh window each time.
+# newest published release of each channel. The release-catalog workflow runs
+# it weekly and on each release and publishes the result on the `catalogs`
+# branch, which ozal.dev/api/v1/releases redirects to; each run re-signs with a
+# fresh window.
 #
 # Needs: gh (GH_TOKEN), OZAL (an ozal binary from this checkout),
 # OZAL_RELEASE_KEY (the release signing key) and GITHUB_REPOSITORY.
@@ -13,7 +14,7 @@ out=${1:?usage: publish-catalogs.sh OUT_DIR}
 repo=${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is not set}
 ozal=${OZAL:?OZAL must point to an ozal binary}
 if [ -z "${OZAL_RELEASE_KEY:-}" ]; then
-  echo "OZAL_RELEASE_KEY is not set: the site would ship without update catalogs and every edge would stop seeing updates" >&2
+  echo "OZAL_RELEASE_KEY is not set: no catalog can be signed" >&2
   exit 1
 fi
 

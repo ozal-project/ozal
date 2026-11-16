@@ -1,0 +1,4 @@
+# Signed update catalogs live on the repository's `catalogs` branch, written by
+# the release-catalog workflow. Edges verify each catalog's signature with the
+# pinned release key, so where the bytes are served from is not trusted.
+/api/v1/releases/* https://raw.githubusercontent.com/ozal-project/ozal/catalogs/:splat 302
