@@ -211,7 +211,7 @@ func Updates(ctx context.Context, out io.Writer, host UpdatesHost, r UpdatesRequ
 		fmt.Fprintf(out, "  %-48s admin.update_socket already set\n", installedConfig)
 	}
 	if r.Root == "" {
-		fmt.Fprintln(out, "  systemctl daemon-reload; enable --now ozal-update-executor; restart ozal (the edge is briefly unavailable)")
+		fmt.Fprintln(out, "  "+activationPlan(changed))
 	}
 	if !r.Apply {
 		fmt.Fprintln(out, "Plan only. Run again with -apply to make these changes.")
@@ -246,6 +246,14 @@ func Updates(ctx context.Context, out io.Writer, host UpdatesHost, r UpdatesRequ
 	}
 	fmt.Fprintln(out, "Updates are on. In the console, open the update notice or Settings to review and install a signed release; installing needs the updates.install tool and a passkey.")
 	return nil
+}
+
+// activationPlan says what activateUpdates will do, and only that.
+func activationPlan(changed bool) string {
+	if changed {
+		return "systemctl daemon-reload; enable --now ozal-update-executor; restart ozal (the edge is briefly unavailable)"
+	}
+	return "systemctl daemon-reload; enable --now ozal-update-executor (ozal is not restarted)"
 }
 
 // activateUpdates starts the executor and, when the configuration changed,

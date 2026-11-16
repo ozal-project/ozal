@@ -177,9 +177,26 @@ sudo ozal install updates          # plan: files, the configuration change and t
 sudo ozal install updates -apply
 ```
 
-It writes the executor's unit, a root-owned profile and the pinned release key
+`ozal install updates` exists from alpha.15. An edge on an earlier release takes
+that one step by hand first, with the same signed catalog:
+
+```sh
+curl -fsSL -o ozal-release.pub https://raw.githubusercontent.com/ozal-project/ozal/main/docs/operations/ozal-release.pub
+sudo install -m 0644 ozal-release.pub /etc/ozal/release.pub
+sudo /usr/local/lib/ozal/ozal update -public-key /etc/ozal/release.pub \
+  -catalog https://ozal.dev/api/v1/releases/preview/linux/$(dpkg --print-architecture) -channel preview \
+  -state /var/lib/ozal/update-catalog-state.json \
+  -unit ozal -binary /usr/local/lib/ozal/ozal -config /etc/ozal/config.json \
+  -db /var/lib/ozal/state.db -user ozal -status /var/lib/ozal/update-status.json -apply
+sudo ozal install updates -apply
+```
+
+Compare the key with a copy obtained another way, as in
+[Verify the download](download-install.md#1-verify-the-download).
+
+`ozal install updates` writes the executor's unit, a root-owned profile and the pinned release key
 (`/etc/ozal/release.pub`, the key built into the binary unless `-public-key FILE`),
-sets `admin.update_socket`, starts `ozal-update-executor.service` and restarts Ozal.
+sets `admin.update_socket`, starts `ozal-update-executor.service`, and restarts Ozal only when it added the socket.
 The channel follows the installed build (`preview` for a prerelease) unless
 `-channel` says otherwise. It only adds: a different key, profile, unit or socket
 already in place stops it before it writes anything. The console's update dialog

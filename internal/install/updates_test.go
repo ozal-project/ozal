@@ -224,3 +224,17 @@ func TestActivateUpdatesWaitsForTheRestartedEdge(t *testing.T) {
 		t.Fatal("an edge that never answers was reported as up")
 	}
 }
+
+// The plan names a restart only when one will happen.
+func TestActivationPlanMatchesWhatActivationDoes(t *testing.T) {
+	for _, changed := range []bool{true, false} {
+		host := &fakeUpdatesHost{}
+		if err := activateUpdates(context.Background(), host, changed); err != nil {
+			t.Fatal(err)
+		}
+		restarts := strings.Contains(strings.Join(host.calls, ";"), "restart")
+		if strings.Contains(activationPlan(changed), "restart ozal") != restarts {
+			t.Fatalf("changed=%v: plan %q, calls %v", changed, activationPlan(changed), host.calls)
+		}
+	}
+}
