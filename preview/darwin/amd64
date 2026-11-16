@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "channel": "preview",
+  "sequence": 1794847893,
+  "generated_at": "2026-11-16T16:51:33Z",
+  "expires_at": "2026-11-30T16:51:33Z",
+  "version": "v0.1.0-alpha.15",
+  "commit": "2636350cc664a07de99c7baa24339fb142ab56a2",
+  "published_at": "2026-11-16T16:50:42Z",
+  "prerelease": true,
+  "notes_url": "https://github.com/ozal-project/ozal/releases/tag/v0.1.0-alpha.15",
+  "os": "darwin",
+  "arch": "amd64",
+  "archive_url": "https://github.com/ozal-project/ozal/releases/download/v0.1.0-alpha.15/ozal_0.1.0-alpha.15_darwin_amd64.tar.gz",
+  "archive_sha256": "1e0555aa096e1ff3d26387b71f9cb956a80120139429ac4f0eaf94ccb5922dbd",
+  "archive_size": 10191104,
+  "checksums_url": "https://github.com/ozal-project/ozal/releases/download/v0.1.0-alpha.15/checksums.txt",
+  "signature_url": "https://github.com/ozal-project/ozal/releases/download/v0.1.0-alpha.15/checksums.txt.sig"
+}
