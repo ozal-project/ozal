@@ -70,6 +70,7 @@ scripts/verify.sh                              # full gate before reporting done
 - `internal/pages/` — static sites, uploads, GitHub workflow generation and deploy auth.
 - `internal/tunnel/`, `internal/tunnelrenew/` — connector transport and renewal.
 - `internal/admin/` — loopback/socket control plane, embedded console and login host.
+- `internal/consoleaccess/` — pure decision for the opt-in remote console host (`admin.remote`).
 - `internal/audit/`, `internal/events/`, `internal/notify/` — durable journal, event stream and alerts.
 - `internal/accesshistory/` — who reached which protected application and why, from the journal when audit is on.
 - `internal/store/sqlite/` — sessions, identities, connectors and deployments.

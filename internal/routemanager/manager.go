@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"slices"
@@ -82,6 +83,13 @@ func WithAdminLogin(admin passkey.AdminLogin) Option {
 // auth.passkeys needs (ID-003). Without it a config with passkeys fails.
 func WithPasskeyDirectory(dir passkey.Directory) Option {
 	return func(m *Manager) { m.passkeys = dir }
+}
+
+// WithRemoteConsole serves admin.remote.host through console. The host is
+// matched inside the trust and rate-limit stages, before any route, so the
+// console never depends on the route table and a route can never shadow it.
+func WithRemoteConsole(console http.Handler) Option {
+	return func(m *Manager) { m.remoteConsole = console }
 }
 
 // WithInstallHook calls hook with every configuration installed — the
@@ -165,6 +173,7 @@ type Manager struct {
 	assertionSigners    map[string]proxy.AssertionSigner
 	passkeys            passkey.Directory
 	adminLogin          passkey.AdminLogin
+	remoteConsole       http.Handler
 	onInstall           func(config.Config)
 }
 
@@ -570,6 +579,7 @@ func (m *Manager) build(raw config.Config) (_ *Snapshot, err error) {
 	}
 	handler := withAuthEndpoints(proxyHandler, builtGate, authEndpointHosts(*cfg, protectedHosts))
 	handler = withLoginRoot(handler, *cfg)
+	handler = withRemoteConsole(handler, m.remoteConsole, cfg.RemoteConsoleHost())
 	if limiters != nil {
 		// Outside withAuthEndpoints so /_/auth/* is limited too.
 		handler = pipeline.RateLimit(limiters.general, limiters.auth, "/_/auth/",
@@ -740,6 +750,31 @@ func withLoginRoot(next http.Handler, cfg config.Config) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// withRemoteConsole sends requests for the remote console host to console.
+// Without admin.remote (or without a console to serve) nothing is added and
+// the name is as unknown as any other.
+func withRemoteConsole(next, console http.Handler, host string) http.Handler {
+	if console == nil || host == "" {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if requested, err := config.NormalizeHost(r.Host); err == nil && hostnameOf(requested) == host {
+			console.ServeHTTP(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// hostnameOf drops a port: the remote console is one name on every port the
+// public listener serves.
+func hostnameOf(host string) string {
+	if name, _, err := net.SplitHostPort(host); err == nil {
+		return name
+	}
+	return host
 }
 
 func protectedRouteHosts(routes []config.Route) []string {

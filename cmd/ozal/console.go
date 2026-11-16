@@ -26,6 +26,7 @@ func runConsole(ctx context.Context, args []string, out io.Writer) error {
 	tools := fs.String("tools", "", "comma-separated tools this login may change (default: all except updates.install): administrators, applications, connectors, people, publishing, sites, updates, updates.install")
 	email := fs.String("email", "", "recover: email of the administrator who lost their passkeys")
 	id := fs.String("id", "", "session id to revoke")
+	all := fs.Bool("all", false, "revoke: end every console session, remote console sessions included")
 	origin := fs.String("url", "", "private browser URL (default: the admin.listen port of the config; use the locally forwarded port when it differs)")
 	link := fs.Bool("link", false, "enrol/recover: print a one-time console link instead of a code to type on the login host")
 	if err := fs.Parse(args[1:]); err != nil {
@@ -119,17 +120,35 @@ func runConsole(ctx context.Context, args []string, out io.Writer) error {
 				ID      string    `json:"id"`
 				Name    string    `json:"name"`
 				Expires time.Time `json:"expires"`
+				Remote  bool      `json:"remote"`
 			} `json:"sessions"`
 		}
 		if err := c.do(ctx, http.MethodGet, "/_/api/operators", nil, &answer); err != nil {
 			return err
 		}
 		for _, session := range answer.Sessions {
-			fmt.Fprintf(out, "%s\t%s\t%s\n", session.ID, session.Name, session.Expires.Format(time.RFC3339))
+			where := "host"
+			if session.Remote {
+				where = "remote"
+			}
+			fmt.Fprintf(out, "%s\t%s\t%s\t%s\n", session.ID, session.Name, session.Expires.Format(time.RFC3339), where)
 		}
 	case "revoke":
+		if *all {
+			if *id != "" {
+				return errors.New("revoke takes -id ID or -all, not both")
+			}
+			var answer struct {
+				Revoked int `json:"revoked"`
+			}
+			if err := c.do(ctx, http.MethodDelete, "/_/api/operators", nil, &answer); err != nil {
+				return err
+			}
+			fmt.Fprintf(out, "Console sessions revoked: %d\n", answer.Revoked)
+			return nil
+		}
 		if *id == "" {
-			return errors.New("revoke needs -id ID")
+			return errors.New("revoke needs -id ID or -all")
 		}
 		if err := c.do(ctx, http.MethodDelete, "/_/api/operators/"+url.PathEscape(*id), nil, nil); err != nil {
 			return err

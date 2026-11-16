@@ -336,6 +336,10 @@ type Admin struct {
 	// many authenticators refuse to work (ID-021). The console stays on
 	// loopback and receives its session through a one-use code.
 	LoginHost bool `json:"login_host,omitempty"`
+	// Remote serves the console on its own HTTPS host through the public
+	// listener, behind an administrator passkey (admin_remote.go). Off when
+	// omitted; the admin listener stays loopback-only either way.
+	Remote *AdminRemote `json:"remote,omitempty"`
 	// UpdateSocket is the local executor's Unix socket (REL-019/REL-020).
 	// Setting it lets the console review and install a signed release; leaving
 	// it empty keeps the console consultation-only. The executor profile, not
@@ -874,6 +878,9 @@ func Validate(cfg Config) (*Config, error) {
 	}
 
 	if err := validateDeployEndpoint(&cfg); err != nil {
+		return nil, err
+	}
+	if err := validateAdminRemote(&cfg); err != nil {
 		return nil, err
 	}
 	if len(cfg.Projects) > 0 {
@@ -1535,6 +1542,10 @@ func Clone(source Config) Config {
 	if source.Auth.Passkeys != nil {
 		passkeys := *source.Auth.Passkeys
 		clone.Auth.Passkeys = &passkeys
+	}
+	if source.Admin.Remote != nil {
+		remote := *source.Admin.Remote
+		clone.Admin.Remote = &remote
 	}
 	if source.TLS.DNS01 != nil {
 		dns01 := *source.TLS.DNS01

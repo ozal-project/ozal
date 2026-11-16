@@ -22,7 +22,7 @@ const loginHostOrigin = "https://auth.example.com"
 
 // loginHostHandler is an identity handler whose config turns on
 // admin.login_host with a passkey login on auth.example.com (ID-021).
-func loginHostHandler(t *testing.T, on bool) (*Handler, *RemoteLogin, *events.Recorder) {
+func loginHostHandler(t *testing.T, on bool, extra ...Option) (*Handler, *RemoteLogin, *events.Recorder) {
 	t.Helper()
 	ctx := context.Background()
 	db, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "state.db"))
@@ -43,7 +43,7 @@ func loginHostHandler(t *testing.T, on bool) (*Handler, *RemoteLogin, *events.Re
 	}
 	recorder := &events.Recorder{}
 	remote := NewRemoteLogin()
-	h := New(&fakeManager{cfg: cfg}, recorder, WithIdentities(sqlite.NewAdmins(db)), WithRemoteLogin(remote))
+	h := New(&fakeManager{cfg: cfg}, recorder, append([]Option{WithIdentities(sqlite.NewAdmins(db)), WithRemoteLogin(remote)}, extra...)...)
 	return h, remote, recorder
 }
 

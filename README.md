@@ -43,7 +43,7 @@ Ozal sits in front of your applications. It terminates HTTPS, checks who the vis
 - **Passwordless by default.** Native passkeys, or an external OIDC provider. Ozal never stores passwords.
 - **Ship static sites.** Upload a build or publish from GitHub Actions, with version history and one-click rollback.
 - **See what happened.** Policy explanations and a live activity feed. A durable audit trail for access and admin changes is available when configured; the feed alone is not a tamper-evident record.
-- **Operate from a console or the CLI.** The console is embedded in the binary and stays private on loopback or a local socket.
+- **Operate from a console or the CLI.** The console is embedded in the binary and stays private on loopback or a local socket; optionally it also answers on its own HTTPS host behind an administrator passkey.
 
 ## Get started
 
@@ -81,6 +81,7 @@ Capabilities below describe this checkout; tagged releases may include less.
 | Static sites with history and rollback | Available |
 | Publishing without a public address (Cloudflare Tunnel) | Available; Ozal creates the tunnel, you run `cloudflared` |
 | Signed identity assertion for applications | Available, per route |
+| Console on its own HTTPS host (`admin.remote`) | Available, off by default |
 | Owned tunnels to private connectors | Experimental, off by default |
 | Signed releases and in-place updates | Signed pre-releases published; `ozal update` is alpha |
 | High availability, DDoS protection, CDN | Not offered |

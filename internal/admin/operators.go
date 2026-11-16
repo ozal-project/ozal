@@ -46,6 +46,9 @@ type operatorGrant struct {
 	passkeyAt time.Time
 	// loginHost means the session was authenticated on the public RP.
 	loginHost bool
+	// Remote marks a session opened on the remote console host
+	// (admin.remote). Only such sessions are accepted there.
+	Remote bool `json:"remote,omitempty"`
 	// idle > 0 makes the session sliding: each use pushes Expires to now+idle,
 	// never past limit. Passkey sessions slide; host logins do not.
 	idle  time.Duration
@@ -207,6 +210,49 @@ func (s *operatorSessions) issuePasskey(name string, loginHost bool, tools ...st
 	return token, g, nil
 }
 
+// issueRemote opens a passkey session on the remote console host: it slides
+// on remoteIdle instead of passkeyIdle and is the only kind that host accepts.
+func (s *operatorSessions) issueRemote(name string, tools ...string) (string, operatorGrant, error) {
+	token, g, err := s.issuePasskey(name, true, tools...)
+	if err != nil {
+		return "", operatorGrant{}, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	hash := sha256.Sum256([]byte(token))
+	g.Remote = true
+	g.idle = remoteIdle
+	g.Expires = s.now().Add(remoteIdle)
+	s.grants[hash] = g
+	return token, g, nil
+}
+
+// revokeRemote ends every session opened on the remote console host and
+// reports how many there were.
+func (s *operatorSessions) revokeRemote() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ended := 0
+	for _, g := range s.grants {
+		if g.Remote {
+			s.revokeLocked(g.ID)
+			ended++
+		}
+	}
+	return ended
+}
+
+// revokeAll ends every console session and reports how many there were.
+func (s *operatorSessions) revokeAll() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ended := len(s.grants)
+	s.grants = make(map[[32]byte]operatorGrant)
+	s.accounts = make(map[string]string)
+	s.credentials = make(map[string]string)
+	return ended
+}
+
 // markPasskey records a successful step-up assertion for one session.
 func (s *operatorSessions) markPasskey(sessionID string) bool {
 	s.mu.Lock()
@@ -299,6 +345,7 @@ func (h *Handler) registerOperators() {
 	h.mux.HandleFunc("GET /_/api/operators/session", h.bearer(h.operatorSession, true, ""))
 	h.mux.HandleFunc("GET /_/api/operators", h.requireLocal(h.listOperators))
 	h.mux.HandleFunc("DELETE /_/api/operators/{id}", h.requireLocal(h.revokeOperator))
+	h.mux.HandleFunc("DELETE /_/api/operators", h.requireLocal(h.revokeAllOperators))
 	h.mux.HandleFunc("POST /_/api/operators/logout", h.requireBearer(h.logoutOperator))
 	h.mux.HandleFunc("POST /_/api/operators/renew", h.requireBearer(h.renewOperator))
 	h.mux.HandleFunc("POST "+resumePath, h.resumeOperator)
@@ -326,17 +373,35 @@ func (h *Handler) rememberSession(w http.ResponseWriter, r *http.Request, token 
 	if seconds <= 0 {
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: resumeCookie, Value: token, Path: resumePath, MaxAge: seconds, HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteStrictMode})
+	cookie := resumeCookieFor(r)
+	cookie.Value, cookie.MaxAge = token, seconds
+	http.SetCookie(w, cookie)
 }
 
 func forgetSession(w http.ResponseWriter, r *http.Request) {
-	http.SetCookie(w, &http.Cookie{Name: resumeCookie, Value: "", Path: resumePath, MaxAge: -1, HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteStrictMode})
+	cookie := resumeCookieFor(r)
+	cookie.MaxAge = -1
+	http.SetCookie(w, cookie)
+}
+
+// resumeCookieFor is the resume cookie's shape on this request's origin: on
+// the loopback console it is scoped to the resume path; on the remote console
+// it is a __Host- cookie, which browsers accept only Secure, host-only and on
+// Path=/.
+func resumeCookieFor(r *http.Request) *http.Cookie {
+	if _, ok := remoteOrigin(r); ok {
+		return &http.Cookie{Name: remoteResumeCookie, Path: "/", HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode}
+	}
+	return &http.Cookie{Name: resumeCookie, Path: resumePath, HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteStrictMode}
 }
 
 // sameOrigin reports whether a browser request comes from the console page
 // itself. Browsers always send Origin on a cross-site POST, and page script
 // cannot forge it.
 func sameOrigin(r *http.Request) bool {
+	if origin, ok := remoteOrigin(r); ok {
+		return r.Header.Get("Origin") == origin
+	}
 	scheme := "http"
 	if r.TLS != nil {
 		scheme = "https"
@@ -352,12 +417,16 @@ func (h *Handler) resumeOperator(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 403, "resume the session from this private console origin")
 		return
 	}
-	cookie, err := r.Cookie(resumeCookie)
+	cookie, err := r.Cookie(resumeCookieFor(r).Name)
 	if err != nil || cookie.Value == "" || len(cookie.Value) > 128 {
 		writeError(w, 401, "no session to resume")
 		return
 	}
 	g, ok := h.operators.authenticate(cookie.Value)
+	if _, remote := remoteOrigin(r); ok && remote != g.Remote {
+		// A session resumes only on the kind of console that opened it.
+		ok = false
+	}
 	if !ok {
 		forgetSession(w, r)
 		writeError(w, 401, "the session ended; sign in again")
@@ -467,6 +536,18 @@ func (h *Handler) revokeOperator(w http.ResponseWriter, r *http.Request) {
 	h.emit(events.Event{Type: events.Type("operator.revoked"), Actor: localActor(r), Code: r.PathValue("id")})
 	writeJSON(w, 200, map[string]bool{"revoked": true})
 }
+
+// revokeAllOperators ends every console session, remote ones included: the
+// host's answer to a suspected compromise (`ozal console revoke -all`).
+func (h *Handler) revokeAllOperators(w http.ResponseWriter, r *http.Request) {
+	if !h.recordMutationIntent(w, r, "operator.revoke_all", "") {
+		return
+	}
+	ended := h.operators.revokeAll()
+	h.emit(events.Event{Type: events.Type("operator.revoked_all"), Actor: localActor(r), Count: ended})
+	writeJSON(w, 200, map[string]int{"revoked": ended})
+}
+
 func (h *Handler) logoutOperator(w http.ResponseWriter, r *http.Request) {
 	if g, ok := r.Context().Value(operatorKey{}).(operatorGrant); ok {
 		h.operators.revoke(g.ID)
@@ -482,6 +563,10 @@ func (h *Handler) withOperator(r *http.Request) (*http.Request, bool) {
 	}
 	grant, ok := h.operators.authenticate(token)
 	if !ok {
+		return r, false
+	}
+	if _, remote := remoteOrigin(r); remote && (!grant.Remote || h.operators.account(grant.ID) == "") {
+		// The remote host accepts only passkey sessions opened on it.
 		return r, false
 	}
 	return r.WithContext(context.WithValue(r.Context(), operatorKey{}, grant)), true

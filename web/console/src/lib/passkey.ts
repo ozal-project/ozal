@@ -105,7 +105,9 @@ export async function enrolWithPasskey(token: string, name: string, email: strin
   return api<AdminSession>("/_/api/admin/enrol/finish", credentialJSON(credential), begun.ceremony);
 }
 
-export async function adminState(signal?: AbortSignal): Promise<{ enrolled: boolean; enrol_command?: string; login_host?: string; access_requests?: boolean } | null> {
+// remote is set on the remote console host (admin.remote), which only signs
+// in on the login host: no host login, no setup link, no access requests.
+export async function adminState(signal?: AbortSignal): Promise<{ enrolled: boolean; enrol_command?: string; login_host?: string; access_requests?: boolean; remote?: boolean } | null> {
   const res = await fetch("/_/api/admin/state", { cache: "no-store", signal });
   if (!res.ok) return null;
   return res.json();

@@ -583,6 +583,11 @@ func (h *Handler) bearer(next http.HandlerFunc, sites bool, tool string) http.Ha
 			next(w, operatorRequest)
 			return
 		}
+		if _, remote := remoteOrigin(r); remote {
+			// No API token is ever accepted on the remote console host.
+			writeError(w, http.StatusUnauthorized, "sign in with an administrator passkey")
+			return
+		}
 		cfg := h.manager.Config().Admin
 		token, err := config.ResolveSecret(cfg.Token)
 		if err != nil {

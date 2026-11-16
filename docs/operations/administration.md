@@ -686,6 +686,9 @@ ssh -t -L 8787:127.0.0.1:8787 USER@HOST \
 ```
 
 Then open `http://ozal.localhost:8787` (never an IP address: passkeys need a name).
+If you would rather not keep a tunnel, the edge can also serve the console on its
+own HTTPS host behind an administrator passkey: see
+[Remote console](../reference.md#remote-console).
 A host with a socket group (see [Operate without `sudo`](#operate-without-sudo-socket-group))
 can forward the socket directly: `ssh -N -L 8787:/run/ozal/admin.sock USER@HOST`.
 
