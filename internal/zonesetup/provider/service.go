@@ -85,7 +85,8 @@ func (s *Service) inspect(ctx context.Context, cfg config.Config, zone string) (
 	challenge := config.ChallengeFor(cfg.TLS, zone)
 	observed := zonesetup.Observed{
 		Zone:               zone,
-		Proxied:            cfg.DNS != nil && cfg.DNS.Proxied,
+		Proxied:            cfg.DNS != nil && cfg.DNS.Proxied || cfg.IngressMode() == config.IngressCloudflareTunnel,
+		Tunnel:             cfg.IngressMode() == config.IngressCloudflareTunnel,
 		ChallengeDelegated: challenge.Delegated,
 		ChallengeName:      challenge.Name,
 		ChallengeTarget:    strings.TrimSuffix(strings.ToLower(challenge.Target), "."),
@@ -114,12 +115,19 @@ func (s *Service) inspect(ctx context.Context, cfg config.Config, zone string) (
 // client resolves the provider token for this call only. No provider is not
 // an error: the steps are then manual.
 func (s *Service) client(cfg config.Config) (Client, error) {
-	if cfg.DNS == nil || cfg.DNS.Cloudflare == nil {
+	reference, field := "", ""
+	switch {
+	case cfg.DNS != nil && cfg.DNS.Cloudflare != nil:
+		reference, field = cfg.DNS.Cloudflare.Token, "dns.cloudflare.token"
+	case cfg.IngressMode() == config.IngressCloudflareTunnel:
+		// The tunnel's token already reaches the account's zones.
+		reference, field = cfg.Ingress.CloudflareTunnel.Token, "ingress.cloudflare_tunnel.token"
+	default:
 		return nil, nil
 	}
-	token, err := config.ResolveSecret(cfg.DNS.Cloudflare.Token)
+	token, err := config.ResolveSecret(reference)
 	if err != nil {
-		return nil, errors.New("the Cloudflare token (dns.cloudflare.token) could not be read")
+		return nil, errors.New("the Cloudflare token (" + field + ") could not be read")
 	}
 	client, err := s.Cloudflare(token)
 	if err != nil {

@@ -43,6 +43,7 @@ go test ./internal/certs -run '^$' -fuzz '^FuzzVerifyTSIGResponse$' -fuzztime=1s
 go test ./internal/acmedns -run '^$' -fuzz '^FuzzRespond$' -fuzztime=1s
 go test ./internal/auth -run '^$' -fuzz '^FuzzSafeReturnTo$' -fuzztime=1s
 go test ./internal/proxy -run '^$' -fuzz '^FuzzStripCookie$' -fuzztime=1s
+go test ./internal/pipeline -run '^$' -fuzz '^FuzzAssertsHTTPS$' -fuzztime=1s
 go test ./internal/pages -run '^$' -fuzz '^FuzzCheckEntry$' -fuzztime=1s
 go test ./internal/pages -run '^$' -fuzz '^FuzzRules$' -fuzztime=1s
 go test ./internal/policydemo -run '^$' -fuzz '^FuzzExplain$' -fuzztime=1s

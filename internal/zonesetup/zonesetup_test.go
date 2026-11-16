@@ -151,3 +151,26 @@ func TestWithoutProviderEveryStepIsManual(t *testing.T) {
 		t.Fatal("a zone without a provider claims to be ready")
 	}
 }
+
+// Behind a Cloudflare Tunnel the SSL mode and Origin Pulls do not apply, but
+// http:// must still be redirected by the proxy: otherwise it reaches the
+// edge through the tunnel and a visitor could sign in without HTTPS.
+func TestTunnelZone(t *testing.T) {
+	o := base()
+	o.Tunnel, o.ChallengeDelegated, o.OriginAuth = true, false, false
+	o.SSLMode, o.PullEnabled, o.PullTrusted = "flexible", false, false
+	if s := step(t, o, Encryption); s.State != NotNeeded {
+		t.Fatalf("encryption = %+v", s)
+	}
+	if s := step(t, o, OriginPull); s.State != NotNeeded {
+		t.Fatalf("origin pull = %+v", s)
+	}
+	if !Ready(Plan(o)) {
+		t.Fatalf("a tunnel zone with Always Use HTTPS is not ready: %+v", Plan(o))
+	}
+	o.AlwaysHTTPS = "off"
+	s := step(t, o, HTTPSRedirect)
+	if s.State != Todo || s.Action != SetAlwaysHTTPS || s.Detail == "" {
+		t.Fatalf("https redirect = %+v", s)
+	}
+}

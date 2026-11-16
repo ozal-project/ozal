@@ -29,7 +29,7 @@ type updateLocker interface {
 	LockUpdates(path string) (release func(), err error)
 }
 
-var serviceUnits = []string{"ozal.service", "ozal-update.service", "ozal-update.timer", "ozal-update-executor.service"}
+var serviceUnits = []string{"ozal.service", "ozal-cloudflared.service", "ozal-update.service", "ozal-update.timer", "ozal-update-executor.service"}
 
 func uninstallBinaryArtifacts(root string) ([]string, error) {
 	dir := mapped(root, "/usr/local/lib/ozal")
@@ -171,7 +171,7 @@ func Uninstall(ctx context.Context, out io.Writer, host UninstallHost, r Uninsta
 		if err := host.Systemctl(ctx, "daemon-reload"); err != nil {
 			return err
 		}
-		_ = host.Systemctl(ctx, "reset-failed", "ozal.service", "ozal-update.service", "ozal-update.timer", "ozal-update-executor.service")
+		_ = host.Systemctl(ctx, "reset-failed", "ozal.service", "ozal-cloudflared.service", "ozal-update.service", "ozal-update.timer", "ozal-update-executor.service")
 	}
 	fmt.Fprintln(out, "Ozal service and binaries removed. The ozal account and group were retained.")
 	return nil

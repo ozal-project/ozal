@@ -8,6 +8,7 @@ import (
 
 	"github.com/ozal-project/ozal/internal/certs"
 	"github.com/ozal-project/ozal/internal/config"
+	"github.com/ozal-project/ozal/internal/domaincheck/probe"
 	"github.com/ozal-project/ozal/internal/events"
 	"github.com/ozal-project/ozal/internal/routemanager"
 )
@@ -56,12 +57,10 @@ func tlsMode(cfg config.Config) string {
 }
 
 func dnsSettings(cfg config.Config) map[string]any {
-	settings := map[string]any{"target": "", "proxied": false, "provider": ""}
-	if cfg.DNS != nil {
-		settings["target"], settings["proxied"] = cfg.DNS.Target, cfg.DNS.Proxied
-		if cfg.DNS.Cloudflare != nil {
-			settings["provider"] = "cloudflare"
-		}
+	records := probe.RecordsFor(cfg)
+	settings := map[string]any{"target": records.Target, "proxied": records.Proxied, "provider": "", "ingress": cfg.IngressMode()}
+	if records.Token != "" {
+		settings["provider"] = "cloudflare"
 	}
 	return settings
 }

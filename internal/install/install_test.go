@@ -332,3 +332,99 @@ func TestUninstallHoldsTheUpdateLockAndRefusesARunningUpdate(t *testing.T) {
 		t.Fatalf("binary directory remains: %v", err)
 	}
 }
+
+// The Cloudflare Tunnel ingress: the API token is copied for root and the
+// service only, never printed or written into the configuration; the
+// connector unit and its state directory are staged, the listener stays on
+// loopback and sign-in moves to the operator's domain over HTTPS.
+func TestServiceStagesTheCloudflareTunnelIngress(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux installer")
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	tokenFile := filepath.Join(dir, "cf.token")
+	const secret = "cf-api-token-value"
+	if err := os.WriteFile(tokenFile, []byte(secret+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(dir, "stage")
+	req := ServiceRequest{Binary: exe, Root: root, Target: "http://127.0.0.1:4000", Group: "staff", Ingress: IngressCloudflareTunnel, Domain: "example.com", CloudflareToken: tokenFile}
+	var plan bytes.Buffer
+	if err := Service(context.Background(), &plan, nil, req); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"/etc/ozal/cloudflare.token", "/etc/systemd/system/ozal-cloudflared.service", "/var/lib/ozal/cloudflare-tunnel/", "https://auth.example.com", `https://app.example.com forwards to http://127.0.0.1:4000`, "no public port"} {
+		if !strings.Contains(plan.String(), want) {
+			t.Fatalf("plan does not name %q:\n%s", want, plan.String())
+		}
+	}
+	req.Apply = true
+	var out bytes.Buffer
+	if err := Service(context.Background(), &out, nil, req); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(plan.String()+out.String(), secret) {
+		t.Fatal("the API token was printed")
+	}
+	copied, err := os.ReadFile(filepath.Join(root, "etc/ozal/cloudflare.token"))
+	if err != nil || strings.TrimSpace(string(copied)) != secret {
+		t.Fatalf("token copy = %q, %v", copied, err)
+	}
+	for path, mode := range map[string]os.FileMode{"etc/ozal/cloudflare.token": 0o640, "var/lib/ozal/cloudflare-tunnel": 0o700, "etc/systemd/system/ozal-cloudflared.service": 0o644} {
+		info, err := os.Stat(filepath.Join(root, path))
+		if err != nil || info.Mode().Perm() != mode {
+			t.Fatalf("%s: %v %v", path, info, err)
+		}
+	}
+	data, _ := os.ReadFile(filepath.Join(root, "etc/ozal/config.json"))
+	cfg := string(data)
+	if strings.Contains(cfg, secret) {
+		t.Fatal("the API token was written into the configuration")
+	}
+	for _, want := range []string{`"mode": "cloudflare_tunnel"`, `"token": "file:/etc/ozal/cloudflare.token"`, `"listen": "127.0.0.1:8888"`, `"login_url": "https://auth.example.com"`, `"127.0.0.1/32"`} {
+		if !strings.Contains(cfg, want) {
+			t.Fatalf("config lacks %s:\n%s", want, cfg)
+		}
+	}
+	unit, _ := os.ReadFile(filepath.Join(root, "etc/systemd/system/ozal-cloudflared.service"))
+	if string(unit) != ConnectorUnit() || !strings.Contains(string(unit), "--token-file ${CREDENTIALS_DIRECTORY}/token") || !strings.Contains(string(unit), "DynamicUser=yes") {
+		t.Fatalf("connector unit:\n%s", unit)
+	}
+}
+
+func TestPlanServiceRejectsIncompleteTunnelRequests(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		req  ServiceRequest
+		want string
+	}{
+		{"no domain", ServiceRequest{Binary: "/tmp/ozal", Ingress: IngressCloudflareTunnel, CloudflareToken: "/root/cf.token"}, "-domain"},
+		{"bad domain", ServiceRequest{Binary: "/tmp/ozal", Ingress: IngressCloudflareTunnel, Domain: "localhost", CloudflareToken: "/root/cf.token"}, "-domain"},
+		{"relative token", ServiceRequest{Binary: "/tmp/ozal", Ingress: IngressCloudflareTunnel, Domain: "example.com", CloudflareToken: "cf.token"}, "-cloudflare-token"},
+		{"tunnel flags in direct mode", ServiceRequest{Binary: "/tmp/ozal", Domain: "example.com"}, "apply only"},
+		{"unknown ingress", ServiceRequest{Binary: "/tmp/ozal", Ingress: "ngrok"}, "-ingress"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := PlanService(tc.req); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("err = %v, want %q", err, tc.want)
+			}
+		})
+	}
+	dir := t.TempDir()
+	link := filepath.Join(dir, "link")
+	os.WriteFile(filepath.Join(dir, "real"), []byte("token"), 0o600)
+	os.Symlink(filepath.Join(dir, "real"), link)
+	for name, path := range map[string]string{"symlink": link, "missing": filepath.Join(dir, "none")} {
+		if _, err := readAPIToken(path); err == nil {
+			t.Fatalf("%s token accepted", name)
+		}
+	}
+	os.WriteFile(filepath.Join(dir, "two"), []byte("one two"), 0o600)
+	if _, err := readAPIToken(filepath.Join(dir, "two")); err == nil {
+		t.Fatal("accepted a file with two values")
+	}
+}
