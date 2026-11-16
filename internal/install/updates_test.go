@@ -238,3 +238,15 @@ func TestActivationPlanMatchesWhatActivationDoes(t *testing.T) {
 		}
 	}
 }
+
+// The one-line installer at ozal.dev/install.sh verifies releases with the
+// key it carries; it must be the published release key.
+func TestCurlInstallerPinsThePublishedReleaseKey(t *testing.T) {
+	script, err := os.ReadFile("../../site/public/install.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(script), "\nRELEASE_KEY=\""+ReleaseKey()+"\"\n") {
+		t.Fatal("site/public/install.sh does not pin docs/operations/ozal-release.pub")
+	}
+}

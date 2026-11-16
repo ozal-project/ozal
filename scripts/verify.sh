@@ -51,6 +51,9 @@ go test ./internal/passkey -run '^$' -fuzz '^FuzzTheRefusalPageNeverGrowsMarkup$
 go test ./internal/consoleaccess -run '^$' -fuzz '^FuzzDecide$' -fuzztime=1s
 
 echo "[6/7] optional linters"
+# The one-line installer runs under any POSIX sh; shellcheck when present.
+sh -n site/public/install.sh
+if command -v shellcheck >/dev/null 2>&1; then shellcheck -s sh site/public/install.sh; fi
 if command -v staticcheck >/dev/null 2>&1; then
   staticcheck ./...
 else
