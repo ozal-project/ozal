@@ -21,25 +21,30 @@ the first tagged build and do not include features added later.
 ## Install in one command
 
 ```sh
-curl -fsSL https://ozal.dev/install.sh | sh                                     # verify, show the plan
-curl -fsSL https://ozal.dev/install.sh | sudo sh -s -- --apply --updates        # install
+curl -fsSL https://ozal.dev/install.sh | sh
 ```
+
+To only verify the release and see what would change, add `--plan`:
+`curl -fsSL https://ozal.dev/install.sh | sh -s -- --plan`.
 
 The script reads the signed release catalog for the `stable` channel (`preview`
 while there is no stable release, or with `--channel preview`) and checks its
 signature with the release key written in the script. It then checks the signed
 `checksums.txt` and the archive's SHA-256 before it extracts the binary. Any
 mismatch, an expired catalog or an address outside the project's GitHub releases
-stops it before anything runs. Without `--apply` it only shows the plan of
-`ozal install service`; `--apply` installs the service, and `--updates` also runs
-`ozal install updates` so the console can install later releases. `--version vX`
+stops it before anything runs. By default it then installs the service with
+`ozal install service` and runs `ozal install updates` so the console can install
+later releases; `--no-updates` skips the second step and `--plan` installs
+nothing. Downloading and verifying run as you; only the two installation steps
+run as root, through `sudo` when you are not root (it asks before any download,
+so a refused password costs nothing). `--apply` and `--updates` from older
+instructions are still accepted and change nothing. `--version vX`
 installs a given release. `--keep DIR` keeps the verified files; a relative path
 is resolved from the directory where you run the script. Arguments after `--`
 go to `ozal install service` (for example `-- -target http://127.0.0.1:4000`).
-Installation mode belongs to the script: put `--apply` before `--`. Forwarded
-`-apply` or `--apply` flags, including explicit boolean values, are rejected
-before any download.
-It needs Linux, `curl`, OpenSSL 3 and root for `--apply`.
+Installation mode belongs to the script: forwarded `-apply` or `--apply` flags,
+including explicit boolean values, are rejected before any download.
+It needs Linux, `curl`, OpenSSL 3, and root or `sudo` to install.
 
 The limit: piped from `https://ozal.dev`, the script and the key in it come from the
 same place, so this trusts that site's TLS. For more, download the script, compare

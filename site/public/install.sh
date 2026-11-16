@@ -1,14 +1,18 @@
 #!/bin/sh
 # Ozal installer.
 #
-#   curl -fsSL https://ozal.dev/install.sh | sh                 # verify and show the plan
-#   curl -fsSL https://ozal.dev/install.sh | sudo sh -s -- --apply --updates
+#   curl -fsSL https://ozal.dev/install.sh | sh
+#
+# One command verifies the newest signed release, installs the Linux service and
+# turns on installing later releases from the console. Downloading and
+# verifying run as you; only the installation itself runs as root, through
+# sudo when you are not root already (sudo may ask for your password).
 #
 # It installs nothing it cannot prove. It reads the signed release catalog,
 # checks its Ed25519 signature with the release key written below, then checks
 # the signed checksums and the archive's SHA-256 before it extracts a single
-# file. Any mismatch stops it. Without --apply it only shows what
-# `ozal install service` would do.
+# file. Any mismatch stops it. With --plan it only shows what
+# `ozal install service` would do and changes nothing.
 #
 # Trust: piped from https://ozal.dev, this script and the key below come from
 # the same place, so the root of trust is that site's TLS. For more, download
@@ -17,20 +21,21 @@
 # every release.
 #
 # Options:
-#   --apply            install the Linux service (needs root)
-#   --updates          also turn on installing updates from the console
+#   --plan             verify and show the plan; install nothing
+#   --no-updates       do not turn on installing updates from the console
 #   --channel NAME     stable or preview (default: stable, else preview)
 #   --version vX.Y.Z   a specific release instead of the channel's newest
 #   --keep DIR         keep the verified archive and binary in DIR
 #   -- ARGS            pass ARGS to `ozal install service` (e.g. -target URL)
+# --apply and --updates are accepted for older instructions; they are the default.
 set -eu
 
 RELEASE_KEY="mLezEy+Uo1RnvqjOAr5+RYoGjny1IxHYgfHdtra51B8="
 CATALOG_BASE="https://ozal.dev/api/v1/releases"
 RELEASES="https://github.com/ozal-project/ozal/releases/download"
 
-apply=0
-updates=0
+apply=1
+updates=1
 channel=""
 version=""
 keep=""
@@ -40,29 +45,30 @@ fail() { printf 'ozal install: %s\n' "$*" >&2; exit 1; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
+    --plan|--dry-run) apply=0 ;;
     --apply) apply=1 ;;
+    --no-updates) updates=0 ;;
     --updates) updates=1 ;;
     --channel) [ $# -ge 2 ] || fail "--channel needs a value"; channel=$2; shift ;;
     --version) [ $# -ge 2 ] || fail "--version needs a value"; version=$2; shift ;;
     --keep) [ $# -ge 2 ] || fail "--keep needs a directory"; keep=$2; shift ;;
-    -h|--help) sed -n '2,27p' "$0" 2>/dev/null || true; exit 0 ;;
+    -h|--help) sed -n '2,30p' "$0" 2>/dev/null || true; exit 0 ;;
     --) shift; break ;;
     *) fail "unknown option $1 (pass installer flags after --)" ;;
   esac
   shift
 done
 
-# Only the outer --apply may enable writes and trigger the root check.
+# Only the script decides whether to install (default) or plan (--plan).
 # Go's flag parser also accepts double dashes and explicit boolean values.
 for arg do
   case "$arg" in
-    -apply|--apply|-apply=*|--apply=*) fail "pass --apply before --; installation mode cannot be set in forwarded service arguments" ;;
+    -apply|--apply|-apply=*|--apply=*) fail "installation mode cannot be set in forwarded service arguments; the script installs by default, use --plan before -- to only show the plan" ;;
   esac
 done
 
 case "$channel" in ""|stable|preview) ;; *) fail "--channel must be stable or preview" ;; esac
 case "$version" in ""|v[0-9]*.[0-9]*.[0-9]*) ;; *) fail "--version must look like v0.1.0" ;; esac
-if [ "$updates" = 1 ] && [ "$apply" = 0 ]; then fail "--updates needs --apply"; fi
 
 [ "$(uname -s)" = Linux ] || fail "the service installer runs on Linux; on other systems download a release from GitHub"
 case "$(uname -m)" in
@@ -73,8 +79,16 @@ esac
 for tool in curl openssl sha256sum tar base64 mktemp sed grep date; do
   command -v "$tool" >/dev/null 2>&1 || fail "$tool is required"
 done
+# Installing writes a system service, so it needs root. Ask for it before any
+# download so a refusal costs nothing; everything up to the install runs as you.
+as_root=""
 if [ "$apply" = 1 ] && [ "$(id -u)" != 0 ]; then
-  fail "--apply installs a system service: run it with sudo (curl -fsSL https://ozal.dev/install.sh | sudo sh -s -- --apply)"
+  command -v sudo >/dev/null 2>&1 ||
+    fail "installing the service needs root and sudo is not available: run this as root, or add --plan to only see the plan"
+  say "Ozal installs a system service; sudo may ask for your password."
+  sudo -v ||
+    fail "installing the service needs root: sudo was refused (add --plan to only see the plan)"
+  as_root=sudo
 fi
 
 # Resolve retained files against the caller before entering the workspace,
@@ -174,11 +188,15 @@ if [ "$apply" = 0 ]; then
   }
   say ""
   say "Nothing was installed. To install the service:"
-  say "  curl -fsSL https://ozal.dev/install.sh | sudo sh -s -- --apply --updates"
+  say "  curl -fsSL https://ozal.dev/install.sh | sh"
   exit 0
 fi
 
-./bin/ozal install service -archive "$archive" -sha256 "$sum" "$@" -apply
+$as_root ./bin/ozal install service -archive "$archive" -sha256 "$sum" "$@" -apply
 if [ "$updates" = 1 ]; then
-  (cd / && /usr/local/lib/ozal/ozal install updates -channel "$channel" -apply)
+  if [ -n "$channel" ]; then
+    (cd / && $as_root /usr/local/lib/ozal/ozal install updates -channel "$channel" -apply)
+  else
+    (cd / && $as_root /usr/local/lib/ozal/ozal install updates -apply)
+  fi
 fi

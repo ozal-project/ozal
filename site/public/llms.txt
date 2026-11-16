@@ -12,8 +12,8 @@ provider, and it does not replace an application's own authorization.
 
 - Status: early alpha. Interfaces and configuration may change. Signed
   prereleases are published on GitHub.
-- Install on a Linux server: `curl -fsSL https://ozal.dev/install.sh | sudo sh -s -- --apply --updates`
-  (verifies the signed release first; without `--apply` it only shows the plan).
+- Install on a Linux server: `curl -fsSL https://ozal.dev/install.sh | sh`
+  (verifies the signed release first, then installs through sudo; `sh -s -- --plan` only shows the plan).
 - License: MIT.
 - Written in Go; one binary for Linux, macOS and Windows.
 - Source: https://github.com/ozal-project/ozal
