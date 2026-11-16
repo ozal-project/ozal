@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ApiError, fetchLatestUpdateJob, fetchUpdateJob, fetchUpdatePlan, startUpdateJob, type UpdateJob, type UpdatePlan } from "$lib/api";
 import { confirmWithPasskey, explainPasskeyError } from "$lib/passkey";
 import { startUpdateWithStepUp } from "$lib/updateStepUp";
+import { Button } from "$lib/components/ui/button/react";
 import { Modal } from "./Modal";
 import { UpdateDialogContent } from "./UpdateDialogContent";
 
@@ -17,6 +18,7 @@ export function UpdateDialog({ open, token, canInstall, onOpenChange, onDone }: 
   const [plan, setPlan] = useState<UpdatePlan | null>(null);
   const [job, setJob] = useState<UpdateJob | null>(null);
   const [error, setError] = useState("");
+  const [setup, setSetup] = useState(false);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -40,6 +42,7 @@ export function UpdateDialog({ open, token, canInstall, onOpenChange, onDone }: 
     request.current = controller;
     setLoading(true);
     setError("");
+    setSetup(false);
     setReconnecting(false);
     setPlan(null);
     setJob(null);
@@ -60,7 +63,9 @@ export function UpdateDialog({ open, token, canInstall, onOpenChange, onDone }: 
         const nextPlan = await fetchUpdatePlan(controller.signal);
         if (!controller.signal.aborted) setPlan(nextPlan);
       } catch (cause) {
-        if (!controller.signal.aborted) setError(message(cause));
+        if (controller.signal.aborted) return;
+        if (cause instanceof ApiError && cause.code === "executor_missing") setSetup(true);
+        else setError(message(cause));
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
@@ -133,8 +138,26 @@ export function UpdateDialog({ open, token, canInstall, onOpenChange, onDone }: 
   }
 
   return <Modal open={open} onOpenChange={onOpenChange} title="Update Ozal" intro="Ozal reviews a signed release, then installs it in place. Traffic is interrupted while the service restarts." wide>
-    <UpdateDialogContent plan={plan} job={job} error={error} loading={loading} busy={busy} confirming={confirming} reconnecting={reconnecting} canInstall={canInstall} onApply={() => void apply()} onClose={() => onOpenChange(false)} onReload={() => window.location.reload()} />
+    {setup ? <EnableUpdates onClose={() => onOpenChange(false)} /> : <UpdateDialogContent plan={plan} job={job} error={error} loading={loading} busy={busy} confirming={confirming} reconnecting={reconnecting} canInstall={canInstall} onApply={() => void apply()} onClose={() => onOpenChange(false)} onReload={() => window.location.reload()} />}
   </Modal>;
+}
+
+// The executor runs as root, so the console cannot start it: it shows the one
+// command that does, to run on the host.
+const enableCommand = "sudo ozal install updates -apply";
+
+function EnableUpdates({ onClose }: { onClose(): void }) {
+  const [copied, setCopied] = useState(false);
+  return <div className="grid gap-3">
+    <p className="text-sm">Installing from the console is not turned on for this host yet.</p>
+    <p className="text-muted-foreground text-sm">Run this once on the server. It installs the local update executor, pins the release key and restarts Ozal briefly. Run it without <span className="font-mono">-apply</span> first to see the plan.</p>
+    <code className="bg-muted block rounded-md px-3 py-2 font-mono text-xs break-all">{enableCommand}</code>
+    <p className="text-muted-foreground text-xs">After that, this dialog reviews the newest signed release from ozal.dev and installs it after you confirm with your passkey.</p>
+    <div className="flex justify-end gap-2">
+      <Button variant="outline" onClick={() => void navigator.clipboard.writeText(enableCommand).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); })}>{copied ? "Copied" : "Copy command"}</Button>
+      <Button onClick={onClose}>Close</Button>
+    </div>
+  </div>;
 }
 
 function message(error: unknown): string {

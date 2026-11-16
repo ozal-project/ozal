@@ -449,6 +449,35 @@ from the public key pinned in each installation through a trusted channel. Do
 not accept a new key only because the queried catalog delivered it.
 
 <a id="actualizar-desde-la-consola-o-la-cli-sin-scp"></a>
+### Update catalogs
+
+Edges read `https://ozal.dev/api/v1/releases/<channel>/<os>/<arch>` and its `.sig`.
+The site workflow writes them on every deploy with `scripts/release/publish-catalogs.sh`:
+for each channel it picks the newest published release (`ozal release latest`: drafts
+and non-version tags never count, `stable` skips prereleases), downloads its
+`checksums.txt` and signature, and runs `ozal release catalog`. That command proves the
+checksums with the public half of the release key, builds one catalog per `tar.gz`
+archive with the asset's size and address and the checksum's hash, signs it, and parses
+it back with `release.ParseCatalog` under the same rules an edge applies before writing
+it. The sequence is the signing time in Unix seconds, so a re-signed catalog of the
+same release supersedes the previous one and an edge refuses a replay of the older.
+Catalogs expire after 14 days (at most 31). Because a deploy replaces the whole site,
+a deploy without the key fails and the live site keeps its catalogs. The
+`release-catalog` workflow dispatches a deploy weekly and when a release is published;
+it dispatches rather than deploys because the deploy trust accepts only `push` and
+`workflow_dispatch`. `migrations` is set when the schema directory changed since the
+previous release of the channel, or when that cannot be told. A path the site does not
+have answers with its page; the client reports that as no catalog published for the
+channel, not as a bad signature. Tests cover the round trip from `ozal release catalog`
+through the update check, re-signing and replay, refusals (draft, prerelease on
+stable, missing checksums or archives, validity bounds) and channel selection.
+
+`ozal install updates` adds the executor to a service installation. It writes only new
+files or files already identical, refuses a different pinned key, profile, unit or
+socket before writing anything, and edits `admin.update_socket` keeping every other
+key and value, checked by decoding the result. The unit and key are embedded copies of
+the published ones, and a test keeps them equal.
+
 ### Updating from the console or the CLI
 
 `ozal update` implements the contract in the current tree. `-catalog URL` plus

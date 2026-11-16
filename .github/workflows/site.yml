@@ -12,7 +12,7 @@ on:
     # The live demo is the access decision compiled to WebAssembly, so a change
     # to the engine republishes the page; the user guides are pages of the site
     # (site/src/lib/guides.mjs), so a guide change republishes it too.
-    paths: [site/**, QUICKSTART.md, docs/START-HERE.md, docs/operations/*.md, docs/security.md, docs/reference.md, scripts/pages/**, cmd/ozalctl/**, internal/ctl/**, internal/pages/**, scripts/build-site-engine.sh, internal/auth/**, internal/config/**, internal/policycontext/**, internal/policydemo/**, cmd/policywasm/**, .github/workflows/site.yml]
+    paths: [site/**, scripts/release/publish-catalogs.sh, internal/release/**, QUICKSTART.md, docs/START-HERE.md, docs/operations/*.md, docs/security.md, docs/reference.md, scripts/pages/**, cmd/ozalctl/**, internal/ctl/**, internal/pages/**, scripts/build-site-engine.sh, internal/auth/**, internal/config/**, internal/policycontext/**, internal/policydemo/**, cmd/policywasm/**, .github/workflows/site.yml]
   workflow_dispatch:
 
 permissions:
@@ -67,6 +67,20 @@ jobs:
         run: |
           npm ci
           npm run build
+
+      # Edges update from ozal.dev/api/v1/releases: a signed catalog per
+      # channel and platform for the newest published release. Every deploy
+      # replaces the whole site, so every deploy writes and re-signs them; the
+      # release-catalog workflow redeploys weekly and on each release so they
+      # never expire. Without the key the deploy fails and the live site, with
+      # its catalogs, stays as it is.
+      - name: Signed update catalogs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OZAL_RELEASE_KEY: ${{ secrets.OZAL_RELEASE_KEY }}
+        run: |
+          go build -trimpath -o "$RUNNER_TEMP/ozal" ./cmd/ozal
+          OZAL="$RUNNER_TEMP/ozal" scripts/release/publish-catalogs.sh site/dist/api/v1/releases
 
       - name: Build the native operator
         run: go build -trimpath -o "$RUNNER_TEMP/ozalctl" ./cmd/ozalctl

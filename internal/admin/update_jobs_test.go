@@ -109,8 +109,13 @@ func TestUpdatePlanAPINeedsTheUpdatesToolAndUsesTheExecutor(t *testing.T) {
 func TestUpdatePlanAPIWithoutAnExecutorStaysConsultationOnly(t *testing.T) {
 	h := New(&fakeManager{}, nil)
 	updates, _ := updateSessions(t, h)
-	if rec := request(h, http.MethodGet, "/_/api/updates/plan", updates, ""); rec.Code != http.StatusServiceUnavailable {
+	rec := request(h, http.MethodGet, "/_/api/updates/plan", updates, "")
+	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("plan without executor = %d, want 503", rec.Code)
+	}
+	// The console offers the one host command that turns installs on.
+	if body := decode(t, rec); body["code"] != "executor_missing" || body["command"] != "sudo ozal install updates -apply" {
+		t.Fatalf("plan without executor = %v", body)
 	}
 	installer := installSession(t, h)
 	if rec := request(h, http.MethodPost, "/_/api/updates/jobs", installer, `{"plan_id":"`+strings.Repeat("a", 32)+`"}`); rec.Code != http.StatusServiceUnavailable {
