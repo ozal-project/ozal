@@ -179,3 +179,48 @@ func TestInstallUpdatesNeedsAnInstallationAndAChannel(t *testing.T) {
 		t.Fatal("an unknown channel was accepted")
 	}
 }
+
+type fakeUpdatesHost struct {
+	calls     []string
+	unhealthy int
+}
+
+func (h *fakeUpdatesHost) Systemctl(_ context.Context, args ...string) error {
+	h.calls = append(h.calls, strings.Join(args, " "))
+	return nil
+}
+
+func (h *fakeUpdatesHost) Healthy(context.Context) bool {
+	if h.unhealthy > 0 {
+		h.unhealthy--
+		return false
+	}
+	return true
+}
+
+// The restarted edge takes a moment to listen: the installer waits for it
+// instead of failing on the first check, and restarts it only when the
+// configuration changed.
+func TestActivateUpdatesWaitsForTheRestartedEdge(t *testing.T) {
+	host := &fakeUpdatesHost{unhealthy: 1}
+	if err := activateUpdates(context.Background(), host, true); err != nil {
+		t.Fatalf("an edge that answers a moment later was reported as down: %v", err)
+	}
+	if strings.Join(host.calls, "; ") != "daemon-reload; enable --now ozal-update-executor.service; restart ozal.service" {
+		t.Fatalf("calls = %v", host.calls)
+	}
+	host = &fakeUpdatesHost{}
+	if err := activateUpdates(context.Background(), host, false); err != nil {
+		t.Fatal(err)
+	}
+	for _, call := range host.calls {
+		if strings.HasPrefix(call, "restart") {
+			t.Fatal("the edge was restarted although its configuration did not change")
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := activateUpdates(ctx, &fakeUpdatesHost{unhealthy: 1 << 30}, true); err == nil {
+		t.Fatal("an edge that never answers was reported as up")
+	}
+}
