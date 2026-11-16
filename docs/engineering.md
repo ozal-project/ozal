@@ -452,23 +452,25 @@ not accept a new key only because the queried catalog delivered it.
 ### Update catalogs
 
 Edges read `https://ozal.dev/api/v1/releases/<channel>/<os>/<arch>` and its `.sig`.
-The site workflow writes them on every deploy with `scripts/release/publish-catalogs.sh`:
-for each channel it picks the newest published release (`ozal release latest`: drafts
-and non-version tags never count, `stable` skips prereleases), downloads its
-`checksums.txt` and signature, and runs `ozal release catalog`. That command proves the
-checksums with the public half of the release key, builds one catalog per `tar.gz`
-archive with the asset's size and address and the checksum's hash, signs it, and parses
-it back with `release.ParseCatalog` under the same rules an edge applies before writing
-it. The sequence is the signing time in Unix seconds, so a re-signed catalog of the
-same release supersedes the previous one and an edge refuses a replay of the older.
-Catalogs expire after 14 days (at most 31). The key is used only in the site workflow's
-`catalogs` job, which builds `cmd/ozal` from the checkout without a module cache and runs
-no npm or site tooling; the deploy job receives the signed files as a job output and
-cannot sign anything itself. Because a deploy replaces the whole site, a run without
-the key deploys nothing and the live site keeps its catalogs. The
-`release-catalog` workflow dispatches a deploy weekly and when a release is published;
-it dispatches rather than deploys because the deploy trust accepts only `push` and
-`workflow_dispatch`. `migrations` is set when the schema directory changed since the
+The site's `_redirects` sends that path to the repository's `catalogs` branch on
+`raw.githubusercontent.com`, a host the update client already approves and may be
+redirected to; the signature, not the host, is what an edge trusts. The
+`release-catalog` workflow writes the branch weekly and when a release is published,
+with `scripts/release/publish-catalogs.sh`: for each channel it picks the newest
+published release (`ozal release latest`: drafts and non-version tags never count,
+`stable` skips prereleases), downloads its `checksums.txt` and signature, and runs
+`ozal release catalog`. That command proves the checksums with the public half of the
+release key, builds one catalog per `tar.gz` archive with the asset's size and address
+and the checksum's hash, signs it, and parses it back with `release.ParseCatalog` under
+the same rules an edge applies before writing it. The sequence is the signing time in
+Unix seconds, so a re-signed catalog of the same release supersedes the previous one
+and an edge refuses a replay of the older. Catalogs expire after 14 days (at most 31).
+The key and write access never meet: the `sign` job holds the key with read access,
+builds `cmd/ozal` from the checkout without a module cache and runs no npm or site
+tooling; the `publish` job holds write access without the key and force-pushes only
+what `sign` produced, as a single commit. Without the key `sign` fails and the branch
+keeps the previous catalogs until they expire. Where the site is built or hosted does
+not matter to this path. `migrations` is set when the schema directory changed since the
 previous release of the channel, or when that cannot be told. A path the site does not
 have answers with its page; the client reports that as no catalog published for the
 channel, not as a bad signature. Tests cover the round trip from `ozal release catalog`
