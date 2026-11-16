@@ -56,7 +56,15 @@ go build ./cmd/ozal
 
 This creates a new private installation and prints the start, invitation and sign-in commands. It does not overwrite anything, change DNS or expose the app to the Internet.
 
-For a minimal routing example with no TLS and no identity provider, see [QUICKSTART.md](QUICKSTART.md). For a Linux service, follow [installation](docs/operations/download-install.md).
+For a minimal routing example with no TLS and no identity provider, see [QUICKSTART.md](QUICKSTART.md).
+
+On a Linux server, one command verifies the newest signed release and installs the service with updates from the console:
+
+```sh
+curl -fsSL https://ozal.dev/install.sh | sudo sh -s -- --apply --updates
+```
+
+Without `--apply` it only verifies and shows the plan. See [installation](docs/operations/download-install.md#install-in-one-command) for what it checks and its trust limit.
 
 ## Documentation
 

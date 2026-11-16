@@ -77,4 +77,8 @@ release:
     name: ozal
   # Published by hand after reading the notes and checking the artifacts.
   draft: true
+  # The one-line installer served at ozal.dev/install.sh, attached so anyone
+  # can compare what they ran with the copy of this tag.
+  extra_files:
+    - glob: ./site/public/install.sh
   prerelease: auto
