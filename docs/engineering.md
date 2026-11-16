@@ -735,6 +735,15 @@ go test -race ./internal/auth -run TestName
 go test ./internal/config -fuzz FuzzName
 ```
 
+On Linux, the gate also exercises the public `site/public/install.sh` with
+disposable signed releases, real OpenSSL verification and a local download
+adapter. It checks plan success and failure (including the child's exit code),
+argument forwarding, retained files at relative and absolute paths (including
+spaces), preview fallback, a pinned version and rejection of altered catalogs,
+checksums and archives before any release executable runs. This fixture
+uses no network and installs no services; it does not prove live downloads or a
+real host installation.
+
 Browser and integration fixtures used by the project:
 
 ```sh
