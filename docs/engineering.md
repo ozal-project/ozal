@@ -743,6 +743,9 @@ spaces), preview fallback, a pinned version and rejection of altered catalogs,
 checksums and archives before any release executable runs. This fixture
 uses no network and installs no services; it does not prove live downloads or a
 real host installation.
+The fixture also checks that forwarded apply flags are rejected before any
+download, the outer `--apply` reaches the service command, and a non-root caller
+cannot apply. Root is simulated and the fixture binary only records arguments.
 
 Browser and integration fixtures used by the project:
 

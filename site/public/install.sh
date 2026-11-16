@@ -52,6 +52,14 @@ while [ $# -gt 0 ]; do
   shift
 done
 
+# Only the outer --apply may enable writes and trigger the root check.
+# Go's flag parser also accepts double dashes and explicit boolean values.
+for arg do
+  case "$arg" in
+    -apply|--apply|-apply=*|--apply=*) fail "pass --apply before --; installation mode cannot be set in forwarded service arguments" ;;
+  esac
+done
+
 case "$channel" in ""|stable|preview) ;; *) fail "--channel must be stable or preview" ;; esac
 case "$version" in ""|v[0-9]*.[0-9]*.[0-9]*) ;; *) fail "--version must look like v0.1.0" ;; esac
 if [ "$updates" = 1 ] && [ "$apply" = 0 ]; then fail "--updates needs --apply"; fi
