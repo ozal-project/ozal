@@ -33,8 +33,9 @@ mismatch, an expired catalog or an address outside the project's GitHub releases
 stops it before anything runs. Without `--apply` it only shows the plan of
 `ozal install service`; `--apply` installs the service, and `--updates` also runs
 `ozal install updates` so the console can install later releases. `--version vX`
-installs a given release, `--keep DIR` keeps the verified files, and arguments
-after `--` go to `ozal install service` (for example `-- -target http://127.0.0.1:4000`).
+installs a given release. `--keep DIR` keeps the verified files; a relative path
+is resolved from the directory where you run the script. Arguments after `--`
+go to `ozal install service` (for example `-- -target http://127.0.0.1:4000`).
 It needs Linux, `curl`, OpenSSL 3 and root for `--apply`.
 
 The limit: piped from `https://ozal.dev`, the script and the key in it come from the

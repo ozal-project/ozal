@@ -106,7 +106,11 @@ else
 fi
 
 echo "[6g] Linux release installer"
-if [[ "$(uname -s)" == Linux ]]; then scripts/release/test-install.sh; scripts/release/test-install-service.sh; fi
+if [[ "$(uname -s)" == Linux ]]; then
+  bash scripts/release/test-curl-install.sh
+  scripts/release/test-install.sh
+  scripts/release/test-install-service.sh
+fi
 
 echo "[7/7] git diff --check"
 git diff --check

@@ -69,6 +69,13 @@ if [ "$apply" = 1 ] && [ "$(id -u)" != 0 ]; then
   fail "--apply installs a system service: run it with sudo (curl -fsSL https://ozal.dev/install.sh | sudo sh -s -- --apply)"
 fi
 
+# Resolve retained files against the caller before entering the workspace,
+# whose contents are removed on exit.
+case "$keep" in
+  ""|/*) ;;
+  *) keep="$(pwd)/$keep" ;;
+esac
+
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT INT TERM
 cd "$work"
@@ -152,7 +159,11 @@ if [ -n "$keep" ]; then
 fi
 
 if [ "$apply" = 0 ]; then
-  ./bin/ozal install service -archive "$archive" -sha256 "$sum" "$@" || true
+  ./bin/ozal install service -archive "$archive" -sha256 "$sum" "$@" || {
+    status=$?
+    printf '%s\n' 'ozal install: could not produce the service installation plan; resolve the error above before installing' >&2
+    exit "$status"
+  }
   say ""
   say "Nothing was installed. To install the service:"
   say "  curl -fsSL https://ozal.dev/install.sh | sudo sh -s -- --apply --updates"
