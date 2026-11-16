@@ -10,8 +10,10 @@ application. It is a reverse proxy, an identity front door and a policy
 decision point for self-hosted software. It is not a VPN, not an identity
 provider, and it does not replace an application's own authorization.
 
-- Status: early alpha. Interfaces and configuration may change; release
-  downloads are not published yet.
+- Status: early alpha. Interfaces and configuration may change. Signed
+  prereleases are published on GitHub.
+- Install on a Linux server: `curl -fsSL https://ozal.dev/install.sh | sudo sh -s -- --apply --updates`
+  (verifies the signed release first; without `--apply` it only shows the plan).
 - License: MIT.
 - Written in Go; one binary for Linux, macOS and Windows.
 - Source: https://github.com/ozal-project/ozal

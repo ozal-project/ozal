@@ -355,6 +355,7 @@
   .start-copy > p { margin-top: 20px; color: var(--color-ink-2); max-width: 46ch; }
   .start-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 26px; margin-top: 30px; }
   .start .terminal { background: var(--color-bg); }
+  .start-terminals { display: grid; gap: 16px; min-width: 0; }
 }
 
 @media (hover: hover) and (pointer: fine) {
