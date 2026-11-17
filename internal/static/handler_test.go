@@ -145,6 +145,41 @@ func TestHandlerSPAFallback(t *testing.T) {
 	}
 }
 
+// A deployment that ships 404.html gets it for every missing path, with the
+// status a crawler needs. The page wins over the SPA fallback: a site that
+// writes a not-found page does not want the home page pretending to be it.
+func TestHandlerServesTheDeploymentsNotFoundPage(t *testing.T) {
+	site := newSite(t)
+	if err := os.WriteFile(filepath.Join(site, notFoundFile), []byte("custom not found"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, spa := range []bool{false, true} {
+		h := Handler{Dir: site, SPA: spa}
+		for _, target := range []string{"/missing", "/docs/nope/", "/assets/missing.js"} {
+			rec := serve(h, http.MethodGet, target)
+			if rec.Code != http.StatusNotFound || rec.Body.String() != "custom not found" {
+				t.Errorf("spa=%v GET %s = %d %q, want 404 custom page", spa, target, rec.Code, rec.Body.String())
+			}
+			if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/html") {
+				t.Errorf("spa=%v GET %s Content-Type = %q, want HTML", spa, target, got)
+			}
+			if got := rec.Header().Get("Cache-Control"); got != "no-store" {
+				t.Errorf("spa=%v GET %s Cache-Control = %q, want no-store", spa, target, got)
+			}
+		}
+	}
+	if rec := serve(Handler{Dir: site}, http.MethodHead, "/missing"); rec.Code != http.StatusNotFound || rec.Body.Len() != 0 {
+		t.Errorf("HEAD missing = %d with %d bytes, want 404 and no body", rec.Code, rec.Body.Len())
+	}
+	if rec := serve(Handler{Dir: site}, http.MethodGet, "/404.html"); rec.Code != http.StatusOK || rec.Body.String() != "custom not found" {
+		t.Errorf("GET /404.html = %d %q, want the page itself", rec.Code, rec.Body.String())
+	}
+	// Control files keep the plain refusal instead of the site's page.
+	if rec := serve(Handler{Dir: site, SPA: true}, http.MethodGet, "/_headers"); rec.Code != http.StatusNotFound || strings.Contains(rec.Body.String(), "custom not found") {
+		t.Errorf("GET /_headers = %d %q, want plain 404", rec.Code, rec.Body.String())
+	}
+}
+
 func TestHandlerOnlyAllowsReads(t *testing.T) {
 	h := Handler{Dir: newSite(t)}
 	if rec := serve(h, http.MethodHead, "/"); rec.Code != http.StatusOK || rec.Body.Len() != 0 {

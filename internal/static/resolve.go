@@ -1,5 +1,7 @@
-// Package static serves a site from a directory, the way Cloudflare Pages
-// does, without letting a request reach anything outside that directory.
+// Package static serves a site from a directory without letting a request
+// reach anything outside that directory. Files, directories and control files
+// follow Cloudflare Pages; a root 404.html answers missing paths with status
+// 404 and wins over the SPA fallback.
 //
 // Resolve is the pure core: it turns a URL path into a name relative to the
 // site root, or refuses it. Handler is the shell: it opens names through

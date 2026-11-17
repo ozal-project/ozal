@@ -137,7 +137,7 @@ only there and takes priority. Unknown hosts do not reveal the public catalog.
 |---|---|
 | `health_path` | HTTP probe; defaults to `/`; does not probe a static route or a connector |
 | `upstreams` | Selection among healthy origins, with passive failure detection |
-| `spa` | For static routes, falls back unknown paths to the index |
+| `spa` | For static routes, falls back unknown paths to the index when the deployment has no root `404.html` |
 | `redirect` | Permanent redirect for a retired hostname: GET/HEAD get 301 and everything else 308, keeping path and query (`old/docs?x=1` → `https://new/docs?x=1`); a path in the URL is a prefix. No user info, query or fragment; never to its own host; does not accept `access`, `health_path` or `spa`, and is not probed. In the console: *Add application → A redirect to another address* |
 | `access` absent | Public route, except the legacy `auth_required` shorthand |
 | `access: {}` | Requires an authenticated identity |
@@ -154,6 +154,11 @@ only there and takes priority. Unknown hosts do not reveal the public catalog.
 An unavailable upstream answers 502; header timeout 504; no healthy upstream 503. A
 disconnected connector answers 502 and has no TCP fallback. Connectors can be protected
 through `access` in the integrated process.
+
+A static or Pages deployment may ship a root `404.html`. Missing paths then answer with
+that page and status 404, including when `spa` is set: an explicit not-found page wins over
+the fallback. Without one, `spa` keeps its index fallback. The `404.html` is a normal page
+when requested directly; `_headers` and `_redirects` are still never published.
 
 ### Identity assertion
 

@@ -1,7 +1,7 @@
 package static
 
 import (
-	"errors"
+	"io"
 	"io/fs"
 	"net/http"
 	"os"
@@ -11,11 +11,16 @@ import (
 	"github.com/ozal-project/ozal/internal/pages"
 )
 
-const indexFile = "index.html"
+const (
+	indexFile    = "index.html"
+	notFoundFile = "404.html"
+)
 
 // Handler serves files from Dir. It never lists directories: a directory is
-// served through its index.html. With SPA set, a missing extensionless path
-// falls back to the root index.html so client-side routers work.
+// served through its index.html. A deployment that ships a root 404.html
+// answers missing paths with that page and status 404. With SPA set and no
+// 404.html, a missing extensionless path falls back to the root index.html so
+// client-side routers work.
 //
 // Live, when set, replaces Dir: it is asked once per request for the live
 // deployment (PAGES-002), so a deploy or rollback takes effect on the next
@@ -67,15 +72,29 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		file, info, err = open(dir, path.Join(name, indexFile))
 	}
-	if errors.Is(err, fs.ErrNotExist) && h.SPA && path.Ext(name) == "" {
-		file, info, err = open(dir, indexFile)
-	}
+	// A deployment that ships 404.html has made a decision about missing
+	// paths: it gets that page and a 404, even when SPA is set. The SPA
+	// fallback is for sites that have no not-found page of their own.
+	notFound := false
 	if err != nil || info.IsDir() {
 		if file != nil {
 			file.Close()
 		}
-		http.NotFound(w, r)
-		return
+		file, info, err = openNotFound(dir)
+		if err != nil {
+			if h.SPA && path.Ext(name) == "" {
+				file, info, err = open(dir, indexFile)
+			}
+			if err != nil || info.IsDir() {
+				if file != nil {
+					file.Close()
+				}
+				http.NotFound(w, r)
+				return
+			}
+		} else {
+			notFound = true
+		}
 	}
 	defer file.Close()
 
@@ -83,7 +102,33 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(header.Name, header.Value)
 	}
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if notFound {
+		// ServeContent answers 200 for a real file. A not-found page is an
+		// error response: keep the 404, and never let a conditional request
+		// turn it into a 304.
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusNotFound)
+		if r.Method != http.MethodHead {
+			_, _ = io.Copy(w, file)
+		}
+		return
+	}
 	http.ServeContent(w, r, info.Name(), info.ModTime(), file)
+}
+
+// openNotFound opens the deployment's 404 page. A directory with that name is
+// not a page, and the SPA fallback still applies when it is absent.
+func openNotFound(dir string) (*os.File, fs.FileInfo, error) {
+	file, info, err := open(dir, notFoundFile)
+	if err != nil {
+		return nil, nil, err
+	}
+	if info.IsDir() {
+		file.Close()
+		return nil, nil, fs.ErrNotExist
+	}
+	return file, info, nil
 }
 
 // open opens name inside dir. os.OpenInRoot fails if name, or any symlink it

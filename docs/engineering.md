@@ -378,7 +378,9 @@ Artifact handling authenticates, rate-limits and records the required intent
 links/traversal, internal or secret paths rejected, an immutable manifest and
 atomic activation. Site rollback activates a retained artifact; it changes no
 DNS or database. `_headers` and `_redirects` are validated and applied but are
-not served as public files.
+not served as public files. A root `404.html` is served with status 404 for
+missing paths and takes precedence over the SPA fallback; without one, `spa`
+keeps its index fallback.
 
 The operator reuses `internal/ctl/artifact`: it packs a bounded snapshot with
 `pages.Pack`, validates with `pages.Extract`, rejects private names, links and
