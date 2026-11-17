@@ -2,11 +2,71 @@
 import "../styles.css";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-const { title, description } = Astro.props;
-const canonical = new URL(Astro.url.pathname, Astro.site).toString();
+
+interface Crumb {
+  name: string;
+  url: string;
+}
+interface Article {
+  headline?: string;
+  section?: string;
+  dateModified?: string;
+  breadcrumb?: Crumb[];
+}
+interface Props {
+  title: string;
+  description: string;
+  // path overrides the URL Astro derives; the 404 page uses its file path.
+  path?: string;
+  // "article" is a guide under /docs; anything else is a product page.
+  kind?: "website" | "article";
+  // app marks the page that describes the software itself, not the site.
+  app?: boolean;
+  noindex?: boolean;
+  article?: Article;
+}
+
+const { title, description, path, kind = "website", app = false, noindex = false, article } = Astro.props;
+const canonical = new URL(path ?? Astro.url.pathname, Astro.site).toString();
+const siteURL = new URL("/", Astro.site).toString();
 // Link previews cache the card by URL: a new og.png gets a new one.
 const ogVersion = createHash("sha256").update(readFileSync(`${process.cwd()}/public/og.png`)).digest("hex").slice(0, 10);
 const ogImage = new URL(`/og.png?v=${ogVersion}`, Astro.site).toString();
+// One description of the project, used by the entities that describe Ozal
+// rather than one page. A page's own description belongs on its WebPage or
+// TechArticle node.
+const siteDescription =
+  "Ozal is a self-hosted access gateway: OIDC or passkey sign-in, per-app policy and HTTPS in front of Grafana, a wiki or any internal app. No VPN, one Go binary.";
+const author = {
+  "@type": "Person",
+  name: "Octavio Santacruz",
+  url: "https://octaviosantacruz.com",
+};
+const webpage =
+  kind === "article" && article
+    ? {
+        "@type": "TechArticle",
+        "@id": `${canonical}#article`,
+        headline: article.headline ?? title,
+        description,
+        url: canonical,
+        mainEntityOfPage: canonical,
+        isPartOf: { "@id": `${siteURL}#website` },
+        inLanguage: "en",
+        author,
+        articleSection: article.section ?? "Documentation",
+        ...(article.dateModified ? { dateModified: article.dateModified } : {}),
+      }
+    : {
+        "@type": "WebPage",
+        "@id": `${canonical}#webpage`,
+        url: canonical,
+        name: title,
+        description,
+        isPartOf: { "@id": `${siteURL}#website` },
+        inLanguage: "en",
+      };
+const crumbs = article?.breadcrumb ?? [];
 // One machine-readable description of the project for search engines and
 // assistants that read structured data. It repeats only claims the page and
 // the repository already make; there is no rating or review markup.
@@ -15,32 +75,47 @@ const schema = {
   "@graph": [
     {
       "@type": "WebSite",
-      "@id": "https://ozal.dev/#website",
-      url: "https://ozal.dev/",
+      "@id": `${siteURL}#website`,
+      url: siteURL,
       name: "Ozal",
-      description,
+      description: siteDescription,
       inLanguage: "en",
     },
-    {
-      "@type": "SoftwareApplication",
-      "@id": "https://ozal.dev/#software",
-      name: "Ozal",
-      url: "https://ozal.dev/",
-      description,
-      applicationCategory: "SecurityApplication",
-      applicationSubCategory: "Self-hosted access gateway",
-      operatingSystem: "Linux, macOS, Windows",
-      isAccessibleForFree: true,
-      license: "https://opensource.org/license/mit",
-      codeRepository: "https://github.com/ozal-project/ozal",
-      isPartOf: { "@id": "https://ozal.dev/#website" },
-      offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-      author: {
-        "@type": "Person",
-        name: "Octavio Santacruz",
-        url: "https://octaviosantacruz.com",
-      },
-    },
+    ...(app
+      ? [
+          {
+            "@type": "SoftwareApplication",
+            "@id": `${siteURL}#software`,
+            name: "Ozal",
+            url: siteURL,
+            description: siteDescription,
+            applicationCategory: "SecurityApplication",
+            applicationSubCategory: "Self-hosted access gateway",
+            operatingSystem: "Linux, macOS, Windows",
+            isAccessibleForFree: true,
+            license: "https://opensource.org/license/mit",
+            codeRepository: "https://github.com/ozal-project/ozal",
+            isPartOf: { "@id": `${siteURL}#website` },
+            offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+            author,
+          },
+        ]
+      : []),
+    webpage,
+    ...(crumbs.length > 1
+      ? [
+          {
+            "@type": "BreadcrumbList",
+            "@id": `${canonical}#breadcrumb`,
+            itemListElement: crumbs.map((crumb, index) => ({
+              "@type": "ListItem",
+              position: index + 1,
+              name: crumb.name,
+              item: new URL(crumb.url, Astro.site).toString(),
+            })),
+          },
+        ]
+      : []),
   ],
 };
 ---
@@ -51,9 +126,11 @@ const schema = {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
-    <!-- Allow long snippets: assistants quote pages best when they can see the
-         whole answer, not a truncated preview. -->
-    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+    {noindex ? (
+      <meta name="robots" content="noindex" />
+    ) : (
+      <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+    )}
     <meta name="author" content="Octavio Santacruz" />
     <link rel="canonical" href={canonical} />
     <!-- ?v= busts the long favicon cache browsers keep across deploys. -->
@@ -64,7 +141,7 @@ const schema = {
     <meta property="og:locale" content="en_US" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
-    <meta property="og:type" content="website" />
+    <meta property="og:type" content={kind === "article" ? "article" : "website"} />
     <meta property="og:url" content={canonical} />
     <meta property="og:image" content={ogImage} />
     <meta property="og:image:type" content="image/png" />

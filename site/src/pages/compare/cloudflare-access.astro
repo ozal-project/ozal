@@ -1,0 +1,73 @@
+---
+import Article from "../../components/Article.astro";
+import { getArticle } from "../../lib/articles.mjs";
+
+const meta = getArticle("/compare/cloudflare-access/");
+---
+<Article meta={meta}>
+  <p>If you are looking for a self-hosted alternative to Cloudflare Access, start with the difference: <strong>Cloudflare Access</strong> is a hosted identity-aware proxy on Cloudflare's network, and <strong>Ozal</strong> is a self-hosted access gateway in one Go binary on a server you own.</p>
+  <p>Both put a sign-in and a policy in front of an application. Where that decision runs drives most of the trade-offs below.</p>
+
+  <h2>At a glance</h2>
+  <table tabindex="0">
+    <caption>Cloudflare Access and Ozal, by decision point</caption>
+    <thead>
+      <tr><th scope="col">Cloudflare Access</th><th scope="col">Ozal</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Runs on Cloudflare's network</td><td>Runs on your server</td></tr>
+      <tr><td>A Cloudflare account</td><td>No account beyond the server you operate</td></tr>
+      <tr><td>Public app: Cloudflare DNS and an Access application</td><td>A route with a host and a target; Ozal obtains and renews TLS</td></tr>
+      <tr><td>Private app: Cloudflare One Client or a network route</td><td>A target reachable from the Ozal host; no client for HTTP apps</td></tr>
+      <tr><td>Your identity providers, device-posture providers and selectors</td><td>An OIDC provider or native passkeys</td></tr>
+      <tr><td>Access policies with identity, device and context selectors</td><td>Per-route fields: verified email domains, groups, methods, recent sign-in, device-bound passkey</td></tr>
+      <tr><td>Cloudflare logs and analytics</td><td>Decision codes and reasons; a durable audit trail when configured</td></tr>
+      <tr><td>The wider Cloudflare platform covers more than HTTP</td><td>HTTP applications and static sites only</td></tr>
+      <tr><td>Managed, established platform</td><td>Early alpha, one host, not production-ready</td></tr>
+      <tr><td>Commercial plans</td><td>MIT; you pay for the server</td></tr>
+    </tbody>
+  </table>
+
+  <h2>What Cloudflare Access does better</h2>
+  <ul>
+    <li><strong>No access layer to operate.</strong> Cloudflare runs the edge, the certificates and the control plane. You add an application and a policy.</li>
+    <li><strong>Device posture and endpoint signals.</strong> Access can use Cloudflare One signals that a single self-hosted proxy does not collect.</li>
+    <li><strong>More than self-hosted HTTP.</strong> Access also covers SaaS applications, MCP servers and dashboard SSO; its private-network paths use the Cloudflare One Client or a network route.</li>
+    <li><strong>A large integration and support surface.</strong> Many identity providers, device-posture vendors and commercial support options.</li>
+    <li><strong>Maturity.</strong> It is a managed product with a large team, a global network and a long track record.</li>
+  </ul>
+  <p>If any of those is a requirement, Cloudflare Access is the safer choice. Ozal does not try to match the whole platform.</p>
+
+  <h2>Where Ozal fits</h2>
+  <ul>
+    <li>You want the access decision and the request path on a server you own, without a cloud account in the middle.</li>
+    <li>You run one Linux host and a small number of HTTP applications: Grafana, a wiki, an admin panel, a preview site.</li>
+    <li>You want native passkeys, or you already have an OIDC provider and want to keep using it.</li>
+    <li>You want one binary, a route file, automatic TLS and static sites in the same place.</li>
+    <li>You can treat it as an early alpha and test before trusting it with anything important.</li>
+  </ul>
+
+  <h2>What Ozal does not do</h2>
+  <ul>
+    <li>It is not production-ready. Interfaces, configuration keys and behavior may change.</li>
+    <li>It is not a global edge. There is no DDoS network, device posture or endpoint agent.</li>
+    <li>It is HTTP only. It is not a VPN and does not carry arbitrary TCP or UDP traffic.</li>
+    <li>It is not an identity provider. It uses an OIDC provider or its own passkeys.</li>
+    <li>It does not extend SSO into third-party SaaS applications.</li>
+    <li>Its console is unreleased in alpha.1.</li>
+  </ul>
+
+  <h2>How to decide</h2>
+  <p><strong>Choose Cloudflare Access</strong> if you need a managed global service, device posture, SaaS coverage, or you do not want to operate the access layer at all.</p>
+  <p><strong>Choose Ozal</strong> if you want a self-hosted HTTP access gateway and can operate it yourself. Start with the <a href="/">live demo</a>, then read <a href="/docs/">the guides</a> and the <a href="https://github.com/ozal-project/ozal">source</a>.</p>
+  <p>You can also use both: Access for the global or SaaS edge and Ozal for a lab or a specific self-hosted application.</p>
+
+  <h2>Verify it</h2>
+  <ul>
+    <li><a href="/#engine">Ask the real decision engine</a> in the browser: four people, four apps, no sign-up.</li>
+    <li><a href="/docs/security/">Read Ozal's trust boundaries</a>: what the gateway strips, what it forwards and what it never protects.</li>
+    <li><a href="/docs/reference/">Check the route and access fields</a> before comparing them with an Access policy.</li>
+    <li><a href="https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/">Read Cloudflare's Access documentation</a> for the current product and its requirements.</li>
+  </ul>
+  <p class="small quiet">Cloudflare Access is a trademark of Cloudflare, Inc. Ozal is not affiliated with Cloudflare. Cloudflare's product and pricing change; check its documentation. Reviewed 17 November 2026.</p>
+</Article>

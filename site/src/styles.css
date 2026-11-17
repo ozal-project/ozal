@@ -131,6 +131,8 @@
   .hero-description { margin-top: 30px; max-width: 42ch; color: var(--color-ink-2); font-size: 1.25rem; line-height: 1.5; letter-spacing: -.01em; }
   .hero-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 14px 26px; margin-top: 32px; }
   .hero-note { margin-top: 30px; max-width: 50ch; color: var(--color-muted); font-size: var(--t-small); line-height: 1.6; }
+  .hero-note a { color: var(--color-ink-2); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--color-depth); }
+  .hero-note a:hover { color: var(--color-loud); text-decoration-color: var(--color-loud); }
 
   /* The doorway: one request at a time walks the checks and gets an answer.
      Native radios choose who is at the door, so it works without scripts. */
@@ -187,6 +189,9 @@
   .options li.options-ozal { border-top: 2px solid var(--color-ink); margin-top: -1px; }
   .options li.options-ozal p { color: var(--color-ink-2); }
   .options li.options-ozal h3 { color: var(--color-ink); }
+  .further { display: flex; flex-wrap: wrap; gap: 10px 28px; margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--color-tile-2); font-size: var(--t-small); }
+  .further a { color: var(--color-ink-2); text-decoration: underline; text-underline-offset: 4px; text-decoration-color: var(--color-depth); }
+  .further a:hover { color: var(--color-loud); text-decoration-color: var(--color-loud); }
 
   /* ---------- How it works ---------- */
   .how { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap: 64px; align-items: start; }
@@ -487,6 +492,11 @@
   .docs-toc a { padding-block: 5px; }
   .docs-note { padding: 12px 16px; border: 1px solid var(--color-tile-3); border-radius: 10px; background: var(--color-tile); color: var(--color-ink-2); font-size: var(--t-small); }
   .docs-note a { text-decoration: underline; text-underline-offset: 3px; }
+  .docs-crumbs ol { display: flex; flex-wrap: wrap; padding: 0; list-style: none; font-size: var(--t-small); color: var(--color-muted); }
+  .docs-crumbs li { display: inline-flex; align-items: center; }
+  .docs-crumbs li + li::before { content: "/"; padding-inline: 8px; color: var(--color-tile-3); }
+  .docs-crumbs a { color: var(--color-muted); text-decoration: none; }
+  .docs-crumbs a:hover { color: var(--color-ink); }
   .docs-source { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--color-tile-3); font-size: var(--t-small); }
 
   .prose { min-width: 0; max-width: 46rem; color: var(--color-ink-2); }
@@ -527,6 +537,30 @@
   .docs-nav ul { display: flex; flex-wrap: wrap; gap: 6px; }
   .docs-nav a { padding: 10px 12px; min-height: 44px; display: flex; align-items: center; border: 1px solid var(--color-tile-3); }
   .docs-nav a[aria-current="page"] { box-shadow: none; border-color: var(--color-loud); }
+}
+
+/* ---------- Not found ----------
+   A real 404 page, served with status 404 by Pages. It keeps the header and
+   footer so a mistyped address still offers a way back. */
+@layer components {
+  .not-found { max-width: 46rem; padding-block: 112px 24px; }
+  .not-found h1 { margin-top: 18px; font-size: clamp(2.5rem, 7vw, 4.75rem); line-height: 1; letter-spacing: -.045em; font-weight: 600; }
+  .not-found-copy { margin-top: 24px; max-width: 52ch; color: var(--color-ink-2); font-size: 1.125rem; }
+  .not-found-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 28px; margin-top: 36px; }
+}
+
+/* ---------- Comparison and setup articles ----------
+   Long-form pages outside /docs: one readable column, the same prose styles as
+   the guides, and a read-next list that links the articles to each other. */
+@layer components {
+  .article { max-width: 46rem; padding-top: 48px; }
+  .article .prose { max-width: none; }
+  .article .prose h1 { margin-top: 22px; }
+  .article-meta { color: var(--color-muted); font-size: var(--t-small); }
+  .article-related { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--color-tile-3); }
+  .article-related ul { display: flex; flex-wrap: wrap; gap: 10px 28px; margin-top: 12px; padding: 0; list-style: none; }
+  .article-related a { color: var(--color-ink); text-decoration: underline; text-underline-offset: 4px; text-decoration-color: var(--color-depth); }
+  .article-related a:hover { color: var(--color-loud); text-decoration-color: var(--color-loud); }
 }
 
 /* ---------- The mark (Umbral), shared with the console ---------- */

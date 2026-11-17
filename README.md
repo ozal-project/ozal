@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>One front door for your self-hosted apps.</strong><br>
-  Give an app a hostname, serve it over HTTPS, and decide who gets in with passkeys or your own identity provider. One Go binary.
+  Ozal is a self-hosted access gateway: give an app a hostname, serve it over HTTPS, and decide who gets in with passkeys or your own identity provider. One Go binary.
 </p>
 
 <p align="center">
@@ -16,6 +16,12 @@
   <a href="docs/reference.md">Reference</a> ·
   <a href="docs/security.md">Security</a> ·
   <a href="VISION.md">Vision</a>
+</p>
+
+<p align="center">
+  Compare: <a href="https://ozal.dev/compare/cloudflare-access/">Cloudflare Access</a> ·
+  <a href="https://ozal.dev/compare/pomerium/">Pomerium</a> ·
+  <a href="https://ozal.dev/guides/vpn-vs-access-gateway/">VPN or access gateway</a>
 </p>
 
 > **Alpha:** interfaces and config keys may change. Not production-ready yet.

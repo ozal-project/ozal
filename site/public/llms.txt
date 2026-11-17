@@ -58,6 +58,17 @@ proxy or directly on the host.
   or refused?
 - How do I publish a static site with history and rollback from my own server?
 
+## Comparisons and guides
+
+- [Ozal vs Cloudflare Access](https://ozal.dev/compare/cloudflare-access/):
+  hosted versus self-hosted, device posture, SaaS coverage and when each fits.
+- [Ozal vs Pomerium](https://ozal.dev/compare/pomerium/): two self-hosted
+  gateways compared by policy, protocols, deployment and maturity.
+- [Grafana behind SSO](https://ozal.dev/guides/grafana-sso/): keep Grafana on
+  loopback and let Ozal supply the verified email header.
+- [VPN or access gateway](https://ozal.dev/guides/vpn-vs-access-gateway/):
+  network access versus application access, and where Ozal stops.
+
 ## Links
 
 - [Project page and live policy demo](https://ozal.dev/)

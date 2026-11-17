@@ -27,7 +27,19 @@ const sections = headings.filter((h) => h.depth === 2);
 const lead = (entry.body ?? "").split(/\n\s*\n/).map((b) => b.trim()).find((b) => b && !/^[#>|`<-]/.test(b)) ?? "";
 const description = lead.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").replace(/[`*_]/g, "").replace(/\s+/g, " ").slice(0, 200);
 ---
-<Base title={`${title} · Ozal docs`} description={description || `${guide.nav}: Ozal documentation.`}>
+<Base
+  title={`${title} · Ozal docs`}
+  description={description || `${guide.nav}: Ozal documentation.`}
+  kind={guide.slug ? "article" : "website"}
+  article={{
+    headline: title,
+    section: "Documentation",
+    breadcrumb: [
+      { name: "Docs", url: "/docs/" },
+      ...(guide.slug ? [{ name: guide.nav, url: href(guide.slug) }] : []),
+    ],
+  }}
+>
   <Header current="docs" />
   <main id="main-content" tabindex="-1" class="docs frame">
     <nav class="docs-nav" aria-label="Guides">
@@ -35,6 +47,14 @@ const description = lead.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").replace(/[`*_]/
       <ul>{GUIDES.map((g) => <li><a href={href(g.slug)} aria-current={g === guide ? "page" : undefined}>{g.nav}</a></li>)}</ul>
     </nav>
     <article class="prose">
+      {guide.slug && (
+        <nav class="docs-crumbs" aria-label="Breadcrumb">
+          <ol>
+            <li><a href="/docs/">Docs</a></li>
+            <li aria-current="page">{guide.nav}</li>
+          </ol>
+        </nav>
+      )}
       <p class="docs-note">These guides follow the main branch. A feature marked “Unreleased” in the <a href="/#status">status list</a> is not in alpha.1 yet.</p>
       <Fragment set:html={html} />
       <p class="docs-source"><a class="text-link" href={`${REPO}/blob/main/${guide.path}`}>This page on GitHub <span aria-hidden="true">↗</span></a></p>

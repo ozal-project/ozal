@@ -1,0 +1,89 @@
+---
+import Article from "../../components/Article.astro";
+import { getArticle } from "../../lib/articles.mjs";
+
+const meta = getArticle("/guides/grafana-sso/");
+---
+<Article meta={meta}>
+  <p>Grafana has its own users, organizations and roles. Ozal does not replace them. Ozal decides <strong>who reaches Grafana</strong>; Grafana decides what that person can see and change inside.</p>
+  <p>The join is Grafana's auth proxy. Grafana trusts an email header from the gateway, and Ozal sets that header only after it has authenticated the person. This is SSO for Grafana without a plugin, and Grafana's own login can stay in place.</p>
+
+  <h2>What you need</h2>
+  <ul>
+    <li>An Ozal installation with TLS and a login host. See <a href="/docs/install/">Install</a> and <a href="/docs/first-application/">Publish your first application</a>.</li>
+    <li>A Grafana version with auth proxy support. The options below are from Grafana's current documentation; check your version.</li>
+    <li>Grafana reachable from Ozal on loopback or a private network, never directly from the internet.</li>
+    <li>A hostname under the domain Ozal serves, for example <code>grafana.example.com</code>.</li>
+    <li>An OIDC provider or passkeys configured in Ozal, and a decision about which verified emails or domains may enter.</li>
+  </ul>
+
+  <h2>1. Keep Grafana private</h2>
+  <p>Grafana must trust the identity header, so the only client that may reach it is Ozal. In <code>grafana.ini</code>:</p>
+  <pre><code>{`[server]
+http_addr = 127.0.0.1
+http_port = 3000
+root_url = https://grafana.example.com/`}</code></pre>
+  <p>If Ozal and Grafana run on the same host, binding to loopback is enough. If Grafana runs on another host, bind it to a private address and firewall it so only Ozal can connect. Never publish port 3000. Restart Grafana after the change.</p>
+
+  <h2>2. Tell Grafana to trust Ozal's header</h2>
+  <p>Add the auth proxy block to <code>grafana.ini</code>:</p>
+  <pre><code>{`[auth.proxy]
+enabled = true
+header_name = X-Auth-Request-Email
+header_property = email
+auto_sign_up = true
+sync_ttl = 15
+whitelist = 127.0.0.1`}</code></pre>
+  <ul>
+    <li><code>header_name</code> is the header Ozal sets. <code>header_property = email</code> tells Grafana to read it as an email address.</li>
+    <li><code>auto_sign_up = true</code> creates the Grafana user on the first sign-in. <code>sync_ttl</code> refreshes the user data.</li>
+    <li><code>whitelist</code> is the source address allowed to use the header. Use <code>127.0.0.1</code> when Ozal is on the same host, or Ozal's address or CIDR when it is not.</li>
+  </ul>
+  <p>Grafana's default organization role applies to auto-created users. If you want a different default, set <code>auto_assign_org</code> and <code>auto_assign_org_role</code> under <code>[users]</code>. After SSO works, you can set <code>disable_login_form = true</code> under <code>[auth]</code> to stop offering Grafana's password form; keep a break-glass admin and a way to re-enable it. Restart Grafana.</p>
+
+  <h2>3. Add the Ozal route</h2>
+  <p>Add this route to the <code>routes</code> array in the config that already terminates TLS for <code>example.com</code>:</p>
+  <pre><code>{`"routes": [
+  {
+    "host": "grafana.example.com",
+    "target": "http://127.0.0.1:3000",
+    "access": { "allowed_domains": ["example.com"] }
+  }
+]`}</code></pre>
+  <p>This is a fragment, not a full config. The direct profile in <a href="/docs/install/">the install guide</a> shows the full shape, and <a href="/docs/reference/">the reference</a> lists every access field. <code>allowed_domains</code> matches the verified email domain; <code>allowed_emails</code> is the explicit list. Make sure your identity provider marks the address as verified, or the allowlist will not match. Add <code>required_groups</code> if your OIDC provider sends groups. Reload or restart Ozal; an invalid route is rejected before it is saved.</p>
+
+  <h2>4. Publish the hostname</h2>
+  <p>Point <code>grafana.example.com</code> at Ozal and open port 443. Ozal obtains the certificate on the first visit with HTTP-01, or through DNS-01 when that is configured. The <a href="/docs/first-application/#5-point-a-domain-at-ozal">domain section of the first-application guide</a> covers DNS and certificates. Keep port 3000 closed.</p>
+
+  <h2>5. Verify it</h2>
+  <pre><code>{`# From the Grafana host: Grafana answers, but only locally.
+curl -I http://127.0.0.1:3000
+
+# From another host: the public address goes to Ozal's sign-in.
+curl -I https://grafana.example.com
+
+# A forged identity header does not become a session.
+curl -sS -H 'X-Auth-Request-Email: attacker@example.com' -o /dev/null -w '%{http_code} %{redirect_url}\\n' https://grafana.example.com/api/user`}</code></pre>
+  <p>Without a session, the last command should not return <code>attacker@example.com</code>: expect a redirect to sign-in, or a 401 or 403. Ozal strips client-supplied identity headers, and Grafana's <code>whitelist</code> is the second lock: it ignores the header from a source that is not Ozal.</p>
+  <p>Now sign in with a permitted account. Grafana should show that email in the user menu, and the user list under <strong>Administration</strong> should list the auto-created user. Try a second account that your rule should refuse; it must not reach Grafana.</p>
+
+  <h2>Limits</h2>
+  <ul>
+    <li>Ozal decides who reaches Grafana, not what they do inside. Grafana's organization, folder and dashboard permissions remain.</li>
+    <li>Auto-sign-up creates users; manage Grafana roles in Grafana.</li>
+    <li>The header is trusted only as far as Grafana's <code>whitelist</code> and network. Keep Grafana on loopback or a private network, and never widen <code>whitelist</code> to a network where users can reach Grafana directly.</li>
+    <li>This is an early alpha. Test with a non-admin account and a lab instance before moving a real Grafana.</li>
+    <li>Grafana's auth proxy is a Grafana feature; its options can change between versions.</li>
+  </ul>
+
+  <h2>Troubleshooting</h2>
+  <ul>
+    <li><strong>Redirect loop:</strong> <code>root_url</code> must be the public HTTPS address, Ozal must send the header on <code>/login</code>, and the request must come from an address in <code>whitelist</code>.</li>
+    <li><strong>User not created:</strong> check <code>auto_sign_up</code>, the exact <code>header_name</code>, and whether the email is verified by the identity provider.</li>
+    <li><strong>Grafana returns 401 or 403:</strong> check <code>header_property = email</code>, the route's allowlist, and the user's Grafana organization role.</li>
+    <li><strong>Direct access still works:</strong> Grafana is still bound to a public interface. Fix the bind address and the firewall before going further.</li>
+  </ul>
+
+  <h2>Versions and status</h2>
+  <p>The Ozal side follows the main branch and is an early alpha. The Grafana settings come from <a href="https://grafana.com/docs/grafana/latest/setup-grafana/configure-access/configure-authentication/auth-proxy/">Grafana's auth proxy documentation</a>. This guide was reviewed on 17 November 2026; test the Grafana version you run.</p>
+</Article>

@@ -1,0 +1,61 @@
+---
+import Base from "../layouts/Base.astro";
+import Header from "../components/Header.astro";
+import Footer from "../components/Footer.astro";
+import { ARTICLES } from "../lib/articles.mjs";
+
+interface Meta {
+  path: string;
+  nav: string;
+  h1: string;
+  title: string;
+  description: string;
+  section: string;
+  updated: string;
+  modified: string;
+}
+interface Props {
+  meta: Meta;
+}
+
+const { meta } = Astro.props;
+const related = ARTICLES.filter((article) => article.path !== meta.path);
+---
+<Base
+  title={meta.title}
+  description={meta.description}
+  kind="article"
+  article={{
+    headline: meta.h1,
+    section: meta.section,
+    dateModified: meta.modified,
+    breadcrumb: [
+      { name: "Home", url: "/" },
+      { name: meta.nav, url: meta.path },
+    ],
+  }}
+>
+  <Header />
+  <main id="main-content" tabindex="-1" class="article frame">
+    <article class="prose">
+      <nav class="docs-crumbs" aria-label="Breadcrumb">
+        <ol>
+          <li><a href="/">Home</a></li>
+          <li aria-current="page">{meta.nav}</li>
+        </ol>
+      </nav>
+      <h1>{meta.h1}</h1>
+      <p class="article-meta">Reviewed {meta.updated} · Ozal follows the main branch and is an early alpha.</p>
+      <slot />
+      <aside class="article-related" aria-labelledby="related-title">
+        <p class="label" id="related-title">Read next</p>
+        <ul>
+          {related.map((article) => (
+            <li><a href={article.path}>{article.nav}</a></li>
+          ))}
+        </ul>
+      </aside>
+    </article>
+  </main>
+  <Footer />
+</Base>

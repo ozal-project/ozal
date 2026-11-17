@@ -1,0 +1,82 @@
+---
+import Article from "../../components/Article.astro";
+import { getArticle } from "../../lib/articles.mjs";
+
+const meta = getArticle("/guides/vpn-vs-access-gateway/");
+---
+<Article meta={meta}>
+  <p>The choice between a VPN and an access gateway starts with what you are granting. People often frame it as VPN vs access gateway; the useful question is what the person receives. A VPN connects a device to a <strong>network</strong>. An access gateway authenticates a request to an <strong>application</strong>.</p>
+  <p>Ozal is an access gateway. It is not a VPN. Knowing which job you have makes the choice obvious.</p>
+
+  <h2>At a glance</h2>
+  <table tabindex="0">
+    <caption>What each tool grants</caption>
+    <thead>
+      <tr><th scope="col">VPN</th><th scope="col">Access gateway</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Network reachability</td><td>Access to one application</td></tr>
+      <tr><td>A VPN client on the device</td><td>A browser</td></tr>
+      <tr><td>Arbitrary IP traffic: TCP, UDP, ICMP</td><td>HTTP(S) for Ozal; other gateways vary</td></tr>
+      <tr><td>Network, route and firewall policy at connection time</td><td>Identity and a per-app rule on every request</td></tr>
+      <tr><td>The routes you allow</td><td>One hostname per application</td></tr>
+      <tr><td>Connection logs</td><td>A decision per request; Ozal adds a reason</td></tr>
+      <tr><td>SSH, RDP, databases, legacy clients, site-to-site</td><td>Dashboards, wikis, admin panels, internal web apps</td></tr>
+    </tbody>
+  </table>
+
+  <h2>What a VPN is good at</h2>
+  <ul>
+    <li><strong>Non-HTTP protocols.</strong> SSH, RDP, databases, message brokers, custom TCP or UDP services.</li>
+    <li><strong>Full network access.</strong> An administrator who needs many hosts and ports, not one web app.</li>
+    <li><strong>Site-to-site links.</strong> Two networks that must reach each other, not a person and an app.</li>
+    <li><strong>Legacy clients.</strong> Software that cannot perform an OIDC redirect or present a browser session.</li>
+    <li><strong>One tunnel for many services.</strong> When the network is the unit you actually manage, a VPN maps to it directly.</li>
+  </ul>
+
+  <h2>What an access gateway is good at</h2>
+  <ul>
+    <li><strong>Per-application rules.</strong> Who may reach Grafana is a different question from who may reach the wiki or the billing console.</li>
+    <li><strong>Less network exposure.</strong> The application has one hostname; the rest of the network is not on the path.</li>
+    <li><strong>Identity from the browser.</strong> OIDC or passkeys, no client to install and no network account to manage.</li>
+    <li><strong>Per-request audit.</strong> Every allowed and refused request can carry a code and a reason, not only a connection event.</li>
+    <li><strong>Third parties.</strong> A contractor can reach one app without joining the network.</li>
+  </ul>
+
+  <h2>They are not substitutes</h2>
+  <p>A VPN exposes a network; an access gateway exposes one application at a time. If you replace a VPN with an HTTP gateway, the SSH and database access does not come along. If you replace an access gateway with a VPN, every allowed person can reach more than the app, and the per-app rule disappears.</p>
+  <p>Ozal does not carry arbitrary TCP or UDP. It fronts HTTP applications and static sites. It also does not replace an application's own permissions: it decides who reaches the app, not what they do inside it.</p>
+
+  <h2>A practical pattern</h2>
+  <ul>
+    <li><strong>VPN or private network</strong> for SSH, databases, legacy clients and everything that is not HTTP.</li>
+    <li><strong>Ozal</strong> for the web apps: Grafana, a wiki, an admin panel, a preview site. Keep their origins on loopback or a private network so the gateway is the only public door.</li>
+    <li><strong>Both</strong> when the same team needs both kinds of access. They solve different halves of the problem.</li>
+  </ul>
+
+  <h2>Where Ozal fits</h2>
+  <p>Ozal is a self-hosted access gateway in one Go binary. It terminates HTTPS, authenticates with an OIDC provider or native passkeys, applies a rule per route, and forwards the request with the person's identity. It is an early alpha and is not production-ready.</p>
+
+  <h2>Choose a VPN if…</h2>
+  <ul>
+    <li>You need SSH, RDP, databases, arbitrary TCP/UDP or site-to-site connectivity.</li>
+    <li>You need full network access for administrators.</li>
+    <li>Your clients cannot use a browser-based sign-in.</li>
+  </ul>
+
+  <h2>Choose an access gateway if…</h2>
+  <ul>
+    <li>Your users reach HTTP applications and nothing else.</li>
+    <li>You want a rule per app, a sign-in per person and a reason per request.</li>
+    <li>You want to avoid installing a client and avoid exposing the network.</li>
+  </ul>
+
+  <h2>Verify it</h2>
+  <ul>
+    <li><a href="/#engine">Ask the real decision engine</a> which person may open which app, and why.</li>
+    <li><a href="/docs/security/">Read Ozal's trust boundaries</a> before comparing it with a network tunnel.</li>
+    <li><a href="/docs/reference/">Check the route and access fields</a> to see what a per-app rule can express.</li>
+    <li><a href="https://github.com/ozal-project/ozal">Read the source</a> if the security boundary matters to you.</li>
+  </ul>
+  <p class="small quiet">Ozal follows the main branch and is an early alpha; evaluate it against your own network and applications.</p>
+</Article>

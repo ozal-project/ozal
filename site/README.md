@@ -77,14 +77,20 @@ walk-through is only for autoplay. Buttons, toggles and summaries a thumb presse
 `/docs/` renders the user guides from the repository's own Markdown at build time; nothing is
 copied into `site/`. `src/lib/guides.mjs` lists them (Start here, the quickstart, install,
 publish an application, administer, security, and configuration and CLI) with their slugs, and
-`src/content.config.ts` loads those files from the repository root. `src/pages/docs/[...slug].astro`
-renders each one with the list of guides, its sections and a link to the file on GitHub, and
+`src/content.config.ts` loads those files from the repository root. `src/pages/docs/[...slug].astro` renders each one with the list of guides, its sections and a link to the file on GitHub, and
 rewrites its links: a link to another listed guide becomes its page with the anchor kept, any
 other repository file (design, engineering, examples) its GitHub page. A link that leaves the
 repository fails the build. Code blocks are plain, like the page's terminals: no highlighting
 styles. Each page says the guides follow main and that "Unreleased" features are not in alpha.1.
 A change to a listed guide republishes the site (`.github/workflows/site.yml` paths), and the
-guides are in `public/sitemap.xml` and `public/llms.txt`.
+guides are in the generated `/sitemap.xml` and `public/llms.txt`.
+
+The comparison and setup pages live outside `/docs`: `/compare/cloudflare-access/`,
+`/compare/pomerium/`, `/guides/grafana-sso/` and `/guides/vpn-vs-access-gateway/`.
+`src/lib/articles.mjs` is their single list: the sitemap, the home page's read-next row and
+the page metadata all come from it. They share `src/components/Article.astro` for the
+breadcrumb, the reviewed date, the schema and the read-next list. They are long-form, use
+the same prose styles as the guides, and link to each other and to the public documentation.
 
 The site presents capabilities without a public roadmap. The public source is linked; the page
 does not link to release downloads.
@@ -93,8 +99,10 @@ set only after the edge trusts the new repository owner and workflow.
 
 ## Discovery by search engines and assistants
 
-The page is static HTML, so every claim is readable without JavaScript. Four
-pieces carry the machine-readable layer:
+The page is static HTML, so every claim is readable without JavaScript. The
+home title and hero name the category in the words people search
+(`self-hosted access gateway`, `SSO`, `OIDC`, `passkeys`, `without a VPN`), and
+the guides carry it through. The machine-readable layer:
 
 - `public/robots.txt` allows ordinary search and names the assistant search
   and on-request agents explicitly (`OAI-SearchBot`, `ChatGPT-User`,
@@ -104,13 +112,23 @@ pieces carry the machine-readable layer:
   in answers does not need them. Cloudflare prepends its Content
   Signals preamble to the origin file, so the live response starts with that
   comment block and then this one.
-- `public/sitemap.xml` lists the canonical URL; `robots.txt` references it.
+- `src/pages/sitemap.xml.ts` builds the sitemap from the same lists as the
+  pages (guides and articles), so a new page appears without a second edit;
+  `robots.txt` references it. The 404 page is not listed.
+- `src/lib/articles.mjs` lists the comparison and setup pages under
+  `/compare/` and `/guides/`; the sitemap and the home's read-next row use
+  the same list.
 - `public/llms.txt` is a short Markdown summary for agents: what Ozal is, what
   it does, what it does not do, and links. No major provider documents reading
   `llms.txt` at inference time, so treat it as a summary for tools and people,
   not as a switch that makes ChatGPT or Claude cite the page.
-- `src/layouts/Base.astro` emits JSON-LD (`WebSite` + `SoftwareApplication`),
+- `src/layouts/Base.astro` emits JSON-LD: `WebSite` and `SoftwareApplication`
+  on the home page, a `WebPage` on every page, and a `TechArticle` with a
+  `BreadcrumbList` on each guide. It also sets `og:type=article` for guides,
   `robots` with `max-snippet:-1`, and Open Graph/Twitter metadata.
+- `src/pages/404.astro` builds `/404.html`. A deployment that ships that file
+  answers missing paths with it and status 404; the static handler gives it
+  precedence over the SPA fallback, so an Astro site does not need `spa`.
 - `public/<key>.txt` is the IndexNow key (public by design; the value is
   `INDEXNOW_KEY` in `.github/workflows/site.yml`). After a deploy passes
   public acceptance, the workflow posts the sitemap's URLs to
@@ -131,6 +149,11 @@ never guaranteed. Third-party mentions (self-hosted directories, comparison
 pages, GitHub topics and the README) are what make an assistant willing to
 name the product, not just describe the page.
 
+Changing the static handler and the site together matters: `ozalctl site
+accept` already rejects a 200 on an unknown path. Deploy the edge build that
+serves `404.html` before publishing a site that ships it, or acceptance will
+roll the site back.
+
 Verify the live result after publishing:
 
 ```bash
@@ -138,6 +161,7 @@ curl -sS https://ozal.dev/robots.txt | grep -E 'OAI-SearchBot|Claude-SearchBot|S
 curl -sSI https://ozal.dev/sitemap.xml | head -1
 curl -sSI https://ozal.dev/llms.txt | head -1
 curl -sS https://ozal.dev/ | grep -o 'application/ld+json'
+curl -sS -o /dev/null -w '%{http_code}\n' https://ozal.dev/no-such-page   # 404
 curl -sSI https://ozal.dev/ | grep -iE 'content-security-policy|strict-transport-security|x-frame-options|permissions-policy'
 ```
 

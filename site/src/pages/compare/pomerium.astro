@@ -1,0 +1,73 @@
+---
+import Article from "../../components/Article.astro";
+import { getArticle } from "../../lib/articles.mjs";
+
+const meta = getArticle("/compare/pomerium/");
+---
+<Article meta={meta}>
+  <p>If you are comparing Pomerium with a self-hosted alternative, the difference is scope. Both put a sign-in and a policy in front of an application, and both are meant to replace a network-level "connect first, ask later" model for HTTP apps.</p>
+  <p><strong>Pomerium</strong> is an established identity-aware proxy with Core, Zero and Enterprise editions, a policy language and routes beyond HTTP. <strong>Ozal</strong> is an early-alpha, single-binary access gateway for a small number of HTTP apps.</p>
+
+  <h2>At a glance</h2>
+  <table tabindex="0">
+    <caption>Pomerium and Ozal, by scope</caption>
+    <thead>
+      <tr><th scope="col">Pomerium</th><th scope="col">Ozal</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Open-source identity-aware proxy (Pomerium Core); Zero and Enterprise add control planes</td><td>Self-hosted access gateway in one Go binary</td></tr>
+      <tr><td>Core self-managed; Zero managed control plane; Enterprise self-hosted control plane</td><td>One edition, MIT</td></tr>
+      <tr><td>An external identity provider over OIDC; Pomerium is not an IdP</td><td>OIDC or native passkeys; no IdP required for passkeys</td></tr>
+      <tr><td>PPL (YAML), Rego in Enterprise, namespaces and clusters</td><td>Per-route fields; no policy language</td></tr>
+      <tr><td>HTTP plus non-HTTP, SSH, Kubernetes and reverse tunneling</td><td>HTTP applications and static sites</td></tr>
+      <tr><td>Core, Zero and Enterprise; containers, Kubernetes, replicas and scaling options</td><td>One binary on one host</td></tr>
+      <tr><td>Automatic certificates and domains</td><td>ACME certificates and domains</td></tr>
+      <tr><td>Audit logs</td><td>Decision codes and reasons; a durable audit trail when configured</td></tr>
+      <tr><td>Device identity and context-aware policy</td><td>Verified email, groups, recent sign-in, device-bound passkey; no device posture</td></tr>
+      <tr><td>Established project, public repository since 2019</td><td>Early alpha (2026), not production-ready</td></tr>
+      <tr><td>Apache-2.0 core; commercial editions</td><td>MIT</td></tr>
+    </tbody>
+  </table>
+
+  <h2>What Pomerium does better</h2>
+  <ul>
+    <li><strong>More than HTTP.</strong> Pomerium documents non-HTTP protocols, native SSH, Kubernetes access and reverse tunneling; Ozal is an HTTP reverse proxy.</li>
+    <li><strong>A policy language.</strong> PPL and Rego express rules that go beyond a route's allowlist. Ozal keeps policy in a small set of route fields by design.</li>
+    <li><strong>More deployment models.</strong> Core, Zero and Enterprise, with containers, Kubernetes, replicas and a control plane. Ozal is one binary on one host.</li>
+    <li><strong>Device identity and context.</strong> Pomerium can evaluate device identity and request context; Ozal has no device-posture signal.</li>
+    <li><strong>Maturity and support.</strong> An established project with a community, commercial editions and a larger feature surface.</li>
+  </ul>
+  <p>If you need a policy language, non-HTTP routes, Kubernetes, multiple replicas or device posture, Pomerium is the better starting point. Ozal does not try to match that surface.</p>
+
+  <h2>Where Ozal fits</h2>
+  <ul>
+    <li>You want one binary and a short route file, not a control plane and a policy language.</li>
+    <li>You want native passkeys without standing up an external identity provider; OIDC is also supported.</li>
+    <li>You run a small number of HTTP apps on one Linux host: Grafana, a wiki, an admin panel, a static site.</li>
+    <li>You want ACME TLS, static sites and the access decision in the same process.</li>
+    <li>You accept an early alpha and test before trusting it with anything important.</li>
+  </ul>
+
+  <h2>What Ozal does not do</h2>
+  <ul>
+    <li>It is not production-ready. Interfaces, configuration keys and behavior may change.</li>
+    <li>It is HTTP only: no SSH, Kubernetes, arbitrary TCP/UDP or non-HTTP protocols.</li>
+    <li>It has no policy language, namespaces or multi-replica control plane.</li>
+    <li>It has no device posture or endpoint agent.</li>
+    <li>It is not an identity provider; it uses OIDC or its own passkeys.</li>
+    <li>Its console is unreleased in alpha.1.</li>
+  </ul>
+
+  <h2>How to decide</h2>
+  <p><strong>Choose Pomerium</strong> if you need complex policy, non-HTTP routes, Kubernetes, multiple replicas or device identity. It is the more complete self-hosted gateway.</p>
+  <p><strong>Choose Ozal</strong> if you want a small, self-hosted HTTP gateway with native passkeys and one binary, and you can operate it as an alpha. Start with the <a href="/">live demo</a>, then read <a href="/docs/">the guides</a> and the <a href="https://github.com/ozal-project/ozal">source</a>.</p>
+
+  <h2>Verify it</h2>
+  <ul>
+    <li><a href="/#engine">Ask the real decision engine</a> in the browser: four people, four apps, no sign-up.</li>
+    <li><a href="/docs/reference/">Check the route and access fields</a> against the Pomerium policy you would write.</li>
+    <li><a href="/docs/security/">Read Ozal's trust boundaries</a>: what it strips, what it forwards and what it never protects.</li>
+    <li><a href="https://www.pomerium.com/docs/capabilities/authorization">Read Pomerium's authorization documentation</a> for PPL, Rego, namespaces and clusters.</li>
+  </ul>
+  <p class="small quiet">Pomerium is a trademark of its owners. Ozal is not affiliated with Pomerium. Pomerium's product changes; check its documentation. Reviewed 17 November 2026.</p>
+</Article>

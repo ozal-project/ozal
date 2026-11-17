@@ -5,6 +5,7 @@ import Footer from "../components/Footer.astro";
 import Engine from "../components/Engine.astro";
 import Door from "../components/Door.astro";
 import Logo from "../components/Logo.astro";
+import { ARTICLES } from "../lib/articles.mjs";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
@@ -68,7 +69,11 @@ const works = [
 ];
 const slug = (e: string) => e.toLowerCase().replace(" ", "-");
 ---
-<Base title="Ozal — the front door for your self-hosted apps" description="Put your internal apps on the internet without a VPN. Ozal signs people in, checks your rules and only then lets them reach the app. Self-hosted, one Go binary.">
+<Base
+  title="Ozal — self-hosted access gateway with SSO and passkeys"
+  description="Ozal is a self-hosted access gateway: OIDC or passkeys, per-app policy and HTTPS for Grafana, a wiki or any internal app. No VPN, one Go binary."
+  app
+>
   <Header />
 
   <main id="main-content" tabindex="-1">
@@ -76,12 +81,12 @@ const slug = (e: string) => e.toLowerCase().replace(" ", "-");
       <div class="hero-copy">
         <p class="hero-mark"><Logo size={44} entrance id="logo-hero" /><span class="label">Open source · early alpha</span></p>
         <h1 id="hero-title"><span>The <em class="loud">front door</em></span> <span>for your</span> <span>self&#8209;hosted apps.</span></h1>
-        <p class="hero-description">Put Grafana, a wiki or any internal tool on the internet. Ozal signs people in, checks your rules, and only then lets them reach the app. No VPN, one Go binary.</p>
+        <p class="hero-description">Ozal is a self-hosted access gateway. It puts Grafana, a wiki or any internal app behind SSO with OIDC or passkeys, applies a rule per app, and only then lets people in. No VPN, one Go binary.</p>
         <div class="hero-actions">
           <a class="button" href="#start">Get started <span aria-hidden="true">↓</span></a>
           <a class="text-link" href="#engine">Try the live demo <span aria-hidden="true">↓</span></a>
         </div>
-        <p class="hero-note">If you know Cloudflare Access or Pomerium: the same idea, on a server you own.</p>
+        <p class="hero-note">If you know <a href="/compare/cloudflare-access/">Cloudflare Access</a> or <a href="/compare/pomerium/">Pomerium</a>: the same idea, on a server you own.</p>
       </div>
       <Door />
     </section>
@@ -99,10 +104,14 @@ const slug = (e: string) => e.toLowerCase().replace(" ", "-");
       <div class="head">
         <p class="label">Why it exists</p>
         <h2 id="why-title">Sharing an internal tool usually costs you something.</h2>
+        <p>Ozal is the self-hosted option: one access gateway on your server, instead of a VPN, a hosted gateway such as Cloudflare Access or Pomerium, or a reverse proxy wired together by hand.</p>
       </div>
       <ul class="options">
         {options.map((o) => <li><h3>{o.t}</h3><p>{o.d}</p><p class="options-cost">{o.cost}</p></li>)}
         <li class="options-ozal"><h3>Or one front door</h3><p>A single binary on your server that every request reaches first.</p><p class="options-cost">HTTPS, sign-in, a rule per app and a reason for every answer. Your apps do not change.</p></li>
+      </ul>
+      <ul class="further" aria-label="Comparisons and guides">
+        {ARTICLES.map((article) => <li><a href={article.path}>{article.nav}</a></li>)}
       </ul>
     </section>
 
