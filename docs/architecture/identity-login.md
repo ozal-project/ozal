@@ -235,6 +235,7 @@ A route's `access` gains two optional fields:
 | Phishing page | The browser signs only for the real origin; a look-alike domain gets no passkey | None for passkeys; social engineering of the operator is out of band |
 | Stolen database | Public keys and SHA-256 hashes only | Metadata (names, emails) is exposed |
 | Stolen session cookie (infostealer) | Short lifetime, step-up on sensitive routes, revocation | A cookie remains usable until it expires or is revoked |
+| Unrelated app on a covered subdomain | Keep it outside `cookie_domain`; host sessions cover apps on other domains | A server on any covered host receives the session cookie; `HttpOnly` does not help |
 | Replay of a login response | Single-use, short-lived challenge bound to the pre-login cookie | — |
 | Cloned authenticator | Sign-count check + alert | Synced passkeys report 0 and cannot be checked this way |
 | Intercepted enrolment link | 15 min, single use, fragment + POST, alert on every new passkey | A link stolen inside 15 min is a real risk: send it over a channel you trust |

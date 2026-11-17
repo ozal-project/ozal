@@ -35,6 +35,25 @@ func TestLoadValidConfig(t *testing.T) {
 	}
 }
 
+func TestDevErrorsRequiresALoopbackListener(t *testing.T) {
+	for _, address := range []string{"127.0.0.1:8888", "[::1]:8888", "localhost:8888"} {
+		t.Run("allowed/"+address, func(t *testing.T) {
+			raw := `{"listen":"` + address + `","dev_errors":true,"routes":[{"host":"app.localhost","target":"http://127.0.0.1:9000"}]}`
+			if _, err := Parse([]byte(raw)); err != nil {
+				t.Fatalf("loopback listen %q rejected: %v", address, err)
+			}
+		})
+	}
+	for _, address := range []string{":8888", "0.0.0.0:8888", "192.0.2.10:8888", "example.com:8888"} {
+		t.Run("refused/"+address, func(t *testing.T) {
+			raw := `{"listen":"` + address + `","dev_errors":true,"routes":[{"host":"app.localhost","target":"http://127.0.0.1:9000"}]}`
+			if _, err := Parse([]byte(raw)); err == nil || !strings.Contains(err.Error(), "dev_errors is local-only") {
+				t.Fatalf("public listen %q with dev_errors: %v", address, err)
+			}
+		})
+	}
+}
+
 func TestExampleConfigLoadsWithoutProjectDeclarations(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("..", "..", "config.example.json"))
 	if err != nil {

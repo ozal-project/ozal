@@ -60,7 +60,8 @@ rm -rf /tmp/ozal-demo
   not grant administrative access. See [secret references](docs/reference.md#secrets)
   for `env:`/`file:` token references.
 - The admin listener is loopback-only and rejects any other `Host` (421).
-- `dev_errors: true` is local-only: it prints upstream addresses and the route
-  list on errors. Never enable it on a public edge.
+- `dev_errors: true` is local-only and validation refuses a non-loopback
+  `listen`: it prints upstream addresses and the route list on errors. Never
+  enable it on a public edge.
 - The steps are written for Linux/macOS shells; on Windows use the PowerShell
   equivalents (`python -m http.server`, `curl.exe`).

@@ -65,7 +65,7 @@ jobs:
       - name: Build
         working-directory: site
         run: |
-          npm ci
+          npm ci --ignore-scripts
           npm run build
 
       - name: Build the native operator

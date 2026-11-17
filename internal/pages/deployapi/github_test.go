@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"strings"
 	"testing"
@@ -73,6 +75,42 @@ func TestGitHubVerifierChecksSignatureIssuerAudienceExpiryAndIDs(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestGitHubVerifierRejectsEmbeddedKeysBeforeParsing(t *testing.T) {
+	encode := base64.RawURLEncoding.EncodeToString
+	header, err := json.Marshal(map[string]any{
+		"alg": "RS256",
+		"kid": "fixture",
+		"jwk": map[string]string{
+			"kty": "RSA",
+			"n":   encode(new(big.Int).Lsh(big.NewInt(1), 2048).Bytes()),
+			"e":   encode(big.NewInt(65537).Bytes()),
+			"d":   encode(big.NewInt(3).Bytes()),
+			"p":   encode(new(big.Int).Lsh(big.NewInt(1), 8192).Bytes()),
+			"q":   encode(big.NewInt(3).Bytes()),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims, err := json.Marshal(map[string]any{"iss": GitHubIssuer, "sub": "synthetic", "aud": "deploy-test", "exp": time.Now().Add(time.Minute).Unix()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := encode(header) + "." + encode(claims) + "." + encode([]byte("invalid-signature"))
+	fetches := 0
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		fetches++
+		return nil, fmt.Errorf("unexpected network request")
+	})}
+	verifier := NewGitHubVerifier(context.Background(), "deploy-test", client)
+	if _, err := verifier.Verify(context.Background(), token); err == nil {
+		t.Fatal("accepted a token with an embedded key")
+	}
+	if fetches != 0 {
+		t.Fatalf("embedded key reached the key set: %d fetches", fetches)
 	}
 }
 

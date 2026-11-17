@@ -289,7 +289,9 @@ type Auth struct {
 	// (which always happens on redirect_url's host) won't be sent back on
 	// the other hosts' requests, and they'll redirect to login in a loop.
 	// With the passkey login, a protected host it does not cover gets its
-	// own host session from the login instead (ID-015).
+	// own host session from the login instead (ID-015). The cookie also
+	// reaches subdomains Ozal does not serve: a server there receives it, so
+	// keep unrelated sites on another domain.
 	CookieDomain string `json:"cookie_domain,omitempty"`
 
 	// ProviderName labels the OIDC button on the passkey login page when both
@@ -519,6 +521,11 @@ func Validate(cfg Config) (*Config, error) {
 	}
 	if cfg.Listen == "" {
 		return nil, fmt.Errorf("config: listen address is required")
+	}
+	if cfg.DevErrors {
+		if err := validateDevErrorsListen(cfg.Listen); err != nil {
+			return nil, fmt.Errorf("config: %w", err)
+		}
 	}
 	proxies, err := ParseTrustedProxies(cfg.TrustedProxies)
 	if err != nil {

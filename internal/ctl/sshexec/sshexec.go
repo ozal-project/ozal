@@ -37,7 +37,9 @@ func expandHome(p string) string {
 
 func (s Remote) base(extra ...string) []string {
 	args := []string{"-i", expandHome(s.Key), "-o", "ConnectTimeout=10"}
-	return append(append(args, extra...), s.Target)
+	// -- ends option parsing: a target that starts with '-' is still the
+	// destination, never an ssh option.
+	return append(append(args, extra...), "--", s.Target)
 }
 
 // Run implements ctl.Remote.

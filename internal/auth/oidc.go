@@ -352,27 +352,32 @@ func (g *Gate) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	g.emit(events.Event{Type: events.LoginSucceeded, Actor: principal.Subject, Host: r.Host, RemoteAddr: r.RemoteAddr})
 
 	http.SetCookie(w, SessionCookie(sessionID, g.cookieDomain, g.secure(r), g.lifetime))
-	http.Redirect(w, r, g.safeReturnTo(pl.ReturnTo), http.StatusFound)
+	http.Redirect(w, r, g.safeReturnTo(r, pl.ReturnTo), http.StatusFound)
 }
 
 // safeReturnTo only honors returnTo if it points at a host this Gate was
 // configured to protect — otherwise it's an open-redirect vector, since
-// returnTo comes from a query parameter an attacker fully controls.
-func (g *Gate) safeReturnTo(returnTo string) string {
-	return SafeReturnTo(g.allowedHosts, returnTo)
+// returnTo comes from a query parameter an attacker fully controls. On an
+// HTTPS request it also refuses a downgrade to plain HTTP.
+func (g *Gate) safeReturnTo(r *http.Request, returnTo string) string {
+	return SafeReturnTo(g.allowedHosts, returnTo, g.secure(r))
 }
 
 // SafeReturnTo returns returnTo when it is an http(s) URL without userinfo
 // on one of the allowed (normalized) hosts, and "/" otherwise. Every login
 // flow uses it: a return address comes from a query parameter an attacker
-// controls.
-func SafeReturnTo(allowedHosts map[string]bool, returnTo string) string {
+// controls. requireHTTPS is true when the login itself arrived over HTTPS;
+// the redirect then cannot downgrade the visitor to plain HTTP.
+func SafeReturnTo(allowedHosts map[string]bool, returnTo string, requireHTTPS bool) string {
 	u, err := url.Parse(returnTo)
 	if err != nil || u.User != nil {
 		return "/"
 	}
 	scheme := strings.ToLower(u.Scheme)
 	if scheme != "http" && scheme != "https" {
+		return "/"
+	}
+	if requireHTTPS && scheme != "https" {
 		return "/"
 	}
 	host, err := config.NormalizeHost(u.Host)

@@ -85,7 +85,7 @@ func (s *Signer) PublicKeyPEM() []byte {
 // Verify parses and checks an assertion against pinned keys, by key ID. It is
 // the reference an application can follow; Ozal uses it in its own tests.
 func Verify(token string, keys []ed25519.PublicKey, issuer, audience string, now time.Time, skew time.Duration) (Claims, string, error) {
-	signed, err := jose.ParseSigned(token, []jose.SignatureAlgorithm{jose.EdDSA})
+	signed, err := jose.ParseSignedCompact(token, []jose.SignatureAlgorithm{jose.EdDSA})
 	if err != nil || len(signed.Signatures) != 1 {
 		return Claims{}, "", errors.New("assertion: not a single-signature EdDSA JWS")
 	}

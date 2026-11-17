@@ -109,7 +109,7 @@ your own local file and do not commit it to Git. Validation rejects unknown keys
 |---|---|
 | `listen` | HTTP listener; ignored when TLS uses the fixed public listeners |
 | `admin.listen` | Loopback administration; default `127.0.0.1:9090` |
-| `admin.socket` | Private Unix socket; its file permission grants local authority |
+| `admin.socket` | Private Unix socket; its file permission grants local authority and its directory must not be writable by group or others |
 | `admin.socket_group` | System group with access to the socket (mode `0660`); its members operate without `sudo` and are audited as `local:<user>`. Requires `admin.socket`; rejects `root`/`wheel`, and startup fails if the service does not belong to the group or the directory is not traversable |
 | `admin.login_host` | Administrator passkeys are created and used at `auth.passkeys.login_url` (HTTPS) instead of `http://ozal.localhost`, where many authenticators do not work; the console stays on loopback and receives the session through a one-time code bound to a verifier in the tab. Requires `auth.passkeys`. Earlier passkeys on `ozal.localhost` keep working. Visitors and administrators then share the login domain: the administrator sign-in names only administrator passkeys to the browser, and an administrator passkey is saved as `<email> · Ozal console` and a visitor passkey as `<email> · sign-in`, so a password manager does not offer a visitor passkey for the console. The visitor sign-in cannot narrow the list the same way without revealing which emails have an account, so a console passkey chosen there gets a message saying to pick the other one. With it, `console enrol` and `console recover` print a code instead of a link: see [Enrolment by code](#enrolment-by-code) |
 | `admin.remote` | `{"host": "console.example.com"}` also serves the console on its own HTTPS host through the public listener, behind an administrator passkey. Off when omitted; the admin listener and socket do not change. Requires `admin.login_host`, an `https` `auth.passkeys.login_url`, and HTTPS to the visitor (`tls.enabled` or the Cloudflare Tunnel profile). The host cannot be an application, the login host or `pages.deploy.host`. It can be added or removed with a reload. See [Remote console](#remote-console) |
@@ -121,7 +121,7 @@ your own local file and do not commit it to Git. Validation rejects unknown keys
 | `runtime_file` | Operational projection of the service: routes, projects and GitHub |
 | `routes` | Hosts and destinations, with optional policy |
 | `upstream_timeout_seconds` | Wait for upstream headers: 60 s by default, maximum 3600; does not limit the body |
-| `dev_errors` | Local diagnostics; keep `false` on any public exposure |
+| `dev_errors` | Local diagnostics; validation requires a loopback `listen`, and it stays unsafe on any public exposure |
 
 The runtime is initialized explicitly and does not replace listeners, TLS or host
 authority. See [service state ownership](operations/administration.md#service-and-state-ownership).
@@ -283,7 +283,7 @@ touching the configuration. `sudo ozal console list` marks remote sessions.
 External OIDC configures `auth.issuer`, `client_id`, `client_secret` and `redirect_url`.
 The last must match exactly the authorized callback `/_/auth/callback`. Only OIDC requires
 a shared `cookie_domain` for private apps on different hosts. Login and redirects are
-restricted to authorized hosts.
+restricted to authorized hosts, and an HTTPS login refuses a plain-HTTP destination.
 
 Native passkeys need SQLite and:
 
@@ -297,6 +297,14 @@ Native passkeys need SQLite and:
 This is a fragment for a complete configuration, not a standalone file. Use HTTPS except
 in the localhost development context. Passkeys are bound to the RP and origin; changing
 domain requires enrollment, not copying credentials.
+
+`cookie_domain` shares the session cookie with every host it covers, including a
+subdomain that Ozal does not serve: a server there receives the cookie and can replay
+it. Keep unrelated sites on another domain; for a private app outside the login domain,
+use host sessions instead. Leave `cookie_domain` unset when the login host is enough:
+the cookie is then host-only. The console uses `__Host-` cookies; a visitor cookie
+shared through `cookie_domain` cannot, because that prefix forbids `Domain`. `HttpOnly`
+protects against page scripts, not against the server that receives the cookie.
 
 OIDC and passkeys can coexist: the callback is `login_url` + `/_/auth/callback`,
 `provider_name` labels the button, and the visitor chooses. A recent or device-bound

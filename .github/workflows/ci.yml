@@ -46,8 +46,8 @@ jobs:
       - name: Install frontend dependencies
         if: startsWith(matrix.os, 'ubuntu')
         run: |
-          npm ci --prefix web/console --no-audit --no-fund
-          npm ci --prefix site --no-audit --no-fund
+          npm ci --prefix web/console --no-audit --no-fund --ignore-scripts
+          npm ci --prefix site --no-audit --no-fund --ignore-scripts
       - name: Gate
         env:
           # Required on Linux; macOS runs the Go gate only.

@@ -138,6 +138,7 @@ curl -sS https://ozal.dev/robots.txt | grep -E 'OAI-SearchBot|Claude-SearchBot|S
 curl -sSI https://ozal.dev/sitemap.xml | head -1
 curl -sSI https://ozal.dev/llms.txt | head -1
 curl -sS https://ozal.dev/ | grep -o 'application/ld+json'
+curl -sSI https://ozal.dev/ | grep -iE 'content-security-policy|strict-transport-security|x-frame-options|permissions-policy'
 ```
 
 Browser regression checks reuse the tour's existing Playwright dependency:

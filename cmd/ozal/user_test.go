@@ -23,7 +23,7 @@ func TestInviteReturnToMustBeAProtectedHost(t *testing.T) {
 	if query, err := inviteQuery(cfg, ""); err != nil || query != "" {
 		t.Fatalf("no destination: %q, %v", query, err)
 	}
-	for _, bad := range []string{"https://public.example.com/", "https://evil.example/", "//evil.example/", "javascript:alert(1)", "https://private.example.com@evil.example/"} {
+	for _, bad := range []string{"https://public.example.com/", "https://evil.example/", "//evil.example/", "javascript:alert(1)", "https://private.example.com@evil.example/", "http://private.example.com/notes"} {
 		if _, err := inviteQuery(cfg, bad); err == nil || !strings.Contains(err.Error(), "protected host") {
 			t.Fatalf("%q accepted: %v", bad, err)
 		}

@@ -9,10 +9,10 @@ import (
 )
 
 // FuzzSafeReturnTo checks the open-redirect guard: anything returned must be
-// an absolute HTTP(S) URL without userinfo on an allowed host, and feeding it
-// back must be a fixed point.
+// an absolute HTTP(S) URL without userinfo on an allowed host, an HTTPS login
+// never returns plain HTTP, and feeding the result back is a fixed point.
 func FuzzSafeReturnTo(f *testing.F) {
-	gate := &Gate{allowedHosts: map[string]bool{"app.example.com": true}}
+	allowed := map[string]bool{"app.example.com": true}
 	f.Add("https://app.example.com/dashboard?x=1")
 	f.Add("https://evil.example.com/")
 	f.Add("//app.example.com/path")
@@ -20,26 +20,31 @@ func FuzzSafeReturnTo(f *testing.F) {
 	f.Add("")
 
 	f.Fuzz(func(t *testing.T, raw string) {
-		got := gate.safeReturnTo(raw)
-		if got == "/" {
-			return
-		}
-		u, err := url.Parse(got)
-		if err != nil {
-			t.Fatalf("safeReturnTo(%q) = %q, unparsable: %v", raw, got, err)
-		}
-		if u.User != nil {
-			t.Fatalf("safeReturnTo(%q) returned userinfo: %q", raw, got)
-		}
-		if u.Scheme != "http" && u.Scheme != "https" {
-			t.Fatalf("safeReturnTo(%q) returned scheme %q", raw, u.Scheme)
-		}
-		host, err := config.NormalizeHost(u.Host)
-		if err != nil || !gate.allowedHosts[host] {
-			t.Fatalf("safeReturnTo(%q) returned disallowed host %q", raw, u.Host)
-		}
-		if again := gate.safeReturnTo(got); again != got {
-			t.Fatalf("safeReturnTo is not idempotent: %q -> %q", got, again)
+		for _, requireHTTPS := range []bool{false, true} {
+			got := SafeReturnTo(allowed, raw, requireHTTPS)
+			if got == "/" {
+				continue
+			}
+			u, err := url.Parse(got)
+			if err != nil {
+				t.Fatalf("SafeReturnTo(%q, %t) = %q, unparsable: %v", raw, requireHTTPS, got, err)
+			}
+			if u.User != nil {
+				t.Fatalf("SafeReturnTo(%q, %t) returned userinfo: %q", raw, requireHTTPS, got)
+			}
+			if u.Scheme != "http" && u.Scheme != "https" {
+				t.Fatalf("SafeReturnTo(%q, %t) returned scheme %q", raw, requireHTTPS, u.Scheme)
+			}
+			if requireHTTPS && u.Scheme != "https" {
+				t.Fatalf("SafeReturnTo(%q, true) downgraded to %q", raw, got)
+			}
+			host, err := config.NormalizeHost(u.Host)
+			if err != nil || !allowed[host] {
+				t.Fatalf("SafeReturnTo(%q, %t) returned disallowed host %q", raw, requireHTTPS, u.Host)
+			}
+			if again := SafeReturnTo(allowed, got, requireHTTPS); again != got {
+				t.Fatalf("SafeReturnTo is not idempotent: %q -> %q", got, again)
+			}
 		}
 	})
 }

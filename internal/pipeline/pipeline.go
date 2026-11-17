@@ -51,7 +51,10 @@ func stripIdentityHeaders(h http.Header) {
 }
 
 func isIdentityHeader(name string) bool {
-	normalized := strings.ReplaceAll(name, "_", "-")
-	return strings.EqualFold(normalized, IdentityEmailHeader) ||
-		strings.EqualFold(normalized, IdentityUserHeader)
+	// Reserve the whole oauth2-proxy namespace, not only the two headers
+	// Ozal injects. Applications commonly trust X-Auth-Request-Groups,
+	// X-Auth-Request-Preferred-Username and similar headers, so leaving any
+	// spelling of the prefix in place would let a client assert them.
+	normalized := strings.ToLower(strings.ReplaceAll(name, "_", "-"))
+	return strings.HasPrefix(normalized, "x-auth-request-")
 }

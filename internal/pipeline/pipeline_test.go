@@ -45,9 +45,13 @@ func TestTrustStripsSpoofedIdentityHeaders(t *testing.T) {
 	}{
 		{"canonical email", "X-Auth-Request-Email"},
 		{"canonical user", "X-Auth-Request-User"},
+		{"groups", "X-Auth-Request-Groups"},
+		{"preferred username", "X-Auth-Request-Preferred-Username"},
+		{"access token", "X-Auth-Request-Access-Token"},
 		{"lowercase", "x-auth-request-user"},
 		{"underscore variant", "X_auth_request_email"},
 		{"mixed separators", "X_Auth-Request_User"},
+		{"nested name", "X-Auth-Request-Email-Extra"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -63,11 +67,30 @@ func TestTrustStripsSpoofedIdentityHeaders(t *testing.T) {
 		})
 	}
 
-	t.Run("keeps a longer lookalike", func(t *testing.T) {
-		h := http.Header{"X-Auth-Request-Email-Extra": []string{"keep-me"}}
+	t.Run("keeps a lookalike outside the prefix", func(t *testing.T) {
+		h := http.Header{"X-Auth-Requested-Email": []string{"keep-me"}}
 		stripIdentityHeaders(h)
-		if got := h.Get("X-Auth-Request-Email-Extra"); got != "keep-me" {
+		if got := h.Get("X-Auth-Requested-Email"); got != "keep-me" {
 			t.Fatalf("lookalike header = %q, want keep-me", got)
 		}
 	})
+}
+
+func TestTrustStripsTheWholeOAuth2ProxyNamespace(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "http://app.localhost/", nil)
+	req.RemoteAddr = "203.0.113.9:1234"
+	for _, name := range []string{"X-Auth-Request-Email", "X-Auth-Request-Groups", "X-Auth-Request-Preferred-Username"} {
+		req.Header.Set(name, "forged")
+	}
+	req.Header.Set("X-Request-Id", "keep-me")
+	Trust(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for _, name := range []string{"X-Auth-Request-Email", "X-Auth-Request-Groups", "X-Auth-Request-Preferred-Username"} {
+			if got := r.Header.Get(name); got != "" {
+				t.Errorf("%s reached the handler: %q", name, got)
+			}
+		}
+		if got := r.Header.Get("X-Request-Id"); got != "keep-me" {
+			t.Errorf("X-Request-Id = %q, want keep-me", got)
+		}
+	})).ServeHTTP(httptest.NewRecorder(), req)
 }
