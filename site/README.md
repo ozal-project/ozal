@@ -1,16 +1,26 @@
 # Ozal project page
 
 Static site for `ozal.dev` (`ozal.octaviosantacruz.com` and the old `switchboard.`
-hostname stay as aliases), built with Astro and served by Ozal Pages. It follows
+hostname stay as aliases), built with Astro. The live site is published by the
+Cloudflare Pages project `ozal` from this repository; the Ozal Pages workflow is
+the migration path and stays disabled until the edge is ready. It follows
 [product design](../docs/architecture/product-design.md): a graphite ground and grey-white
 text, indigo as the only loud colour, on the detail to see first (the headline, the next action,
 the current choice), Geist, and green, red and blue kept for states.
 
-Publishing is CI: a push to `main` that touches `site/` or the engine paths
-runs `.github/workflows/site.yml`, which builds, refuses secrets
-in `dist/`, uploads through the deploy endpoint with a GitHub OIDC token (project
-`ozal-site`, renamed on the edge with `ozal project rename`), checks the public page and rolls back to the last good build
-if that check fails. Every claim, the doorway's three requests, the tour and the status list work without JavaScript.
+Publishing today: a push to `main` is built by the Cloudflare Pages project
+`ozal` (GitHub `ozal-project/ozal`, production branch `main`). Its build command
+is `bash scripts/build-site-engine.sh && npm --prefix site ci && npm --prefix site run build`;
+the output directory is `site/dist`, and `ozal.dev` is a custom domain of that
+project. The project deploys independently of the Ozal edge.
+
+The Ozal Pages workflow (`.github/workflows/site.yml`) is the migration path. It
+stays disabled while `OZAL_SITE_DEPLOY_ENABLED` is false: it builds, refuses
+secrets in `dist/`, uploads through the deploy endpoint with a GitHub OIDC token
+(project `ozal-site`, renamed on the edge with `ozal project rename`), checks the
+public page and rolls back to the last good build if that check fails. Enable it
+only after the deploy endpoint is reachable, the edge runs the current binary and
+the DNS moves from `ozal.pages.dev` to the edge. Every claim, the doorway's three requests, the tour and the status list work without JavaScript.
 Only the live engine, the doorway's playback, the tour's sticky stage, the copy button and entrance motion use client scripts;
 all content is visible if those scripts fail.
 
@@ -82,7 +92,8 @@ rewrites its links: a link to another listed guide becomes its page with the anc
 other repository file (design, engineering, examples) its GitHub page. A link that leaves the
 repository fails the build. Code blocks are plain, like the page's terminals: no highlighting
 styles. Each page says the guides follow main and that "Unreleased" features are not in alpha.1.
-A change to a listed guide republishes the site (`.github/workflows/site.yml` paths), and the
+A change to a listed guide republishes the site: Cloudflare Pages rebuilds on a push that
+touches `site/` or the guide, and the Ozal workflow has its own paths for the migration. The
 guides are in the generated `/sitemap.xml` and `public/llms.txt`.
 
 The comparison and setup pages live outside `/docs`: `/compare/cloudflare-access/`,
@@ -94,8 +105,9 @@ the same prose styles as the guides, and link to each other and to the public do
 
 The site presents capabilities without a public roadmap. The public source is linked; the page
 does not link to release downloads.
-Automatic site publication requires repository variable `OZAL_SITE_DEPLOY_ENABLED=true`,
-set only after the edge trusts the new repository owner and workflow.
+The live site does not need `OZAL_SITE_DEPLOY_ENABLED`. That variable enables the Ozal Pages
+migration workflow only; the Cloudflare Pages project publishes on its own. When the migration
+is ready, set the variable to true and move the DNS in the same change.
 
 ## Discovery by search engines and assistants
 
@@ -130,11 +142,13 @@ the guides carry it through. The machine-readable layer:
   answers missing paths with it and status 404; the static handler gives it
   precedence over the SPA fallback, so an Astro site does not need `spa`.
 - `public/<key>.txt` is the IndexNow key (public by design; the value is
-  `INDEXNOW_KEY` in `.github/workflows/site.yml`). After a deploy passes
-  public acceptance, the workflow posts the sitemap's URLs to
-  `api.indexnow.org`, which tells Bing and the other IndexNow engines at once.
-  A refusal is a warning in the run summary and never fails the deploy. To
-  rotate the key, replace the file and the variable in the same commit.
+  `INDEXNOW_KEY` in `.github/workflows/site.yml`). The Ozal Pages workflow posts
+  the sitemap's URLs to `api.indexnow.org` after a deploy passes public
+  acceptance, which tells Bing and the other IndexNow engines at once. The
+  Cloudflare Pages path does not submit automatically: after a content change,
+  submit the sitemap in Bing or make the same request. A refusal is a warning,
+  never a failed deploy. To rotate the key, replace the file and the variable in
+  the same commit.
 - Cloudflare's Email Address Obfuscation is off for `ozal.dev` (2026-11-01):
   it rewrote the demo's fictional addresses into `/cdn-cgi/l/email-protection`
   links, so crawlers without JavaScript read "[email protected]" and followed

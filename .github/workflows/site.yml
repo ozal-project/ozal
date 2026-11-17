@@ -1,6 +1,10 @@
 name: site
 
-# Builds the public project page and publishes it to ozal.dev
+# Ozal Pages publication (migration path). The live site is published by the
+# Cloudflare Pages project `ozal` from this repository; this workflow is kept
+# for the move to Ozal Pages and is disabled by OZAL_SITE_DEPLOY_ENABLED.
+#
+# It builds the public project page and publishes it to ozal.dev
 # through this edge's own deploy endpoint (PAGES-004/PAGES-008). The edge trusts
 # only this file, in this repository, on main, run by a push or by hand, through
 # a GitHub OIDC token: no deploy secret is stored here. Renaming this file or the
@@ -32,7 +36,8 @@ env:
 
 jobs:
   deploy:
-    # Enable only after the edge trusts this repository's owner/workflow.
+    # Enable only after the deploy endpoint is reachable, the edge runs the
+    # current binary and the DNS is ready for the migration.
     if: vars.OZAL_SITE_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
