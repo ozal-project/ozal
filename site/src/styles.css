@@ -133,6 +133,10 @@
   .hero-install { margin-top: 30px; max-width: 34rem; }
   .hero-install-label { color: var(--color-ink-2); font-size: var(--t-small); font-weight: 600; }
   .hero-install-code { margin-top: 10px; padding: 12px 16px; border: 1px solid var(--color-tile-3); border-radius: 8px; background: var(--color-tile); color: var(--color-ink); font-family: var(--font-mono); font-size: .8125rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+  /* The copy button sits inside the box, so the command keeps its width. */
+  .hero-install-box { position: relative; margin-top: 10px; }
+  .hero-install-box .hero-install-code { margin-top: 0; padding-right: 76px; }
+  .hero-install-box .copy { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); }
   .hero-install-note { margin-top: 8px; color: var(--color-muted); font-size: var(--t-micro); }
   .hero-install-note a { color: var(--color-ink-2); text-decoration: underline; text-underline-offset: 3px; }
   .hero-note { margin-top: 30px; max-width: 50ch; color: var(--color-muted); font-size: var(--t-small); line-height: 1.6; }
