@@ -89,7 +89,7 @@ if (walk && observing) {
 
 // Copy buttons appear only when the clipboard can be written.
 for (const button of document.querySelectorAll<HTMLButtonElement>("[data-copy]")) {
-  const source = button.closest("figure")?.querySelector("[data-copy-source]");
+  const source = button.closest("figure, [data-copy-scope]")?.querySelector("[data-copy-source]");
   if (!source || !navigator.clipboard) continue;
   button.hidden = false;
   button.addEventListener("click", async () => {

@@ -88,7 +88,10 @@ const slug = (e: string) => e.toLowerCase().replace(" ", "-");
         </div>
         <div class="hero-install">
           <p class="hero-install-label">Install on a Linux server</p>
-          <pre class="hero-install-code" tabindex="0"><code>curl -fsSL https://ozal.dev/install.sh | sh</code></pre>
+          <div class="hero-install-box" data-copy-scope>
+            <pre class="hero-install-code" tabindex="0"><code data-copy-source>curl -fsSL https://ozal.dev/install.sh | sh</code></pre>
+            <button type="button" class="copy" data-copy hidden>Copy</button>
+          </div>
           <p class="hero-install-note">The installer verifies the signed release first. <a href="#start">What it checks</a>.</p>
         </div>
         <p class="hero-note">If you know <a href="/compare/cloudflare-access/">Cloudflare Access</a> or <a href="/compare/pomerium/">Pomerium</a>: the same idea, on a server you own.</p>
