@@ -163,10 +163,15 @@ never guaranteed. Third-party mentions (self-hosted directories, comparison
 pages, GitHub topics and the README) are what make an assistant willing to
 name the product, not just describe the page.
 
-Changing the static handler and the site together matters: `ozalctl site
-accept` already rejects a 200 on an unknown path. Deploy the edge build that
-serves `404.html` before publishing a site that ships it, or acceptance will
-roll the site back.
+On the Ozal Pages migration path, changing the static handler and the site
+together matters: `ozalctl site accept` already rejects a 200 on an unknown
+path. Deploy the edge build that serves `404.html` before publishing a site that
+ships it, or acceptance will roll the site back. Cloudflare Pages serves
+`404.html` with status 404 without that step.
+
+Measurement uses Search Console, Bing and the server's request logs. The
+Cloudflare Pages project keeps Web Analytics off and the page loads no
+third-party script, as the product design requires.
 
 Verify the live result after publishing:
 
