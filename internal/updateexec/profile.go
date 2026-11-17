@@ -176,6 +176,55 @@ func (p Profile) Validate() error {
 	if os.Geteuid() == 0 && !ownedByRoot(dir) {
 		return errors.New("update executor profile: the binary directory must be owned by root")
 	}
+	// The executor writes plans, logs and job records there as root. They
+	// must not live under a directory the service account can rename or
+	// replace with links.
+	if err := privateDirectory("jobs", p.Jobs); err != nil {
+		return err
+	}
+	if err := privateFileOrParent("state", p.State); err != nil {
+		return err
+	}
+	return nil
+}
+
+func privateDirectory(field, path string) error {
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return privateParent(field, path)
+	}
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("update executor profile: %s must be a real directory", field)
+	}
+	return privateInfo(field, info)
+}
+
+func privateFileOrParent(field, path string) error {
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return privateParent(field, path)
+	}
+	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("update executor profile: %s must be a regular file or absent", field)
+	}
+	return privateInfo(field, info)
+}
+
+func privateParent(field, path string) error {
+	info, err := os.Lstat(filepath.Dir(path))
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("update executor profile: %s parent must be a real directory", field)
+	}
+	return privateInfo(field, info)
+}
+
+func privateInfo(field string, info os.FileInfo) error {
+	if info.Mode().Perm()&0o022 != 0 {
+		return fmt.Errorf("update executor profile: %s is writable by group or other accounts", field)
+	}
+	if os.Geteuid() == 0 && !ownedByRoot(info) {
+		return fmt.Errorf("update executor profile: %s must be owned by root", field)
+	}
 	return nil
 }
 

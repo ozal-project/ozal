@@ -23,6 +23,10 @@ Environment=TMPDIR=/usr/local/lib/ozal
 # to the service account's group (0660) for the console API to read.
 RuntimeDirectory=ozal-update
 RuntimeDirectoryMode=0755
+# Plans, catalog state and job records are root-owned: the service account
+# must not be able to replace them with links between root writes.
+StateDirectory=ozal-update
+StateDirectoryMode=0700
 UMask=0077
 # A running job owns the stop sequence. Serve waits for it; this timeout
 # bounds a wedged download before systemd kills the remaining cgroup.
@@ -37,7 +41,7 @@ AmbientCapabilities=CAP_SETUID
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/usr/local/lib/ozal /var/lib/ozal
+ReadWritePaths=/usr/local/lib/ozal /var/lib/ozal /var/lib/ozal-update
 # systemctl talks to PID 1; the updater can still stop and start its unit.
 RestrictSUIDSGID=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

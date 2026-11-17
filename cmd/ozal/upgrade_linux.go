@@ -174,5 +174,7 @@ func (s *upgradeSystem) Chown(path string) error {
 	if s.uid < 0 {
 		return nil
 	}
-	return os.Chown(path, s.uid, s.gid)
+	// Lchown never follows a link an attacker could have planted at the final
+	// path; the caller only passes the root-created restoration temp file.
+	return os.Lchown(path, s.uid, s.gid)
 }

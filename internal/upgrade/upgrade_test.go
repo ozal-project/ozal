@@ -233,8 +233,61 @@ func TestAMigrationFailingHalfwayPutsTheDatabaseBack(t *testing.T) {
 	if _, err := os.Stat(s.host.db + "-wal"); !os.IsNotExist(err) {
 		t.Fatal("the migrated database's WAL would replay onto the restored one")
 	}
-	if len(s.host.chowned) != 1 || s.host.chowned[0] != "state.db" {
+	if len(s.host.chowned) != 1 || !strings.HasPrefix(s.host.chowned[0], ".ozal-restore-") {
 		t.Fatalf("restored database not handed to the service account: %v", s.host.chowned)
+	}
+}
+
+func TestRollbackRefusesASymlinkedBackup(t *testing.T) {
+	dir := t.TempDir()
+	db := filepath.Join(dir, "state.db")
+	if err := os.WriteFile(db, []byte("v7"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	secret := filepath.Join(dir, "secret")
+	if err := os.WriteFile(secret, []byte("root-only"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	backup := filepath.Join(dir, "state.db.pre")
+	if err := os.Symlink(secret, backup); err != nil {
+		t.Fatal(err)
+	}
+	r := rollback{p: Plan{DB: db}, sys: &fakeHost{t: t}, dbBackup: backup}
+	if err := r.restoreDB(); err == nil {
+		t.Fatal("symlinked backup was accepted")
+	}
+	body, err := os.ReadFile(db)
+	if err != nil || string(body) != "v7" {
+		t.Fatal("database changed through a rejected backup", string(body), err)
+	}
+}
+
+func TestRollbackReplacesASymlinkedDatabaseWithoutWritingThroughIt(t *testing.T) {
+	dir := t.TempDir()
+	db := filepath.Join(dir, "state.db")
+	target := filepath.Join(dir, "target")
+	if err := os.WriteFile(target, []byte("root-only"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, db); err != nil {
+		t.Fatal(err)
+	}
+	backup := filepath.Join(dir, "backup.db")
+	if err := os.WriteFile(backup, []byte("v5"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := rollback{p: Plan{DB: db}, sys: &fakeHost{t: t}, dbBackup: backup}
+	if err := r.restoreDB(); err != nil {
+		t.Fatal(err)
+	}
+	if body, _ := os.ReadFile(target); string(body) != "root-only" {
+		t.Fatal("rollback wrote through the database symlink", string(body))
+	}
+	if body, _ := os.ReadFile(db); string(body) != "v5" {
+		t.Fatal("database was not restored", string(body))
+	}
+	if info, err := os.Lstat(db); err != nil || !info.Mode().IsRegular() {
+		t.Fatal("database path is not a regular file after restore", info, err)
 	}
 }
 

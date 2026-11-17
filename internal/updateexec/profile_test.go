@@ -131,6 +131,43 @@ func TestProfileValidationNeedsAProtectedPublicKey(t *testing.T) {
 	}
 }
 
+func TestProfileValidationProtectsTheUpdateStateDirectory(t *testing.T) {
+	p, _ := validProfileFile(t)
+	writable := t.TempDir()
+	if err := os.Chmod(writable, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	p.Jobs = filepath.Join(writable, "jobs")
+	if err := p.Validate(); err == nil || !strings.Contains(err.Error(), "jobs") {
+		t.Fatalf("writable jobs parent: %v", err)
+	}
+}
+
+func TestProfileValidationProtectsTheCatalogState(t *testing.T) {
+	p, _ := validProfileFile(t)
+	writable := t.TempDir()
+	if err := os.Chmod(writable, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	p.State = filepath.Join(writable, "state.json")
+	if err := p.Validate(); err == nil || !strings.Contains(err.Error(), "state") {
+		t.Fatalf("writable state parent: %v", err)
+	}
+}
+
+func TestProfileValidationRefusesASymlinkedJobsDirectory(t *testing.T) {
+	p, _ := validProfileFile(t)
+	target := t.TempDir()
+	link := filepath.Join(t.TempDir(), "jobs")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	p.Jobs = link
+	if err := p.Validate(); err == nil || !strings.Contains(err.Error(), "jobs") {
+		t.Fatalf("symlinked jobs directory: %v", err)
+	}
+}
+
 func TestProfileValidationProtectsTheRootBinary(t *testing.T) {
 	p, _ := validProfileFile(t)
 	if err := os.Chmod(p.Binary, 0o777); err != nil {

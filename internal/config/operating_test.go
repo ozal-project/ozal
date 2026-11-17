@@ -6,6 +6,33 @@ import (
 	"testing"
 )
 
+func TestOperatingConfigRejectsSymlinkAndOversize(t *testing.T) {
+	root := t.TempDir()
+	secret := filepath.Join(root, "secret.json")
+	if err := os.WriteFile(secret, []byte(`{"routes":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "runtime.json")
+	if err := os.Symlink(secret, link); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := loadOperating(&Config{RuntimeFile: link}, []byte("{}")); err == nil {
+		t.Fatal("symlinked runtime file accepted")
+	}
+	oversized := filepath.Join(root, "oversized.json")
+	file, err := os.Create(oversized)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = file.Truncate(maxOperatingBytes + 1); err != nil {
+		t.Fatal(err)
+	}
+	file.Close()
+	if _, _, err = loadOperating(&Config{RuntimeFile: oversized}, []byte("{}")); err == nil {
+		t.Fatal("oversized runtime file accepted")
+	}
+}
+
 func TestOperatingProjectionPreservesHostConfigAndReferences(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "host.json")

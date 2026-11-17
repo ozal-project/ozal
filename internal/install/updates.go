@@ -41,6 +41,7 @@ const (
 	executorProfilePath = "/etc/ozal/update-executor.json"
 	releaseKeyPath      = "/etc/ozal/release.pub"
 	executorSocket      = "/run/ozal-update/executor.sock"
+	executorStateDir    = "/var/lib/ozal-update"
 	installedConfig     = "/etc/ozal/config.json"
 	installedBinary     = "/usr/local/lib/ozal/ozal"
 	installedUnit       = "/etc/systemd/system/ozal.service"
@@ -123,8 +124,8 @@ func planUpdates(r UpdatesRequest) (updatesPlan, error) {
 		Socket: executorSocket, SocketGroup: "ozal", Unit: "ozal", Binary: installedBinary,
 		Config: installedConfig, DB: "/var/lib/ozal/state.db", User: "ozal",
 		PublicKey: releaseKeyPath, CatalogBase: r.CatalogBase, Channel: r.Channel,
-		Status: "/var/lib/ozal/update-status.json", State: "/var/lib/ozal/update-catalog-state.json",
-		Jobs: "/var/lib/ozal/update-jobs", Lock: "/usr/local/lib/ozal/update.lock",
+		Status: "/var/lib/ozal/update-status.json", State: executorStateDir + "/state.json",
+		Jobs: executorStateDir + "/jobs", Lock: "/usr/local/lib/ozal/update.lock",
 	}
 	// Profile.Validate also inspects the files on this host, which do not
 	// exist yet; the executor runs it when it starts. Here, only what this
@@ -222,6 +223,18 @@ func Updates(ctx context.Context, out io.Writer, host UpdatesHost, r UpdatesRequ
 	}
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	stateDir := mapped(r.Root, executorStateDir)
+	if err := os.MkdirAll(stateDir, 0o700); err != nil {
+		return fmt.Errorf("create the update state directory: %w", err)
+	}
+	if r.Root == "" {
+		if err := os.Chown(stateDir, 0, 0); err != nil {
+			return fmt.Errorf("own the update state directory: %w", err)
+		}
+		if err := os.Chmod(stateDir, 0o700); err != nil {
+			return fmt.Errorf("protect the update state directory: %w", err)
+		}
 	}
 	for _, f := range pending {
 		actual := mapped(r.Root, f.path)

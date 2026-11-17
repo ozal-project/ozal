@@ -3,11 +3,15 @@ package config
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 )
+
+// maxOperatingBytes bounds the service-owned runtime file read by root.
+const maxOperatingBytes = 8 << 20
 
 // operatingConfig is the complete mutable projection. It cannot alter host
 // listeners, authentication, admin authority, certificate or database settings.
@@ -20,11 +24,41 @@ type operatingConfig struct {
 	Zones []Zone `json:"zones,omitempty"`
 }
 
+func readOperating(path string) ([]byte, error) {
+	before, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !before.Mode().IsRegular() || before.Size() > maxOperatingBytes {
+		return nil, errors.New("operational configuration must be a small regular file")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() || !os.SameFile(before, info) {
+		return nil, errors.New("operational configuration changed while reading")
+	}
+	raw, err := io.ReadAll(io.LimitReader(file, maxOperatingBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > maxOperatingBytes {
+		return nil, errors.New("operational configuration exceeds its size limit")
+	}
+	return raw, nil
+}
+
 func loadOperating(base *Config, root []byte) (*Config, string, error) {
 	if base.RuntimeFile == "" {
 		return base, Digest(root), nil
 	}
-	raw, err := os.ReadFile(base.RuntimeFile)
+	raw, err := readOperating(base.RuntimeFile)
 	if err != nil {
 		return nil, "", fmt.Errorf("read operational configuration: %w", err)
 	}

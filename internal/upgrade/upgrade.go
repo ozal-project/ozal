@@ -128,7 +128,7 @@ func Run(ctx context.Context, p Plan, sys System, out io.Writer) (Result, error)
 		backup := fmt.Sprintf("%s.pre-%.12s-%s", p.DB, got, p.Now().UTC().Format("20060102T150405Z"))
 		step("migrate %s as the service account", p.DB)
 		err := sys.Run(ctx, true, next, "migrate", "up", "-db", p.DB, "-backup", backup)
-		if _, statErr := os.Lstat(backup); statErr == nil {
+		if info, statErr := os.Lstat(backup); statErr == nil && info.Mode().IsRegular() {
 			r.dbBackup = backup
 		}
 		if err != nil {
@@ -204,15 +204,74 @@ func (r rollback) run(ctx context.Context, cause error) (Result, error) {
 // they would be replayed onto the restored one.
 func (r rollback) restoreDB() error {
 	db := r.p.DB
+	backupInfo, err := os.Lstat(r.dbBackup)
+	if err != nil || !backupInfo.Mode().IsRegular() {
+		return errors.New("database backup is not a regular file")
+	}
+	source, err := os.Open(r.dbBackup)
+	if err != nil {
+		return err
+	}
+	defer source.Close()
+	opened, err := source.Stat()
+	if err != nil || !opened.Mode().IsRegular() || !os.SameFile(backupInfo, opened) {
+		return errors.New("database backup changed while restoring")
+	}
 	for _, suffix := range []string{"-wal", "-shm"} {
 		if err := os.Remove(db + suffix); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 	}
-	if err := copyFile(r.dbBackup, db, 0o600); err != nil {
+	// Write the restored database beside it and rename it into place. The
+	// service account owns the directory and can plant links there; the temp
+	// file is opened with O_EXCL and the final rename replaces a link instead
+	// of following it. Chown runs on the temp name with Lchown (see the host
+	// adapter), never on the attacker-named database path.
+	temp, err := os.CreateTemp(filepath.Dir(db), ".ozal-restore-")
+	if err != nil {
 		return err
 	}
-	return r.sys.Chown(db)
+	tempName := temp.Name()
+	cleanup := true
+	defer func() {
+		if cleanup {
+			os.Remove(tempName)
+		}
+	}()
+	if err := temp.Chmod(0o600); err != nil {
+		temp.Close()
+		return err
+	}
+	if _, err := io.Copy(temp, source); err != nil {
+		temp.Close()
+		return err
+	}
+	if err := temp.Sync(); err != nil {
+		temp.Close()
+		return err
+	}
+	before, err := temp.Stat()
+	if err != nil {
+		temp.Close()
+		return err
+	}
+	if err := r.sys.Chown(tempName); err != nil {
+		temp.Close()
+		return err
+	}
+	after, err := os.Lstat(tempName)
+	if err != nil || !after.Mode().IsRegular() || !os.SameFile(before, after) {
+		temp.Close()
+		return errors.New("restored database changed before installation")
+	}
+	if err := temp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tempName, db); err != nil {
+		return err
+	}
+	cleanup = false
+	return nil
 }
 
 func (p *Plan) defaults() {

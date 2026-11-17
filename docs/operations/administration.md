@@ -150,8 +150,8 @@ signature, expiry, platform, sequence and the checksums before downloading:
 ```sh
 sudo /usr/local/lib/ozal/ozal update -public-key /etc/ozal/release.pub \
   -catalog https://ozal.dev/api/v1/releases/stable/linux/arm64 -channel stable \
-  -state /var/lib/ozal/update-catalog-state.json \
-  -plan /var/lib/ozal/update-plan.json \
+  -state /var/lib/ozal-update/state.json \
+  -plan /var/lib/ozal-update/plan.json \
   -unit ozal -binary /usr/local/lib/ozal/ozal -config /etc/ozal/config.json \
   -db /var/lib/ozal/state.db -user ozal -status /var/lib/ozal/update-status.json
 ```
@@ -185,7 +185,7 @@ curl -fsSL -o ozal-release.pub https://raw.githubusercontent.com/ozal-project/oz
 sudo install -m 0644 ozal-release.pub /etc/ozal/release.pub
 sudo /usr/local/lib/ozal/ozal update -public-key /etc/ozal/release.pub \
   -catalog https://ozal.dev/api/v1/releases/preview/linux/$(dpkg --print-architecture) -channel preview \
-  -state /var/lib/ozal/update-catalog-state.json \
+  -state /var/lib/ozal-update/state.json \
   -unit ozal -binary /usr/local/lib/ozal/ozal -config /etc/ozal/config.json \
   -db /var/lib/ozal/state.db -user ozal -status /var/lib/ozal/update-status.json -apply
 sudo ozal install updates -apply
@@ -227,8 +227,8 @@ and the profile itself are not writable by group or others.
   "catalog_base": "https://ozal.dev/api/v1/releases",
   "channel": "stable",
   "status": "/var/lib/ozal/update-status.json",
-  "state": "/var/lib/ozal/update-catalog-state.json",
-  "jobs": "/var/lib/ozal/update-jobs",
+  "state": "/var/lib/ozal-update/state.json",
+  "jobs": "/var/lib/ozal-update/jobs",
   "lock": "/usr/local/lib/ozal/update.lock"
 }
 ```
