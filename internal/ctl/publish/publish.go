@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -25,6 +26,13 @@ import (
 // Tunnel opens a local address forwarded to an address on the edge.
 type Tunnel interface {
 	Forward(ctx context.Context, remote string) (local string, stop func(), err error)
+}
+
+// SocketTunnel is the safer transport: the edge's admin socket reaches the
+// operator through a private Unix socket instead of a loopback TCP port that
+// every local user can reach during the publish.
+type SocketTunnel interface {
+	ForwardSocket(ctx context.Context, remote string) (local string, stop func(), err error)
 }
 
 // Request is one run of `ozalctl site publish`: a build the operator
@@ -62,8 +70,8 @@ func Run(ctx context.Context, out io.Writer, tunnel Tunnel, req Request) error {
 	if !pages.ValidSiteName(req.Site) {
 		return fmt.Errorf("site name %q must be 1-63 characters of a-z, 0-9 or '-'", req.Site)
 	}
-	if req.Target.Edge.Admin == "" {
-		return errors.New("edge.admin is required to reach the admin API through the tunnel")
+	if req.Target.Edge.Admin == "" && (req.Target.Edge.Socket == "" || req.Target.Edge.SocketGroup == "") {
+		return errors.New("edge.admin or edge.socket with edge.socket_group is required to reach the admin API through the tunnel")
 	}
 	step("pack %s", req.Dir)
 	snapshot, err := artifact.FromDir(req.Dir)
@@ -81,14 +89,33 @@ func Run(ctx context.Context, out io.Writer, tunnel Tunnel, req Request) error {
 		return errors.New("a sites token is required (edge.sites_token)")
 	}
 
-	local, stop, err := tunnel.Forward(ctx, req.Target.Edge.Admin)
-	if err != nil {
-		return fmt.Errorf("SSH tunnel to the admin listener: %w", err)
+	var local, base string
+	var adminClient *http.Client
+	var stop func()
+	if req.Target.Edge.Socket != "" && req.Target.Edge.SocketGroup != "" {
+		if socketTunnel, ok := tunnel.(SocketTunnel); ok {
+			local, stop, err = socketTunnel.ForwardSocket(ctx, req.Target.Edge.Socket)
+			if err != nil {
+				return fmt.Errorf("SSH tunnel to the admin socket: %w", err)
+			}
+			base = "http://localhost"
+			adminClient = unixHTTPClient(local)
+		}
+	}
+	if adminClient == nil {
+		if req.Target.Edge.Admin == "" {
+			return errors.New("this tunnel does not support the admin socket")
+		}
+		local, stop, err = tunnel.Forward(ctx, req.Target.Edge.Admin)
+		if err != nil {
+			return fmt.Errorf("SSH tunnel to the admin listener: %w", err)
+		}
+		base = "http://" + local
+		adminClient = req.Admin
 	}
 	defer stop()
-	base := "http://" + local
 	var list siteList
-	if err := adminCall(ctx, req.Admin, http.MethodGet, base+"/_/api/sites", req.Token, "", nil, &list); err != nil {
+	if err := adminCall(ctx, adminClient, http.MethodGet, base+"/_/api/sites", req.Token, "", nil, &list); err != nil {
 		return err
 	}
 	previous := ""
@@ -101,7 +128,7 @@ func Run(ctx context.Context, out io.Writer, tunnel Tunnel, req Request) error {
 	var deployment struct {
 		ID string `json:"id"`
 	}
-	if err := adminCall(ctx, req.Admin, http.MethodPost, base+"/_/api/sites/"+url.PathEscape(req.Site)+"/deployments", req.Token, "application/gzip", bytes.NewReader(archive), &deployment); err != nil {
+	if err := adminCall(ctx, adminClient, http.MethodPost, base+"/_/api/sites/"+url.PathEscape(req.Site)+"/deployments", req.Token, "application/gzip", bytes.NewReader(archive), &deployment); err != nil {
 		return err
 	}
 	note("deployment %s is live (previous: %s)", deployment.ID, orNone(previous))
@@ -121,7 +148,7 @@ func Run(ctx context.Context, out io.Writer, tunnel Tunnel, req Request) error {
 	}
 	step("roll back %s to %s", req.Site, previous)
 	payload, _ := json.Marshal(map[string]string{"id": previous})
-	if err := adminCall(ctx, req.Admin, http.MethodPost, base+"/_/api/sites/"+url.PathEscape(req.Site)+"/rollback", req.Token, "application/json", bytes.NewReader(payload), nil); err != nil {
+	if err := adminCall(ctx, adminClient, http.MethodPost, base+"/_/api/sites/"+url.PathEscape(req.Site)+"/rollback", req.Token, "application/json", bytes.NewReader(payload), nil); err != nil {
 		return fmt.Errorf("public check failed (%v) and the rollback failed too: %w", failure, err)
 	}
 	return fmt.Errorf("public check failed; %s is back on %s: %w", req.Site, previous, failure)
@@ -153,6 +180,15 @@ func fetch(ctx context.Context, client *http.Client, target string) (int, []byte
 	defer res.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(res.Body, 8<<20))
 	return res.StatusCode, body, err
+}
+
+func unixHTTPClient(socket string) *http.Client {
+	return &http.Client{
+		Timeout: 2 * time.Minute,
+		Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "unix", socket)
+		}},
+	}
 }
 
 func adminCall(ctx context.Context, client *http.Client, method, target, token, contentType string, body io.Reader, result any) error {

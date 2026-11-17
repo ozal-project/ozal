@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -27,7 +28,11 @@ type fakeEdge struct {
 }
 
 func (f *fakeEdge) admin(t *testing.T) *httptest.Server {
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return httptest.NewServer(f.adminHandler())
+}
+
+func (f *fakeEdge) adminHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer sites-token" {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -62,7 +67,7 @@ func (f *fakeEdge) admin(t *testing.T) *httptest.Server {
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
-	}))
+	})
 }
 
 func (f *fakeEdge) public() *httptest.Server {
@@ -92,6 +97,21 @@ func (t *fakeTunnel) Forward(_ context.Context, remote string) (string, func(), 
 	return t.addr, func() { t.stopped++ }, nil
 }
 
+type fakeSocketTunnel struct {
+	path    string
+	opened  int
+	stopped int
+}
+
+func (t *fakeSocketTunnel) Forward(context.Context, string) (string, func(), error) {
+	panic("site publish fell back to a loopback TCP tunnel")
+}
+
+func (t *fakeSocketTunnel) ForwardSocket(context.Context, string) (string, func(), error) {
+	t.opened++
+	return t.path, func() { t.stopped++ }, nil
+}
+
 func build(t *testing.T) string {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<h1>new build</h1>"), 0o644); err != nil {
@@ -107,6 +127,38 @@ func request(t *testing.T, edge *fakeEdge, apply bool) (Request, *fakeTunnel, fu
 	return Request{Target: target, Site: "blog", Dir: build(t), Host: "blog.example.com", Token: "sites-token", Apply: apply,
 			PublicURL: public.URL, Admin: admin.Client(), Public: public.Client(), Retries: 2, Wait: 10 * time.Millisecond},
 		tunnel, func() { admin.Close(); public.Close() }
+}
+
+func TestPublishUsesTheAdminSocketWhenConfigured(t *testing.T) {
+	edge := &fakeEdge{live: map[string]string{"blog": "d0"}, content: map[string][]byte{"d0": []byte("old")}}
+	public := edge.public()
+	defer public.Close()
+	dir, err := os.MkdirTemp("", "publish-socket-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	socket := filepath.Join(dir, "admin.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &http.Server{Handler: edge.adminHandler()}
+	go server.Serve(listener)
+	defer server.Close()
+
+	tunnel := &fakeSocketTunnel{path: socket}
+	req := Request{
+		Target: ctl.Target{Edge: ctl.Edge{Socket: socket, SocketGroup: "ozal-admin"}},
+		Site:   "blog", Dir: build(t), Host: "blog.example.com", Token: "sites-token", Apply: true,
+		PublicURL: public.URL, Public: public.Client(), Retries: 2, Wait: 10 * time.Millisecond,
+	}
+	if err := Run(context.Background(), io.Discard, tunnel, req); err != nil {
+		t.Fatal(err)
+	}
+	if tunnel.opened != 1 || tunnel.stopped != 1 || edge.uploads != 1 {
+		t.Fatalf("socket tunnel opened=%d stopped=%d uploads=%d", tunnel.opened, tunnel.stopped, edge.uploads)
+	}
 }
 
 func TestPublishUploadsAndAcceptsTheNewBuild(t *testing.T) {

@@ -576,6 +576,11 @@ ozalctl site cutover -host HOST -to IP -cloudflare-token FILE [-dir DIST] [-appl
 ozalctl site cutover -host HOST -back EVIDENCE -cloudflare-token FILE [-apply]
 ```
 
+With `edge.socket` and `edge.socket_group`, `site publish` reaches the admin
+API through the private Unix socket. Without them it falls back to the loopback
+TCP tunnel for older targets; prefer the socket on hosts where local users are
+not fully trusted.
+
 `edge upgrade` first validates, as your SSH user, the part of the configuration
 it can read. If the configuration directory is readable only by root and the
 service account (`0750`), it says so and leaves full validation to `ozal upgrade`,
