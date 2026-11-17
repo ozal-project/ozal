@@ -6,3 +6,11 @@
   X-Frame-Options: DENY
   Permissions-Policy: camera=(), microphone=(), geolocation=()
   Referrer-Policy: strict-origin-when-cross-origin
+
+# The sitemap opens as a table in a browser. Search engines read the XML
+# directly; the stylesheet only dresses the human view.
+/sitemap.xsl
+  Content-Type: text/xsl
+  Cache-Control: public, max-age=3600, must-revalidate
+/sitemap.css
+  Cache-Control: public, max-age=3600, must-revalidate
