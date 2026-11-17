@@ -38,7 +38,12 @@ func NewGitHubVerifier(_ context.Context, audience string, client *http.Client) 
 	return v
 }
 func (v *GitHubVerifier) Verify(ctx context.Context, token string) (deployauth.Claims, error) {
-	if len(token) > 16<<10 {
+	if len(token) > maxGitHubTokenBytes {
+		return deployauth.Claims{}, ErrInvalidGitHubToken
+	}
+	// go-oidc parses before it calls the key set, so the embedded-key rejection
+	// must happen here, before that parser sees the token.
+	if err := rejectEmbeddedKey(token); err != nil {
 		return deployauth.Claims{}, ErrInvalidGitHubToken
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)

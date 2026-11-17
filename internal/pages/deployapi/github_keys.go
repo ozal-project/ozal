@@ -3,11 +3,13 @@ package deployapi
 import (
 	"context"
 	"crypto/rsa"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +17,9 @@ import (
 )
 
 const (
+	// maxGitHubTokenBytes is well above a GitHub Actions token. The bound is
+	// checked before any parser walks the token.
+	maxGitHubTokenBytes = 16 << 10
 	// jwksMinRefresh bounds how often a token can make the edge fetch GitHub's
 	// keys. go-oidc's remote key set refetches on every unknown kid, so a
 	// stream of forged tokens turned into a stream of outbound requests.
@@ -43,8 +48,14 @@ type githubKeys struct {
 }
 
 func (k *githubKeys) VerifySignature(ctx context.Context, token string) ([]byte, error) {
-	signed, err := jose.ParseSigned(token, []jose.SignatureAlgorithm{jose.RS256})
-	if err != nil || len(signed.Signatures) != 1 || signed.Signatures[0].Header.KeyID == "" {
+	if len(token) == 0 || len(token) > maxGitHubTokenBytes {
+		return nil, ErrInvalidGitHubToken
+	}
+	if err := rejectEmbeddedKey(token); err != nil {
+		return nil, err
+	}
+	signed, err := jose.ParseSignedCompact(token, []jose.SignatureAlgorithm{jose.RS256})
+	if err != nil || len(signed.Signatures) != 1 || signed.Signatures[0].Header.KeyID == "" || signed.Signatures[0].Header.JSONWebKey != nil {
 		return nil, ErrInvalidGitHubToken
 	}
 	key := k.key(ctx, signed.Signatures[0].Header.KeyID)
@@ -52,6 +63,32 @@ func (k *githubKeys) VerifySignature(ctx context.Context, token string) ([]byte,
 		return nil, errUnknownSigningKey
 	}
 	return signed.Verify(key)
+}
+
+// rejectEmbeddedKey refuses a JOSE header that carries its own key material.
+// GitHub identifies its key with kid; an embedded jwk or x5c is never needed,
+// and parsing attacker-chosen RSA parameters is disproportionately expensive.
+// This check runs before go-oidc's parser as well as inside the key set.
+func rejectEmbeddedKey(token string) error {
+	protected, _, ok := strings.Cut(token, ".")
+	if !ok || protected == "" {
+		return ErrInvalidGitHubToken
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(protected)
+	if err != nil {
+		return ErrInvalidGitHubToken
+	}
+	var header struct {
+		JWK json.RawMessage `json:"jwk"`
+		X5C json.RawMessage `json:"x5c"`
+	}
+	if err := json.Unmarshal(raw, &header); err != nil {
+		return ErrInvalidGitHubToken
+	}
+	if len(header.JWK) != 0 || len(header.X5C) != 0 {
+		return ErrInvalidGitHubToken
+	}
+	return nil
 }
 
 // key returns the public key for kid, refreshing the set first when kid is
