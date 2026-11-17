@@ -570,9 +570,13 @@ func emitAccessEvent(w http.ResponseWriter, r *http.Request, cfg options, event 
 // stripAccessCookies also removes scoped handoff bindings if a client sends
 // them outside their browser-enforced path, including the legacy shared name.
 func stripAccessCookies(header string) string {
-	return stripCookies(header, func(name string) bool {
-		return name == auth.SessionCookieName || name == auth.LoginCookieName || name == auth.PasskeyCeremonyCookieName || name == "sb_handoff" || strings.HasPrefix(name, auth.HandoffCookiePrefix)
-	})
+	return stripCookies(header, isAccessCookie)
+}
+
+func isAccessCookie(name string) bool {
+	return name == auth.SessionCookieName || name == auth.LoginCookieName ||
+		name == auth.PasskeyCeremonyCookieName || name == "sb_handoff" ||
+		strings.HasPrefix(name, auth.HandoffCookiePrefix)
 }
 
 func stripCookies(header string, remove func(string) bool) string {
@@ -643,6 +647,21 @@ func upstreamHandler(r config.Route, devErrors, assertVisitor bool, transport ht
 	proxy := &httputil.ReverseProxy{
 		Transport:  transport,
 		BufferPool: responseBuffers,
+		ModifyResponse: func(response *http.Response) error {
+			cookies := response.Header.Values("Set-Cookie")
+			if len(cookies) == 0 {
+				return nil
+			}
+			response.Header.Del("Set-Cookie")
+			for _, cookie := range cookies {
+				name, _, _ := strings.Cut(cookie, "=")
+				if isAccessCookie(strings.TrimSpace(name)) {
+					continue
+				}
+				response.Header.Add("Set-Cookie", cookie)
+			}
+			return nil
+		},
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			// The identify stage already read the session cookie; the outbound
 			// request is where it stops, so no upstream ever sees the edge

@@ -54,6 +54,40 @@ func TestDevErrorsRequiresALoopbackListener(t *testing.T) {
 	}
 }
 
+func TestOIDCRequiresSecureIssuerAndRedirect(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		issuer  string
+		wantErr bool
+	}{
+		{"https", "https://idp.example.com", false},
+		{"loopback http", "http://127.0.0.1:8080", false},
+		{"public http", "http://idp.example.com", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := `{"listen":":8888","auth":{"issuer":"` + tc.issuer + `","client_id":"id","client_secret":"env:SECRET","redirect_url":"https://app.example.com/_/auth/callback"},"routes":[{"host":"app.example.com","target":"http://127.0.0.1:9000","auth_required":true}]}`
+			_, err := Parse([]byte(raw))
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("Parse error = %v, wantErr %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestDevErrorsCannotUseThePublicTLSPath(t *testing.T) {
+	raw := `{"listen":"127.0.0.1:8888","dev_errors":true,"tls":{"enabled":true,"domains":["app.example.com"],"email":"ops@example.com"},"routes":[{"host":"app.example.com","target":"http://127.0.0.1:9000"}]}`
+	if _, err := Parse([]byte(raw)); err == nil || !strings.Contains(err.Error(), "dev_errors cannot be enabled with tls.enabled") {
+		t.Fatalf("TLS with dev_errors: %v", err)
+	}
+}
+
+func TestPasskeyLoginHostCannotHostARoute(t *testing.T) {
+	raw := `{"listen":":8888","auth":{"passkeys":{"rp_id":"example.com","login_url":"https://auth.example.com"}},"routes":[{"host":"auth.example.com","target":"http://127.0.0.1:9000","auth_required":true}]}`
+	if _, err := Parse([]byte(raw)); err == nil || !strings.Contains(err.Error(), "cannot use the auth.passkeys.login_url host") {
+		t.Fatalf("route on login host: %v", err)
+	}
+}
+
 func TestExampleConfigLoadsWithoutProjectDeclarations(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("..", "..", "config.example.json"))
 	if err != nil {
@@ -240,7 +274,7 @@ func TestLoadRejectsAuthRequiredOnDifferentHostWithoutCookieDomain(t *testing.T)
 			"issuer": "https://accounts.google.com",
 			"client_id": "id",
 			"client_secret": "secret",
-			"redirect_url": "http://auth.example.com/_/auth/callback"
+			"redirect_url": "https://auth.example.com/_/auth/callback"
 		},
 		"routes": [{"host": "app.example.com", "target": "http://localhost:9000", "auth_required": true}]
 	}`)
@@ -256,7 +290,7 @@ func TestLoadAcceptsAuthRequiredOnDifferentHostWithCookieDomain(t *testing.T) {
 			"issuer": "https://accounts.google.com",
 			"client_id": "id",
 			"client_secret": "secret",
-			"redirect_url": "http://auth.example.com/_/auth/callback",
+			"redirect_url": "https://auth.example.com/_/auth/callback",
 			"cookie_domain": ".example.com"
 		},
 		"routes": [{"host": "app.example.com", "target": "http://localhost:9000", "auth_required": true}]

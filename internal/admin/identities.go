@@ -250,14 +250,14 @@ func (h *Handler) registerIdentities() {
 	h.mux.HandleFunc("POST /_/api/admin/remote/finish", h.remoteFinish)
 	h.registerCodeEnrolment()
 	h.mux.HandleFunc("GET /_/api/admins", h.requireTool("administrators", h.listAdmins))
-	h.mux.HandleFunc("POST /_/api/admins/invite", h.requireTool("administrators", h.inviteAdmin))
+	h.mux.HandleFunc("POST /_/api/admins/invite", h.requireOperatorTool("administrators", h.inviteAdmin))
 	h.mux.HandleFunc("GET /_/api/admins/requests", h.requireTool("administrators", h.listAccessRequests))
 	h.mux.HandleFunc("PUT /_/api/admins/requests/settings", h.requireTool("administrators", h.setAccessRequests))
 	h.mux.HandleFunc("POST /_/api/admins/requests/{id}/approve", h.requireOperatorTool("administrators", h.approveAccessRequest))
 	h.mux.HandleFunc("POST /_/api/admins/requests/{id}/deny", h.requireTool("administrators", h.denyAccessRequest))
-	h.mux.HandleFunc("POST /_/api/admins/{id}/recover", h.requireTool("administrators", h.recoverAdmin))
-	h.mux.HandleFunc("POST /_/api/admins/{id}/disable", h.requireTool("administrators", h.setAdminDisabled(true)))
-	h.mux.HandleFunc("POST /_/api/admins/{id}/enable", h.requireTool("administrators", h.setAdminDisabled(false)))
+	h.mux.HandleFunc("POST /_/api/admins/{id}/recover", h.requireOperatorTool("administrators", h.recoverAdmin))
+	h.mux.HandleFunc("POST /_/api/admins/{id}/disable", h.requireOperatorTool("administrators", h.setAdminDisabled(true)))
+	h.mux.HandleFunc("POST /_/api/admins/{id}/enable", h.requireOperatorTool("administrators", h.setAdminDisabled(false)))
 }
 
 // relyingParty derives the WebAuthn relying party from the page's own origin.
@@ -839,6 +839,9 @@ func (h *Handler) callerAccount(r *http.Request) string {
 // with a chosen subset of tools. A grant can never exceed its giver's own
 // tools, so delegating cannot widen authority.
 func (h *Handler) inviteAdmin(w http.ResponseWriter, r *http.Request) {
+	if h.freshPasskeyAccount(w, r) == "" {
+		return
+	}
 	var req struct {
 		Email string   `json:"email"`
 		Name  string   `json:"name"`
@@ -906,6 +909,9 @@ const recoverTTL = time.Hour
 // for it. Whoever holds the link becomes that account, so the caller needs
 // every tool the target has: recovery cannot be used to climb.
 func (h *Handler) recoverAdmin(w http.ResponseWriter, r *http.Request) {
+	if h.freshPasskeyAccount(w, r) == "" {
+		return
+	}
 	id := r.PathValue("id")
 	if id == h.callerAccount(r) {
 		writeError(w, http.StatusConflict, "you are signed in; add another passkey instead")
@@ -1168,6 +1174,11 @@ func (h *Handler) removePasskey(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "sign in with your passkey to remove one")
 		return
 	}
+	grant, _ := r.Context().Value(operatorKey{}).(operatorGrant)
+	if !h.operators.passkeyFresh(grant.ID, passkeyStepUpMaxAge) {
+		writeErrorCode(w, http.StatusForbidden, "confirm it's you with your passkey", "passkey_required")
+		return
+	}
 	id, err := base64.RawURLEncoding.DecodeString(r.PathValue("id"))
 	if err != nil || len(id) == 0 {
 		writeError(w, http.StatusNotFound, "no such passkey")
@@ -1289,7 +1300,28 @@ func (h *Handler) setAdminDisabled(disabled bool) http.HandlerFunc {
 		action = "admin.disable"
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
+		if h.freshPasskeyAccount(w, r) == "" {
+			return
+		}
 		id := r.PathValue("id")
+		grant, _ := r.Context().Value(operatorKey{}).(operatorGrant)
+		accounts, err := h.identities.Accounts(r.Context())
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "administrator directory unavailable")
+			return
+		}
+		for i := range accounts {
+			if accounts[i].ID != id {
+				continue
+			}
+			for _, tool := range accounts[i].Tools {
+				if !grant.allows(tool) {
+					writeError(w, http.StatusForbidden, "you cannot change this administrator: they hold the "+tool+" tool and this session does not")
+					return
+				}
+			}
+			break
+		}
 		if disabled && id == h.callerAccount(r) {
 			writeError(w, http.StatusConflict, "you cannot disable your own account; ask another administrator or the host")
 			return

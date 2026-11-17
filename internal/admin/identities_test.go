@@ -249,6 +249,26 @@ func invite(t *testing.T, h *Handler, session, email string, tools ...string) (s
 	return decode(t, rec)["token"].(string), rec
 }
 
+func TestAdminTokenCannotIssueOrRecoverPasskeys(t *testing.T) {
+	h, _ := identityHandler(t)
+	owner := ownerSession(t, h)
+	if rec := api(h, http.MethodPost, "/_/api/admins/invite", "secret", map[string]any{"email": "eve@example.com", "tools": []string{"administrators"}}); rec.Code != http.StatusForbidden {
+		t.Fatalf("admin token issued an invitation: %d %s", rec.Code, rec.Body)
+	}
+	var ownerID string
+	for _, entry := range decode(t, api(h, http.MethodGet, "/_/api/admins", owner, nil))["admins"].([]any) {
+		if entry.(map[string]any)["you"] == true {
+			ownerID = entry.(map[string]any)["id"].(string)
+		}
+	}
+	if ownerID == "" {
+		t.Fatal("owner id missing")
+	}
+	if rec := api(h, http.MethodPost, "/_/api/admins/"+ownerID+"/recover", "secret", nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("admin token recovered an administrator: %d %s", rec.Code, rec.Body)
+	}
+}
+
 func TestAdministratorInvitesAnotherWithOnlyTheChosenTools(t *testing.T) {
 	h, _ := identityHandler(t)
 	owner := ownerSession(t, h)
@@ -343,8 +363,8 @@ func TestDisablingAnAdministratorEndsTheirSessionAndGuardsTheLastManager(t *test
 	if rec := api(h, http.MethodPost, "/_/api/admins/"+ownerID+"/disable", owner, nil); rec.Code != http.StatusConflict {
 		t.Fatalf("self-disable = %d, want 409", rec.Code)
 	}
-	if rec := api(h, http.MethodPost, "/_/api/admins/"+ownerID+"/disable", "secret", nil); rec.Code != http.StatusConflict {
-		t.Fatalf("disabling the last manager through the admin token = %d, want 409", rec.Code)
+	if rec := api(h, http.MethodPost, "/_/api/admins/"+ownerID+"/disable", "secret", nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("disabling the last manager through the admin token = %d, want 403", rec.Code)
 	}
 	if rec := api(h, http.MethodPost, "/_/api/admins/"+anaID+"/enable", owner, nil); rec.Code != http.StatusOK {
 		t.Fatalf("enable = %d", rec.Code)

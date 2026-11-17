@@ -523,6 +523,12 @@ func Validate(cfg Config) (*Config, error) {
 		return nil, fmt.Errorf("config: listen address is required")
 	}
 	if cfg.DevErrors {
+		if cfg.TLS.Enabled {
+			return nil, fmt.Errorf("config: dev_errors cannot be enabled with tls.enabled: the public listener ignores listen")
+		}
+		if cfg.IngressMode() == IngressCloudflareTunnel {
+			return nil, fmt.Errorf("config: dev_errors cannot be enabled with ingress.mode %q: the tunnel makes the loopback listener public", IngressCloudflareTunnel)
+		}
 		if err := validateDevErrorsListen(cfg.Listen); err != nil {
 			return nil, fmt.Errorf("config: %w", err)
 		}
@@ -851,6 +857,9 @@ func Validate(cfg Config) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
+		if err := rejectRoutesOnLoginHost(&cfg, loginHost, "auth.passkeys.login_url"); err != nil {
+			return nil, err
+		}
 		if err := checkSessionHosts(&cfg, loginHost, "auth.passkeys.login_url", true); err != nil {
 			return nil, err
 		}
@@ -873,6 +882,12 @@ func Validate(cfg Config) (*Config, error) {
 		}
 		if err := ValidateSecretReference("auth.client_secret", cfg.Auth.ClientSecret); err != nil {
 			return nil, fmt.Errorf("config: %w", err)
+		}
+		if err := validateSecureEndpoint("auth.issuer", cfg.Auth.Issuer); err != nil {
+			return nil, err
+		}
+		if err := validateSecureEndpoint("auth.redirect_url", cfg.Auth.RedirectURL); err != nil {
+			return nil, err
 		}
 
 		redirectHost, err := hostOf(cfg.Auth.RedirectURL)
@@ -1031,6 +1046,25 @@ func IsSupportedHTTPMethod(method string) bool {
 // cookie_domain. field names the setting that chose loginHost. With
 // handoff (the passkey login, ID-015) a protected host the cookie cannot
 // reach is allowed: it gets its own host session after the central login.
+func rejectRoutesOnLoginHost(cfg *Config, loginHost, field string) error {
+	loopback := loginHost == "localhost" || strings.HasSuffix(loginHost, ".localhost")
+	if ip := net.ParseIP(loginHost); ip != nil && ip.IsLoopback() {
+		loopback = true
+	}
+	if loopback {
+		return nil
+	}
+	for _, route := range cfg.Routes {
+		if hostnameOnly(route.Host) == loginHost {
+			return fmt.Errorf("config: route %q cannot use the %s host %q; give the login origin its own hostname", route.Host, field, loginHost)
+		}
+	}
+	if cfg.Pages != nil && cfg.Pages.Deploy != nil && deployHostname(cfg.Pages.Deploy.Host) == loginHost {
+		return fmt.Errorf("config: pages.deploy.host cannot use the %s host %q; give the login origin its own hostname", field, loginHost)
+	}
+	return nil
+}
+
 func checkSessionHosts(cfg *Config, loginHost, field string, handoff bool) error {
 	if cfg.Auth.CookieDomain != "" {
 		cookieDomain, err := normalizeCookieDomain(cfg.Auth.CookieDomain)
@@ -1067,6 +1101,25 @@ func checkSessionHosts(cfg *Config, loginHost, field string, handoff bool) error
 				r.Host, field, loginHost,
 			)
 		}
+	}
+	return nil
+}
+
+func validateSecureEndpoint(field, raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil || !u.IsAbs() || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return fmt.Errorf("config: %s must be an absolute URL without credentials, query or fragment", field)
+	}
+	host, err := normalizeHostname(u.Hostname())
+	if err != nil {
+		return fmt.Errorf("config: %s: %w", field, err)
+	}
+	loopback := host == "localhost" || strings.HasSuffix(host, ".localhost")
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		loopback = true
+	}
+	if u.Scheme != "https" && !(u.Scheme == "http" && loopback) {
+		return fmt.Errorf("config: %s must use https (http only on loopback)", field)
 	}
 	return nil
 }
@@ -1130,6 +1183,12 @@ func validateOIDCBesidePasskeys(auth *Auth, loginURL string) error {
 	}
 	if err := ValidateSecretReference("auth.client_secret", auth.ClientSecret); err != nil {
 		return fmt.Errorf("config: %w", err)
+	}
+	if err := validateSecureEndpoint("auth.issuer", auth.Issuer); err != nil {
+		return err
+	}
+	if err := validateSecureEndpoint("auth.redirect_url", auth.RedirectURL); err != nil {
+		return err
 	}
 	if want := loginURL + "/_/auth/callback"; auth.RedirectURL != want {
 		return fmt.Errorf("config: with auth.passkeys, auth.redirect_url must be %q (the callback runs on the login host)", want)

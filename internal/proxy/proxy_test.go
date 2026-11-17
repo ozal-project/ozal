@@ -733,6 +733,31 @@ func TestStripAccessCookies(t *testing.T) {
 	}
 }
 
+func TestUpstreamCannotSetEdgeCookies(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Add("Set-Cookie", "sb_session=attacker; Domain=example.com; Path=/; HttpOnly")
+		w.Header().Add("Set-Cookie", "sb_handoff_evil=binding; Path=/")
+		w.Header().Add("Set-Cookie", "app=kept; Path=/")
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer upstream.Close()
+	handler, err := New([]config.Route{{Host: "public.localhost", Target: upstream.URL}}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "http://public.localhost/", nil)
+	request.Host = "public.localhost"
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("status = %d", recorder.Code)
+	}
+	cookies := recorder.Result().Cookies()
+	if len(cookies) != 1 || cookies[0].Name != "app" {
+		t.Fatalf("cookies = %+v, want only app", cookies)
+	}
+}
+
 func TestPublicRouteStripsSessionCookie(t *testing.T) {
 	session := auth.SessionCookieName
 
