@@ -1,0 +1,99 @@
+---
+import Article from "../../components/Article.astro";
+import { getArticle } from "../../lib/articles.mjs";
+
+const meta = getArticle("/guides/oidc-or-passkeys/");
+---
+<Article meta={meta}>
+  <p>Ozal does not store passwords. It signs people in with <strong>native passkeys</strong>, an <strong>OIDC provider</strong>, or both. The choice is less about the login screen and more about where the identity lives, who can revoke it, and what evidence a route can ask for.</p>
+  <p>Both methods end in the same place: an Ozal session, a per-route decision, and an identity the application can trust. They differ in what you have to operate.</p>
+
+  <h2>At a glance</h2>
+  <table tabindex="0">
+    <caption>Native passkeys and an external OIDC provider</caption>
+    <thead>
+      <tr><th scope="col">Passkeys</th><th scope="col">OIDC provider</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>WebAuthn credential created on the person's device</td><td>A browser redirect to an identity provider you already run</td></tr>
+      <tr><td>No external identity service required</td><td>An issuer, client ID, client secret and exact callback URL</td></tr>
+      <tr><td>Ozal manages users, invitations and recovery on the host</td><td>The provider manages accounts, passwords, MFA and group membership</td></tr>
+      <tr><td>Phishing-resistant by construction; no password, SMS or TOTP</td><td>The provider's own MFA and password policy apply</td></tr>
+      <tr><td>Can require a device-bound credential</td><td>Cannot satisfy a passkey-only step-up</td></tr>
+      <tr><td>Changing the RP domain requires re-enrolment</td><td>Changing the provider requires a new trust configuration</td></tr>
+      <tr><td>Good for a small team or a lab without an IdP</td><td>Good when an IdP already owns people and groups</td></tr>
+    </tbody>
+  </table>
+
+  <h2>What each one needs</h2>
+  <h3>Passkeys</h3>
+  <ul>
+    <li>SQLite for users, credentials, invitations and sessions.</li>
+    <li><code>auth.passkeys.rp_id</code>, the domain the credential is bound to, and <code>auth.passkeys.login_url</code>, the HTTPS login host.</li>
+    <li>A browser and device that support WebAuthn. That is normal on current phones and computers, but it is still a deployment requirement.</li>
+    <li>An operator on the host to invite people and recover an account. Recovery is deliberately not an email link.</li>
+  </ul>
+
+  <h3>OIDC</h3>
+  <ul>
+    <li>An issuer, a client ID, a client secret and the exact callback URL <code>login_url + /_/auth/callback</code>.</li>
+    <li>A provider that sends a stable subject and the email and group claims your rules use. Ozal identifies the person by issuer and subject, not by email.</li>
+    <li>A session cookie domain. If private apps live on different hosts under one domain, <code>cookie_domain</code> lets one sign-in cover them; keep unrelated sites on another domain.</li>
+    <li>A provider policy for MFA, password reset and offboarding. Ozal consumes the result; it is not the identity provider.</li>
+  </ul>
+  <p>Both can be configured together. The visitor chooses on the login page. The callback stays <code>login_url + /_/auth/callback</code>, and a recent or device-bound step-up still requires a passkey; an OIDC session does not silently replace it.</p>
+
+  <h2>The route still decides</h2>
+  <p>Signing in is not the same as being allowed into an app. The route rule can require a method or a fresher proof:</p>
+  <pre><code>{`"access": {
+  "methods": ["passkey"],
+  "max_auth_age_minutes": 15,
+  "require_device_bound": true
+}`}</code></pre>
+  <ul>
+    <li><code>methods</code> allows the configured methods: <code>passkey</code>, <code>oidc</code>, or both.</li>
+    <li><code>max_auth_age_minutes</code> sends the person through a passkey step-up when the sign-in is too old.</li>
+    <li><code>require_device_bound</code> rejects a synced passkey and asks for one that stays on a single device.</li>
+    <li><code>required_groups</code>, <code>allowed_emails</code> and <code>allowed_domains</code> apply to the identity the method produced.</li>
+  </ul>
+  <p>That is how a whole company can sign in with OIDC while a sensitive admin app still demands a passkey from the last 15 minutes. It is also why a route can be stricter than the login page without a second account.</p>
+
+  <h2>What Ozal stores</h2>
+  <p>For native passkeys, the database holds public keys, credential metadata and hashes of session IDs and invitation tokens. A stolen database does not contain a password or a usable private key. OIDC client secrets are configuration references, not values stored in the database; use <code>file:</code> or <code>env:</code> and keep the file private.</p>
+  <p>Sessions are bearer cookies: <code>HttpOnly</code>, and <code>Secure</code> over HTTPS. The defaults are a 7-day absolute lifetime and 12 hours without use, both configurable. Logout is a POST; current groups and revocations are checked on the server. The session cookie is not forwarded to the application.</p>
+
+  <h2>When to choose passkeys</h2>
+  <ul>
+    <li>You do not want to run or pay for an identity provider for a small team.</li>
+    <li>You want a phishing-resistant login without passwords, SMS or TOTP.</li>
+    <li>You can operate recovery on the host and accept that losing every device needs an operator.</li>
+    <li>You want a sensitive route to require a device-bound credential or a fresh proof.</li>
+  </ul>
+
+  <h2>When to choose OIDC</h2>
+  <ul>
+    <li>Your organization already has an identity provider and wants one place to disable people.</li>
+    <li>Groups, MFA or password policy already live in that provider.</li>
+    <li>Several applications, not only Ozal, should share the same sign-in.</li>
+    <li>You can configure the exact callback URL and keep the client secret on the host.</li>
+  </ul>
+
+  <h2>Limits that matter</h2>
+  <ul>
+    <li><strong>Ozal is not an identity provider.</strong> It does not issue OIDC tokens to other applications.</li>
+    <li><strong>Email is not a link.</strong> OIDC subjects are issuer-qualified; two people with the same email at different issuers are not merged.</li>
+    <li><strong>Passkeys are bound to the RP domain.</strong> Moving to a different domain means enrolling again, not copying credentials.</li>
+    <li><strong>Recovery is an operator action.</strong> A lost device is replaced from the host, not by an email reset.</li>
+    <li><strong>OIDC depends on the provider.</strong> A provider outage or a misconfigured callback blocks that login path; test the provider before relying on it.</li>
+    <li><strong>Cookie scope is a security decision.</strong> A shared cookie is sent to every host it covers, including one Ozal does not serve.</li>
+    <li><strong>This is an early alpha.</strong> Test with a non-admin account and a lab instance first.</li>
+  </ul>
+
+  <h2>Verify the claims</h2>
+  <ul>
+    <li>Read the <a href="/docs/reference/">login and session reference</a> for the exact fields.</li>
+    <li>Read <a href="/docs/security/">the trust boundaries</a> for headers, cookies and the console.</li>
+    <li>Use the <a href="/#engine">live decision engine</a> to see how method and recent sign-in change an answer.</li>
+    <li>Follow <a href="/guides/protect-internal-app/">Protect an internal app</a> to apply the choice to a route.</li>
+  </ul>
+</Article>

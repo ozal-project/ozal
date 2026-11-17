@@ -1,0 +1,76 @@
+---
+import Article from "../../components/Article.astro";
+import { getArticle } from "../../lib/articles.mjs";
+
+const meta = getArticle("/guides/reverse-proxy-vs-access-gateway/");
+---
+<Article meta={meta}>
+  <p>A reverse proxy and an access gateway both sit between a person and an application. They answer different questions. A reverse proxy asks <strong>where does this request go?</strong> An access gateway asks <strong>who is this, may they reach this app, and why?</strong></p>
+  <p>Ozal is both: it terminates HTTPS and forwards to the app, and it puts a sign-in and a per-route decision in front of that forward. The useful comparison is where the authentication and the policy live, not whether the box can also terminate TLS.</p>
+
+  <h2>At a glance</h2>
+  <table tabindex="0">
+    <caption>What each layer does by itself</caption>
+    <thead>
+      <tr><th scope="col">Reverse proxy</th><th scope="col">Access gateway</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Terminates TLS and selects an upstream by host or path</td><td>Authenticates the person and keeps a session</td></tr>
+      <tr><td>Health checks, retries and header rewriting</td><td>Applies a rule per application on every request</td></tr>
+      <tr><td>Compression, caching and connection limits</td><td>Returns a stable decision code and a reason</td></tr>
+      <tr><td>Forwards what it receives</td><td>Removes client identity headers and injects the authenticated identity</td></tr>
+      <tr><td>Usually has no user directory or session</td><td>Owns or consumes the user directory and session</td></tr>
+      <tr><td>Logs requests and upstream status</td><td>Records who was allowed or refused, and why</td></tr>
+      <tr><td>Can add authentication through modules or a sidecar</td><td>Authentication is the reason the layer exists</td></tr>
+    </tbody>
+  </table>
+  <p>“Usually” is doing work in that table: a reverse proxy can be assembled with an auth module, an OAuth2 sidecar and a policy file into an access gateway. That is a valid design; it is just more pieces to operate and keep consistent.</p>
+
+  <h2>When a reverse proxy is enough</h2>
+  <ul>
+    <li>The application has its own strong authentication and you do not need a central sign-in.</li>
+    <li>The network already limits who can reach the proxy, and the app does not need a per-person rule at the edge.</li>
+    <li>You need caching, compression, path routing or a CDN in front of a public site.</li>
+    <li>You already run an identity-aware proxy and only need another upstream behind it.</li>
+  </ul>
+  <p>A proxy is not a weaker choice by definition. It is the right layer when the application owns the identity decision and the proxy owns transport and routing.</p>
+
+  <h2>When the access decision needs its own layer</h2>
+  <ul>
+    <li>Several apps need different rules: the wiki, Grafana and the billing console are not the same audience.</li>
+    <li>People should sign in with OIDC or passkeys once, not with a separate account per app.</li>
+    <li>A contractor should reach one app without joining a network or seeing the rest of the catalog.</li>
+    <li>Every refusal needs a reason and a reference, not only an upstream 401.</li>
+    <li>You want a recent sign-in or a device-bound passkey for a sensitive route without changing the app.</li>
+  </ul>
+  <p>That is the layer Ozal adds. It also does the reverse-proxy work: host routing, health checks, automatic TLS and static sites. One binary, one place to read the decision.</p>
+
+  <h2>They compose</h2>
+  <p>A common shape is a CDN or reverse proxy at the edge and Ozal behind it. That changes the trust profile: Ozal must be configured to trust only the proxy's address, and the origin should not be reachable around it. The <a href="/docs/security/">security guide</a> covers direct ingress, a trusted proxy, and the Cloudflare Tunnel profile. The proxy terminating TLS does not make the access decision; Ozal still verifies the session and applies the route rule.</p>
+  <p>The opposite shape also exists: Ozal in front and the app's own proxy behind it, as long as the app only accepts traffic from Ozal. Do not leave a second public path to the same app.</p>
+
+  <h2>Not a VPN either</h2>
+  <p>A reverse proxy and an access gateway are HTTP tools. They do not carry SSH, RDP, databases or arbitrary TCP/UDP. If the requirement is a network, a VPN or a private network is the right tool. The three layers can coexist: VPN for non-HTTP, Ozal for the web apps, and a proxy or CDN for transport. See <a href="/guides/vpn-vs-access-gateway/">VPN or access gateway</a>.</p>
+
+  <h2>What Ozal does not do</h2>
+  <ul>
+    <li>It does not replace the application's own authorization. It decides who reaches the app, not what they do inside it.</li>
+    <li>It does not collect device posture, run an endpoint agent or absorb a traffic flood.</li>
+    <li>It does not carry non-HTTP protocols or provide site-to-site networking.</li>
+    <li>It is not an identity provider; it uses OIDC or its own passkeys.</li>
+    <li>It is an early alpha and not production-ready. Test it before trusting it with an important app.</li>
+  </ul>
+
+  <h2>How to decide</h2>
+  <p><strong>Stay with a reverse proxy</strong> if the app already authenticates its users, the network is the boundary, and you do not need a central per-app decision.</p>
+  <p><strong>Add an access gateway</strong> if people, groups and per-app rules should be decided before the request reaches the app, with a reason for every answer. Ozal is that layer for HTTP apps, with the proxy work included.</p>
+  <p>If you are choosing between a gateway and a network tunnel, read <a href="/guides/vpn-vs-access-gateway/">VPN or access gateway</a>. If you are choosing between self-hosted and hosted, read <a href="/compare/cloudflare-access/">Ozal vs Cloudflare Access</a> or <a href="/compare/pomerium/">Ozal vs Pomerium</a>.</p>
+
+  <h2>Verify the claims</h2>
+  <ul>
+    <li><a href="/#engine">Ask the live decision engine</a> how a route rule changes an answer.</li>
+    <li>Read <a href="/docs/reference/">the route and access fields</a> to see what the gateway can express.</li>
+    <li>Read <a href="/docs/security/">the trust boundaries</a> before putting Ozal behind another proxy.</li>
+    <li>Follow <a href="/guides/protect-internal-app/">Protect an internal app</a> for the complete shape.</li>
+  </ul>
+</Article>

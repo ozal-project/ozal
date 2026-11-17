@@ -1,0 +1,106 @@
+---
+import Article from "../../components/Article.astro";
+import { getArticle } from "../../lib/articles.mjs";
+
+const meta = getArticle("/guides/protect-internal-app/");
+---
+<Article meta={meta}>
+  <p>The goal is not to publish an internal app to the whole internet. It is to publish <strong>one door</strong> to it. The app keeps listening on loopback or a private network; Ozal terminates HTTPS, authenticates the person, applies the route's rule, and only then forwards the request.</p>
+  <p>This page describes the shape and the decisions. The full command-by-command setup is in <a href="/docs/first-application/">Publish your first application</a> and <a href="/docs/install/">Install</a>.</p>
+
+  <h2>The shape</h2>
+  <table tabindex="0">
+    <caption>What stays private and what becomes public</caption>
+    <thead>
+      <tr><th scope="col">Part</th><th scope="col">What it does</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>The application</td><td>Listens on <code>127.0.0.1:3000</code> or a private address. It is not reachable from the internet.</td></tr>
+      <tr><td>Ozal</td><td>Listens on <code>443</code>, obtains the certificate, signs the person in, applies the route rule, strips client identity headers and forwards the request.</td></tr>
+      <tr><td>The browser</td><td>Sees one HTTPS hostname, such as <code>app.example.com</code>. No VPN client and no second network login.</td></tr>
+      <tr><td>The app's own users</td><td>The application keeps its roles, teams and permissions. Ozal decides who reaches it, not what they do inside it.</td></tr>
+    </tbody>
+  </table>
+  <p>The request path is deliberately short: <code>browser → https://app.example.com → Ozal → http://127.0.0.1:3000</code>. The only public listener is Ozal.</p>
+
+  <h2>What you need</h2>
+  <ul>
+    <li>A host that can run Ozal, with a public HTTPS port or a tunnel profile. See <a href="/docs/install/">Install</a>.</li>
+    <li>A hostname you control, such as <code>app.example.com</code>, and a DNS record for it.</li>
+    <li>An application reachable from Ozal on loopback or a private network.</li>
+    <li>Either native passkeys or an OIDC provider. Ozal never stores a password. <a href="/guides/oidc-or-passkeys/">OIDC or passkeys</a> explains the choice.</li>
+    <li>A decision about who may enter: verified emails, email domains, groups, or any signed-in person.</li>
+  </ul>
+
+  <h2>1. Keep the application private</h2>
+  <p>Bind it to loopback when it runs on the same host. If it runs elsewhere, bind it to a private address and firewall it so only Ozal can connect. Publishing the app "just for the certificate" or "just for testing" creates a second door that bypasses every rule.</p>
+  <p>Typical examples are a Grafana on <code>127.0.0.1:3000</code>, a wiki on a private container network, or an admin panel on a private interface. The public name belongs to Ozal, not to the app.</p>
+
+  <h2>2. Point DNS at Ozal and keep 443 open</h2>
+  <p>Create the DNS record for <code>app.example.com</code> at Ozal's public address, or route the hostname through the configured tunnel. Ozal obtains and renews the certificate for the domain. Keep the app's own port closed from the internet.</p>
+
+  <h2>3. Add the route</h2>
+  <p>This is a fragment, not a complete configuration. The full shape, including the listener and TLS, is in the <a href="/docs/install/">install guide</a>:</p>
+  <pre><code>{`"routes": [
+  {
+    "host": "app.example.com",
+    "target": "http://127.0.0.1:3000",
+    "access": {
+      "allowed_domains": ["example.com"],
+      "required_groups": ["team"]
+    }
+  }
+]`}</code></pre>
+  <p>The fields are small on purpose:</p>
+  <ul>
+    <li><code>host</code> selects the public name; <code>target</code> is the private origin.</li>
+    <li><code>access.allowed_emails</code> and <code>access.allowed_domains</code> use the <strong>verified</strong> email and are OR-ed.</li>
+    <li><code>access.required_groups</code> requires every listed group; it is AND-ed with the allowlist.</li>
+    <li><code>access</code> absent makes the route public; <code>access: {}</code> requires any signed-in person.</li>
+  </ul>
+  <p>Every field is listed in the <a href="/docs/reference/">configuration reference</a>. A change is validated before it is saved; an invalid route does not replace the running snapshot.</p>
+
+  <h2>4. Decide who gets in</h2>
+  <p>Start with the smallest rule that answers the question. A team wiki might allow one email domain; an admin panel might require a group and a recent passkey sign-in.</p>
+  <ul>
+    <li><strong>Verified email domain:</strong> <code>allowed_domains</code>. Good for a company-wide tool, but it does not know teams.</li>
+    <li><strong>Explicit people:</strong> <code>allowed_emails</code>. Good for a small list or a contractor.</li>
+    <li><strong>Groups from OIDC:</strong> <code>required_groups</code>. Good when the identity provider already owns team membership.</li>
+    <li><strong>A recent sign-in:</strong> <code>max_auth_age_minutes</code>. Forces a passkey step-up for a sensitive route.</li>
+    <li><strong>A device-bound passkey:</strong> <code>require_device_bound</code>. Rejects synced passkeys and asks for a security key or a passkey that stays on one device.</li>
+  </ul>
+  <p>OIDC sessions do not satisfy a recent or device-bound step-up; those rules require a passkey sign-in. That is deliberate. See <a href="/guides/oidc-or-passkeys/">OIDC or passkeys</a>.</p>
+
+  <h2>5. Verify it</h2>
+  <pre><code>{`# The app answers locally, but only locally.
+curl -I http://127.0.0.1:3000
+
+# From another host, the public name goes to Ozal's sign-in.
+curl -I https://app.example.com
+
+# A forged identity header does not become a session.
+curl -sS -H 'X-Auth-Request-Email: attacker@example.com' \\
+  -o /dev/null -w '%{http_code} %{redirect_url}\\n' https://app.example.com/`}</code></pre>
+  <p>Without a session, the last request must not return <code>attacker@example.com</code>: expect a redirect to sign-in, or a 401 or 403. Then sign in with an allowed account and try one that the rule should refuse. The refusal page should name the app, the account and a reference code, not return a bare error.</p>
+  <p>If the app trusts identity headers, keep it on loopback or a private address and restrict its header source to Ozal. The header is only as trustworthy as the hop that carries it. For a stronger contract, a route can send a short-lived signed assertion that the app verifies with a pinned key; see the <a href="/docs/reference/#identity-assertion">identity assertion</a> section.</p>
+
+  <h2>What this does not solve</h2>
+  <ul>
+    <li><strong>The app's own permissions.</strong> Ozal decides who reaches Grafana; Grafana still decides which dashboards that person can edit.</li>
+    <li><strong>Non-HTTP access.</strong> SSH, RDP, databases and arbitrary TCP/UDP are not HTTP and do not come along. Use a VPN or a private network for those; see <a href="/guides/vpn-vs-access-gateway/">VPN or access gateway</a>.</li>
+    <li><strong>Device posture and endpoint agents.</strong> Ozal does not collect device health or install software on the device.</li>
+    <li><strong>A global edge.</strong> A single host does not absorb a traffic flood or provide a global CDN.</li>
+    <li><strong>Production readiness.</strong> Ozal is an early alpha. Test with a non-admin account and a lab instance before moving a real application.</li>
+  </ul>
+
+  <h2>Why not just a reverse proxy?</h2>
+  <p>A reverse proxy already terminates TLS and forwards to the app. The difference is what happens before the forward: sign-in, a per-app rule, a session, and a decision with a code and reason. If the app has its own strong login and you do not need a central policy, a proxy may be enough. If you need the access decision in front of several apps, read <a href="/guides/reverse-proxy-vs-access-gateway/">Reverse proxy or access gateway</a>.</p>
+
+  <h2>Verify the claims</h2>
+  <ul>
+    <li><a href="/#engine">Ask the decision engine</a> which person may open which app, and why.</li>
+    <li>Read <a href="/docs/security/">the trust boundaries</a>: what Ozal strips, injects and never protects.</li>
+    <li>Check the <a href="/docs/reference/">route and access fields</a> before writing a rule.</li>
+    <li>Follow <a href="/guides/grafana-sso/">Grafana behind SSO</a> for one complete application example.</li>
+  </ul>
+</Article>

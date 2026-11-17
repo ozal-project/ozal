@@ -97,7 +97,9 @@ touches `site/` or the guide, and the Ozal workflow has its own paths for the mi
 guides are in the generated `/sitemap.xml` and `public/llms.txt`.
 
 The comparison and setup pages live outside `/docs`: `/compare/cloudflare-access/`,
-`/compare/pomerium/`, `/guides/grafana-sso/` and `/guides/vpn-vs-access-gateway/`.
+`/compare/pomerium/`, `/guides/grafana-sso/`, `/guides/vpn-vs-access-gateway/`,
+`/guides/protect-internal-app/`, `/guides/oidc-or-passkeys/` and
+`/guides/reverse-proxy-vs-access-gateway/`.
 `src/lib/articles.mjs` is their single list: the sitemap, the home page's read-next row and
 the page metadata all come from it. They share `src/components/Article.astro` for the
 breadcrumb, the reviewed date, the schema and the read-next list. They are long-form, use

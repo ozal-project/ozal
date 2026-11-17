@@ -48,6 +48,39 @@ export const ARTICLES = [
     updated: "17 November 2026",
     modified: "2026-11-17",
   },
+  {
+    path: "/guides/protect-internal-app/",
+    nav: "Protect an internal app",
+    h1: "Protect an internal app without exposing the network",
+    title: "Protect an internal app · Ozal access gateway",
+    description:
+      "Keep an internal app on loopback or a private network, put Ozal in front, and decide who gets in with OIDC or passkeys and a rule per route.",
+    section: "Guide",
+    updated: "17 November 2026",
+    modified: "2026-11-17",
+  },
+  {
+    path: "/guides/oidc-or-passkeys/",
+    nav: "OIDC or passkeys",
+    h1: "OIDC or passkeys: choosing how people sign in",
+    title: "OIDC or passkeys · Ozal sign-in",
+    description:
+      "Native passkeys and an existing OIDC provider compared: what each needs, what Ozal stores, when to choose each, and how step-up works.",
+    section: "Guide",
+    updated: "17 November 2026",
+    modified: "2026-11-17",
+  },
+  {
+    path: "/guides/reverse-proxy-vs-access-gateway/",
+    nav: "Reverse proxy or gateway?",
+    h1: "Reverse proxy or access gateway? Where the line sits",
+    title: "Reverse proxy or access gateway? · Ozal",
+    description:
+      "A reverse proxy routes and terminates TLS; an access gateway authenticates and authorizes every request. Compare what each does and when a proxy is enough.",
+    section: "Guide",
+    updated: "17 November 2026",
+    modified: "2026-11-17",
+  },
 ];
 
 /**
