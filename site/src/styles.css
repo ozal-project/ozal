@@ -363,6 +363,11 @@
   .start .label { margin-bottom: 16px; }
   .start h2 { font-size: var(--t-h2); line-height: 1.06; letter-spacing: -.035em; font-weight: 600; }
   .start-copy > p { margin-top: 20px; color: var(--color-ink-2); max-width: 46ch; }
+  .start-copy code { font-family: var(--font-mono); font-size: .86em; color: var(--color-ink); }
+  .start-needs strong { color: var(--color-ink); font-weight: 600; }
+  .start-steps { margin-top: 14px; padding-left: 1.4em; list-style: decimal; color: var(--color-ink-2); max-width: 46ch; }
+  .start-steps li + li { margin-top: 6px; }
+  .start-steps li::marker { color: var(--color-muted); font-family: var(--font-mono); }
   .start-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 26px; margin-top: 30px; }
   .start .terminal { background: var(--color-bg); }
   .start-terminals { display: grid; gap: 16px; min-width: 0; }
@@ -517,14 +522,21 @@
   .prose li + li { margin-top: .35em; }
   .prose li::marker { color: var(--color-muted); }
   .prose :not(pre) > code { padding: .1em .35em; border-radius: 4px; background: var(--color-tile-2); color: var(--color-ink); font-size: .86em; overflow-wrap: anywhere; }
-  /* Code wraps like the page's terminals, so it never becomes a region that
-     only a mouse can scroll; a wide table scrolls and is focusable instead. */
-  .prose pre { padding: 16px 18px; border: 1px solid var(--color-tile-3); border-radius: 10px; background: var(--color-tile); white-space: pre-wrap; overflow-wrap: anywhere; font-size: .8125rem; line-height: 1.7; color: var(--color-ink-2); }
+  /* Commands keep their lines: wrapping one mid-token (a URL, a flag) makes it
+     read as two commands. A long line scrolls, and the block is focusable
+     (tabindex from the docs page), like a wide table. */
+  .prose pre { padding: 16px 18px; border: 1px solid var(--color-tile-3); border-radius: 10px; background: var(--color-tile); white-space: pre; overflow-x: auto; font-size: .8125rem; line-height: 1.7; color: var(--color-ink-2); }
+  .prose pre:focus-visible { outline: 2px solid var(--color-loud); outline-offset: 2px; }
+  .prose .code-block { position: relative; }
+  .prose .code-block pre { padding-right: 76px; }
+  .prose .code-block .copy { position: absolute; top: 10px; right: 10px; }
   .prose blockquote { padding-left: 16px; border-left: 2px solid var(--color-tile-3); color: var(--color-muted); }
   .prose hr { border: 0; border-top: 1px solid var(--color-tile-3); }
   .prose table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; font-size: var(--t-small); }
   .prose th, .prose td { padding: 9px 14px 9px 0; border-bottom: 1px solid var(--color-tile-3); text-align: left; vertical-align: top; }
   .prose th { color: var(--color-ink); font-weight: 500; white-space: nowrap; }
+  /* A flag or a path in the first column stays on one line; the table scrolls. */
+  .prose td:first-child > code { white-space: nowrap; overflow-wrap: normal; }
   .prose details { padding: 12px 16px; border: 1px solid var(--color-tile-3); border-radius: 10px; background: var(--color-tile); }
   .prose summary { color: var(--color-ink); min-height: 24px; }
 }

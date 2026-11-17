@@ -18,8 +18,11 @@ const { entry } = Astro.props;
 const guide = GUIDES.find((g) => (g.slug || "index") === entry.id);
 if (!guide || !entry.rendered) throw new Error(`no rendered guide for ${entry.id}`);
 const headings = (entry.rendered.metadata?.headings ?? []) as { depth: number; slug: string; text: string }[];
-// A wide table scrolls sideways on a phone, so the keyboard must reach it.
-const html = rewriteGuideLinks(entry.rendered.html, guide.path).replaceAll("<table>", '<table tabindex="0">');
+// A wide table or command scrolls sideways on a phone, so the keyboard must
+// reach it. Commands never wrap: a line broken mid-token reads as two commands.
+const html = rewriteGuideLinks(entry.rendered.html, guide.path)
+  .replaceAll("<table>", '<table tabindex="0">')
+  .replaceAll("<pre>", '<pre tabindex="0">');
 const href = (slug: string) => (slug ? `/docs/${slug}/` : "/docs/");
 const title = headings.find((h) => h.depth === 1)?.text ?? guide.nav;
 const sections = headings.filter((h) => h.depth === 2);
@@ -66,3 +69,4 @@ const description = guide.description;
   </main>
   <Footer />
 </Base>
+<script>import "../../scripts/docs";</script>
