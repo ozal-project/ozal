@@ -23,9 +23,7 @@ const html = rewriteGuideLinks(entry.rendered.html, guide.path).replaceAll("<tab
 const href = (slug: string) => (slug ? `/docs/${slug}/` : "/docs/");
 const title = headings.find((h) => h.depth === 1)?.text ?? guide.nav;
 const sections = headings.filter((h) => h.depth === 2);
-// The first paragraph of the guide, as plain text, describes the page.
-const lead = (entry.body ?? "").split(/\n\s*\n/).map((b) => b.trim()).find((b) => b && !/^[#>|`<-]/.test(b)) ?? "";
-const description = lead.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").replace(/[`*_]/g, "").replace(/\s+/g, " ").slice(0, 200);
+const description = guide.description;
 ---
 <Base
   title={`${title} · Ozal docs`}

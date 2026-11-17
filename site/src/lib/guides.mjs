@@ -6,15 +6,15 @@
 
 export const REPO = "https://github.com/ozal-project/ozal";
 
-/** @type {{ path: string, slug: string, nav: string }[]} */
+/** @type {{ path: string, slug: string, nav: string, description: string }[]} */
 export const GUIDES = [
-  { path: "docs/START-HERE.md", slug: "", nav: "Start here" },
-  { path: "QUICKSTART.md", slug: "quickstart", nav: "Quickstart" },
-  { path: "docs/operations/download-install.md", slug: "install", nav: "Install" },
-  { path: "docs/operations/first-application.md", slug: "first-application", nav: "Publish an application" },
-  { path: "docs/operations/administration.md", slug: "administration", nav: "Administer" },
-  { path: "docs/security.md", slug: "security", nav: "Security" },
-  { path: "docs/reference.md", slug: "reference", nav: "Configuration and CLI" },
+  { path: "docs/START-HERE.md", slug: "", nav: "Start here", description: "What to read first: try Ozal, run it for real, contribute, and see what is public." },
+  { path: "QUICKSTART.md", slug: "quickstart", nav: "Quickstart", description: "From a clean checkout to a routed app and a process check, with no TLS and no OIDC provider." },
+  { path: "docs/operations/download-install.md", slug: "install", nav: "Install", description: "Verify a download, install the binary, and run Ozal as a Linux service." },
+  { path: "docs/operations/first-application.md", slug: "first-application", nav: "Publish an application", description: "Take a running app to a private, protected HTTPS address, step by step." },
+  { path: "docs/operations/administration.md", slug: "administration", nav: "Administer", description: "Operate an installation: service state, upgrades, backups, connectors and publishing." },
+  { path: "docs/security.md", slug: "security", nav: "Security", description: "Ozal's trust boundaries, deployment rules and what to verify on each installation." },
+  { path: "docs/reference.md", slug: "reference", nav: "Configuration and CLI", description: "Configuration fields and CLI commands for the current checkout." },
 ];
 
 /** The site URL of a guide, or undefined when the path is not a public guide.
