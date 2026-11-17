@@ -171,9 +171,11 @@ path. Deploy the edge build that serves `404.html` before publishing a site that
 ships it, or acceptance will roll the site back. Cloudflare Pages serves
 `404.html` with status 404 without that step.
 
-Measurement uses Search Console, Bing and the server's request logs. The
-Cloudflare Pages project keeps Web Analytics off and the page loads no
-third-party script, as the product design requires.
+Measurement uses Search Console, Bing, Cloudflare Web Analytics and the
+server's request logs. The Cloudflare Pages project has Web Analytics enabled;
+the CSP in `public/_headers` allows only the Insights script and endpoint. No
+other third-party script runs on the page. Web Analytics reports page views,
+paths and referrers, not custom events or UTM parameters.
 
 Verify the live result after publishing:
 

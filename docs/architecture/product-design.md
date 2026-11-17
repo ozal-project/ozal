@@ -57,8 +57,10 @@ them, they win.
   exists, always with a word or a code, and the loud colour never stands in
   for one. Tokens live in `site/src/styles.css` and
   `web/console/src/theme.css`.
-- **Nothing leaves the server.** Fonts and images are bundled; no third-party
-  requests, analytics or embeds. Motion and styles must work inside the
+- **The page is self-contained.** Fonts and images are bundled. The only
+  third-party request is the owner-enabled Cloudflare Web Analytics beacon;
+  its CSP allowance is limited to the Insights script and endpoint. No other
+  analytics, embeds or external fonts. Motion and styles must work inside the
   [console CSP](../engineering.md#console-asset-and-csp-contract).
 - **One voice everywhere.** The site, console, sign-in page, alerts and CLI
   speak the same plain, short English.
@@ -113,7 +115,8 @@ Reference:   airbnb.com, for visible filter chips, a live result count and an
              obvious "clear"
 Adapt to:    Ozal tokens and Geist; filters for person, application and
              decision; refused rows use the reserved red with their code
-Leave:       image-first results; any third-party script or font
+Leave:       image-first results; any third-party script or font except the
+             explicitly enabled Web Analytics beacon
 Constraints: console CSP, prefers-reduced-motion, keyboard reachable,
              mobile layout without horizontal scroll
 Done when:   the empty, loading and no-results states exist and a refused
