@@ -12,7 +12,7 @@ the first tagged build and do not include features added later.
 | You want to… | Go to |
 |---|---|
 | Try Ozal on your own machine | [Try it locally](../../README.md#get-started), then [first application](first-application.md) |
-| Run Ozal as a Linux service | [Install the service in one step](#3-install-the-linux-service) |
+| Run Ozal as a Linux service | [Install in one command](#install-in-one-command), or [step by step](#1-verify-the-download) |
 | Update an existing installation | [Upgrade and roll back](administration.md#upgrade-and-roll-back) |
 | Keep an installation from the Switchboard era | [Legacy Switchboard names](administration.md#legacy-switchboard-names) |
 
@@ -20,39 +20,80 @@ the first tagged build and do not include features added later.
 
 ## Install in one command
 
+On a Linux server, as a user who can `sudo`:
+
 ```sh
 curl -fsSL https://ozal.dev/install.sh | sh
 ```
 
-To only verify the release and see what would change, add `--plan`:
-`curl -fsSL https://ozal.dev/install.sh | sh -s -- --plan`.
+To verify the release and see what would change without installing anything,
+add `--plan`:
 
-The script reads the signed release catalog for the `stable` channel (`preview`
-while there is no stable release, or with `--channel preview`) and checks its
-signature with the release key written in the script. It then checks the signed
-`checksums.txt` and the archive's SHA-256 before it extracts the binary. Any
-mismatch, an expired catalog or an address outside the project's GitHub releases
-stops it before anything runs. By default it then installs the service with
-`ozal install service` and runs `ozal install updates` so the console can install
-later releases; `--no-updates` skips the second step and `--plan` installs
-nothing. Downloading and verifying run as you; only the two installation steps
-run as root, through `sudo` when you are not root (it asks before any download,
-so a refused password costs nothing). Before root runs anything, the archive is
-copied into a directory only root can write, checked against the signed
-checksum again and extracted there. `--apply` and `--updates` from older
-instructions are still accepted and change nothing. `--version vX`
-installs a given release. `--keep DIR` keeps the verified files; a relative path
-is resolved from the directory where you run the script. Arguments after `--`
-go to `ozal install service` (for example `-- -target http://127.0.0.1:4000`).
-Installation mode belongs to the script: forwarded `-apply` or `--apply` flags,
-including explicit boolean values, are rejected before any download.
-It needs Linux, `curl`, OpenSSL 3, and root or `sudo` to install.
+```sh
+curl -fsSL https://ozal.dev/install.sh | sh -s -- --plan
+```
 
-The limit: piped from `https://ozal.dev`, the script and the key in it come from the
-same place, so this trusts that site's TLS. For more, download the script, compare
-its `RELEASE_KEY` with [`ozal-release.pub`](ozal-release.pub) obtained another way,
-read it, and run it from the file. The same script is attached to every release.
-The steps below do the same checks by hand.
+**You need** Linux on amd64 or arm64 with systemd, `curl`, OpenSSL 3.0 or later,
+`sha256sum` and `tar`, and root or `sudo` for the installation itself. The script
+checks for each tool before it downloads anything.
+
+**What it checks.** Any failure stops it before anything runs:
+
+1. The signed release catalog for the `stable` channel (`preview` while there is
+   no stable release): its Ed25519 signature against the release key written in
+   the script, its channel, platform and expiry.
+2. The release's `checksums.txt` and its signature, with the same key.
+3. The archive's SHA-256 against the signed checksum, and that its address is in
+   the project's GitHub releases.
+
+Downloading and verifying run as you. Only the installation runs as root, through
+`sudo` when you are not root, and `sudo` asks before any download, so a refused
+password costs nothing. Before root runs anything, the archive is copied into a
+directory only root can write, checked against the signed checksum again and
+extracted there.
+
+**What it installs.** It runs `ozal install service`, described
+[below](#3-install-the-linux-service): the `ozal` service account, the binary, the
+configuration and the systemd service, all on loopback. It then runs
+`ozal install updates` so the console can install later releases. When it
+finishes it prints the next steps: an SSH tunnel to the console, then
+`sudo ozal console enrol` to create the first administrator.
+
+**Options.** Put them after `sh -s --` when piping the script:
+
+| Option | Effect |
+|---|---|
+| `--plan` | Verify the release and print the installation plan; install nothing. |
+| `--no-updates` | Do not turn on installing updates from the console. |
+| `--channel stable\|preview` | Read this channel instead of the default. |
+| `--version vX.Y.Z` | Install this release instead of the channel's newest. |
+| `--keep DIR` | Keep the verified archive, checksums and binary in `DIR`, relative to where you run the script. |
+| `-- ARGS` | Pass `ARGS` to `ozal install service`, for example `-- -target http://127.0.0.1:4000`. |
+
+For example, to install with the trial route pointing at an app on port 4000:
+
+```sh
+curl -fsSL https://ozal.dev/install.sh | sh -s -- -- -target http://127.0.0.1:4000
+```
+
+Installation mode belongs to the script: a forwarded `-apply` or `--apply`,
+including an explicit boolean value, is rejected before any download. `--apply`
+and `--updates` before `--` come from older instructions; they are accepted and
+change nothing.
+
+**The trust limit.** Piped from `https://ozal.dev`, the script and the key in it
+come from the same place, so this trusts that site's TLS. For more, download the
+script, compare its `RELEASE_KEY` with [`ozal-release.pub`](ozal-release.pub)
+obtained another way, read it, and run it from the file:
+
+```sh
+curl -fsSLO https://ozal.dev/install.sh
+grep '^RELEASE_KEY=' install.sh   # compare with ozal-release.pub
+sh install.sh --plan              # then without --plan to install
+```
+
+The same script is attached to every release. The steps below do the same checks
+by hand.
 
 ## 1. Verify the download
 
