@@ -64,6 +64,21 @@ func TestListenAdminSocketIsPrivateAndReplacesStaleSocket(t *testing.T) {
 	}
 }
 
+func TestListenAdminSocketRefusesWritableDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("admin.socket is refused on Windows")
+	}
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	if listener, err := listenAdminSocket(filepath.Join(dir, "admin.sock")); err == nil {
+		listener.Close()
+		t.Fatal("admin socket bound in a directory other users can write")
+	}
+}
+
 func TestListenAdminSocketRefusesRegularFile(t *testing.T) {
 	path := socketPath(t)
 	if err := os.WriteFile(path, []byte("keep me"), 0o600); err != nil {

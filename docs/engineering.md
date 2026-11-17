@@ -471,7 +471,14 @@ builds `cmd/ozal` from the checkout without a module cache and runs no npm or si
 tooling; the `publish` job holds write access without the key and force-pushes only
 what `sign` produced, as a single commit. Without the key `sign` fails and the branch
 keeps the previous catalogs until they expire. Where the site is built or hosted does
-not matter to this path. `migrations` is set when the schema directory changed since the
+not matter to this path. The `release` workflow signs the release checksums with the
+same separation: `release` builds the draft, runs the gate and npm with
+`--ignore-scripts`, and holds no key; `sign` checks out the tag without npm, without a
+module cache and with read-only access, receives only `checksums.txt`, and runs in the
+`release` environment, which must require reviewers; `publish` uploads the signature
+with write access and no key. A compromised frontend dependency therefore cannot read
+the key, and no signature exists without the human approval the environment enforces.
+`migrations` is set when the schema directory changed since the
 previous release of the channel, or when that cannot be told. A path the site does not
 have answers with its page; the client reports that as no catalog published for the
 channel, not as a bad signature. Tests cover the round trip from `ozal release catalog`

@@ -458,7 +458,7 @@ func (g *Gate) destination(returnTo string) string {
 	if returnTo == "" {
 		return ""
 	}
-	if safe := auth.SafeReturnTo(g.allowedHosts, returnTo); safe != "/" {
+	if safe := auth.SafeReturnTo(g.allowedHosts, returnTo, g.secure); safe != "/" {
 		return safe
 	}
 	return ""

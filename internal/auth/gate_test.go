@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"crypto/tls"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -121,9 +122,17 @@ func TestS256ChallengeIsDeterministic(t *testing.T) {
 	}
 }
 
+// secureRequest is a request as it arrives over HTTPS, which is what makes
+// the return-address guard refuse a downgrade to plain HTTP.
+func secureRequest() *http.Request {
+	req := httptest.NewRequest(http.MethodGet, "https://app.example.com/", nil)
+	req.TLS = &tls.ConnectionState{}
+	return req
+}
+
 func TestSafeReturnToAllowsKnownHost(t *testing.T) {
 	g := newTestGate()
-	got := g.safeReturnTo("https://app.example.com/dashboard")
+	got := g.safeReturnTo(secureRequest(), "https://app.example.com/dashboard")
 	if got != "https://app.example.com/dashboard" {
 		t.Errorf("safeReturnTo = %q, want the original URL for an allowed host", got)
 	}
@@ -131,7 +140,7 @@ func TestSafeReturnToAllowsKnownHost(t *testing.T) {
 
 func TestSafeReturnToRejectsUnknownHost(t *testing.T) {
 	g := newTestGate()
-	got := g.safeReturnTo("https://evil.example.com/phish")
+	got := g.safeReturnTo(secureRequest(), "https://evil.example.com/phish")
 	if got != "/" {
 		t.Errorf("safeReturnTo = %q, want %q for a disallowed host (open-redirect guard)", got, "/")
 	}
@@ -139,8 +148,21 @@ func TestSafeReturnToRejectsUnknownHost(t *testing.T) {
 
 func TestSafeReturnToRejectsGarbage(t *testing.T) {
 	g := newTestGate()
-	if got := g.safeReturnTo("not a url at all \x00"); got != "/" {
+	if got := g.safeReturnTo(secureRequest(), "not a url at all \x00"); got != "/" {
 		t.Errorf("safeReturnTo = %q, want %q for an unparseable value", got, "/")
+	}
+}
+
+func TestSafeReturnToRefusesHTTPDowngradeOnHTTPS(t *testing.T) {
+	g := newTestGate()
+	if got := g.safeReturnTo(secureRequest(), "http://app.example.com/dashboard"); got != "/" {
+		t.Fatalf("safeReturnTo = %q, want / for a plain-HTTP destination on an HTTPS login", got)
+	}
+	// An HTTP installation may still use an HTTP destination during local
+	// development.
+	plain := httptest.NewRequest(http.MethodGet, "http://app.example.com/", nil)
+	if got := g.safeReturnTo(plain, "http://app.example.com/dashboard"); got != "http://app.example.com/dashboard" {
+		t.Fatalf("safeReturnTo = %q, want the HTTP destination for an HTTP login", got)
 	}
 }
 
@@ -314,7 +336,7 @@ func TestLoginEmitsEvents(t *testing.T) {
 func TestSafeReturnToNormalizesKnownHost(t *testing.T) {
 	g := newTestGate()
 	returnTo := "https://APP.EXAMPLE.COM./dashboard"
-	if got := g.safeReturnTo(returnTo); got != returnTo {
+	if got := g.safeReturnTo(secureRequest(), returnTo); got != returnTo {
 		t.Fatalf("safeReturnTo = %q, want %q", got, returnTo)
 	}
 }
@@ -326,9 +348,10 @@ func TestSafeReturnToRejectsUnsafeSchemesAndUserinfo(t *testing.T) {
 		"ftp://app.example.com/file",
 		"//app.example.com/scheme-relative",
 		"https://attacker@app.example.com/dashboard",
+		"http://app.example.com/downgrade",
 	} {
 		t.Run(returnTo, func(t *testing.T) {
-			if got := g.safeReturnTo(returnTo); got != "/" {
+			if got := g.safeReturnTo(secureRequest(), returnTo); got != "/" {
 				t.Fatalf("safeReturnTo(%q) = %q, want /", returnTo, got)
 			}
 		})

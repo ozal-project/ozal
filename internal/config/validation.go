@@ -157,6 +157,23 @@ func hostnameOnly(host string) string {
 	return host
 }
 
+// validateDevErrorsListen keeps dev_errors on a loopback listener. Its pages
+// reveal upstream addresses, hints and the route table, which must never be
+// reachable from a public network.
+func validateDevErrorsListen(address string) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return fmt.Errorf("dev_errors: listen %q must be a host:port address", address)
+	}
+	if strings.EqualFold(host, "localhost") {
+		return nil
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return nil
+	}
+	return fmt.Errorf("dev_errors is local-only: listen %q is not a loopback address", address)
+}
+
 func validateAdminListen(address string) error {
 	host, port, err := net.SplitHostPort(address)
 	if err != nil {

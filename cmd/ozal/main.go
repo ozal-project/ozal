@@ -549,13 +549,26 @@ func startAdmin(cfg *config.Config, manager *routemanager.Manager, sink events.S
 
 // listenAdminSocket binds the admin unix socket with mode 0600. A socket
 // left by a crashed process is replaced; any other file at the path stops
-// startup. The parent directory should be 0700 (systemd RuntimeDirectory)
-// so the socket is never reachable between bind and chmod.
+// startup. The bind uses a 0177 umask so the socket is never group/other
+// accessible between bind and chmod. The parent directory must not be
+// writable by group or others: 0700 (systemd RuntimeDirectory), or 0711 when
+// admin.socket_group needs the group to traverse it.
 func listenAdminSocket(path string) (net.Listener, error) {
 	// The socket's file mode is its credential; Windows does not enforce it,
 	// so an admin socket there would answer any local user.
 	if runtime.GOOS == "windows" {
 		return nil, errors.New("admin.socket is not supported on Windows: its unix file mode is the credential")
+	}
+	// A directory writable by another local user lets them replace the
+	// socket while it is in use. 0700 is the default; 0711 is the deliberate
+	// exception for admin.socket_group, which still denies writes.
+	dir := filepath.Dir(path)
+	dirInfo, err := os.Stat(dir)
+	if err != nil {
+		return nil, fmt.Errorf("admin socket directory %s: %w", dir, err)
+	}
+	if dirInfo.Mode().Perm()&0o022 != 0 {
+		return nil, fmt.Errorf("admin socket directory %s is writable by group or others; use a private directory", dir)
 	}
 	if info, err := os.Lstat(path); err == nil {
 		if info.Mode()&os.ModeSocket == 0 {
@@ -567,7 +580,9 @@ func listenAdminSocket(path string) (net.Listener, error) {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
+	restoreUmask := privateSocketUmask()
 	listener, err := net.Listen("unix", path)
+	restoreUmask()
 	if err != nil {
 		return nil, err
 	}

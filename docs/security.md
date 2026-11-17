@@ -18,6 +18,10 @@ conditions. It is not an ASVS certification or a complete audit of an installati
   reports which browser used it.
 - Keep private applications on loopback or a controlled network: an alternative
   address that bypasses the gateway can also bypass its policies.
+- `auth.cookie_domain` sends the session cookie to every host under that domain,
+  including a subdomain Ozal does not serve. Keep unrelated sites on another
+  domain, or use host sessions for apps outside the login domain. `HttpOnly`
+  does not help: the browser still sends the cookie to that server.
 - Use a valid public TLS certificate; do not disable verification to work
   around certificate problems, staging tests or connections to the origin.
 - Keep private keys on their host. Configure secrets through `file:`/`env:`

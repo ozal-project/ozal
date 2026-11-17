@@ -12,15 +12,24 @@ import (
 // host's enrolment page, an optional destination and the token in the
 // fragment (never sent to a server or a link preview). returnTo must be an
 // http(s) URL on a protected host of cfg or the login host, the same rule the
-// gate applies; a refused destination is an error here, not a silent drop at
-// enrolment. The CLI and the admin console share it.
+// gate applies; an HTTPS login also refuses a plain-HTTP destination. A
+// refused destination is an error here, not a silent drop at enrolment. The
+// CLI and the admin console share it.
 func InviteLink(cfg config.Config, token, returnTo string) (string, error) {
 	if cfg.Auth.Passkeys == nil {
 		return "", fmt.Errorf("auth.passkeys is not configured")
 	}
+	login, err := url.Parse(cfg.Auth.Passkeys.LoginURL)
+	if err != nil {
+		return "", fmt.Errorf("auth.passkeys.login_url: %w", err)
+	}
+	loginHost, err := config.NormalizeHost(login.Host)
+	if err != nil {
+		return "", fmt.Errorf("auth.passkeys.login_url host: %w", err)
+	}
 	query := ""
 	if returnTo != "" {
-		allowed := map[string]bool{}
+		allowed := map[string]bool{loginHost: true}
 		for _, r := range cfg.Routes {
 			if r.RequiresAuth() {
 				if host, err := config.NormalizeHost(r.Host); err == nil {
@@ -28,13 +37,8 @@ func InviteLink(cfg config.Config, token, returnTo string) (string, error) {
 				}
 			}
 		}
-		if login, err := url.Parse(cfg.Auth.Passkeys.LoginURL); err == nil {
-			if host, err := config.NormalizeHost(login.Host); err == nil {
-				allowed[host] = true
-			}
-		}
-		if auth.SafeReturnTo(allowed, returnTo) != returnTo {
-			return "", fmt.Errorf("return_to %q is not an http(s) URL on a protected host of this config", returnTo)
+		if auth.SafeReturnTo(allowed, returnTo, login.Scheme == "https") != returnTo {
+			return "", fmt.Errorf("return_to %q is not an http(s) URL on a protected host of this config, or downgrades the login to HTTP", returnTo)
 		}
 		query = "?return_to=" + url.QueryEscape(returnTo)
 	}

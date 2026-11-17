@@ -3,6 +3,13 @@ name: release
 # A v* tag builds the archives, checksums and SBOMs that .goreleaser.yaml
 # defines and uploads them to a draft GitHub release (REL-006). The draft is
 # published by hand after checking it against a local rebuild.
+#
+# The release key never shares a job with the npm supply chain: `release`
+# builds and checks the draft but has no key; `sign` checks out the tag with
+# no npm, no module cache and read-only access, and receives only
+# `checksums.txt`; `publish` has write access and no key. Configure the
+# `release` environment with required reviewers: without their approval, no
+# job that holds the key runs.
 on:
   push:
     tags: ["v*"]
@@ -16,11 +23,16 @@ jobs:
     permissions:
       # Creating the draft release and uploading its assets.
       contents: write
+    outputs:
+      checksums: ${{ steps.checksums.outputs.contents }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The changelog and {{ .CommitTimestamp }} need the full history.
           fetch-depth: 0
+          # npm build tooling runs in this job; do not leave a write token in
+          # .git/config. GoReleaser receives GITHUB_TOKEN in its own step.
+          persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
@@ -40,8 +52,8 @@ jobs:
             site/package-lock.json
       - name: Install frontend dependencies
         run: |
-          npm ci --prefix web/console --no-audit --no-fund
-          npm ci --prefix site --no-audit --no-fund
+          npm ci --prefix web/console --no-audit --no-fund --ignore-scripts
+          npm ci --prefix site --no-audit --no-fund --ignore-scripts
       - name: Gate
         env:
           OZAL_REQUIRE_FRONTEND: "1"
@@ -69,17 +81,69 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # Edges that update on their own (`ozal update`) install only a release
-      # whose checksums are signed by the key they pin. The key exists only as
-      # this secret; without it the job fails instead of leaving an unsigned
-      # release that every edge would refuse.
+      # Only this file crosses into the signing job. It is public data, not
+      # an artifact the key holder needs to execute.
+      - name: Export checksums for the signing job
+        id: checksums
+        run: |
+          test -s dist/checksums.txt || { echo "goreleaser produced no checksums.txt" >&2; exit 1; }
+          echo "contents=$(base64 -w0 dist/checksums.txt)" >> "$GITHUB_OUTPUT"
+
+  sign:
+    needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # Required reviewers on this environment are the human gate before the
+    # release key is used.
+    environment: release
+    permissions:
+      contents: read
+    outputs:
+      signature: ${{ steps.sign.outputs.signature }}
+    steps:
+      # A clean checkout of the tagged commit: no npm, no module cache and no
+      # credentials, so installing a frontend dependency cannot change the
+      # code that runs beside the key.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
       - name: Sign checksums
+        id: sign
         env:
+          GOFLAGS: -mod=readonly
           OZAL_RELEASE_KEY: ${{ secrets.OZAL_RELEASE_KEY }}
+          CHECKSUMS: ${{ needs.release.outputs.checksums }}
         run: |
           test -n "$OZAL_RELEASE_KEY" || { echo "OZAL_RELEASE_KEY secret is not set: run 'ozal release keygen' and add it" >&2; exit 1; }
-          go run ./cmd/ozal release sign -key env:OZAL_RELEASE_KEY -in dist/checksums.txt -out dist/checksums.txt.sig
+          test -n "$CHECKSUMS" || { echo "the release job produced no checksums" >&2; exit 1; }
+          dir="$RUNNER_TEMP/dist"
+          mkdir -p "$dir"
+          printf '%s' "$CHECKSUMS" | base64 -d > "$dir/checksums.txt"
+          test -s "$dir/checksums.txt" || { echo "checksums.txt is empty" >&2; exit 1; }
+          go run ./cmd/ozal release sign -key env:OZAL_RELEASE_KEY -in "$dir/checksums.txt" -out "$dir/checksums.txt.sig"
+          echo "signature=$(base64 -w0 "$dir/checksums.txt.sig")" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: [release, sign]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      # Uploading the signature to the draft release.
+      contents: write
+    steps:
       - name: Upload signature to the draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$GITHUB_REF_NAME" dist/checksums.txt.sig --clobber
+          SIGNATURE: ${{ needs.sign.outputs.signature }}
+        run: |
+          test -n "$SIGNATURE" || { echo "the sign job produced no signature" >&2; exit 1; }
+          dir="$RUNNER_TEMP/dist"
+          mkdir -p "$dir"
+          printf '%s' "$SIGNATURE" | base64 -d > "$dir/checksums.txt.sig"
+          test -s "$dir/checksums.txt.sig" || { echo "checksums.txt.sig is empty" >&2; exit 1; }
+          gh release upload "$GITHUB_REF_NAME" "$dir/checksums.txt.sig" --clobber -R "$GITHUB_REPOSITORY"

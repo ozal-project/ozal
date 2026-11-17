@@ -272,10 +272,11 @@ rollback; exit code 4 requires intervention.
 Publishing: `ozal release keygen -key release.key` creates the key and prints the
 public part. Store the private key as the `OZAL_RELEASE_KEY` secret of the
 `release` workflow, then delete the file. Without that secret the workflow fails
-instead of producing an unsigned release. A release remains a draft until someone
-publishes it, and only then do edges see it. **Whoever holds that key can install
-code on every edge that pins it.** Rotate it by publishing the new public key to
-the edges before signing with it.
+instead of producing an unsigned release. Configure the workflow's `release`
+environment with required reviewers: the signing job holds the key only after that
+approval. A release remains a draft until someone publishes it, and only then do
+edges see it. **Whoever holds that key can install code on every edge that pins
+it.** Rotate it by publishing the new public key to the edges before signing with it.
 
 <a id="actualización-coordinada-del-edge-y-el-conector"></a>
 
