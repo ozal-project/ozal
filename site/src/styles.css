@@ -152,17 +152,27 @@
   .door .avatar, .matrix .avatar { font-style: normal; }
   .door-tabs { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; }
   .door-tabs label { position: relative; cursor: pointer; }
-  .door-tabs input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  /* The radios sit before the tabs and the cards; ~ reaches both. No :has(),
+     so a browser without it still shows one card, never all three. */
+  .door-radio { position: absolute; top: 0; left: 0; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
   .door-tabs label > span { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 14px 6px 9px; border-radius: 999px; border: 1px solid var(--color-tile-3); background: var(--color-bg); color: var(--color-muted); font-size: var(--t-small); transition: border-color 150ms, color 150ms; }
-  .door-tabs label:has(input:checked) > span { border-color: var(--color-loud-solid); background: var(--color-loud-solid); color: var(--color-loud-ink); font-weight: 500; }
-  .door-tabs label:has(input:checked) .avatar { background: rgb(255 255 255 / .22); color: var(--color-loud-ink); border-color: transparent; }
-  .door-tabs label:has(input:focus-visible) > span { outline: 2px solid var(--color-loud); outline-offset: 3px; }
+  #scene-ana:checked ~ .door-tabs [for="scene-ana"] > span,
+  #scene-bob:checked ~ .door-tabs [for="scene-bob"] > span,
+  #scene-anon:checked ~ .door-tabs [for="scene-anon"] > span { border-color: var(--color-loud-solid); background: var(--color-loud-solid); color: var(--color-loud-ink); font-weight: 500; }
+  #scene-ana:checked ~ .door-tabs [for="scene-ana"] .avatar,
+  #scene-bob:checked ~ .door-tabs [for="scene-bob"] .avatar,
+  #scene-anon:checked ~ .door-tabs [for="scene-anon"] .avatar { background: rgb(255 255 255 / .22); color: var(--color-loud-ink); border-color: transparent; }
+  #scene-ana:focus-visible ~ .door-tabs [for="scene-ana"] > span,
+  #scene-bob:focus-visible ~ .door-tabs [for="scene-bob"] > span,
+  #scene-anon:focus-visible ~ .door-tabs [for="scene-anon"] > span { outline: 2px solid var(--color-loud); outline-offset: 3px; }
   .avatar { display: grid; place-items: center; flex: none; width: 26px; height: 26px; border-radius: 50%; font-size: .75rem; font-weight: 600; background: var(--color-tile-3); color: var(--color-ink); }
   .avatar-ana { background: #1b3128; } .avatar-carla { background: #232838; } .avatar-bob { background: #3a2220; }
   .avatar-none, .avatar-anon { background: transparent; border: 1px dashed var(--color-depth); color: var(--color-muted); }
-  .door:has(#scene-ana:checked) .door-card:not(#door-ana),
-  .door:has(#scene-bob:checked) .door-card:not(#door-bob),
-  .door:has(#scene-anon:checked) .door-card:not(#door-anon) { display: none; }
+  .door-cards { display: grid; min-width: 0; }
+  .door-card { display: none; }
+  #scene-ana:checked ~ .door-cards #door-ana,
+  #scene-bob:checked ~ .door-cards #door-bob,
+  #scene-anon:checked ~ .door-cards #door-anon { display: block; }
   .door-card { --tone: var(--color-ok); border-radius: 12px; border: 1px solid var(--color-tile-3); background: var(--color-tile); overflow: hidden; }
   .door-card[data-state="no"] { --tone: var(--color-no); }
   .door-card[data-state="wait"] { --tone: var(--color-wait); }
