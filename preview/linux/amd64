@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "channel": "preview",
+  "sequence": 1795458056,
+  "generated_at": "2026-11-23T18:20:56Z",
+  "expires_at": "2026-12-07T18:20:56Z",
+  "version": "v0.1.0-alpha.15",
+  "commit": "2636350cc664a07de99c7baa24339fb142ab56a2",
+  "published_at": "2026-11-16T16:50:42Z",
+  "prerelease": true,
+  "notes_url": "https://github.com/ozal-project/ozal/releases/tag/v0.1.0-alpha.15",
+  "os": "linux",
+  "arch": "amd64",
+  "archive_url": "https://github.com/ozal-project/ozal/releases/download/v0.1.0-alpha.15/ozal_0.1.0-alpha.15_linux_amd64.tar.gz",
+  "archive_sha256": "519fd72d5c05b6da41eed73e98df5596da7e5dcd72f3ca08f36d99223af45347",
+  "archive_size": 10214990,
+  "checksums_url": "https://github.com/ozal-project/ozal/releases/download/v0.1.0-alpha.15/checksums.txt",
+  "signature_url": "https://github.com/ozal-project/ozal/releases/download/v0.1.0-alpha.15/checksums.txt.sig"
+}
