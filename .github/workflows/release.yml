@@ -33,7 +33,7 @@ jobs:
           # npm build tooling runs in this job; do not leave a write token in
           # .git/config. GoReleaser receives GITHUB_TOKEN in its own step.
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
       # The same gate as ci.yml: a tag on an unverified commit releases nothing.
@@ -108,7 +108,7 @@ jobs:
         with:
           ref: ${{ github.ref }}
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
           cache: false
